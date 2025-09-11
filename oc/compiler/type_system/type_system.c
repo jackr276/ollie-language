@@ -24,6 +24,7 @@ u_int8_t is_memory_address_type(generic_type_t* type){
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
 			return TRUE;
 		default:
 			return FALSE;
@@ -195,6 +196,7 @@ u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
 			return TRUE;
 
 		//Some more exploration needed here
@@ -265,8 +267,8 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 
 	//Switch based on the type to determine this
 	switch(type->type_class){
+		case TYPE_CLASS_UNION:
 		case TYPE_CLASS_ARRAY:
-			return FALSE;
 		case TYPE_CLASS_STRUCT:
 			return FALSE;
 		case TYPE_CLASS_POINTER:
@@ -1207,9 +1209,18 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 	//Deconstructed basic type(since we'll be using it so much)
 	Token basic_type;
 
-	//Function signatures are never valid for any binary operations
-	if(type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
-		return FALSE;
+	//Let's first check if we have any in a
+	//series of types that never make sense for any unary operation
+	switch (type->type_class) {
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			return FALSE;
+
+		//Otherwise we'll just bail out of here
+		default:
+			break;
 	}
 
 
@@ -1320,11 +1331,6 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
 		case PLUS:
-			//This doesn't work on arrays or constructs
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
-				return FALSE;
-			}
-
 			//This also doesn't work for void types
 			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
@@ -1341,11 +1347,6 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 		 * 		int - int* is not good
 		 */
 		case MINUS:
-			//This doesn't work on arrays or constructs
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
-				return FALSE;
-			}
-
 			//This also doesn't work for void types
 			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
@@ -1550,6 +1551,9 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 	//Dynamically allocate the union type
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
+	//Store that this is a union
+	type->type_class = TYPE_CLASS_UNION;
+
 	//Move the name over
 	type->type_name = type_name;
 
@@ -1592,6 +1596,33 @@ void* get_struct_member(generic_type_t* structure, char* name){
 
 
 /**
+ * Does this union contain said member? Return the variable if yes, NULL if not
+ */
+void* get_union_member(generic_type_t* union_type, char* name){
+	//The current variable that we have
+	symtab_variable_record_t* var;
+
+	//Extract for convenience
+	dynamic_array_t* union_table = union_type->internal_types.union_table;
+
+	//Run through everything here
+	for(u_int16_t _ = 0; _ < union_table->current_index; _++){
+		//Grab the variable out
+		var = dynamic_array_get_at(union_table, _);
+
+		//Now we'll do a simple comparison. If they match, we're set
+		if(strcmp(var->var_name.string, name) == 0){
+			//Return the whole record if we find it
+			return var;
+		}
+	}
+
+	//Otherwise if we get down here, it didn't work
+	return NULL;
+}
+
+
+/**
  * Add a value to a struct type. The void* here is a 
  * symtab variable record
  *
@@ -1603,7 +1634,7 @@ void add_struct_member(generic_type_t* type, void* member_var){
 	symtab_variable_record_t* var = member_var;
 
 	//Mark that this is a struct member
-	var->is_struct_member = TRUE;
+	var->membership = STRUCT_MEMBER;
 
 	//If this is the very first one, then we'll 
 	if(type->internal_types.struct_table->current_index == 0){
@@ -1678,6 +1709,12 @@ void add_struct_member(generic_type_t* type, void* member_var){
  * Add a value to an enumeration's list of values
  */
 u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t user_defined_values){
+	//For the type system
+	symtab_variable_record_t* enum_variable = enum_member;
+
+	//Flag what this is
+	enum_variable->membership = ENUM_MEMBER;
+
 	//Are we using user-defined enum values? If so, we need to check for duplicates
 	//that already exist in the list
 	if(user_defined_values == TRUE){
@@ -1710,7 +1747,8 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 	//Let's extract the union member and variable record for convenience
 	symtab_variable_record_t* record = member_var;
 
-	//TODO may or may not need to check for duplicates in here
+	//Flag what this is
+	record->membership = UNION_MEMBER;
 
 	//Add this in
 	dynamic_array_add(union_type->internal_types.union_table, member_var);

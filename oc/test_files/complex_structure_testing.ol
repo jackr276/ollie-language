@@ -23,5 +23,5 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	structure:y := 5;
 
 	//So it isn't optimized away
-	ret structure:x[2];//x[2];// +*/ structure:lch;
+	ret structure:x[2];
 }

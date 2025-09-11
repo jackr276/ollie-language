@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <iso646.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -584,21 +585,21 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
 	//We'll also keep a nicer reference to the function name
-	char* function_name;
+	dynamic_string_t function_name;
 	//The number of parameters that we've seen
 	u_int8_t num_params = 0;
 	
-	//First grab the ident node
-	generic_ast_node_t* ident = identifier(fl, side);
+	//Grab the next token using the lookahead
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//We have a general error-probably will be quite uncommon
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		//We'll let the node propogate up
 		return print_and_return_error("Non-identifier provided as funciton call", parser_line_num);
 	}
 
 	//Grab the function name out for convenience
-	function_name = ident->string_value.string;
+	function_name = lookahead.lexeme;
 
 	//A pointer that holds our function call node
 	generic_ast_node_t* function_call_node;
@@ -616,10 +617,10 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	 */
 	
 	//Lookup the variable
-	symtab_variable_record_t* function_pointer_variable = lookup_variable(variable_symtab, function_name);
+	symtab_variable_record_t* function_pointer_variable = lookup_variable(variable_symtab, function_name.string);
 
 	//Let's now look up the function name in the function symtab
-	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name);
+	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name.string);
 
 	//This is the most common case - that we have a simple, direct function call
 	if(function_record != NULL){
@@ -648,7 +649,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//If this is not a function signature, then we can't call it as one
 		if(function_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 			//Print and fail out here
-			sprintf(error, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name, function_type->type_name.string);
+			sprintf(error, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name.string, function_type->type_name.string);
 			return print_and_return_error(error, parser_line_num);
 		}
 
@@ -663,7 +664,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 	//This means that they're both NULL. We'll need to throw an error here
 	} else{
-		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name);
+		sprintf(info, "\"%s\" is not currently defined as a function or function pointer", function_name.string);
 		//Return the error node and get out
 		return print_and_return_error(info, current_line);
 	}
@@ -691,7 +692,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		
 		//If it's not an R_PAREN, then we fail
 		if(lookahead.tok != R_PAREN){
-			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name, function_type->type_name.string);
+			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name.string, function_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, current_line);
 			//Print out the actual function record as well
 			num_errors++;
@@ -763,7 +764,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
 			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". Defined as: %s",
-		   			function_name, param_type->type_name.string, num_params, expr_type->type_name.string, function_type->type_name.string);
+		   			function_name.string, param_type->type_name.string, num_params, expr_type->type_name.string, function_type->type_name.string);
 
 			//Use the helper to return this
 			return print_and_return_error(info, parser_line_num);
@@ -791,7 +792,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//error
 	if(num_params != function_signature->num_params){
 		sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
-		  function_name, function_signature->num_params, num_params, function_type->type_name.string);
+		  function_name.string, function_signature->num_params, num_params, function_type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		//Error out
@@ -1415,8 +1416,81 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
  *
  * We will expect to see the => or : here
  *
- * BNF Rule: <struct-accessor> ::= => <variable-identifier> 
- * 								    | : <variable-identifier>
+ * BNF Rule: <struct-pointer-accessor> ::= :: <variable-identifier> 
+ */
+static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
+	//Freeze the current line
+	u_int16_t current_line = parser_line_num;
+	//The lookahead token
+	lexitem_t lookahead;
+
+	//Otherwise we'll now make the node here
+	generic_ast_node_t* struct_pointer_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR, side);
+	//Add the line number
+	struct_pointer_access_node->line_number = current_line;
+
+	//Grab a convenient reference to the type that we're working with
+	current_type = dealias_type(current_type);
+
+	//If this is not a pointer, then we can't use ::
+	if(current_type->type_class != TYPE_CLASS_POINTER){
+		sprintf(info, "Type \"%s\" is not a pointer to a struct and cannot be accessed with the : operator.", current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Otherwise, we can symbolically dereference here and carry on
+	current_type = current_type->internal_types.points_to;
+
+	//We need to specifically see a struct here. If we don't then we leave
+	if(current_type->type_class != TYPE_CLASS_STRUCT){
+		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now we are required to see a valid variable identifier.
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//For now we're just doing error checking
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Struct accessor could not find valid identifier", current_line);
+	}
+
+	//Grab this for nicety
+	char* member_name = lookahead.lexeme.string;
+
+	//Let's see if we can look this up inside of the type
+	symtab_variable_record_t* var_record = get_struct_member(current_type, member_name);
+
+	//If we can't find it we're out
+	if(var_record == NULL){
+		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+	
+	//Add the variable record into the node
+	struct_pointer_access_node->is_assignable = TRUE;
+
+	//Store the variable in here
+	struct_pointer_access_node->variable = var_record;
+
+	//Store the type
+	struct_pointer_access_node->inferred_type = var_record->type_defined_as;
+
+	//And now we're all done, so we'll just give back the root reference
+	return struct_pointer_access_node;
+}
+
+
+/**
+ * A construct accessor is used to access a construct either on the heap of or on the stack.
+ * Like all rules, it will return a reference to the root node of the tree that it created
+ *
+ * A constructor accessor node will be a subtree with the parent holding the actual operator
+ * and its child holding the variable identifier
+ *
+ * We will expect to see the => or : here
+ *
+ * BNF Rule: <struct-accessor> ::= : <variable-identifier> 
  */
 static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
 	//Freeze the current line
@@ -1424,80 +1498,37 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	//The lookahead token
 	lexitem_t lookahead;
 
-	//We'll first grab whatever token that we have here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
 	//Otherwise we'll now make the node here
 	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_ACCESSOR, side);
 	//Add the line number
 	struct_access_node->line_number = current_line;
 
-	//Put the token in to show what we have
-	struct_access_node->unary_operator = lookahead.tok;
-
 	//Grab a convenient reference to the type that we're working with
-	generic_type_t* working_type = dealias_type(current_type);
+	current_type = dealias_type(current_type);
 
-	//What is the type that we're referencing here
-	generic_type_t* referenced_type;
-
-	//If we have a =>, we need to have seen a pointer to a struct
-	if(lookahead.tok == DOUBLE_COLON){
-		//We need to specifically see a pointer to a struct for the current type
-		//If it's something else, we fail out here
-		if(working_type->type_class != TYPE_CLASS_POINTER){
-			sprintf(info, "Type \"%s\" cannot be accessed with the :: operator. First defined here:", working_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_type_name(lookup_type(type_symtab, working_type));
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-		}
-
-		//We can now pick out what type we're referencing(should be construct)
-		referenced_type = working_type->internal_types.points_to;
-
-		//Now we know that its a pointer, but what does it point to?
-		if(referenced_type->type_class != TYPE_CLASS_STRUCT){
-			sprintf(info, "Type \"%s\" is not a struct and cannot be accessed with the :: operator. First defined here:", referenced_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_type_name(lookup_type(type_symtab, referenced_type));
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-		}
-
-	//Otherwise we know that we have some kind of non-pointer here(or so we hope)
-	} else {
-		//We need to specifically see a struct here
-		if(working_type->type_class != TYPE_CLASS_STRUCT){
-			sprintf(info, "Type \"%s\" cannot be accessed with the : operator. First defined here:", working_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_type_name(lookup_type(type_symtab, working_type));
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-		}
-
-		//If we make it here we know that working type is a struct
-		//We'll assign here for convenience
-		referenced_type = working_type;
+	//We need to specifically see a struct here. If we don't then we leave
+	if(current_type->type_class != TYPE_CLASS_STRUCT){
+		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Now we are required to see a valid variable identifier.
-	generic_ast_node_t* ident = identifier(fl, side); 
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//For now we're just doing error checking
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Construct accessor could not find valid identifier", current_line);
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Struct accessor could not find valid identifier", current_line);
 	}
 
 	//Grab this for nicety
-	char* member_name = ident->string_value.string;
+	char* member_name = lookahead.lexeme.string;
 
 	//Let's see if we can look this up inside of the type
-	symtab_variable_record_t* var_record = get_struct_member(referenced_type, member_name);
+	symtab_variable_record_t* var_record = get_struct_member(current_type, member_name);
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, referenced_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 	
@@ -1508,10 +1539,57 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	struct_access_node->variable = var_record;
 
 	//Store the type
-	struct_access_node->inferred_type = working_type;
+	struct_access_node->inferred_type = var_record->type_defined_as;
 
 	//And now we're all done, so we'll just give back the root reference
 	return struct_access_node;
+}
+
+
+/**
+ * Access a member inside of a union node
+ *
+ * BNF RULE: <union-accessor> ::= .<identifier>
+ *
+ * REMEMBER: BY the time we get here, we have already seen the "." token
+ */
+static generic_ast_node_t* union_accessor(FILE* fl, generic_type_t* type, side_type_t side){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//If this is not a union type, it immediately cannot be correct
+	if(type->type_class != TYPE_CLASS_UNION){
+		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the . operator", type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Following this, we need to see an identifier
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If this is not an identifier, we fail out
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Identifier required after the . operator", parser_line_num);
+	}
+
+	//Following this, we need to look and see if this identifier is indeed a type of this union
+	symtab_variable_record_t* union_variable = get_union_member(type, lookahead.lexeme.string);
+
+	//If this is NULL, it means that the var is not present and therefore this is incorrect
+	if(union_variable == NULL){
+		sprintf(info, "Variable %s is not a member of type %s\n", lookahead.lexeme.string, type->type_name.string); 
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Otherwise if we get here, we know that we do indeed have the needed union type. We can now go 
+	//ahead with constructing the accessor
+	generic_ast_node_t* union_accessor = ast_node_alloc(AST_NODE_TYPE_UNION_ACCESSOR, side);
+
+	//Let's now populate with the appropriate variable and type
+	union_accessor->variable = union_variable;
+	union_accessor->inferred_type = union_variable->type_defined_as;
+
+	//And give this back
+	return union_accessor;
 }
 
 
@@ -1524,22 +1602,17 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
  * BNF Rule: <array-accessor> ::= [ <ternary-expression> ]
  *
  */
-static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
+static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Freeze the current line
 	u_int16_t current_line = parser_line_num;
 
-	//We expect to see the left bracket here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//If we didn't see it, that's some weird internal error
-	if(lookahead.tok != L_BRACKET){
-		return print_and_return_error("Opening bracket expected for array access", current_line);
+	//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
+	if(type->type_class != TYPE_CLASS_ARRAY && type->type_class != TYPE_CLASS_POINTER){
+		sprintf(info, "Type \"%s\" is not subscriptable", type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
 	}
-
-	//Otherwise it all went well, so we'll push this onto the stack
-	push_token(grouping_stack, lookahead);
 
 	//Now we are required to see a valid constant expression representing what
 	//the actual index is.
@@ -1590,15 +1663,23 @@ static generic_ast_node_t* array_accessor(FILE* fl, side_type_t side){
 	}
 
 	//Now that we've done all of our checks have been done, we can create the actual node
-	generic_ast_node_t* array_acc_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_ACCESSOR, side);
+	generic_ast_node_t* accessor_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_ACCESSOR, side);
+
 	//Add the line number
-	array_acc_node->line_number = current_line;
+	accessor_node->line_number = current_line;
 
 	//The conditional expression is a child of this node
-	add_child_node(array_acc_node, expr);
+	add_child_node(accessor_node, expr);
+
+	//The values type is what we point to/have as a member type
+	if(type->type_class == TYPE_CLASS_POINTER){
+		accessor_node->inferred_type = type->internal_types.points_to;
+	} else {
+		accessor_node->inferred_type = type->internal_types.member_type;
+	}
 
 	//And now we're done so give back the root reference
-	return array_acc_node;
+	return accessor_node;
 }
 
 
@@ -1620,12 +1701,12 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	u_int16_t current_line = parser_line_num;
 
 	//No matter what, we have to first see a valid primary expression
-	generic_ast_node_t* result = primary_expression(fl, side);
+	generic_ast_node_t* primary_expression_node = primary_expression(fl, side);
 
 	//If we fail, then we're bailing out here
-	if(result->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(primary_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//Just return, no need for any errors here
-		return result;
+		return primary_expression_node;
 	}
 
 	//Peek at the next token
@@ -1636,6 +1717,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		case L_BRACKET:
 		case COLON:
 		case DOUBLE_COLON:
+		case DOT:
 		case PLUSPLUS:
 		case MINUSMINUS:
 			//We need to keep going here, so leave
@@ -1644,16 +1726,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 			//Push this back
 			push_back_token(lookahead);
 			//Return the result
-			return result;
+			return primary_expression_node;
 	}
-
-	//If we make it down to here, we know that we're trying to access a variable. As such, 
-	//we need to make sure that we don't see a constant here
-	if(result->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		return print_and_return_error("Constants are not assignable", current_line);
-	}
-
-	//Otherwise we at least know that it isn't a constant
 
 	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
 	//post operation, so we can make the node for it
@@ -1661,82 +1735,73 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//Add the line number
 	postfix_expr_node->line_number = current_line;
 
-	//This node will always have the primary expression as its first child
-	add_child_node(postfix_expr_node, result);
-
 	//Let's grab whatever type that we currently have
-	generic_type_t* current_type = result->inferred_type;
+	generic_type_t* current_type = primary_expression_node->inferred_type;
+
 	//Do any kind of dealiasing that we need to do
 	current_type = dealias_type(current_type);
+
+	//Add in the first child which is the primary expression
+	add_child_node(postfix_expr_node, primary_expression_node);
+
+	//The accessor node for each go around
+	generic_ast_node_t* accessor_node = NULL;
 
 	//We assume it's assignable, that will only change if we have a basic type that is 
 	//post inc'd/dec'd
 	postfix_expr_node->is_assignable = ASSIGNABLE;
 
 	//Now we can see as many construct accessor and array accessors as we can take
-	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == DOUBLE_COLON){
-		//Let's see which rule it is
-		//We have an array accessor
-		if(lookahead.tok == L_BRACKET){
-			//Put the token back
-			push_back_token(lookahead);
+	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == DOUBLE_COLON || lookahead.tok == DOT){
+		//Go based on what's in here
+		switch(lookahead.tok){
+			case L_BRACKET:
+				//We'll push this onto the grouping stack for later matching
+				push_token(grouping_stack, lookahead);
 
-			//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
-			if(current_type->type_class != TYPE_CLASS_ARRAY && current_type->type_class != TYPE_CLASS_POINTER){
-				sprintf(info, "Type \"%s\" is not subscriptable. First declared here:", current_type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				//Print it out
-				print_type_name(lookup_type(type_symtab, current_type));
-				num_errors++;
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
-			}
+				//Let the array accessor handle it
+				accessor_node = array_accessor(fl, current_type, side);
 
-			//Let the array accessor handle it
-			generic_ast_node_t* array_acc = array_accessor(fl, side);
+				break;
+
+			//A raw construct accessor, not syntactic sugar for the deref operator
+			case COLON:
+				//Let's have the rule do it.
+				accessor_node = struct_accessor(fl, current_type, side);
+
+				break;
 			
-			//Let's see if it actually worked
-			if(array_acc->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return print_and_return_error("Invalid array accessor found in postfix expression", current_line);
-			}
+			//This is a struct pointer accessor
+			case DOUBLE_COLON:
+				//Let's have the rule do it.
+				accessor_node = struct_pointer_accessor(fl, current_type, side);
 
-			//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
-			//node
-			add_child_node(postfix_expr_node, array_acc);
+				break;
 
-			//Based on this, the current type is whatever this array contains. We'll also use this for size determinations
-			if(current_type->type_class == TYPE_CLASS_ARRAY){
-				current_type = dealias_type(current_type->internal_types.member_type);
-			} else {
-				//Otherwise we know that it must be a pointer
-				current_type = dealias_type(current_type->internal_types.points_to);
-			}
-			
-			//The current type of any array access will be whatever the derferenced value is
-			array_acc->inferred_type = current_type;
+			//And this is a union accessor
+			case DOT:
+				//Let the rule handle it
+				accessor_node = union_accessor(fl, current_type, side);
 
-		//Otherwise we have a construct accessor
-		} else {
-			//Put it back for the rule to deal with
-			push_back_token(lookahead);
+				break;
 
-			//Let's have the rule do it.
-			generic_ast_node_t* struct_access = struct_accessor(fl, current_type, side);
-
-			//We have our fail case here
-			if(struct_access->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return print_and_return_error("Invalid construct accessor found in postfix expression", current_line);
-			}
-
-			//Update the current type to be whatever came out of here
-			current_type = struct_access->variable->type_defined_as;
-
-			//Store the type information here
-			struct_access->inferred_type = current_type;
-
-			//Otherwise we know it's good, so we'll add it in as a child
-			add_child_node(postfix_expr_node, struct_access);
+			//We shouldn't ever hit here, but if we do then leave
+			default:
+				return print_and_return_error("Expected :, ::, [] or ., but got none", parser_line_num);
 		}
-		
+
+		//We have our fail case here
+		if(accessor_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid accessor found in postfix expression", current_line);
+		}
+
+		//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
+		//node
+		add_child_node(postfix_expr_node, accessor_node);
+
+		//The type is just this one's inferred type
+		current_type = accessor_node->inferred_type;
+
 		//refresh the lookahead for the next iteration
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
@@ -1746,17 +1811,22 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 	//Now once we get here, we know that we have something that isn't one of accessor rules
 	//It could however be postinc/postdec. Let's first see if it isn't
-	if(lookahead.tok != PLUSPLUS && lookahead.tok != MINUSMINUS){
-		//Put the token back
-		push_back_token(lookahead);
-		//Assign the type
-		postfix_expr_node->inferred_type = return_type;
-		//Assign the variable
-		postfix_expr_node->variable = result->variable;
-		//This was assigned to
-		result->variable->assigned_to = TRUE;
-		//And we'll give back what we had constructed so far
-		return postfix_expr_node;
+	switch(lookahead.tok){
+		case PLUSPLUS:
+		case MINUSMINUS:
+			break;
+		//If it's not that, then we're done here and we can leave
+		default:
+			//Put the token back
+			push_back_token(lookahead);
+			//Assign the type
+			postfix_expr_node->inferred_type = return_type;
+			//Assign the variable
+			postfix_expr_node->variable = primary_expression_node->variable;
+			//This was assigned to
+			primary_expression_node->variable->assigned_to = TRUE;
+			//And we'll give back what we had constructed so far
+			return postfix_expr_node;
 	}
 
 	//Let's see if it's valid
@@ -1774,6 +1844,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
 	}
 
+	//TODO THIS IS BROKEN
+
 	//Otherwise if we get here we know that we either have post inc or dec
 	//Create the unary operator node
 	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
@@ -1788,12 +1860,11 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	postfix_expr_node->inferred_type = return_type;
 
 	//Carry through
-	postfix_expr_node->variable = result->variable;
+	postfix_expr_node->variable = primary_expression_node->variable;
 
 	//Now that we're done, we can get out
 	return postfix_expr_node;
 }
-
 
 
 /**
@@ -3774,17 +3845,12 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//We could first see the mutable keyword, indicating that this field can be changed
 	if(lookahead.tok == MUT){
 		is_mutable = TRUE;
-	} else {
-		//Otherwise put it back
-		push_back_token(lookahead);
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//Otherwise we know that it worked here
-	//Now we need to see a valid ident and check it for duplication
-	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);	
-
 	//Let's make sure it actually worked
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as construct member name", parser_line_num);
 		num_errors++;
 		//It's an error, so we'll propogate it up
@@ -3792,22 +3858,14 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	}
 
 	//Grab this for convenience
-	char* name = ident->string_value.string;
-
-	//Array bounds checking real quick
-	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
+	dynamic_string_t name = lookahead.lexeme;
 
 	//The field, if we can find it
-	symtab_variable_record_t* duplicate = NULL;
+	symtab_variable_record_t* duplicate = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Is this a duplicate? If so, we fail out
-	if((duplicate = get_struct_member(construct, name)) != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, construct->type_name.string);
+	if(duplicate != NULL){
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, construct->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
 		num_errors++;
@@ -3815,14 +3873,28 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return FAILURE;
+	}
+
+	//Check that it's not a duplicate function
+	symtab_function_record_t* found_function = lookup_function(function_symtab, name.string);
+
+	//Fail out here
+	if(found_function != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_function_name(found_function);
 		num_errors++;
 		//Return a fresh error node
 		return FAILURE;
@@ -3862,7 +3934,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//node that we have and also add it into our symbol table
 	
 	//We'll first create the symtab record
-	symtab_variable_record_t* member_record = create_variable_record(ident->string_value, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* member_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Store what the type is
@@ -3888,8 +3960,19 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
 static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
-	//Lookahead token
-	lexitem_t lookahead;
+	//Now we are required to see a curly brace
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail case here
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unelaborated construct definition is not supported", parser_line_num);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Otherwise we'll push onto the stack for later matching
+	push_token(grouping_stack, lookahead);
 
 	//Initiate a new variable scope here
 	initialize_variable_scope(variable_symtab);
@@ -3929,16 +4012,13 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
 	//So long as we don't see the end
 	} while (lookahead.tok != R_CURLY);
 
-	//Once we get here, what we know is that lookahead was not a semicolon. We know that it should
-	//be a closing curly brace, so in the interest of better error messages, we'll do a little pre-check
-	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Construct members must be delimited by ;", parser_line_num);
+	//Check for unamtched curlies
+	if(pop_token(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces in construct definition", parser_line_num);
 		num_errors++;
+		//Fail out here
 		return FAILURE;
 	}
-
-	//If we get here we know that it's right, but we'll still allow the other rule to handle it
-	push_back_token(lookahead);
 
 	//Once we're done we can escape this scope
 	finalize_variable_scope(variable_symtab);
@@ -4099,11 +4179,12 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
+
 	//If we make it here then we know we're good to look for an identifier
-	generic_ast_node_t* identifier_node = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If this is an error, then we're going to fail out
-	if(identifier_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias type", parser_line_num);
 		num_errors++;
 		return FALSE;
@@ -4112,7 +4193,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//We know that it wasn't an error, but now we need to perform duplicate checking
 
 	//Grab this out for convenience
-	char* identifier_name = identifier_node->string_value.string;
+	dynamic_string_t identifier_name = lookahead.lexeme;
 
 	//Let's close the parsing out here - we'll need to see & consume a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4125,11 +4206,11 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, identifier_name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, identifier_name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", identifier_name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", identifier_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -4139,11 +4220,11 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, identifier_name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, identifier_name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", identifier_name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", identifier_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -4153,11 +4234,11 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name.string);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", identifier_name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", identifier_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -4176,7 +4257,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	insert_type(type_symtab, type_record);
 
 	//Now that we've done that part, we also need to create the alias type and insert it
-	generic_type_t* alias_type = create_aliased_type(identifier_node->string_value, function_type, parser_line_num);
+	generic_type_t* alias_type = create_aliased_type(identifier_name, function_type, parser_line_num);
 
 	//Once we've created this, we'll add this into the symtab
 	insert_type(type_symtab, create_type_record(alias_type));
@@ -4210,12 +4291,11 @@ static u_int8_t struct_definer(FILE* fl){
 	//Set it
 	dynamic_string_set(&type_name, "struct ");
 
-
-	//We are now required to see a valid identifier
-	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
+	//Get the next token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Fail case
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Valid identifier required after construct keyword", parser_line_num);
 		num_errors++;
 		//Destroy the node
@@ -4224,7 +4304,7 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Add the name on the end
-	dynamic_string_concatenate(&type_name, ident->string_value.string);
+	dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 	//Once we have this, the actual node is useless so we'll free it
 
@@ -4243,20 +4323,6 @@ static u_int8_t struct_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Now we are required to see a curly brace
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Fail case here
-	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unelaborated construct definition is not supported", parser_line_num);
-		num_errors++;
-		//Fail out
-		return FAILURE;
-	}
-
-	//Otherwise we'll push onto the stack for later matching
-	push_token(grouping_stack, lookahead);
-
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
 	generic_type_t* struct_type = create_struct_type(type_name, current_line);
 
@@ -4265,27 +4331,8 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//Automatic fail case here
 	if(success == FAILURE){
-		print_parse_message(PARSE_ERROR, "Invalid construct member list given in construct definition", parser_line_num);
-		//We'll destroy it first
-		return FAILURE;
-	}
-
-	//Otherwise we got past the list, and now we need to see a closing curly
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Bail out if this happens
-	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Closing curly brace required after member list", parser_line_num);
-		num_errors++;
-		//Fail out here
-		return FAILURE;
-	}
-	
-	//Check for unamtched curlies
-	if(pop_token(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces in construct definition", parser_line_num);
-		num_errors++;
-		//Fail out here
+		print_parse_message(PARSE_ERROR, "Invalid struct member list given in construct definition", parser_line_num);
+		//Fail out
 		return FAILURE;
 	}
 	
@@ -4314,10 +4361,10 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
 	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
-	generic_ast_node_t* alias_ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If it was invalid
-	if(alias_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	//If it was invalid leave
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
@@ -4325,7 +4372,7 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Let's grab the actual name out
-	char* alias_name = alias_ident->string_value.string;
+	dynamic_string_t alias_name = lookahead.lexeme;
 
 	//Once we have this, the alias ident is of no use to us
 
@@ -4341,11 +4388,11 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -4355,11 +4402,11 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -4369,11 +4416,11 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, alias_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -4383,7 +4430,7 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_ident->string_value, struct_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_name, struct_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -4394,12 +4441,180 @@ static u_int8_t struct_definer(FILE* fl){
 
 
 /**
- * A union member list is a semicolon separated list of different variables that the union stores
+ * Parse and add a union member into our union type
+ *
+ * BNF Rule: <union-member> ::= {mut}? <identifier>:<type-specifier>;
  */
-static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
-	return FALSE;
+static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
+	//Our lookahead token
+	lexitem_t lookahead;
+	//Is this mutable? By default we assume no
+	u_int8_t is_mutable = 0;
+
+	//Let's fetch the first token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we have the MUT keyword we'll flag that and move along
+	if(lookahead.tok == MUT){
+		is_mutable = TRUE;
+		//Refresh the token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//Once we're here, we need to see an identifier token. If we don't, we'll fail out
+	if(lookahead.tok != IDENT){
+		print_parse_message(PARSE_ERROR, "Identifier expected in union member declaration", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise we did find it, so let's grab the name out
+	dynamic_string_t name = lookahead.lexeme;
+
+	//Let's validate that this is not a duplicated name
+	symtab_variable_record_t* duplicate = lookup_variable_local_scope(variable_symtab, name.string);
+
+	//Is this a duplicate? If so, we fail out
+	if(duplicate != NULL){
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, union_type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_variable_name(duplicate);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return a fresh error node
+		return FAILURE;
+	}
+
+	//Check that it's not a duplicate function
+	symtab_function_record_t* found_function = lookup_function(function_symtab, name.string);
+
+	//Fail out here
+	if(found_function != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_function_name(found_function);
+		num_errors++;
+		//Return a fresh error node
+		return FAILURE;
+	}
+
+	//Now that we know it's all good, we can keep parsing. We next need to see a colon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail out if we don't have it
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required after identifier in union member definition", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Now we need to see a valid type-specifier
+	generic_type_t* type = type_specifier(fl);
+
+	//If this is NULL we've failed
+	if(type == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid type given to union type", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Now that we have the type as well, we can finally see the semicolon to close it off
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail out here if we don't have it
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after union member declaration", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Finally we can create our member
+	symtab_variable_record_t* union_member = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	//Give it its type
+	union_member->type_defined_as = type;
+	//Store the mutability
+	union_member->is_mutable = is_mutable;
+	//And we'll let the helper add it into the union type
+	add_union_member(union_type, union_member);
+
+	//If we make it here then we succeeded
+	return SUCCESS;
 }
 
+
+/**
+ * Parse the union member list for a given union type
+ *
+ * BNF RULE: <union-member-list> ::= { {<union-member>}+ }
+ */
+static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
+	//Initialize a new variable scope to help with duplicate checks
+	initialize_variable_scope(variable_symtab);
+
+	//We must first see an L_curly
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it's not a curly we fail
+	if(lookahead.tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Left curly required after union name", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise push onto the grouping stack for matching
+	push_token(grouping_stack, lookahead);
+
+	//Refresh the token once
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Now we need to see union members so long as we don't hit the closing R_CURLY
+	do {
+		//Push the token back
+		push_back_token(lookahead);
+
+		//Call the helper union member function
+		u_int8_t status = union_member(fl, union_type);
+
+		//If one of them fails, then we're out
+		if(status == FAILURE){
+			print_parse_message(PARSE_ERROR, "Invalid union member defition", parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//So long as we don't hit the closing curly
+	} while(lookahead.tok != R_CURLY);
+
+	//Once we get down here then we know that we've got an R_CURLY. Let's ensure that we have a grouping
+	//stack match
+	if(pop_token(grouping_stack).tok != L_CURLY){
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Before we go, we need to close out that variable scope that we opened above
+	finalize_variable_scope(variable_symtab);
+
+	//If we make it here then we know that it worked
+	return SUCCESS;
+}
 
 
 /**
@@ -4407,7 +4622,7 @@ static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
  *
  * NOTE: By the time that we get here, we have already seen the UNION keyword 
  *
- * BNF RULE: <union_definer> ::=  define union <identifier> {<union_member_list>} {as <identifier>}? ;
+ * BNF RULE: <union_definer> ::=  define union <identifier> <union-member-list> {as <identifier>}? ;
  */
 static u_int8_t union_definer(FILE* fl){
 	//Lookahead token for searching
@@ -4421,17 +4636,17 @@ static u_int8_t union_definer(FILE* fl){
 	//Add the prefix in
 	dynamic_string_set(&union_name, "union ");
 
-	//We now need to see a name for our union type
-	generic_ast_node_t* name = identifier(fl, SIDE_TYPE_LEFT);
+	//Now we need to see an identifier
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If this is an error fail out
-	if(name->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as union name", parser_line_num);
 		return FAILURE;
 	}
 
 	//Add the ident into our overall name
-	dynamic_string_concatenate(&union_name, name->string_value.string);
+	dynamic_string_concatenate(&union_name, lookahead.lexeme.string);
 
 	//Now we'll need to scan through the type database to ensure that this isn't already in there
 	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, union_name.string);
@@ -4445,17 +4660,115 @@ static u_int8_t union_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Create the union type
+	//Create the union type now that we have enough information
 	generic_type_t* union_type = create_union_type(union_name, parser_line_num);
 
-	//Once we've created it, we can begin parsing the internals
+	//Once we've created it, we can begin parsing the internals. We'll call the union member list 
+	//and let it handle everything else
+	u_int8_t status = union_member_list(fl, union_type);
 
+	//If this fails then we're done
+	if(status == FAILURE){
+		return FAILURE;
+	}
 
+	//Otherwise we're set, so we can now create the union type record
+	symtab_type_record_t* type_record = create_type_record(union_type);
 
+	//Add it into the type symtab
+	insert_type(type_symtab, type_record);
+
+	//Now let's see what we have at the end. We could either see a semicolon
+	//or an immediate alias statement
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Switch based on what we have
+	switch(lookahead.tok){
+		case SEMICOLON:
+			return SUCCESS;
+		//More to do
+		case AS:
+			break;
+		default:
+			print_parse_message(PARSE_ERROR, "AS keyword or semicolon expected after union definition", parser_line_num);
+			num_errors++;
+			return FAILURE;
+	}
+
+	//If we made it here we're aliasing. We need to now see an IDENT
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it's not an IDENT we're done
+	if(lookahead.tok != IDENT){
+		print_parse_message(PARSE_ERROR, "Identifier expected after as keyword", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise we can now extract the name and check for duplication
+	dynamic_string_t alias_name = lookahead.lexeme;
+
+	//Before we do all of the expensive symtab checking, let's just see if the user
+	//forgot a semicolon first. It's fast to check that
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it's not here we're out
+	if(lookahead.tok != SEMICOLON){
+		print_parse_message(PARSE_ERROR, "Semicolon required after union definition", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name.string);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name.string);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	found_type = lookup_type_name_only(type_symtab, alias_name.string);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Let's construct the final alias here
+	generic_type_t* alias_type = create_aliased_type(alias_name, union_type, parser_line_num);
+
+	//Add it into the type symtab
+	insert_type(type_symtab, create_type_record(alias_type));
 
 	//If we get here it worked so
-	//TODO just fail out for now
-	return FAILURE;
+	return SUCCESS;
 }
 
 
@@ -4468,8 +4781,6 @@ static u_int8_t union_definer(FILE* fl){
  * BNF Rule: <enum-definer> ::= define enum <identifier> { <identifier> {= <constant>}? {, <identifier>{ = <constant>}?}* } {as <identifier>}?;
  */
 static u_int8_t enum_definer(FILE* fl){
-	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Reserve space for the type name
@@ -4482,10 +4793,10 @@ static u_int8_t enum_definer(FILE* fl){
 	dynamic_string_set(&type_name, "enum ");
 
 	//We now need to see a valid identifier to round out the name
-	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Fail case here
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid name given to enum definition", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
@@ -4493,7 +4804,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now if we get here we know that we found a valid ident, so we'll add it to the name
-	dynamic_string_concatenate(&type_name, ident->string_value.string);
+	dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 	//Now we need to check that this name isn't already currently in use. We only need to check against the
 	//type symtable, because nothing else could have enum in the name
@@ -4600,9 +4911,6 @@ static u_int8_t enum_definer(FILE* fl){
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
 		//to create the record and assign it a type
 		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme, STORAGE_CLASS_NORMAL);
-
-		//Once it's been created, mark that it is an enum member
-		member_record->is_enumeration_member = TRUE;
 
 		//Store the line number
 		member_record->line_number = parser_line_num;
@@ -4766,10 +5074,10 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Now if we get here, we know that we are aliasing. We won't have a separate node for this, as all
 	//we need to see now is a valid identifier. We'll add the identifier as a child of the overall node
-	generic_ast_node_t* alias_ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it was invalid
-	if(alias_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
@@ -4777,7 +5085,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Extract the alias name
-	char* alias_name = alias_ident->string_value.string;
+	dynamic_string_t alias_name = lookahead.lexeme;
 
 	//Real quick, let's check to see if we have the semicol that we need now
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4791,11 +5099,11 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -4805,11 +5113,11 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -4819,11 +5127,11 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	found_type = lookup_type_name_only(type_symtab, alias_name);
+	found_type = lookup_type_name_only(type_symtab, alias_name.string);
 
 	//Fail out here
 	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -4833,7 +5141,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_ident->string_value, enum_type, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(alias_name, enum_type, parser_line_num);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -4874,10 +5182,14 @@ static u_int8_t enum_definer(FILE* fl){
 static symtab_type_record_t* type_name(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
-	//A temporary holder for the type name
-	char type_name[MAX_TYPE_NAME_LENGTH];
 	//Hold the record we get
 	symtab_type_record_t* record;
+
+	//Create a dstring for the type name
+	dynamic_string_t type_name;
+
+	//Allocate it
+	dynamic_string_alloc(&type_name);
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4911,35 +5223,27 @@ static symtab_type_record_t* type_name(FILE* fl){
 		//Enumerated type
 		case ENUM:
 			//We know that this keyword is in the name, so we'll add it in
-			strcpy(type_name, "enum ");
+			dynamic_string_set(&type_name, "enum ");
 
-			//It is required that we now see a valid identifier
-			generic_ast_node_t* type_ident = identifier(fl, SIDE_TYPE_LEFT);
+			//Now we need to see a valid identifier
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 			//If we fail, we'll bail out
-			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			if(lookahead.tok != IDENT){
 				print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
 				//It's already an error so just give it back
 				return NULL;
 			}
 
-			//Array bounds checking
-			if(strlen(type_ident->string_value.string) > MAX_TYPE_NAME_LENGTH - 10){
-				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->string_value.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return NULL;
-			}
-
 			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-			strcat(type_name, type_ident->string_value.string);
+			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name);
+			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name.string);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Enum %s was never defined. Types must be defined before use", type_name);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -4949,38 +5253,31 @@ static symtab_type_record_t* type_name(FILE* fl){
 			//Once we make it here, we should be all set to get out
 			return record;
 
-		//Construct type
+		//Struct type
 		case STRUCT:
-			//We know that this keyword is in the name, so we'll add it in
-			strcpy(type_name, "struct ");
+			//First add the struct into the name
+			dynamic_string_set(&type_name, "struct ");
 
-			//It is required that we now see a valid identifier
-			type_ident = identifier(fl, SIDE_TYPE_LEFT);
+			//We need to see an ident here
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-			//If we fail, we'll bail out
-			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			//If it's not an ident, leave
+			if(lookahead.tok != IDENT){
 				print_parse_message(PARSE_ERROR, "Invalid identifier given as struct type name", parser_line_num);
-				//It's already an error so just give it back
-				return NULL;
-			}
-
-			//Array bounds checking
-			if(strlen(type_ident->string_value.string) > MAX_TYPE_NAME_LENGTH - 10){
-				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->string_value.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
+				//Throw an error up
 				return NULL;
 			}
 
 			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-			strcat(type_name, type_ident->string_value.string);
+			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name);
+			record = lookup_type_name_only(type_symtab, type_name.string);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Struct %s was never defined. Types must be defined before use", type_name);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -4990,40 +5287,48 @@ static symtab_type_record_t* type_name(FILE* fl){
 			//Once we make it here, we should be all set to get out
 			return record;
 
-		//Some user defined name
-		default:
-			//Put the token back for the ident rule
-			push_back_token(lookahead);
+		//Union type
+		case UNION:
+			//Add union into the name
+			dynamic_string_set(&type_name, "union ");
 
-			//We will let the identifier rule handle it
-			type_ident = identifier(fl, SIDE_TYPE_LEFT);
+			//Now we'll need to see an ident
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-			//If we fail, we'll bail out
-			if(type_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				print_parse_message(PARSE_ERROR, "Invalid identifier given as type name", parser_line_num);
-				//Error increase here
+			//If we don't have one, then we need to fail out
+			if(lookahead.tok != IDENT){
+				print_parse_message(PARSE_ERROR, "Invalid identifier given as union type name", parser_line_num);
 				num_errors++;
-				//It's already an error so just give it back
+				//Send an error up the chain
 				return NULL;
 			}
 
-			//Array bounds checking
-			if(strlen(type_ident->string_value.string) > MAX_TYPE_NAME_LENGTH - 10){
-				sprintf(info, "Type names may only be 200 characters long, but was given %s", type_ident->string_value.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				num_errors++;
-				return NULL;
-			}
-
-			//Grab a pointer for it for convenience
-			char* temp_name = type_ident->string_value.string;
+			//Add the name onto the "union" qualifier
+			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, temp_name);
+			record = lookup_type_name_only(type_symtab, type_name.string);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Type %s was never defined. Types must be defined before use", temp_name);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				//Create and return an error node
+				return NULL;
+			}
+
+			//Once we make it here, we should be all set to get out
+			return record;
+
+		//This is an identifier
+		case IDENT:
+			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
+			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
+
+			//If we didn't find it it's an instant fail
+			if(record == NULL){
+				sprintf(info, "Type %s was never defined. Types must be defined before use", lookahead.lexeme.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -5038,6 +5343,12 @@ static symtab_type_record_t* type_name(FILE* fl){
 
 			//Once we make it here, we should be all set to get out
 			return true_type;
+
+		//If we hit down here, we have some invalid lexeme that isn't a type name at all
+		default:
+			print_parse_message(PARSE_ERROR, "Type name expected but not found", parser_line_num);
+			num_errors++;
+			return NULL;
 	}
 }
 
@@ -5283,23 +5594,23 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 
 	//Following the valid type specifier declaration, we are required to to see a valid variable. This
 	//takes the form of an ident
-	generic_ast_node_t* ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it didn't work we fail immediately
-	if(ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid name given to parameter in function definition", parser_line_num);
 	}
 
 	//Now we must perform all needed duplication checks for the name
 	//Grab this for convenience
-	char* name = ident->string_value.string;
+	dynamic_string_t name = lookahead.lexeme;
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -5309,11 +5620,11 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -5323,11 +5634,11 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -5362,9 +5673,9 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	//symbol table
 	
 	//Let's first construct the variable record
-	symtab_variable_record_t* param_record = create_variable_record(ident->string_value, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
 	//It is a function parameter
-	param_record->is_function_parameter = TRUE;
+	param_record->membership = FUNCTION_PARAMETER;
 	//We assume that it was initialized
 	param_record->initialized = TRUE;
 	//Add the line number
@@ -5383,8 +5694,6 @@ static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_para
 	parameter_decl_node->variable = param_record;
 	//Store the line number
 	parameter_decl_node->line_number = parser_line_num;
-	//Destroy the type specifier node
-	//Destroy the ident node
 
 	//Finally, we'll send this node back
 	return parameter_decl_node;
@@ -5587,12 +5896,15 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	label_stmt->line_number = parser_line_num;
 
 	//Let's see if we can find one
-	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it's bad we'll fail out here
-	if(label_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid identifier given as label ident statement", current_line);
 	}
+
+	//Grab the name out for convenience
+	dynamic_string_t label_name = lookahead.lexeme;
 		
 	//Let's also verify that we have the colon right now
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5601,17 +5913,13 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	if(lookahead.tok != COLON){
 		return print_and_return_error("Colon required after label statement", current_line);
 	}
-	//Otherwise we are all good syntactically here
-
-	//Grab the name out for convenience
-	char* label_name = label_ident->string_value.string;
 
 	//We now need to make sure that it isn't a duplicate. We'll use a special search function to do this
-	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name);
+	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name.string);
 
 	//If we did find it, that's bad
 	if(found_variable != NULL){
-		sprintf(info, "Identiifer %s has already been declared. First declared here: ", label_name); 
+		sprintf(info, "Identiifer %s has already been declared. First declared here: ", label_name.string); 
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(found_variable);
 		num_errors++;
@@ -5620,11 +5928,11 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	}
 
 	//We now need to make sure that it isn't a duplicate
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, label_name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, label_name.string);
 
 	//If we did find it, that's bad
 	if(found_type != NULL){
-		sprintf(info, "Identifier %s has already been declared as a type. First declared here: ", label_name); 
+		sprintf(info, "Identifier %s has already been declared as a type. First declared here: ", label_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_type_name(found_type);
 		num_errors++;
@@ -5633,11 +5941,11 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	}
 
 	//We now need to make sure that it isn't a duplicate
-	symtab_function_record_t* found_function = lookup_function(function_symtab, label_name);
+	symtab_function_record_t* found_function = lookup_function(function_symtab, label_name.string);
 
 	//If we did find it, that's bad
 	if(found_function != NULL){
-		sprintf(info, "Identifier %s has already been declared as a function. First declared here: ", label_name); 
+		sprintf(info, "Identifier %s has already been declared as a function. First declared here: ", label_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_function_name(found_function);
 		num_errors++;
@@ -5650,11 +5958,11 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	symtab_type_record_t* label_type = lookup_type_name_only(type_symtab, "label");
 
 	//Now that we know we didn't find it, we'll create it
-	symtab_variable_record_t* label = create_variable_record(label_ident->string_value, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* label = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
 	//Store the type
 	label->type_defined_as = label_type->type;
 	//Store the fact that it is a label
-	label->is_label = TRUE;
+	label->membership = LABEL_VARIABLE;
 	//Store the line number
 	label->line_number = parser_line_num;
 	//Store what function it's defined in(important for later)
@@ -7439,6 +7747,8 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	lexitem_t lookahead;
 	//Switch compound statement node for later on
 	generic_ast_node_t* switch_compound_statement;
+	//The identifier name - declared here because of strangeness with C case declarations
+	dynamic_string_t ident_name;
 
 	//Remember that we've already seen the first "case" keyword here, so now we need
 	//to consume whatever comes after it(constant or enum value)
@@ -7452,32 +7762,21 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 	switch(lookahead.tok){
 		case IDENT:
-			//Put it back
-			push_back_token(lookahead);
-
-			//Let the subrule handle it
-			generic_ast_node_t* enum_ident_node = identifier(fl, SIDE_TYPE_LEFT);
-
-			//If it's invalid fail out
-			if(enum_ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return enum_ident_node;
-			}
-
 			//Extract the name
-			char* name = enum_ident_node->string_value.string;
+			 ident_name = lookahead.lexeme;
 
 			//If it's an identifier, then it has to be an enum
-			symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, name);
+			symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, ident_name.string);
 
 			//If we somehow couldn't find it
 			if(enum_record == NULL){
-				sprintf(info, "Identifier \"%s\" has never been declared", name);
+				sprintf(info, "Identifier \"%s\" has never been declared", ident_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
 			//If we could find it, but it isn't an enum
-			if(enum_record->is_enumeration_member == FALSE){
-				sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", name);
+			if(enum_record->membership != ENUM_MEMBER){
+				sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", ident_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -7491,9 +7790,6 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 							  switch_stmt_node->inferred_type->type_name.string, enum_record->type_defined_as->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
-
-			//Store this for later processing
-			enum_ident_node->variable = enum_record;
 
 			//Grab the value of this case statement
 			case_stmt->constant_value.signed_int_value = enum_record->enum_member_value;
@@ -7695,35 +7991,26 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Let's now check to see if it's mutable or not
 	if(lookahead.tok == MUT){
 		is_mutable = TRUE;
-	} else {
-		//Push the token back
-		push_back_token(lookahead);
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//The last thing before we perform checks is for us to see a valid identifier
-	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
-
-	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	//If we get here and it's not an identifier, there is an issue
+	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid identifier given in declaration", parser_line_num);
 	}
 
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->string_value.string;
-
-	//Array bounds checking real quick
-	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		return print_and_return_error(info, parser_line_num);
-	}
+	dynamic_string_t name = lookahead.lexeme;
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -7733,11 +8020,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -7748,11 +8035,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 	//Check that it isn't some duplicated variable name. We will only check in the
 	//local scope for this one
-	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -7762,11 +8049,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name);
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
 
 	//Fail out if this isn't null
 	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_constant_name(found_const);
@@ -7805,7 +8092,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(ident_node->string_value, storage_class);
+	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
 	//Store its constant status
 	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
@@ -7819,7 +8106,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//The line_number
 	declared_var->line_number = current_line;
 	//Is it global? This speeds up optimization down the line
-	declared_var->is_global = is_global;
+	declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
@@ -8131,35 +8418,26 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Let's now check and see if this is mutable
 	if(lookahead.tok == MUT){
 		is_mutable = TRUE;
-	} else {
-		//Otherwise push this back
-		push_back_token(lookahead);
+		//Refresh the token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//The last thing before we perform checks is for us to see a valid identifier
-	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
-
-	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	//If it's not an identifier, we fail
+	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid identifier given in let statement", parser_line_num);
 	}
 
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->string_value.string;
-
-	//Array bounds checking real quick
-	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		return print_and_return_error(info, parser_line_num);
-	}
+	dynamic_string_t name = lookahead.lexeme;
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -8169,11 +8447,11 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -8184,11 +8462,11 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Check that it isn't some duplicated variable name. We will only check in the
 	//local scope for this one
-	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var); num_errors++;
@@ -8197,11 +8475,11 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 
 	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name);
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
 
 	//Fail out if this isn't null
 	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_constant_name(found_const);
@@ -8273,7 +8551,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(ident_node->string_value, storage_class);
+	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
 	//Store it's mutability status
 	declared_var->is_mutable = is_mutable;
 	//Store the type
@@ -8287,7 +8565,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//It was "letted" 
 	declared_var->declare_or_let = 1;
 	//Is it a global var or not? This speeds up optimization
-	declared_var->is_global = is_global;
+	declared_var->membership = is_global == TRUE ? GLOBAL_VARIABLE : NO_MEMBERSHIP;
 	//Save the line num
 	declared_var->line_number = current_line;
 
@@ -8356,26 +8634,18 @@ static u_int8_t alias_statement(FILE* fl){
 		return FAILURE;
 	}
 
-	//Otherwise we've made it, so now we need to see a valid identifier
-	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
+	//Now we need to see an identifier here
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If it's bad, we're also done here
-	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to alias statement", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
 
-	//Array bounds checking real quick
-	if(strlen(ident_node->string_value.string) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Type names may only be at most 200 characters long, was given: %s", (ident_node->string_value.string));
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
 	//Grab this out for convenience
-	char* name = ident_node->string_value.string;
+	dynamic_string_t name = lookahead.lexeme;
 
 	//Let's do our last syntax check--the semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8389,11 +8659,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -8403,11 +8673,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
@@ -8417,11 +8687,11 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -8431,7 +8701,7 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//If we get here, we know that it actually worked, so we can create the alias
-	generic_type_t* aliased_type = create_aliased_type(ident_node->string_value, type_spec, parser_line_num);
+	generic_type_t* aliased_type = create_aliased_type(name, type_spec, parser_line_num);
 
 	//Let's now create the aliased record
 	symtab_type_record_t* aliased_record = create_type_record(aliased_type);
@@ -8492,16 +8762,14 @@ static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
 	//rules must account for that
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//We have a declare statement
-	if(lookahead.tok == DECLARE){
-		return declare_statement(fl, is_global);
-	//We have a let statement
-	} else if(lookahead.tok == LET){
-		return let_statement(fl, is_global);
-	//Otherwise we have some weird error here
-	} else {
-		sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
-		return print_and_return_error(info, parser_line_num);
+	switch(lookahead.tok){
+		case DECLARE:
+			return declare_statement(fl, is_global);
+		case LET:	
+			return let_statement(fl, is_global);
+		default:
+			sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
 	}
 }
 
@@ -8575,7 +8843,7 @@ static int8_t check_jump_labels(){
 		}
 
 		//This can also happen - where we have a user trying to jump to a non-label
-		if(label->is_label == FALSE){
+		if(label->membership != LABEL_VARIABLE){
 			sprintf(info, "Variable %s exists but is not a label, so it cannot be jumped to", label->var_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			return FAILURE;
@@ -8732,28 +9000,22 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
 
 	//Now we must see a valid identifier as the name
-	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we have a failure here, we're done for
-	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid name given as function name", current_line);
 	}
 
 	//Otherwise, we could still have a failure here if this is any kind of duplicate
 	//Grab a reference for convenience
-	char* function_name = ident_node->string_value.string;
-
-	//Array bounds checking real quick
-	if(strlen(function_name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Function names may only be at most 200 characters long, was given: %s", function_name);
-		return print_and_return_error(info, parser_line_num);
-	}
+	dynamic_string_t function_name = lookahead.lexeme;
 
 	//Let's now do all of our checks for duplication before we go any further. This can
 	//save us time if it ends up being bad
 	
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
-	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name); 
+	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name.string);
 
 	//Fail out if found and it's already been defined
 	if(function_record != NULL && function_record->defined == TRUE){
@@ -8775,7 +9037,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Otherwise we're defining fresh, so all of these checks need to happen
 	} else {
 		//Check for duplicated variables
-		symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name); 
+		symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name.string);
 
 		//Fail out if duplicate is found
 		if(found_variable != NULL){
@@ -8788,7 +9050,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Check for duplicated type names
-		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name); 
+		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name.string);
 
 		//Fail out if duplicate has been found
 		if(found_type != NULL){
@@ -8801,11 +9063,11 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Let's see if we've already named a constant this
-		symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name);
+		symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name.string);
 
 		//Fail out if this isn't null
 		if(found_const != NULL){
-			sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name);
+			sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			//Also print out the original declaration
 			print_constant_name(found_const);
@@ -8814,7 +9076,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(ident_node->string_value);
+		function_record = create_function_record(function_name);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Set first thing
@@ -8836,7 +9098,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		 * If this is the main function, we will record it as having been called by the operating 
 		 * system
 		 */
-		if(strcmp("main", function_name) == 0){
+		if(strcmp("main", function_name.string) == 0){
 			//It is the main function
 			is_main_function = TRUE;
 		}
@@ -8902,7 +9164,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 			//Let's now compare the types here
 			if(types_assignable(&(func_param->type_defined_as), &(parameter_type)) == NULL){
-				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name, param_count, func_param->type_defined_as->type_name.string);
+				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name.string, param_count, func_param->type_defined_as->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -8978,7 +9240,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//If we're defining a function that was previously implicit, the types have to match exactly
 	if(defining_prev_implicit == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
-			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name, function_record->return_type->type_name.string);
+			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
@@ -9021,7 +9283,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//If we're for some reason defining a previous implicit function
 		if(defining_prev_implicit == TRUE){
-			sprintf(info, "Function \"%s\" was already defined implicitly here:", function_name);
+			sprintf(info, "Function \"%s\" was already defined implicitly here:", function_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
@@ -9123,14 +9385,10 @@ static generic_ast_node_t* function_definition(FILE* fl){
  */
 static u_int8_t replace_statement(FILE* fl){
 	//Lookahead token
-	lexitem_t lookahead;
-
-	//We've already seen the with statement, now we need to see an
-	//identifier
-	generic_ast_node_t* ident_node = identifier(fl, SIDE_TYPE_LEFT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we failed, we're done here
-	if(ident_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(lookahead.tok != IDENT){
 		print_parse_message(PARSE_ERROR, "Invalid identifier given to replace statement", parser_line_num);
 		num_errors++;
 		return FAILURE;
@@ -9138,24 +9396,16 @@ static u_int8_t replace_statement(FILE* fl){
 	
 	//Now that we have the ident, we need to make sure that it's not a duplicate
 	//Let's get a pointer to the name for convenience
-	char* name = ident_node->string_value.string;
-
-	//Array bounds checking real quick
-	if(strlen(name) > MAX_TYPE_NAME_LENGTH){
-		sprintf(info, "Variable names may only be at most 200 characters long, was given: %s", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
+	dynamic_string_t name = lookahead.lexeme;
 
 	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
 	//the same scope may not share names. This is also true regarding functions and types globally
 	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name);
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
 
 	//Fail out here
 	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found_func);
@@ -9164,11 +9414,11 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
 
 	//Fail out here
 	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found_type);
@@ -9178,11 +9428,11 @@ static u_int8_t replace_statement(FILE* fl){
 
 	//Check that it isn't some duplicated variable name. We will only check in the
 	//local scope for this one
-	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name);
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var); num_errors++;
@@ -9190,11 +9440,11 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name);
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
 
 	//Fail out if this isn't null
 	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name);
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_constant_name(found_const);
@@ -9232,7 +9482,7 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Now we're ready for assembly and insertion
-	symtab_constant_record_t* created_const = create_constant_record(ident_node->string_value);
+	symtab_constant_record_t* created_const = create_constant_record(name);
 
 	//Once we've created it, we'll pack it with values
 	created_const->constant_node = constant_node;

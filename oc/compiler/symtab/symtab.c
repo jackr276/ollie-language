@@ -1012,43 +1012,48 @@ void print_function_name(symtab_function_record_t* record){
  * Intended for error messages
  */
 void print_variable_name(symtab_variable_record_t* record){
-	//If it's part of a function we'll just print that
-	if(record->is_function_parameter == TRUE){
-		print_function_name(record->function_declared_in);
-		return;
-	} else if (record->is_label == TRUE){
-		printf("\n---> %d | %s:\n", record->line_number, record->var_name.string);
-		return;
-	} else if(record->is_enumeration_member == TRUE){
-		//The var name
-		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name.string);
-	} else if(record->is_struct_member == TRUE){
-		//The var name
-		printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name.string);
-	} else {
-		//Line num
-		printf("\n---> %d | ", record->line_number);
+	//Go based on the membership
+	switch(record->membership){
+		case FUNCTION_PARAMETER:
+			print_function_name(record->function_declared_in);
+			break;
+		case LABEL_VARIABLE:
+			printf("\n---> %d | %s:\n", record->line_number, record->var_name.string);
+			break;
+		case ENUM_MEMBER:
+			//The var name
+			printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s", record->line_number, record->var_name.string);
+			break;
+		case STRUCT_MEMBER:
+			//The var name
+			printf("{\n\t\t...\n\t\t...\t\t\n---> %d |\t %s : %s", record->line_number, record->var_name.string, record->type_defined_as->type_name.string);
+			break;
+		default:
+			//Line num
+			printf("\n---> %d | ", record->line_number);
 
-		//Declare or let
-		record->declare_or_let == 0 ? printf("declare ") : printf("let ");
+			//Declare or let
+			record->declare_or_let == 0 ? printf("declare ") : printf("let ");
 
-		//If it's mutable print that
-		if(record->is_mutable == 1){
-			printf(" mut ");
-		}
+			//If it's mutable print that
+			if(record->is_mutable == 1){
+				printf(" mut ");
+			}
 
-		//The var name
-		printf("%s : ", record->var_name.string);
+			//The var name
+			printf("%s : ", record->var_name.string);
 
-		//The type name
-		printf("%s ", record->type_defined_as->type_name.string);
-		
-		//We'll print out some abbreviated stuff with the let record
-		if(record->declare_or_let == 1){
-			printf(" := <initializer>;\n\n");
-		} else {
-			printf(";\n");
-		}
+			//The type name
+			printf("%s ", record->type_defined_as->type_name.string);
+			
+			//We'll print out some abbreviated stuff with the let record
+			if(record->declare_or_let == 1){
+				printf(" := <initializer>;\n\n");
+			} else {
+				printf(";\n");
+			}
+
+			break;
 	}
 }
 
@@ -1204,9 +1209,13 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 				continue;
 			}
 
-			//If it's a label, don't bother with it
-			if(record->is_label == TRUE || record->is_struct_member == TRUE){
-				continue;;
+			//If it's a label or struct, don't bother with it
+			switch(record->membership){
+				case LABEL_VARIABLE:
+				case STRUCT_MEMBER:
+					continue;
+				default:
+					break;
 			}
 
 			//Let's now analyze this record

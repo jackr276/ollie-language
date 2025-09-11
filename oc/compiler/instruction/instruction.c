@@ -208,6 +208,8 @@ variable_size_t select_constant_size(three_addr_const_t* constant){
 
 /**
  * Select the size based only on a type
+ *
+ * TODO NEEDS REWORK
  */
 variable_size_t select_type_size(generic_type_t* type){
 	//What the size will be
@@ -576,7 +578,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
  * that they share is the overall variable that they're linked back to, which stores their type information,
  * etc.
 */
-three_addr_var_t* emit_var(symtab_variable_record_t* var, u_int8_t is_label){
+three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
@@ -3899,7 +3901,7 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable, generic_typ
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//We'll just store the assignee here, no need for anything else
-	stmt->assignee = emit_var(variable, FALSE);
+	stmt->assignee = emit_var(variable);
 
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_PHI_FUNC;
