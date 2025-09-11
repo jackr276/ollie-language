@@ -7294,45 +7294,29 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 
 /**
- * Visit a declaration statement
+ * Visit a declaration statement. If we see an actual declaration node, then
+ * we know that this is either a struct, array or union - it's something that
+ * has to be allocated and placed onto the stack
  */
 static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node){
 	//What block are we emitting into?
-	basic_block_t* emitted_block = NULL;
+	basic_block_t* emitted_block = basic_block_alloc(1);
 
 	//Extract the type info out of here
-	generic_type_t* type = node->variable->type_defined_as;
+	generic_type_t* type = node->inferred_type;
 
 	//The base address. We may or may not need this
-	three_addr_var_t* base_addr;
+	three_addr_var_t* base_addr = emit_var(node->variable);
 
-	//Based on what type of class we have, we may or may not need to use the stack
-	switch(type->type_class){
-		//These are always on the stack
-		case TYPE_CLASS_UNION:
-		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_STRUCT:
-			//If we're doing something like this, we'll actually need to allocate
-			emitted_block = basic_block_alloc(1);
+	//This var is an assigned variable
+	add_assigned_variable(emitted_block, base_addr);
 
-			//Now we emit the variable for the array base address
-			base_addr = emit_var(node->variable);
+	//Add this variable into the current function's stack. This is what we'll use
+	//to store the address
+	add_variable_to_stack(&(current_function->data_area), base_addr);
 
-			//This var is an assigned variable
-			add_assigned_variable(emitted_block, base_addr);
-
-			//Add this variable into the current function's stack. This is what we'll use
-			//to store the address
-			add_variable_to_stack(&(current_function->data_area), base_addr);
-
-			//We'll now emit the actual address calculation using the offset
-			emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, type_symtab), FALSE);
-			break;
-
-		//Otherwise just leave
-		default:
-			break;
-	}
+	//We'll now emit the actual address calculation using the offset
+	emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, type_symtab), FALSE);
 
 	//Declare the result package
 	cfg_result_package_t result_package = {emitted_block, emitted_block, NULL, BLANK};

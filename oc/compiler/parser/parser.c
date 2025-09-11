@@ -7693,29 +7693,42 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
- * BNF Rule: <declare-statement> ::= declare {register | static}? {mut}? <identifier> : <type-specifier>;
+ * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? {mut}? <identifier> : <type-specifier>} ;
  */
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
-	//Is it mutable?
-	u_int8_t is_mutable = 0;
+	//Is it mutable? Our default is no
+	u_int8_t is_mutable = FALSE;
 	//The storage class, normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
-
-	//Let's first declare the root node
-	generic_ast_node_t* decl_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we see static here, we'll make a note of that
-	if(lookahead.tok == STATIC){
-		storage_class = STORAGE_CLASS_STATIC;
-		//Refresh token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//Go based on what we see here
+	switch(lookahead.tok){
+		//This is bound to be a normal variable declaration
+		case STATIC:
+			storage_class = STORAGE_CLASS_STATIC;
+			//Refresh token
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			break;
+
+		//If we see either of these tokens, it means that the user is predeclaring a function.
+		//In this case, we push the token back and let the function predeclaration rule
+		//handle it
+		case PUB:
+		case FN:
+			push_back_token(lookahead);
+			//Let this rule handle it
+			return function_predeclaration(fl);
+	
+		//By default just leave
+		default:
+			break;
 	}
 
 	//Let's now check to see if it's mutable or not
@@ -7815,6 +7828,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//The last thing that we are required to see before final assembly is a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//No semicolon, we fail out
 	if(lookahead.tok != SEMICOLON){
 		return print_and_return_error("Semicolon required at the end of declaration statement", parser_line_num);
 	}
@@ -7840,15 +7854,35 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
-	//Also store this record with the root node
-	decl_node->variable = declared_var;
-	//Store the type as well
-	decl_node->inferred_type = declared_var->type_defined_as;
-	//Store the line number
-	decl_node->line_number = current_line;
+	//By default this is NULL
+	generic_ast_node_t* declaration_node = NULL;
 
-	//All went well so we can return this
-	return decl_node;
+	//Based on what type we have, we may or may not even need a declaration here
+	switch(declared_var->type_defined_as->type_class){
+		//These all require a stack allocation, so a node is required
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			//Actually create the node now
+			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
+
+			//Also store this record with the root node
+			declaration_node->variable = declared_var;
+			//Store the type as well
+			declaration_node->inferred_type = declared_var->type_defined_as;
+			//Store the line number
+			declaration_node->line_number = current_line;
+
+			break;
+
+		//Otherwise just leave
+		default:
+			break;
+	}
+
+	//Return this. It will either be NULL or a generic node based on whether or not
+	//a stack allocation was required
+	return declaration_node;
 }
 
 
@@ -8877,9 +8911,6 @@ static u_int8_t validate_predeclared_parameter_list(FILE* fl, symtab_function_re
 			push_back_token(lookahead);
 			break;
 	}
-
-	//Start off at 1 
-	u_int8_t function_parameter_number = 1;
 
 	//We'll keep going as long as we see more commas
 	do{
