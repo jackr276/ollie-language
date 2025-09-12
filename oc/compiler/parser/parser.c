@@ -105,6 +105,7 @@ static generic_ast_node_t* defer_statement(FILE* fl);
 static generic_ast_node_t* idle_statement(FILE* fl);
 static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side);
 static generic_ast_node_t* initializer(FILE* fl, side_type_t side);
+static generic_ast_node_t* function_predeclaration(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee);
@@ -9068,13 +9069,22 @@ static u_int8_t parameter_list(FILE* fl, generic_type_t* function_signature){
 }
 
 
+
+static generic_ast_node_t* function_predeclaration(FILE* fl){
+
+	//TODO STUB
+	return NULL;
+}
+
+
+
 /**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= {pub}? fn <identifer> ({<parameter-list> | void}?) -> <type-specifier>{; | <compound-statement>}
+ * BNF Rule: <function-definition> ::= {pub}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
  */
 static generic_ast_node_t* function_definition(FILE* fl){
 	//Freeze the line number
@@ -9156,16 +9166,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//This is our interesting case. The function has been defined implicitly, and now we're trying to define it
-	//explicitly. We don't need to do any other checks if this is the case
-	if(function_record != NULL && function_record->defined == FALSE){
-		//Flag this
-		definining_predeclared_function = TRUE;
-		//Set this as well
-		current_function = function_record;
-
-	//Otherwise we're defining fresh, so all of these checks need to happen
-	} else {
+	//If the function record is NULL, that means we're defining completely fresh
+	if(function_record == NULL){
+		//Go through all the steps of a fresh definition here
 		//Check for duplicated variables
 		symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name.string);
 
@@ -9206,7 +9209,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name);
+		function_record = create_function_record(function_name, parser_line_num);
 		//Associate this with the function node
 		function_node->func_record = function_record;
 		//Store this for printing
@@ -9231,16 +9234,13 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//It is the main function
 			is_main_function = TRUE;
 		}
-	}
 
-	//Here is the signature type
-	generic_type_t* function_signature;
-
-	//If we're not defining a predeclared function, we need to make the signature ourselves
-	if(definining_predeclared_function == FALSE){
-		function_signature = create_function_pointer_type(parser_line_num);
+	//If we get here, we know that we're defining a predeclared function
 	} else {
-		function_signature = function_record->signature;
+		//Flag this
+		definining_predeclared_function = TRUE;
+		//Set this as well
+		current_function = function_record;
 	}
 
 	//We'll need to initialize a new variable scope here. This variable scope is designed
@@ -9308,38 +9308,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		//Error out here
 		return print_and_return_error("Invalid definition for main() function", parser_line_num);
 	}
-
-	//Now we have a fork in the road here. We can either define the function implicitly here
-	//or we can do a full definition
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If it's a semicolon, we're done. This means that we're essentially promising
-	//that a function of this kind exists
-	if(lookahead.tok == SEMICOLON){
-		//The main function may not be defined implicitly
-		if(is_main_function == TRUE){
-			print_parse_message(PARSE_ERROR, "The main function may not be predeclared. Predeclarative definition here:", parser_line_num);
-			print_function_name(function_record);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-		}
-
-		//This function was not defined
-		function_record->defined = FALSE;
-
-		//Close the variable scope that we opened for the parameter list
-		finalize_variable_scope(variable_symtab);
-
-		//Remove the nesting level now that we're not in a function
-		pop_nesting_level(nesting_stack);
-		
-		//Return NULL here
-		return NULL;
-	}
-
-	//Otherwise if we make it here then we know that we're doing the full declaration
-	//Put it back
-	push_back_token(lookahead);
 
 	//Some housekeeping, if there were previously deferred statements, we want them out
 	deferred_stmts_node = NULL;

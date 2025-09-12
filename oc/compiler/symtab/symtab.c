@@ -304,7 +304,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name){
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -316,6 +316,13 @@ symtab_function_record_t* create_function_record(dynamic_string_t name){
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name.string);
 
+	//Store the line number
+	record->line_number = line_number;
+
+	//We know that we need to create this immediately
+	record->signature = create_function_pointer_type(line_number);
+
+	//And give it back
 	return record;
 }
 
