@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <execution>
 #include <iso646.h>
 #include <stdio.h>
 #include <limits.h>
@@ -4055,8 +4056,9 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//Otherwise push this onto the grouping stack for later
 	push_token(grouping_stack, lookahead);
 
-	//Once we've gotten past this point, we're safe to allocate this type
-	generic_type_t* function_type = create_function_pointer_type(parser_line_num); 
+	//Once we've gotten past this point, we're safe to allocate this type. Function
+	//pointers are always private
+	generic_type_t* function_type = create_function_pointer_type(FALSE, parser_line_num); 
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -8824,145 +8826,19 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 
 
 /**
- * This validator function exists only to parse through the parameter list for a predeclared
- * function and validate that this parameter list and the predeclared function's
- * parameter list are identical
- *
- * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
- */
-static u_int8_t validate_predeclared_parameter_list(FILE* fl, symtab_function_record_t* function){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//This is the internal function type, extracted for convenience
-	function_type_t* function_type = function->signature->internal_types.function_type;
-	
-	//Now we need to see a valid parentheis
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we didn't find it, no point in going further
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected before parameter list", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Otherwise, we'll push this onto the list to check for later
-	push_token(grouping_stack, lookahead);
-
-	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
-	//done here and we'll just return an empty list
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	switch(lookahead.tok){
-		//If we see an R_PAREN immediately, we can check and leave
-		case R_PAREN:
-			//If we have a mismatch, we can return these
-			if(pop_token(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//If we don't also have 0 params, then this fails
-			if(function_type->num_params != 0){
-				sprintf(info, "Function %s was defined to have %d parameters, not 0", function->func_name.string, function_type->num_params);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Otherwise we're fine, so return the list node
-			return SUCCESS;
-
-		//This is a possibility, we could see (void) as a valid declaration of no parameters
-		case VOID:
-			//We now need to see a closing R_PAREN
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-			//Fail out if we don't see this
-			if(lookahead.tok != R_PAREN){
-				print_parse_message(PARSE_ERROR, "Closing parenthesis expected after void parameter list declaration", parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Also check for grouping
-			if(pop_token(grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//If we don't also have 0 params, then this fails
-			if(function_type->num_params != 0){
-				sprintf(info, "Function %s was defined to have %d parameters, not 0", function->func_name.string, function_type->num_params);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Give back the paremeter list node
-			return SUCCESS;
-			
-		//By default just put it back and get out
-		default:
-			push_back_token(lookahead);
-			break;
-	}
-
-	//We'll keep going as long as we see more commas
-	do{
-		//We must first see a valid parameter declaration
-		symtab_variable_record_t* parameter = parameter_declaration(fl, function_parameter_number);
-
-		//It's invalid, we'll just send it up the chain
-		if(parameter == NULL){
-			print_parse_message(PARSE_ERROR, "Invalid paremeter declaration found in parameter list", parser_line_num);
-			num_errors++;
-			return NULL;;
-		}
-
-		//Increment this
-		function_parameter_number++;
-
-		//Refresh the lookahead token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//We keep going as long as we see commas
-	} while(lookahead.tok == COMMA);
-
-	//Once we reach here, we need to check for the R_PAREN
-	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Closing parenthesis expected after parameter list", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Otherwise it worked, so we need to check matching
-	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//If we make it down here then this all worked, so
-	return SUCCESS;
-}
-
-
-
-/**
  * A paramater list will handle all of the parameters in a function definition. It is important
  * to note that a parameter list may very well be empty, and that this rule will handle that case.
  * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
  *
  * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
  */
-static u_int8_t parameter_list(FILE* fl, generic_type_t* function_signature){
+static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_record, u_int8_t defining_predeclared_function){
 	//Lookahead token
 	lexitem_t lookahead;
 
 	//This is the internal function type, extracted for convenience
-	function_type_t* function_type = function_signature->internal_types.function_type;
+	generic_type_t* function_type = function_record->signature;
+	function_type_t* internal_function_type = function_type->internal_types.function_type;
 	
 	//Now we need to see a valid parentheis
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8991,6 +8867,18 @@ static u_int8_t parameter_list(FILE* fl, generic_type_t* function_signature){
 				return FAILURE;
 			}
 
+			//If we're validating, let's check and ensure that the defined type also
+			//has no params
+			if(defining_predeclared_function == TRUE){
+				//If we have a mismatch, we fail out
+				if(internal_function_type->num_params != 0){
+					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->num_params);
+					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FAILURE;
+				}
+			}
+
 			//Otherwise we're fine, so return the list node
 			return SUCCESS;
 
@@ -9011,6 +8899,18 @@ static u_int8_t parameter_list(FILE* fl, generic_type_t* function_signature){
 				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 				num_errors++;
 				return FAILURE;
+			}
+
+			//If we're validating, let's check and ensure that the defined type also
+			//has no params
+			if(defining_predeclared_function == TRUE){
+				//If we have a mismatch, we fail out
+				if(internal_function_type->num_params != 0){
+					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->num_params);
+					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FAILURE;
+				}
 			}
 
 			//Give back the paremeter list node
@@ -9205,15 +9105,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, parser_line_num);
+		function_record = create_function_record(function_name, is_public, parser_line_num);
 		//Associate this with the function node
 		function_node->func_record = function_record;
-		//Store this for printing
-		function_record->line_number = current_line;
-		//Create the call graph node
-		function_record->call_graph_node = create_call_graph_node(function_record);
-		//By default, this function has never been called
-		function_record->called = FALSE;
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -9247,7 +9141,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	u_int8_t status = parameter_list(fl, function_signature);
+	u_int8_t status = parameter_list(fl, function_record, definining_predeclared_function);
 
 	//We have a bad parameter list, we just fail out
 	if(status == FAILURE){

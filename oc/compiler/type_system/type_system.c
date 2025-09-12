@@ -1821,7 +1821,7 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int32_t line_number){
+generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number){
 	//First allocate the parent
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
@@ -1831,6 +1831,9 @@ generic_type_t* create_function_pointer_type(u_int32_t line_number){
 
 	//Now we need to create the internal function pointer type
 	type->internal_types.function_type = calloc(1, sizeof(function_type_t));
+
+	//Store whether or not this is public
+	type->internal_types.function_type->is_public = is_public;
 
 	//These are always 8 bytes
 	type->type_size = 8;

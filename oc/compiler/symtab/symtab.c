@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../ast/ast.h"
+#include "../call_graph/call_graph.h"
 
 #define LARGE_PRIME 611593
 //For standardization
@@ -304,7 +305,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -319,8 +320,11 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int32_
 	//Store the line number
 	record->line_number = line_number;
 
+	//Create its call graph node
+	record->call_graph_node = create_call_graph_node(record);
+
 	//We know that we need to create this immediately
-	record->signature = create_function_pointer_type(line_number);
+	record->signature = create_function_pointer_type(is_public, line_number);
 
 	//And give it back
 	return record;
