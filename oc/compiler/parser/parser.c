@@ -11,8 +11,6 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
-#include <execution>
-#include <iso646.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -8937,6 +8935,68 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			return NULL;;
 		}
 
+		//Status tracker
+		u_int8_t status;
+
+		//If we're not defining a predeclared function, we need to add this parameter in
+		if(defining_predeclared_function == FALSE){
+			//Let the helper do it
+			status = add_parameter_to_function_type(function_type, parameter->type_defined_as, parameter->is_mutable);
+
+			//This means that we exceeded the number of parameters
+			if(status == FAILURE){
+				print_parse_message(PARSE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+			//Otherwise we're fine
+
+		//If we get here, we need to validate that the type that was declared is
+		//the same as the one originally given
+		} else {
+			//Check if we've got too many parameters
+			if(function_parameter_number > internal_function_type->num_params){
+				sprintf(info, "Function %s was defined with only %d parameters", function_record->func_name.string, internal_function_type->num_params);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//If the mutability levels are off, we fail out
+			if(internal_function_type->parameters[function_parameter_number-1].is_mutable != parameter->is_mutable){
+				sprintf(info, "Mutability mismatch for parameter %d", function_parameter_number);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Grab the defined type out
+			generic_type_t* defined_type = dealias_type(internal_function_type->parameters[function_parameter_number-1].parameter_type);
+			//And this type
+			generic_type_t* declared_type = dealias_type(parameter->type_defined_as);
+
+			//If these 2 don't match, we fail
+			if(defined_type != declared_type){
+				sprintf(info, "Parameter %d was defined with type %s, but declared with type %s",  function_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Otherwise if we survive to here, then we're good
+		}
+
+		//Once we're here, we can add the function parameter in
+		status = add_function_parameter(function_record, parameter);
+
+		//If this fails that means we exceeded the maximum number of parameters
+		//This means that we exceeded the number of parameters
+		if(status == FAILURE){
+			print_parse_message(PARSE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
 		//Increment this
 		function_parameter_number++;
 
@@ -8945,6 +9005,14 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 
 	//We keep going as long as we see commas
 	} while(lookahead.tok == COMMA);
+
+	//If we're predeclaring, we need to check that the parameter count matches
+	if(defining_predeclared_function == TRUE && function_record->number_of_params != internal_function_type->num_params){
+		sprintf(info, "Function %s was declared with %d parameters, but was only defined with %d", function_record->func_name.string, internal_function_type->num_params, function_record->number_of_params);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
 
 	//Once we reach here, we need to check for the R_PAREN
 	if(lookahead.tok != R_PAREN){

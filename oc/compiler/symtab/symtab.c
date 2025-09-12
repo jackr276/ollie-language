@@ -15,6 +15,9 @@
 #define TRUE 1
 #define FALSE 0
 
+#define SUCCESS 1
+#define FAILURE 0
+
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
 
@@ -301,6 +304,25 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 	return record;
 }
 
+
+/**
+ * Add a parameter to a function and perform all internal bookkeeping needed
+ */
+u_int8_t add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
+	//We have too many parameters, fail out
+	if(function_record->number_of_params == 6){
+		return FAILURE;
+	}
+
+	//Store it in the function's parameters
+	function_record->func_params[function_record->number_of_params] = variable_record;
+
+	//Increment the count
+	(function_record->number_of_params)++;
+
+	//All went well
+	return SUCCESS;
+}
 
 /**
  * Dynamically allocate a function record
