@@ -291,6 +291,11 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 generic_type_t* create_function_pointer_type(u_int32_t line_number);
 
 /**
+ * Add a function's parameter in
+ */
+u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter, u_int8_t is_mutable);
+
+/**
  * Print a function pointer type out
  */
 void generate_function_pointer_type_name(generic_type_t* function_pointer_type);

@@ -4078,16 +4078,13 @@ static u_int8_t function_pointer_definer(FILE* fl){
 			break;
 	}
 
-	//Keep track of the parameter count
-	u_int8_t parameter_count = 0;
+	//Is the parameter mutable
+	u_int8_t is_mutable;
 
 	//Keep processing so long as we keep seeing commas
 	do{
-		//We've exceeded the allowed count. We'll throw an error here
-		if(parameter_count >= MAX_FUNCTION_TYPE_PARAMS){
-			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
-			return FALSE;
-		}
+		//Assume by default it's not mutable
+		is_mutable = FALSE;
 
 		//Each function pointer parameter will consist only of a type and optionally
 		//a mutable keyword
@@ -4095,8 +4092,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 		//Is it mutable? If this token exists then it is
 		if(lookahead.tok == MUT){
-			//Store that this is mutable inside of the structure
-			function_type->internal_types.function_type->parameters[parameter_count].is_mutable = TRUE;
+			is_mutable = TRUE;
 		} else {
 			//Otherwise put this back
 			push_back_token(lookahead);
@@ -4110,19 +4106,19 @@ static u_int8_t function_pointer_definer(FILE* fl){
 			return FALSE;
 		}
 
-		//This is good, we'll store it in the parameter type
-		function_type->internal_types.function_type->parameters[parameter_count].parameter_type = type;
+		//Let the helper add the type in
+		u_int8_t status = add_parameter_to_function_type(function_type, type, is_mutable);
 
-		//Increment the count
-		parameter_count++;
+		//This means that we have been given too many parameters
+		if(status == FAILURE){
+			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			return FALSE;
+		}
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	} while(lookahead.tok == COMMA);
-
-	//Store the parameter count for down the road
-	function_type->internal_types.function_type->num_params = parameter_count;
 
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){

@@ -3,6 +3,7 @@
 */
 
 #include "type_system.h"
+#include <execution>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -1836,6 +1837,30 @@ generic_type_t* create_function_pointer_type(u_int32_t line_number){
 
 	//And give the type back
 	return type;
+}
+
+
+/**
+ * Add a function's parameter in
+ */
+u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter, u_int8_t is_mutable){
+	//Extract this for convenience
+	function_type_t* internal_type = function_type->internal_types.function_type;
+
+	//This means that we've hit the maximum number of parameters
+	if(internal_type->num_params == 6){
+		return FAILURE;
+	}
+
+	//Store the mutability level and parameter type
+	internal_type->parameters[internal_type->num_params].is_mutable = is_mutable;
+	internal_type->parameters[internal_type->num_params].parameter_type = parameter;
+
+	//Increment this
+	(internal_type->num_params)++;
+
+	//Give back success
+	return SUCCESS;
 }
 
 
