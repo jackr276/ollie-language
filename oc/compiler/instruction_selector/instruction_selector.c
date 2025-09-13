@@ -22,6 +22,7 @@
 
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* u64;
+static generic_type_t* u32;
 static generic_type_t* u8;
 
 //The window for our "sliding window" optimizer
@@ -2886,9 +2887,18 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//By default the true source is this, but we may need to emit a converting move
 		three_addr_var_t* true_source = window->instruction1->op2;
 
-		//Do we need to convert op2 into a u64? If so, we'll do that here
-		if(is_type_conversion_needed(u64, true_source->type) == TRUE){
-			true_source = handle_converting_move_operation(window->instruction1, window->instruction1->op2, u64);
+		//What is the size of this source variable? It needs
+		//to be 32 bits or more to avoid needing a conversion
+		switch(true_source->variable_size){
+			//These two mean that we're fine
+			case QUAD_WORD:
+			case DOUBLE_WORD:
+				break;
+
+			//Otherwise, a conversion is required
+			default:
+				true_source = handle_converting_move_operation(window->instruction1, window->instruction1->op2, u32);
+				break;
 		}
 
 		//The source register is op1
@@ -4340,6 +4350,7 @@ static void print_ordered_blocks(basic_block_t* head_block, instruction_printing
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Grab these two general use types first
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64")->type;
+	u32 = lookup_type_name_only(cfg->type_symtab, "u32")->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8")->type;
 
 	//Our very first step in the instruction selector is to order all of the blocks in one 
