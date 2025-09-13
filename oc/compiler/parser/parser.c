@@ -9153,13 +9153,28 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
 
-	//If this is a void parameter, we cannot see any more parameters
-	if(lookahead.tok == VOID){
-		//Skip over everything else
-		goto parameter_end;
-	} else {
-		//Otherwise just put it back
-		push_back_token(lookahead);
+	//We must check some edge cases here
+	switch(lookahead.tok){
+		case VOID:
+			//We now need to see an RPAREn
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			
+			//We now need to see an R_PAREN
+			if(lookahead.tok != R_PAREN){
+				return print_and_return_error("Right parenthesis required after void parameter declaration", parser_line_num);
+			}
+
+			//Otherwise just go to after r_paren
+			goto after_rparen;
+
+		//We'll just hop out
+		case R_PAREN:
+			goto after_rparen;
+
+		//By default we can just leave
+		default:
+			push_back_token(lookahead);
+			break;
 	}
 
 	//Is the parameter mutable
@@ -9203,12 +9218,12 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 
 	} while(lookahead.tok == COMMA);
 
-parameter_end:
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
 		return print_and_return_error("Right parenthesis required after parameter list declaration", parser_line_num);
 	}
 
+after_rparen:
 	//Make sure that we can pop the grouping stack and get a match
 	if(pop_token(grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
