@@ -9128,6 +9128,82 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 	//Now that we've survived up to here, we can make the actual record
 	symtab_function_record_t* function_record = create_function_record(function_name, is_public, parser_line_num);
 
+	//Now we need to see an lparen to begin the parameters
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see it, we fail out
+	if(lookahead.tok != L_PAREN){
+		return print_and_return_error("Left parenthesis expected after function name", parser_line_num);
+	}
+
+	//Add this onto the grouping stack
+	push_token(grouping_stack, lookahead);
+
+	//Now we can begin processing our parameters
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+
+	//If this is a void parameter, we cannot see any more parameters
+	if(lookahead.tok == VOID){
+		//Skip over everything else
+		goto parameter_end;
+	} else {
+		//Otherwise just put it back
+		push_back_token(lookahead);
+	}
+
+	//Is the parameter mutable
+	u_int8_t is_mutable;
+
+	//Keep processing so long as we keep seeing commas
+	do{
+		//Assume by default it's not mutable
+		is_mutable = FALSE;
+
+		//Each function pointer parameter will consist only of a type and optionally
+		//a mutable keyword
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Is it mutable? If this token exists then it is
+		if(lookahead.tok == MUT){
+			is_mutable = TRUE;
+		} else {
+			//Otherwise put this back
+			push_back_token(lookahead);
+		}
+
+		//Now we need to see a valid type
+		generic_type_t* type = type_specifier(fl);
+
+		//If this is NULL, we'll error out
+		if(type == NULL){
+			return FALSE;
+		}
+
+		//Let the helper add the type in
+		u_int8_t status = add_parameter_to_function_type(function_record->signature, type, is_mutable);
+
+		//This means that we have been given too many parameters
+		if(status == FAILURE){
+			return print_and_return_error("Maximum function parameter count of 6 exceeded", parser_line_num);
+		}
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	} while(lookahead.tok == COMMA);
+
+parameter_end:
+	//Now that we're done processing the list, we need to ensure that we have a right paren
+	if(lookahead.tok != R_PAREN){
+		return print_and_return_error("Right parenthesis required after parameter list declaration", parser_line_num);
+	}
+
+	//Make sure that we can pop the grouping stack and get a match
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+	}
+
 	
 	
 	//TODO STUB
