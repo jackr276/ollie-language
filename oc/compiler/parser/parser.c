@@ -8967,6 +8967,21 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 				return FAILURE;
 			}
 
+			//We need to ensure that the mutability levels match here
+			if(internal_function_type->parameters[function_parameter_number - 1].is_mutable == TRUE && parameter->is_mutable == FALSE){
+				sprintf(info, "Parameter %s was defined as immutable, but predeclared as mutable", parameter->var_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+
+			//The other option for a mismatch
+			} else if(internal_function_type->parameters[function_parameter_number - 1].is_mutable == FALSE && parameter->is_mutable == TRUE){
+				sprintf(info, "Parameter %s was defined as mutable, but predeclared as immutable", parameter->var_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
 			//If the mutability levels are off, we fail out
 			if(internal_function_type->parameters[function_parameter_number-1].is_mutable != parameter->is_mutable){
 				sprintf(info, "Mutability mismatch for parameter %d", function_parameter_number);
@@ -9476,7 +9491,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//If we're defining a function that was previously implicit, the types have to match exactly
 	if(definining_predeclared_function == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
-			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
+			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
