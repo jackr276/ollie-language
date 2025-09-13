@@ -23,6 +23,7 @@
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* u64;
 static generic_type_t* u32;
+static generic_type_t* i32;
 static generic_type_t* u8;
 
 //The window for our "sliding window" optimizer
@@ -2897,7 +2898,15 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 
 			//Otherwise, a conversion is required
 			default:
-				true_source = handle_converting_move_operation(window->instruction1, window->instruction1->op2, u32);
+				//If it is signed, we'll want to preserve the signedness
+				if(is_type_signed(true_source->type) == TRUE){
+					true_source = handle_converting_move_operation(window->instruction1, window->instruction1->op2, i32);
+
+				//Otherwise, we'll use the unsigned version
+				} else {
+					true_source = handle_converting_move_operation(window->instruction1, window->instruction1->op2, u32);
+				}
+
 				break;
 		}
 
@@ -4350,6 +4359,7 @@ static void print_ordered_blocks(basic_block_t* head_block, instruction_printing
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Grab these two general use types first
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64")->type;
+	i32 = lookup_type_name_only(cfg->type_symtab, "i32")->type;
 	u32 = lookup_type_name_only(cfg->type_symtab, "u32")->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8")->type;
 
