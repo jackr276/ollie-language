@@ -8991,9 +8991,9 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			}
 
 			//Grab the defined type out
-			generic_type_t* defined_type = dealias_type(internal_function_type->parameters[function_parameter_number-1].parameter_type);
+			generic_type_t* declared_type = dealias_type(internal_function_type->parameters[function_parameter_number-1].parameter_type);
 			//And this type
-			generic_type_t* declared_type = dealias_type(parameter->type_defined_as);
+			generic_type_t* defined_type = dealias_type(parameter->type_defined_as);
 
 			//If these 2 don't match, we fail
 			if(defined_type != declared_type){
