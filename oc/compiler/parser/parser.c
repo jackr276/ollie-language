@@ -402,8 +402,6 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	//Clone the string in
 	ident_node->string_value = clone_dynamic_string(&(lookahead.lexeme));
 
-	//Default identifier type is s_int32
-	ident_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 	//Add the line number
 	ident_node->line_number = parser_line_num;
 
