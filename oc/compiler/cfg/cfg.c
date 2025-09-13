@@ -2345,7 +2345,7 @@ static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_bl
  */
 static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* basic_block, jump_table_t* initial_address, three_addr_var_t* mutliplicand, u_int8_t is_branch_ending){
 	//We'll need a new temp var for the assignee
-	three_addr_var_t* assignee = emit_temp_var(lookup_type_name_only(type_symtab, "label")->type);
+	three_addr_var_t* assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
 
 	//If the multiplicand is not temporary we have a new used variable
 	add_used_variable(basic_block, mutliplicand);

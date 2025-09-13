@@ -5678,9 +5678,8 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Grab the label type
-	//The label type is one of our core types
-	symtab_type_record_t* label_type = lookup_type_name_only(type_symtab, "label");
+	//This is a u64(address)
+	symtab_type_record_t* label_type = lookup_type_name_only(type_symtab, "u64");
 
 	//Now that we know we didn't find it, we'll create it
 	symtab_variable_record_t* label = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
