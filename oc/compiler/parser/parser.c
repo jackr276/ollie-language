@@ -9177,7 +9177,7 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 
 		//If this is NULL, we'll error out
 		if(type == NULL){
-			return FALSE;
+			print_and_return_error("Invalid parameter type given", parser_line_num);
 		}
 
 		//Let the helper add the type in
@@ -9204,9 +9204,38 @@ parameter_end:
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
+	//Following this, we need to see the -> symbol
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see it, we fail
+	if(lookahead.tok != ARROW){
+		return print_and_return_error("-> expected after function parameter list", parser_line_num);
+	}
+
+	//Now we need to see a valid type specifier
+	generic_type_t* return_type = type_specifier(fl);
+
+	//Fail out if bad
+	if(return_type == NULL){
+		return print_and_return_error("Invalid return type given", parser_line_num);
+	}
+
+	//Otherwise, this is the return type
+	function_record->return_type = return_type;
+	function_record->signature->internal_types.function_type->return_type = return_type;
+
+	//One last thing, we need to see a semicolon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail out
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon required at the end of function predeclaration", parser_line_num);
+	}
+
+	//Otherwise this all worked. We can add this function to the symtab
+	insert_function(function_symtab, function_record);
 	
-	
-	//TODO STUB
+	//A null return means that we succeeded
 	return NULL;
 }
 
