@@ -1987,7 +1987,7 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 	//First we'll print out the appropriate variety of subtraction 
 	switch(instruction->instruction_type){
 		case SUBB:
-			fprintf(fl, "subw ");
+			fprintf(fl, "subb ");
 			break;
 		case SUBW:
 			fprintf(fl, "subw ");
