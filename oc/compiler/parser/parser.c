@@ -9130,6 +9130,11 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
+	//The main function may not be predeclared
+	if(strcmp(function_name.string, "main") == 0){
+		return print_and_return_error("The main function may not be predeclared", parser_line_num);
+	}
+
 	//Now that we've survived up to here, we can make the actual record
 	symtab_function_record_t* function_record = create_function_record(function_name, is_public, parser_line_num);
 
