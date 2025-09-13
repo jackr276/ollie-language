@@ -7719,6 +7719,11 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		//handle it
 		case PUB:
 		case FN:
+			//If this is now global, then we cannot do this
+			if(is_global == FALSE){
+				return print_and_return_error("Function predeclarations must occur in global scope", parser_line_num);
+			}
+
 			push_back_token(lookahead);
 			//Let this rule handle it
 			return function_predeclaration(fl);
@@ -9398,6 +9403,17 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		definining_predeclared_function = TRUE;
 		//Set this as well
 		current_function = function_record;
+
+		//Let's now check - if the is_public's don't match here, we can fail already
+		if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == FALSE){
+			sprintf(info, "Function %s was predeclared as public, but defined as private", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+
+		//Other case, still a failure
+		} else if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == TRUE){
+			sprintf(info, "Function %s was predeclared as private, but defined as public", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
 	}
 
 	//We'll need to initialize a new variable scope here. This variable scope is designed
