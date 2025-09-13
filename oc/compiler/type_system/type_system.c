@@ -1893,6 +1893,89 @@ u_int8_t is_type_signed(generic_type_t* type){
 	}
 }
 
+
+/**
+ * Select the size based only on a type
+ */
+variable_size_t get_type_size(generic_type_t* type){
+	//What the size will be
+	variable_size_t size;
+
+	switch(type->type_class){
+		//Probably the most common option
+		case TYPE_CLASS_BASIC:
+			//Switch based on this
+			switch (type->basic_type_token) {
+				case U8:
+				case I8:
+				case CHAR:
+					size = BYTE;
+					break;
+
+				case U16:
+				case I16:
+					size = WORD;
+					break;
+
+				//These are 32 bit(double word)
+				case I32:
+				case U32:
+				case SIGNED_INT_CONST:
+				case UNSIGNED_INT_CONST:
+					size = DOUBLE_WORD;
+					break;
+
+				//This is SP
+				case F32:
+					size = SINGLE_PRECISION;
+					break;
+
+				//This is double precision
+				case F64:
+					size = DOUBLE_PRECISION;
+					break;
+
+				//These are all quad word(64 bit)
+				case U64:
+				case I64:
+					size = QUAD_WORD;
+					break;
+			
+				//We shouldn't get here
+				default:
+					break;
+			}
+
+			break;
+
+		//Enumerated types are 32 bits for convenience
+		//THIS IS WRONG!!!!!!!!!!
+		case TYPE_CLASS_ENUMERATED:
+			size = DOUBLE_WORD;
+			break;
+
+		//These are always 64 bits
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ALIAS:
+		case TYPE_CLASS_UNION: //always a memory address
+			size = QUAD_WORD;
+			break;
+
+		//Default is also quad word
+		default:
+			size = QUAD_WORD;
+			break;
+	}
+
+
+	//Give it back
+	return size;
+}
+
+
 /**
  * Convert a generic type to a sring
  */

@@ -27,6 +27,18 @@ typedef enum{
 	SIDE_TYPE_RIGHT,
 } side_type_t;
 
+/**
+ * What kind of word length do we have -- used for instructions
+ */
+typedef enum{
+	BYTE,
+	WORD,
+	DOUBLE_WORD,
+	QUAD_WORD,
+	SINGLE_PRECISION,
+	DOUBLE_PRECISION //For floats
+} variable_size_t;
+
 
 /**
  * Which class of type is it?
@@ -299,6 +311,11 @@ u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_t
  * Print a function pointer type out
  */
 void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
+
+/**
+ * Select the size based only on a type
+ */
+variable_size_t get_type_size(generic_type_t* type);
 
 /**
  * Is a type signed?
