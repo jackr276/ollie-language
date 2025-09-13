@@ -2,7 +2,7 @@
 * Sample program
 */
 
-fn never_defined(example:f64) -> u32;
+declare fn never_defined(example:f64) -> u32;
 
 declare j:u8;
 
