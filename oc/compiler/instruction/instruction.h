@@ -37,7 +37,6 @@ typedef enum{
 } jump_category_t;
 
 
-
 /**
  * What type of instruction do we have? This saves us a lot of space
  * as opposed to storing strings. These are x86-64 assembly instructions
@@ -251,20 +250,6 @@ typedef enum{
 	CONDITIONAL_MOVE_B, // LT(UNSIGNED)
 	CONDITIONAL_MOVE_BE, //LE(UNSIGNED)
 } conditional_move_type_t;
-
-
-/**
- * What kind of word length do we have -- used for instructions
- */
-typedef enum{
-	BYTE,
-	WORD,
-	DOUBLE_WORD,
-	QUAD_WORD,
-	SINGLE_PRECISION,
-	DOUBLE_PRECISION //For floats
-} variable_size_t;
-
 
 /**
  * What kind of memory addressing mode do we have?
@@ -567,20 +552,6 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
  */
 void set_new_function(symtab_function_record_t* func);
 
-/**
- * Select the size based only on a type
- */
-variable_size_t select_type_size(generic_type_t* type);
-
-/**
- * Select the size of a constant based on its type
- */
-variable_size_t select_constant_size(three_addr_const_t* constant);
-
-/**
- * Select the size of a given variable based on its type
- */
-variable_size_t select_variable_size(three_addr_var_t* variable);
 
 /**
  * Determine the signedness of a jump type
