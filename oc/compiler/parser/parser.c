@@ -9398,8 +9398,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
 		function_record = create_function_record(function_name, is_public, parser_line_num);
-		//Associate this with the function node
-		function_node->func_record = function_record;
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -9435,6 +9433,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 	}
+
+	//Associate this with the function node
+	function_node->func_record = function_record;
 
 	//We'll need to initialize a new variable scope here. This variable scope is designed
 	//so that we include the function parameters in it. We need to remember to close
