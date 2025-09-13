@@ -2883,8 +2883,16 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//This will be flagged as an indirect jump
 		window->instruction2->instruction_type = INDIRECT_JMP;
 
+		//By default the true source is this, but we may need to emit a converting move
+		three_addr_var_t* true_source = window->instruction1->op2;
+
+		//Do we need to convert op2 into a u64? If so, we'll do that here
+		if(is_type_conversion_needed(u64, true_source->type) == TRUE){
+			true_source = handle_converting_move_operation(window->instruction1, window->instruction1->op2, u64);
+		}
+
 		//The source register is op1
-		window->instruction2->source_register = window->instruction1->op2;
+		window->instruction2->source_register = true_source;
 
 		//Store the jumping to block where the jump table is
 		window->instruction2->jumping_to_block = window->instruction1->jumping_to_block;
