@@ -2091,12 +2091,24 @@ static void handle_inc_instruction(instruction_t* instruction){
 
 	//If it's a quad word, there's a different instruction to use. Otherwise
 	//it's just a regular inc
-	if(size == QUAD_WORD){
-		instruction->instruction_type = INCQ;
-	} else {
-		instruction->instruction_type = INCL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = INCQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = INCL;
+			break;
+		case WORD:
+			instruction->instruction_type = INCW;
+			break;
+		case BYTE:
+			instruction->instruction_type = INCB;
+			break;
+		//We shouldn't get here, but if we do, make it INCQ
+		default:
+			instruction->instruction_type = INCQ;
+			break;
 	}
-	//TODO WRONG
 
 	//Set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
@@ -2111,12 +2123,24 @@ static void handle_dec_instruction(instruction_t* instruction){
 
 	//If it's a quad word, there's a different instruction to use. Otherwise
 	//it's just a regular inc
-	if(size == QUAD_WORD){
-		instruction->instruction_type = DECQ;
-	} else {
-		instruction->instruction_type = DECL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = DECQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = DECL;
+			break;
+		case WORD:
+			instruction->instruction_type = DECW;
+			break;
+		case BYTE:
+			instruction->instruction_type = DECB;
+			break;
+		//We shouldn't get here, but if we do, make it INCQ
+		default:
+			instruction->instruction_type = DECQ;
+			break;
 	}
-	//TODO WRONG
 
 	//Set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
