@@ -195,7 +195,7 @@ static Token compressed_assignment_to_binary_op(Token op){
 
 
 /**
- * Determine the minimum bit width for an integer field that is needed based on a value that is passed
+ * Determine the minimum bit width for an unsigned integer field that is needed based on a value that is passed
  * in
  *
  * Rules:
@@ -204,7 +204,7 @@ static Token compressed_assignment_to_binary_op(Token op){
  * 	If we shift left by 32 and have 0, then we can fit in 32 bits
  * 	Anything else -> 64 bits
  */
-static generic_type_t* determine_required_minimum_integer_type_size(u_int64_t value){
+static generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value){
 	//The case where we can use a u8
 	if(value >> 8 == 0){
 		return lookup_type_name_only(type_symtab, "u8")->type;
@@ -222,6 +222,38 @@ static generic_type_t* determine_required_minimum_integer_type_size(u_int64_t va
 
 	//Otherwise, we need 64 bits
 	return lookup_type_name_only(type_symtab, "u64")->type;
+}
+
+
+/**
+ * Determine the minimum bit width for a signed integer field that is needed based on a value that is passed
+ * in
+ *
+ * Rules:
+ * 	If we bit shift left by 8 and have 0 OR -1, then our value can fit in 8 bits
+ * 	If we shift left by 16 and have 0 OR -1, then we can fit in 16 bits
+ * 	If we shift left by 32 and have 0 OR -1, then we can fit in 32 bits
+ * 	Anything else -> 64 bits
+ *
+ */
+static generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value){
+	//The case where we can use an i8
+	if(value >> 8 == 0 || value >> 8 == -1){
+		return lookup_type_name_only(type_symtab, "i8")->type;
+	}
+
+	//We'll use an i16
+	if(value >> 16 == 0 || value >> 16 == -1){
+		return lookup_type_name_only(type_symtab, "i16")->type;
+	}
+
+	//We'll use an i32
+	if(value >> 32 == 0 || value >> 32 == -1){
+		return lookup_type_name_only(type_symtab, "i32")->type;
+	}
+
+	//Otherwise, we need 64 bits
+	return lookup_type_name_only(type_symtab, "i64")->type;
 }
 
 
@@ -5031,7 +5063,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Now, based on our largest value, we need to determine the bit-width needed for this
 	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
-	generic_type_t* type_needed = determine_required_minimum_integer_type_size(largest_value);
+	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value);
 
 	//Store this in the enum
 	enum_type->internal_values.enum_integer_type = type_needed;
@@ -8934,7 +8966,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 		if(parameter == NULL){
 			print_parse_message(PARSE_ERROR, "Invalid paremeter declaration found in parameter list", parser_line_num);
 			num_errors++;
-			return NULL;;
+			return FAILURE;;
 		}
 
 		//Status tracker
