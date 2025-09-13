@@ -172,7 +172,7 @@ static three_addr_var_t* handle_converting_move_operation(instruction_t* after_i
 		assignee->type = desired_type;
 
 		//Select the size appropriately after the type is reassigned
-		assignee->variable_size = select_variable_size(assignee);
+		assignee->variable_size = get_type_size(assignee->type);
 
 	//Otherwise we have a normal case here
 	} else {
@@ -261,7 +261,7 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We'll need the size to select the appropriate instruction
-	variable_size_t size = select_variable_size(converted);
+	variable_size_t size = get_type_size(converted->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -333,7 +333,7 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We'll need the size of the variable
-	variable_size_t size = select_variable_size(destination);
+	variable_size_t size = get_type_size(destination->type);
 
 	switch(size){
 		case QUAD_WORD:	
@@ -369,7 +369,7 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We'll need the size of the variable
-	variable_size_t size = select_variable_size(destination);
+	variable_size_t size = get_type_size(destination->type);
 
 	switch(size){
 		case QUAD_WORD:	
@@ -408,7 +408,7 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We set the size based on the destination 
-	variable_size_t size = select_variable_size(assignee);
+	variable_size_t size = get_type_size(assignee->type);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -469,7 +469,7 @@ static instruction_t* emit_mod_instruction(three_addr_var_t* assignee, three_add
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We set the size based on the destination 
-	variable_size_t size = select_variable_size(assignee);
+	variable_size_t size = get_type_size(assignee->type);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -782,9 +782,9 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 
 	//Select the size based on what we're moving in
 	if(memory_access->op1 != NULL){
-		size = select_variable_size(memory_access->op1);
+		size = get_type_size(memory_access->op1->type);
 	} else {
-		size = select_constant_size(memory_access->op1_const);
+		size = get_type_size(memory_access->op1_const->type);
 	}
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
@@ -888,9 +888,9 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 
 	//Select the size based on what we're moving in
 	if(memory_access->op1 != NULL){
-		size = select_variable_size(memory_access->op1);
+		size = get_type_size(memory_access->op1->type);
 	} else {
-		size = select_constant_size(memory_access->op1_const);
+		size = get_type_size(memory_access->op1_const->type);
 	}
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
@@ -963,7 +963,7 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
 	three_addr_var_t* address_calc_reg2;
 
 	//Select the variable size based on the assignee
-	variable_size_t size = select_variable_size(memory_access->assignee);
+	variable_size_t size = get_type_size(memory_access->assignee->type);
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
@@ -1060,7 +1060,7 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
  */
 static void handle_three_instruction_address_calc_from_memory_move(instruction_t* offset_calc, instruction_t* lea_statement, instruction_t* memory_access){
 	//We'll first select the variable size based on the destination
-	variable_size_t size = select_variable_size(memory_access->assignee);
+	variable_size_t size = get_type_size(memory_access->assignee->type);
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
@@ -1129,7 +1129,7 @@ static void handle_three_instruction_registers_and_offset_only_from_memory_move(
 
 	//Let's first decide what the appropriate move instruction would be
 	//We'll first select the variable size based on the destination
-	variable_size_t size = select_variable_size(memory_access->assignee);
+	variable_size_t size = get_type_size(memory_access->assignee->type);
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
@@ -1201,10 +1201,10 @@ static void handle_three_instruction_registers_and_offset_only_to_memory_move(in
 
 	//Use the op1 if it's there
 	if(memory_access->op1 != NULL){
-		size = select_variable_size(memory_access->op1);
+		size = get_type_size(memory_access->op1->type);
 	//Otherwise we need to use the constant
 	} else {
-		size = select_constant_size(memory_access->op1_const);
+		size = get_type_size(memory_access->op1_const->type);
 	}
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
@@ -1291,7 +1291,7 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
 
 	//We'll also need the size of the variable
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch (size) {
 		case BYTE:
@@ -1349,7 +1349,7 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
 
 	//We'll also need the size of the variable
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch (size) {
 		case BYTE:
@@ -1403,7 +1403,7 @@ static void handle_right_shift_instruction(instruction_t* instruction){
  */
 static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -1448,7 +1448,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
  */
 static void handle_bitwise_and_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -1493,7 +1493,7 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
  */
 static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -1539,7 +1539,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
  */
 static void handle_cmp_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Select this instruction
 	instruction->instruction_type = select_cmp_instruction(size);
@@ -1577,7 +1577,7 @@ static void handle_cmp_instruction(instruction_t* instruction){
  */
 static void handle_subtraction_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Select the appropriate level of minus instruction
 	instruction->instruction_type = select_sub_instruction(size);
@@ -1616,7 +1616,7 @@ static void handle_subtraction_instruction(instruction_t* instruction){
  */
 static void handle_addition_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Grab the add instruction that we want
 	instruction->instruction_type = select_add_instruction(size);
@@ -1652,7 +1652,7 @@ static void handle_addition_instruction(instruction_t* instruction){
  */
 static void handle_addition_instruction_lea_modification(instruction_t* instruction){
 	//Determines what instruction to use
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Now we'll get the appropriate lea instruction
 	instruction->instruction_type = select_lea_instruction(size);
@@ -1712,7 +1712,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	instruction_t* multiplication_instruction = window->instruction1;
 
 	//We'll need to know the variables size
-	variable_size_t size = select_variable_size(multiplication_instruction->assignee);
+	variable_size_t size = get_type_size(multiplication_instruction->assignee->type);
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* source;
@@ -1788,7 +1788,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
  */
 static void handle_signed_multiplication_instruction(instruction_t* instruction){
 	//We'll need to know the variables size
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//We determine the instruction that we need based on signedness and size
 	switch (size) {
@@ -2087,7 +2087,7 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
  */
 static void handle_inc_instruction(instruction_t* instruction){
 	//Determine the size of the variable we need
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//If it's a quad word, there's a different instruction to use. Otherwise
 	//it's just a regular inc
@@ -2096,6 +2096,7 @@ static void handle_inc_instruction(instruction_t* instruction){
 	} else {
 		instruction->instruction_type = INCL;
 	}
+	//TODO WRONG
 
 	//Set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
@@ -2106,7 +2107,7 @@ static void handle_inc_instruction(instruction_t* instruction){
  */
 static void handle_dec_instruction(instruction_t* instruction){
 	//Determine the size of the variable we need
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//If it's a quad word, there's a different instruction to use. Otherwise
 	//it's just a regular inc
@@ -2115,6 +2116,7 @@ static void handle_dec_instruction(instruction_t* instruction){
 	} else {
 		instruction->instruction_type = DECL;
 	}
+	//TODO WRONG
 
 	//Set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
@@ -2130,10 +2132,10 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 
 	//If this has a 0 indirection, we'll use it's size
 	if(instruction->assignee->indirection_level == 0){
-		size = select_variable_size(instruction->assignee);
+		size = get_type_size(instruction->assignee->type);
 	//Otherwise take the constant's size
 	} else {
-		size = select_constant_size(instruction->op1_const);
+		size = get_type_size(instruction->op1_const->type);
 	}
 
 	//Select based on size
@@ -2167,7 +2169,7 @@ static void handle_register_to_register_move_instruction(instruction_t* instruct
 	//If it's 0(most common), we don't need to do anything fancy
 	if(instruction->assignee->indirection_level == 0){
 		//Use the standard function here
-		destination_size = select_variable_size(instruction->assignee);
+		destination_size = get_type_size(instruction->assignee->type);
 		//Set the flag
 		assignee_is_deref = FALSE;
 	}
@@ -2175,7 +2177,7 @@ static void handle_register_to_register_move_instruction(instruction_t* instruct
 	//If it's 0(most common), we don't need to do anything fancy
 	if(instruction->op1->indirection_level == 0){
 		//Use the standard function here
-		source_size = select_variable_size(instruction->op1);
+		source_size = get_type_size(instruction->op1->type);
 		//Set the flag
 		op1_is_deref = FALSE;
 	}
@@ -2251,7 +2253,7 @@ static void handle_lea_statement(instruction_t* instruction){
 	three_addr_var_t* address_calc_reg2 = instruction->op2;
 	
 	//Select the size of our variable
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -2310,7 +2312,7 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* logical_not = window->instruction1;
 
 	//Ensure that this one's size has been selected
-	logical_not->assignee->variable_size = select_variable_size(logical_not->assignee);
+	logical_not->assignee->variable_size = get_type_size(logical_not->assignee->type);
 
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
@@ -2388,7 +2390,7 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	instruction_t* movzx_instruction = emit_appropriate_move_statement(setne_instruction->destination_register, logical_or->assignee);
 
 	//Select this one's size 
-	logical_or->assignee->variable_size = select_variable_size(logical_or->assignee);
+	logical_or->assignee->variable_size = get_type_size(logical_or->assignee->type);
 
 	//Now we can delete the old logical or instruction
 	delete_statement(logical_or);
@@ -2455,7 +2457,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* movzx_instruction = emit_appropriate_move_statement(and_inst->destination_register, logical_and->assignee);
 
 	//Select this one's size 
-	logical_and->assignee->variable_size = select_variable_size(logical_and->assignee);
+	logical_and->assignee->variable_size = get_type_size(logical_and->assignee->type);
 
 	//We no longer need the logical and statement
 	delete_statement(logical_and);
@@ -2479,7 +2481,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
  */
 static void handle_neg_instruction(instruction_t* instruction){
 	//Find out what size we have
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -2509,7 +2511,7 @@ static void handle_neg_instruction(instruction_t* instruction){
  */
 static void handle_not_instruction(instruction_t* instruction){
 	//Find out what size we have
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -2539,7 +2541,7 @@ static void handle_not_instruction(instruction_t* instruction){
  */
 static void handle_test_instruction(instruction_t* instruction){
 	//Find out what size we have
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
