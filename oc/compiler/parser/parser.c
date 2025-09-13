@@ -9060,7 +9060,74 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 	if(lookahead.tok != FN){
 		return print_and_return_error("fn keyword required in function predeclaration", parser_line_num);
 	}
-	
+
+	//Following this, we need to see an identifier
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it's not an ident, we leave
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Identifier required after fn keyword in function predeclaration", parser_line_num);
+	}
+
+	//Now we need to check for duplicated names. We'll do this for
+	dynamic_string_t function_name = lookahead.lexeme;
+
+	//Go through all the steps of a fresh definition here
+	//Check for duplicated variables
+	symtab_function_record_t* found_function = lookup_function(function_symtab, function_name.string);
+
+	//Fail out if duplicate is found
+	if(found_function != NULL){
+		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_function_name(found_function);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//Check for duplicated variables
+	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name.string);
+
+	//Fail out if duplicate is found
+	if(found_variable != NULL){
+		sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_variable_name(found_variable);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//Check for duplicated type names
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name.string);
+
+	//Fail out if duplicate has been found
+	if(found_type != NULL){
+		sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_type_name(found_type);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//Let's see if we've already named a constant this
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name.string);
+
+	//Fail out if this isn't null
+	if(found_const != NULL){
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_constant_name(found_const);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//Now that we've survived up to here, we can make the actual record
+	symtab_function_record_t* function_record = create_function_record(function_name, is_public, parser_line_num);
+
 	
 	
 	//TODO STUB
