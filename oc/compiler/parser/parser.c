@@ -9033,9 +9033,36 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 }
 
 
-
+/**
+ * A function predeclaration allows the user to basically
+ * promise that a function of this signature will exist at 
+ * some point
+ *
+ * <function_predeclaration> ::= declare {pub}? fn <identifier>({param_declaration | void} {, <param_declaration}*) -> <type-specifier> ;
+ *
+ * NOTE: by the time we get here, we've already seen the declare keyword
+ */
 static generic_ast_node_t* function_predeclaration(FILE* fl){
+	//Lookahead token
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//Is this a public function?
+	u_int8_t is_public = FALSE;
 
+	//If we see the PUB keyword, that means we have a public function
+	if(lookahead.tok == PUB){
+		//Set the flag
+		is_public = TRUE;
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//Now we need to see the "fn" keyword. If we don't, we leave
+	if(lookahead.tok != FN){
+		return print_and_return_error("fn keyword required in function predeclaration", parser_line_num);
+	}
+	
+	
+	
 	//TODO STUB
 	return NULL;
 }
