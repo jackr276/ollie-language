@@ -316,6 +316,9 @@ u_int8_t add_function_parameter(symtab_function_record_t* function_record, symta
 
 	//Store it in the function's parameters
 	function_record->func_params[function_record->number_of_params] = variable_record;
+	
+	//Store what function this came from
+	variable_record->function_declared_in = function_record;
 
 	//Increment the count
 	(function_record->number_of_params)++;
