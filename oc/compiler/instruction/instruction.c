@@ -263,6 +263,7 @@ variable_size_t select_type_size(generic_type_t* type){
 			break;
 
 		//Enumerated types are 32 bits for convenience
+		//THIS IS WRONG!!!!!!!!!!
 		case TYPE_CLASS_ENUMERATED:
 			size = DOUBLE_WORD;
 			break;
@@ -273,6 +274,7 @@ variable_size_t select_type_size(generic_type_t* type){
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 		case TYPE_CLASS_ALIAS:
+		case TYPE_CLASS_UNION: //always a memory address
 			size = QUAD_WORD;
 			break;
 

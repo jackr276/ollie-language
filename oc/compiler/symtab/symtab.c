@@ -8,11 +8,15 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../ast/ast.h"
+#include "../call_graph/call_graph.h"
 
 #define LARGE_PRIME 611593
 //For standardization
 #define TRUE 1
 #define FALSE 0
+
+#define SUCCESS 1
+#define FAILURE 0
 
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
@@ -302,9 +306,31 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 
 
 /**
+ * Add a parameter to a function and perform all internal bookkeeping needed
+ */
+u_int8_t add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
+	//We have too many parameters, fail out
+	if(function_record->number_of_params == 6){
+		return FAILURE;
+	}
+
+	//Store it in the function's parameters
+	function_record->func_params[function_record->number_of_params] = variable_record;
+	
+	//Store what function this came from
+	variable_record->function_declared_in = function_record;
+
+	//Increment the count
+	(function_record->number_of_params)++;
+
+	//All went well
+	return SUCCESS;
+}
+
+/**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name){
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -316,6 +342,16 @@ symtab_function_record_t* create_function_record(dynamic_string_t name){
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash(name.string);
 
+	//Store the line number
+	record->line_number = line_number;
+
+	//Create its call graph node
+	record->call_graph_node = create_call_graph_node(record);
+
+	//We know that we need to create this immediately
+	record->signature = create_function_pointer_type(is_public, line_number);
+
+	//And give it back
 	return record;
 }
 

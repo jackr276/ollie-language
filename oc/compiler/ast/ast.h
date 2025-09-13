@@ -42,9 +42,7 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_LET_STMT,
 	AST_NODE_TYPE_IDLE_STMT,
 	AST_NODE_TYPE_FUNC_DEF,
-	AST_NODE_TYPE_PARAM_LIST,//TODO this needs to be REMOVED //@Deprecated
 	AST_NODE_TYPE_CONSTANT,
-	AST_NODE_TYPE_PARAM_DECL, //TODO this needs to be REMOVED //@Deprecated
 	AST_NODE_TYPE_IDENTIFIER,
 	AST_NODE_TYPE_ASNMNT_EXPR,
 	AST_NODE_TYPE_BINARY_EXPR,
@@ -77,8 +75,6 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_COMPOUND_STMT,
 	//Has no body
 	AST_NODE_TYPE_DEFER_STMT,
-	//For special elaborative parameters
-	AST_NODE_TYPE_ELABORATIVE_PARAM,
 	//For assembly inline statements
 	AST_NODE_TYPE_ASM_INLINE_STMT,
 	//An array initializer node
@@ -145,8 +141,6 @@ struct generic_ast_node_t{
 	side_type_t side;
 	//What kind of node is it?
 	ast_node_type_t ast_node_type;
-	//The number of parameters
-	u_int8_t num_params;
 	//The type address specifier - for types
 	address_specifier_type_t address_type;
 };

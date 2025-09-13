@@ -2,7 +2,7 @@
 * Sample program
 */
 
-fn never_defined(example:f64) -> u32;
+declare fn never_defined(mut i32) -> u32;
 
 declare j:u8;
 
@@ -16,18 +16,17 @@ fn test_func(my_float:u32, ptr:void*) -> void{
 
 	my_arr[3] := 2;
 
-	let my:void := ptr;
 	let z:i32 := 3;
 	let x:i32 := -z;
 
 	//Example call
-	i := @never_defined(3.2222);
+	i := @never_defined(17);
 
 	ret;
 }
 
-fn never_defined(example:f64) -> i32{
-	ret 2;
+fn never_defined(mut x:i32) -> u32{
+	ret x;
 }
 
 pub fn main() -> i32 {
@@ -37,7 +36,7 @@ pub fn main() -> i32 {
 	let i_ptr:u32* := &i;
 
 	//Example call
-	i := @never_defined(2.32);
+	i := @never_defined(2);
 
 	ret *i_ptr + *j_ptr;
 }

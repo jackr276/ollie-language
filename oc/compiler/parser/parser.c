@@ -11,7 +11,6 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
-#include <iso646.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -105,6 +104,7 @@ static generic_ast_node_t* defer_statement(FILE* fl);
 static generic_ast_node_t* idle_statement(FILE* fl);
 static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side);
 static generic_ast_node_t* initializer(FILE* fl, side_type_t side);
+static generic_ast_node_t* function_predeclaration(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
 static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee);
@@ -4054,8 +4054,9 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//Otherwise push this onto the grouping stack for later
 	push_token(grouping_stack, lookahead);
 
-	//Once we've gotten past this point, we're safe to allocate this type
-	generic_type_t* function_type = create_function_pointer_type(parser_line_num); 
+	//Once we've gotten past this point, we're safe to allocate this type. Function
+	//pointers are always private
+	generic_type_t* function_type = create_function_pointer_type(FALSE, parser_line_num); 
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -4077,16 +4078,13 @@ static u_int8_t function_pointer_definer(FILE* fl){
 			break;
 	}
 
-	//Keep track of the parameter count
-	u_int8_t parameter_count = 0;
+	//Is the parameter mutable
+	u_int8_t is_mutable;
 
 	//Keep processing so long as we keep seeing commas
 	do{
-		//We've exceeded the allowed count. We'll throw an error here
-		if(parameter_count >= MAX_FUNCTION_TYPE_PARAMS){
-			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
-			return FALSE;
-		}
+		//Assume by default it's not mutable
+		is_mutable = FALSE;
 
 		//Each function pointer parameter will consist only of a type and optionally
 		//a mutable keyword
@@ -4094,8 +4092,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 		//Is it mutable? If this token exists then it is
 		if(lookahead.tok == MUT){
-			//Store that this is mutable inside of the structure
-			function_type->internal_types.function_type->parameters[parameter_count].is_mutable = TRUE;
+			is_mutable = TRUE;
 		} else {
 			//Otherwise put this back
 			push_back_token(lookahead);
@@ -4109,19 +4106,19 @@ static u_int8_t function_pointer_definer(FILE* fl){
 			return FALSE;
 		}
 
-		//This is good, we'll store it in the parameter type
-		function_type->internal_types.function_type->parameters[parameter_count].parameter_type = type;
+		//Let the helper add the type in
+		u_int8_t status = add_parameter_to_function_type(function_type, type, is_mutable);
 
-		//Increment the count
-		parameter_count++;
+		//This means that we have been given too many parameters
+		if(status == FAILURE){
+			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			return FALSE;
+		}
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	} while(lookahead.tok == COMMA);
-
-	//Store the parameter count for down the road
-	function_type->internal_types.function_type->num_params = parameter_count;
 
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
@@ -5550,276 +5547,6 @@ static generic_type_t* type_specifier(FILE* fl){
 
 	//Give back whatever the current type may be
 	return current_type_record->type;
-}
-
-
-/**
- * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
- * top lexical scope for the function itself. Like all rules, it returns a reference to the
- * root of the subtree that it creates
- *
- * NOTE: An identifier may or may not be required based on the type of parameter declaration that we have
- *
- * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
- */
-static generic_ast_node_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
-	//Is it mutable?
-	u_int8_t is_mut = FALSE;
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//Let's first create the top level node here
-	generic_ast_node_t* parameter_decl_node;
-
-	//Now we can optionally see the constant keyword here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//Is this parameter constant? If so we'll just set a flag for later
-	if(lookahead.tok == DOTDOTDOT){
-		//This is a special elaborative param
-		parameter_decl_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM, SIDE_TYPE_LEFT);
-		//We're done here
-		return parameter_decl_node;
-	} else {
-		//Otherwise we have a regular param node
-		parameter_decl_node = ast_node_alloc(AST_NODE_TYPE_PARAM_DECL, SIDE_TYPE_LEFT);
-	}
-
-	if(lookahead.tok == MUT){
-		is_mut = TRUE;
-	} else {
-		//Put it back and move on
-		push_back_token(lookahead);
-	}
-
-	//Following the valid type specifier declaration, we are required to to see a valid variable. This
-	//takes the form of an ident
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If it didn't work we fail immediately
-	if(lookahead.tok != IDENT){
-		return print_and_return_error("Invalid name given to parameter in function definition", parser_line_num);
-	}
-
-	//Now we must perform all needed duplication checks for the name
-	//Grab this for convenience
-	dynamic_string_t name = lookahead.lexeme;
-
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
-
-	//Fail out here
-	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//Now we need to see a colon
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If it isn't a colon, we're out
-	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//We are now required to see a valid type specifier node
-	generic_type_t* type = type_specifier(fl);
-	
-	//If the node fails, we'll just send the error up the chain
-	if(type == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier gien to function parameter", parser_line_num);
-		num_errors++;
-		//It's already an error, just propogate it up
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//Once we get here, we have actually seen an entire valid parameter 
-	//declaration. It is now incumbent on us to store it in the variable 
-	//symbol table
-	
-	//Let's first construct the variable record
-	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
-	//It is a function parameter
-	param_record->membership = FUNCTION_PARAMETER;
-	//We assume that it was initialized
-	param_record->initialized = TRUE;
-	//Add the line number
-	param_record->line_number = parser_line_num;
-	//If it is mutable
-	param_record->is_mutable = is_mut;
-	//Store the type as well, very important
-	param_record->type_defined_as = type;
-	//Store the current parameter number of it
-	param_record->function_parameter_order = current_parameter_number;
-
-	//We've now built up our param record, so we'll give add it to the symtab
-	insert_variable(variable_symtab, param_record);
-
-	//We'll also save the associated record in the node
-	parameter_decl_node->variable = param_record;
-	//Store the line number
-	parameter_decl_node->line_number = parser_line_num;
-
-	//Finally, we'll send this node back
-	return parameter_decl_node;
-}
-
-
-/**
- * A paramater list will handle all of the parameters in a function definition. It is important
- * to note that a parameter list may very well be empty, and that this rule will handle that case.
- * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
- *
- * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
- */
-static generic_ast_node_t* parameter_list(FILE* fl){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//Now we need to see a valid parentheis
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we didn't find it, no point in going further
-	if(lookahead.tok != L_PAREN){
-		return print_and_return_error("Left parenthesis expected before parameter list", parser_line_num);
-	}
-
-	//Otherwise, we'll push this onto the list to check for later
-	push_token(grouping_stack, lookahead);
-
-	//Let's now create the parameter list node
-	generic_ast_node_t* param_list_node = ast_node_alloc(AST_NODE_TYPE_PARAM_LIST, SIDE_TYPE_LEFT);
-	//Initially no params
-	param_list_node->num_params = 0;
-
-	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
-	//done here and we'll just return an empty list
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	switch(lookahead.tok){
-		//If we see an R_PAREN immediately, we can check and leave
-		case R_PAREN:
-			//If we have a mismatch, we can return these
-			if(pop_token(grouping_stack).tok != L_PAREN){
-				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
-			}
-
-			//Otherwise we're fine, so return the list node
-			return param_list_node;
-
-		//This is a possibility, we could see (void) as a valid declaration of no parameters
-		case VOID:
-			//We now need to see a closing R_PAREN
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-			//Fail out if we don't see this
-			if(lookahead.tok != R_PAREN){
-				return print_and_return_error("Closing parenthesis expected after void parameter list declaration", parser_line_num);
-			}
-
-			//Also check for grouping
-			if(pop_token(grouping_stack).tok != L_PAREN){
-				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
-			}
-
-			//Give back the paremeter list node
-			return param_list_node;
-			
-		//By default just put it back and get out
-		default:
-			push_back_token(lookahead);
-			break;
-	}
-
-	//Start off at 1 
-	u_int8_t function_parameter_number = 1;
-
-	//We'll keep going as long as we see more commas
-	do{
-		//We must first see a valid parameter declaration
-		generic_ast_node_t* param_decl = parameter_declaration(fl, function_parameter_number);
-
-		//It's invalid, we'll just send it up the chain
-		if(param_decl->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			//It's already an error so send it on up
-			return param_decl;
-		}
-
-		//Let's see if we have a special parameter elaboration type here
-		if(param_decl->ast_node_type == AST_NODE_TYPE_ELABORATIVE_PARAM){
-			//Add it as a child node
-			add_child_node(param_list_node, param_decl);
-
-			//Now we'll return the entire thing
-			param_list_node->line_number = parser_line_num;
-			return param_list_node;
-		}
-
-		//Add this in as a child node
-		add_child_node(param_list_node, param_decl);
-
-		//Otherwise it was valid, so we've seen one more parameter
-		param_list_node->num_params++;
-
-		//Increment this
-		function_parameter_number++;
-
-		//Refresh the lookahead token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//We keep going as long as we see commas
-	} while(lookahead.tok == COMMA);
-
-	//Once we reach here, we need to check for the R_PAREN
-	if(lookahead.tok != R_PAREN){
-		return print_and_return_error("Closing parenthesis expected after parameter list", parser_line_num);
-	}
-
-	//Otherwise it worked, so we need to check matching
-	if(pop_token(grouping_stack).tok != L_PAREN){
-		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
-	}
-
-	//Store the line number
-	param_list_node->line_number = parser_line_num;
-
-	//Now we're done here, so we'll just give the root node back
-	return param_list_node;
 }
 
 
@@ -7963,29 +7690,47 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
- * BNF Rule: <declare-statement> ::= declare {register | static}? {mut}? <identifier> : <type-specifier>;
+ * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? {mut}? <identifier> : <type-specifier>} ;
  */
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
-	//Is it mutable?
-	u_int8_t is_mutable = 0;
+	//Is it mutable? Our default is no
+	u_int8_t is_mutable = FALSE;
 	//The storage class, normal by default
 	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
-
-	//Let's first declare the root node
-	generic_ast_node_t* decl_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we see static here, we'll make a note of that
-	if(lookahead.tok == STATIC){
-		storage_class = STORAGE_CLASS_STATIC;
-		//Refresh token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//Go based on what we see here
+	switch(lookahead.tok){
+		//This is bound to be a normal variable declaration
+		case STATIC:
+			storage_class = STORAGE_CLASS_STATIC;
+			//Refresh token
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			break;
+
+		//If we see either of these tokens, it means that the user is predeclaring a function.
+		//In this case, we push the token back and let the function predeclaration rule
+		//handle it
+		case PUB:
+		case FN:
+			//If this is now global, then we cannot do this
+			if(is_global == FALSE){
+				return print_and_return_error("Function predeclarations must occur in global scope", parser_line_num);
+			}
+
+			push_back_token(lookahead);
+			//Let this rule handle it
+			return function_predeclaration(fl);
+	
+		//By default just leave
+		default:
+			break;
 	}
 
 	//Let's now check to see if it's mutable or not
@@ -8085,6 +7830,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//The last thing that we are required to see before final assembly is a semicolon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+	//No semicolon, we fail out
 	if(lookahead.tok != SEMICOLON){
 		return print_and_return_error("Semicolon required at the end of declaration statement", parser_line_num);
 	}
@@ -8110,15 +7856,35 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
-	//Also store this record with the root node
-	decl_node->variable = declared_var;
-	//Store the type as well
-	decl_node->inferred_type = declared_var->type_defined_as;
-	//Store the line number
-	decl_node->line_number = current_line;
+	//By default this is NULL
+	generic_ast_node_t* declaration_node = NULL;
 
-	//All went well so we can return this
-	return decl_node;
+	//Based on what type we have, we may or may not even need a declaration here
+	switch(declared_var->type_defined_as->type_class){
+		//These all require a stack allocation, so a node is required
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			//Actually create the node now
+			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
+
+			//Also store this record with the root node
+			declaration_node->variable = declared_var;
+			//Store the type as well
+			declaration_node->inferred_type = declared_var->type_defined_as;
+			//Store the line number
+			declaration_node->line_number = current_line;
+
+			break;
+
+		//Otherwise just leave
+		default:
+			break;
+	}
+
+	//Return this. It will either be NULL or a generic node based on whether or not
+	//a stack allocation was required
+	return declaration_node;
 }
 
 
@@ -8935,22 +8701,601 @@ static u_int8_t validate_main_function(generic_type_t* type){
 
 
 /**
+ * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
+ * top lexical scope for the function itself. Like all rules, it returns a reference to the
+ * root of the subtree that it creates
+ *
+ * This rule will return a symtab variable record that represents the parameter it made. If will return
+ * NULL if an error occurs
+ *
+ * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
+ */
+static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
+	//Is it mutable?
+	u_int8_t is_mut = FALSE;
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//Now we can optionally see the constant keyword here
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	
+	//Is it mutable?
+	if(lookahead.tok == MUT){
+		is_mut = TRUE;
+		//Refresh token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//If it didn't work we fail immediately
+	if(lookahead.tok != IDENT){
+		print_parse_message(PARSE_ERROR, "Expected identifier in function parameter declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Now we must perform all needed duplication checks for the name
+	//Grab this for convenience
+	dynamic_string_t name = lookahead.lexeme;
+
+	//Check that it isn't some duplicated function name
+	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
+
+	//Fail out here
+	if(found_func != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found_func);
+		num_errors++;
+		//Return NULL to signify failure
+		return NULL;
+	}
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found_var);
+		num_errors++;
+		//Return NULL to signify failure
+		return NULL;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
+
+	//Fail out here
+	if(found_type != NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Return NULL to signify failure
+		return NULL;
+	}
+
+	//Now we need to see a colon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it isn't a colon, we're out
+	if(lookahead.tok != COLON){
+		print_parse_message(PARSE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
+		num_errors++;
+		//Return NULL to signify failure
+		return NULL;
+	}
+
+	//We are now required to see a valid type specifier node
+	generic_type_t* type = type_specifier(fl);
+	
+	//If the node fails, we'll just send the error up the chain
+	if(type == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
+		num_errors++;
+		//It's already an error, just propogate it up
+		return NULL;
+	}
+
+	//Once we get here, we have actually seen an entire valid parameter 
+	//declaration. It is now incumbent on us to store it in the variable 
+	//symbol table
+	
+	//Let's first construct the variable record
+	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	//It is a function parameter
+	param_record->membership = FUNCTION_PARAMETER;
+	//We assume that it was initialized
+	param_record->initialized = TRUE;
+	//Add the line number
+	param_record->line_number = parser_line_num;
+	//If it is mutable
+	param_record->is_mutable = is_mut;
+	//Store the type as well, very important
+	param_record->type_defined_as = type;
+	//Store the current parameter number of it
+	param_record->function_parameter_order = current_parameter_number;
+
+	//We've now built up our param record, so we'll give add it to the symtab
+	insert_variable(variable_symtab, param_record);
+
+	//Give the variable back
+	return param_record;
+}
+
+
+/**
+ * A paramater list will handle all of the parameters in a function definition. It is important
+ * to note that a parameter list may very well be empty, and that this rule will handle that case.
+ * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
+ *
+ * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
+ */
+static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_record, u_int8_t defining_predeclared_function){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//This is the internal function type, extracted for convenience
+	generic_type_t* function_type = function_record->signature;
+	function_type_t* internal_function_type = function_type->internal_types.function_type;
+	
+	//Now we need to see a valid parentheis
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we didn't find it, no point in going further
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Left parenthesis expected before parameter list", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise, we'll push this onto the list to check for later
+	push_token(grouping_stack, lookahead);
+
+	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
+	//done here and we'll just return an empty list
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	switch(lookahead.tok){
+		//If we see an R_PAREN immediately, we can check and leave
+		case R_PAREN:
+			//If we have a mismatch, we can return these
+			if(pop_token(grouping_stack).tok != L_PAREN){
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//If we're validating, let's check and ensure that the defined type also
+			//has no params
+			if(defining_predeclared_function == TRUE){
+				//If we have a mismatch, we fail out
+				if(internal_function_type->num_params != 0){
+					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->num_params);
+					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FAILURE;
+				}
+			}
+
+			//Otherwise we're fine, so return the list node
+			return SUCCESS;
+
+		//This is a possibility, we could see (void) as a valid declaration of no parameters
+		case VOID:
+			//We now need to see a closing R_PAREN
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+			//Fail out if we don't see this
+			if(lookahead.tok != R_PAREN){
+				print_parse_message(PARSE_ERROR, "Closing parenthesis expected after void parameter list declaration", parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Also check for grouping
+			if(pop_token(grouping_stack).tok != L_PAREN){
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//If we're validating, let's check and ensure that the defined type also
+			//has no params
+			if(defining_predeclared_function == TRUE){
+				//If we have a mismatch, we fail out
+				if(internal_function_type->num_params != 0){
+					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->num_params);
+					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FAILURE;
+				}
+			}
+
+			//Give back the paremeter list node
+			return SUCCESS;
+			
+		//By default just put it back and get out
+		default:
+			push_back_token(lookahead);
+			break;
+	}
+
+	//Start off at 1 
+	u_int8_t function_parameter_number = 1;
+
+	//We'll keep going as long as we see more commas
+	do{
+		//We must first see a valid parameter declaration
+		symtab_variable_record_t* parameter = parameter_declaration(fl, function_parameter_number);
+
+		//It's invalid, we'll just send it up the chain
+		if(parameter == NULL){
+			print_parse_message(PARSE_ERROR, "Invalid paremeter declaration found in parameter list", parser_line_num);
+			num_errors++;
+			return NULL;;
+		}
+
+		//Status tracker
+		u_int8_t status;
+
+		//If we're not defining a predeclared function, we need to add this parameter in
+		if(defining_predeclared_function == FALSE){
+			//Let the helper do it
+			status = add_parameter_to_function_type(function_type, parameter->type_defined_as, parameter->is_mutable);
+
+			//This means that we exceeded the number of parameters
+			if(status == FAILURE){
+				print_parse_message(PARSE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+			//Otherwise we're fine
+
+		//If we get here, we need to validate that the type that was declared is
+		//the same as the one originally given
+		} else {
+			//Check if we've got too many parameters
+			if(function_parameter_number > internal_function_type->num_params){
+				sprintf(info, "Function %s was defined with only %d parameters", function_record->func_name.string, internal_function_type->num_params);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//We need to ensure that the mutability levels match here
+			if(internal_function_type->parameters[function_parameter_number - 1].is_mutable == TRUE && parameter->is_mutable == FALSE){
+				sprintf(info, "Parameter %s was defined as immutable, but predeclared as mutable", parameter->var_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+
+			//The other option for a mismatch
+			} else if(internal_function_type->parameters[function_parameter_number - 1].is_mutable == FALSE && parameter->is_mutable == TRUE){
+				sprintf(info, "Parameter %s was defined as mutable, but predeclared as immutable", parameter->var_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//If the mutability levels are off, we fail out
+			if(internal_function_type->parameters[function_parameter_number-1].is_mutable != parameter->is_mutable){
+				sprintf(info, "Mutability mismatch for parameter %d", function_parameter_number);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Grab the defined type out
+			generic_type_t* declared_type = dealias_type(internal_function_type->parameters[function_parameter_number-1].parameter_type);
+			//And this type
+			generic_type_t* defined_type = dealias_type(parameter->type_defined_as);
+
+			//If these 2 don't match, we fail
+			if(defined_type != declared_type){
+				sprintf(info, "Parameter %d was defined with type %s, but declared with type %s",  function_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Otherwise if we survive to here, then we're good
+		}
+
+		//Once we're here, we can add the function parameter in
+		status = add_function_parameter(function_record, parameter);
+
+		//If this fails that means we exceeded the maximum number of parameters
+		//This means that we exceeded the number of parameters
+		if(status == FAILURE){
+			print_parse_message(PARSE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//Increment this
+		function_parameter_number++;
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//We keep going as long as we see commas
+	} while(lookahead.tok == COMMA);
+
+	//If we're predeclaring, we need to check that the parameter count matches
+	if(defining_predeclared_function == TRUE && function_record->number_of_params != internal_function_type->num_params){
+		sprintf(info, "Function %s was declared with %d parameters, but was only defined with %d", function_record->func_name.string, internal_function_type->num_params, function_record->number_of_params);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Once we reach here, we need to check for the R_PAREN
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Closing parenthesis expected after parameter list", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Otherwise it worked, so we need to check matching
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//If we make it down here then this all worked, so
+	return SUCCESS;
+}
+
+
+/**
+ * A function predeclaration allows the user to basically
+ * promise that a function of this signature will exist at 
+ * some point
+ *
+ * <function_predeclaration> ::= declare {pub}? fn <identifier>({param_declaration | void} {, <param_declaration}*) -> <type-specifier> ;
+ *
+ * NOTE: by the time we get here, we've already seen the declare keyword
+ */
+static generic_ast_node_t* function_predeclaration(FILE* fl){
+	//Lookahead token
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//Is this a public function?
+	u_int8_t is_public = FALSE;
+
+	//If we see the PUB keyword, that means we have a public function
+	if(lookahead.tok == PUB){
+		//Set the flag
+		is_public = TRUE;
+		//Refresh the lookahead
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//Now we need to see the "fn" keyword. If we don't, we leave
+	if(lookahead.tok != FN){
+		return print_and_return_error("fn keyword required in function predeclaration", parser_line_num);
+	}
+
+	//Following this, we need to see an identifier
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If it's not an ident, we leave
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Identifier required after fn keyword in function predeclaration", parser_line_num);
+	}
+
+	//Now we need to check for duplicated names. We'll do this for
+	dynamic_string_t function_name = lookahead.lexeme;
+
+	//Go through all the steps of a fresh definition here
+	//Check for duplicated variables
+	symtab_function_record_t* found_function = lookup_function(function_symtab, function_name.string);
+
+	//Fail out if duplicate is found
+	if(found_function != NULL){
+		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_function_name(found_function);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//Check for duplicated variables
+	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name.string);
+
+	//Fail out if duplicate is found
+	if(found_variable != NULL){
+		sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_variable_name(found_variable);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//Check for duplicated type names
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name.string);
+
+	//Fail out if duplicate has been found
+	if(found_type != NULL){
+		sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_type_name(found_type);
+		num_errors++;
+		//Create and return an error node
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//Let's see if we've already named a constant this
+	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name.string);
+
+	//Fail out if this isn't null
+	if(found_const != NULL){
+		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_constant_name(found_const);
+		num_errors++;
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	//The main function may not be predeclared
+	if(strcmp(function_name.string, "main") == 0){
+		return print_and_return_error("The main function may not be predeclared", parser_line_num);
+	}
+
+	//Now that we've survived up to here, we can make the actual record
+	symtab_function_record_t* function_record = create_function_record(function_name, is_public, parser_line_num);
+
+	//Now we need to see an lparen to begin the parameters
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see it, we fail out
+	if(lookahead.tok != L_PAREN){
+		return print_and_return_error("Left parenthesis expected after function name", parser_line_num);
+	}
+
+	//Add this onto the grouping stack
+	push_token(grouping_stack, lookahead);
+
+	//Now we can begin processing our parameters
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+
+	//We must check some edge cases here
+	switch(lookahead.tok){
+		case VOID:
+			//We now need to see an RPAREn
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			
+			//We now need to see an R_PAREN
+			if(lookahead.tok != R_PAREN){
+				return print_and_return_error("Right parenthesis required after void parameter declaration", parser_line_num);
+			}
+
+			//Otherwise just go to after r_paren
+			goto after_rparen;
+
+		//We'll just hop out
+		case R_PAREN:
+			goto after_rparen;
+
+		//By default we can just leave
+		default:
+			push_back_token(lookahead);
+			break;
+	}
+
+	//Is the parameter mutable
+	u_int8_t is_mutable;
+
+	//Keep processing so long as we keep seeing commas
+	do{
+		//Assume by default it's not mutable
+		is_mutable = FALSE;
+
+		//Each function pointer parameter will consist only of a type and optionally
+		//a mutable keyword
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Is it mutable? If this token exists then it is
+		if(lookahead.tok == MUT){
+			is_mutable = TRUE;
+		} else {
+			//Otherwise put this back
+			push_back_token(lookahead);
+		}
+
+		//Now we need to see a valid type
+		generic_type_t* type = type_specifier(fl);
+
+		//If this is NULL, we'll error out
+		if(type == NULL){
+			print_and_return_error("Invalid parameter type given", parser_line_num);
+		}
+
+		//Let the helper add the type in
+		u_int8_t status = add_parameter_to_function_type(function_record->signature, type, is_mutable);
+
+		//This means that we have been given too many parameters
+		if(status == FAILURE){
+			return print_and_return_error("Maximum function parameter count of 6 exceeded", parser_line_num);
+		}
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	} while(lookahead.tok == COMMA);
+
+	//Now that we're done processing the list, we need to ensure that we have a right paren
+	if(lookahead.tok != R_PAREN){
+		return print_and_return_error("Right parenthesis required after parameter list declaration", parser_line_num);
+	}
+
+after_rparen:
+	//Make sure that we can pop the grouping stack and get a match
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
+	}
+
+	//Following this, we need to see the -> symbol
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we don't see it, we fail
+	if(lookahead.tok != ARROW){
+		return print_and_return_error("-> expected after function parameter list", parser_line_num);
+	}
+
+	//Now we need to see a valid type specifier
+	generic_type_t* return_type = type_specifier(fl);
+
+	//Fail out if bad
+	if(return_type == NULL){
+		return print_and_return_error("Invalid return type given", parser_line_num);
+	}
+
+	//Otherwise, this is the return type
+	function_record->return_type = return_type;
+	function_record->signature->internal_types.function_type->return_type = return_type;
+
+	//One last thing, we need to see a semicolon
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Fail out
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon required at the end of function predeclaration", parser_line_num);
+	}
+
+	//Otherwise this all worked. We can add this function to the symtab
+	insert_function(function_symtab, function_record);
+	
+	//A null return means that we succeeded
+	return NULL;
+}
+
+
+
+/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= func {:static}? <identifer> ({<parameter-list> | void}?) -> <type-specifier>{; | <compound-statement>}
- *
- * REMEMBER: By the time we get here, we've already seen the func keyword
+ * BNF Rule: <function-definition> ::= {pub}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
  */
 static generic_ast_node_t* function_definition(FILE* fl){
 	//Freeze the line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
-	//Are we defining something that's already been defined implicitly?
-	u_int8_t defining_prev_implicit = FALSE;
+	//Have we predeclared this function
+	u_int8_t definining_predeclared_function = FALSE;
 	//Is it the main function?
 	u_int8_t is_main_function = FALSE;
 	//Is this function public or private? Unless explicitly stated, all functions are private
@@ -9011,9 +9356,6 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	//Grab a reference for convenience
 	dynamic_string_t function_name = lookahead.lexeme;
 
-	//Let's now do all of our checks for duplication before we go any further. This can
-	//save us time if it ends up being bad
-	
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
 	symtab_function_record_t* function_record = lookup_function(function_symtab, function_name.string);
 
@@ -9025,17 +9367,11 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		num_errors++;
 		//Create and return an error node
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 
-	//This is our interesting case. The function has been defined implicitly, and now we're trying to define it
-	//explicitly. We don't need to do any other checks if this is the case
-	} else if(function_record != NULL && function_record->defined == FALSE){
-		//Flag this
-		defining_prev_implicit = TRUE;
-		//Set this as well
-		current_function = function_record;
-
-	//Otherwise we're defining fresh, so all of these checks need to happen
-	} else {
+	//If the function record is NULL, that means we're defining completely fresh
+	if(function_record == NULL){
+		//Go through all the steps of a fresh definition here
 		//Check for duplicated variables
 		symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name.string);
 
@@ -9076,16 +9412,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name);
-		//Associate this with the function node
-		function_node->func_record = function_record;
-		//Set first thing
-		function_record->number_of_params = 0;
-		function_record->line_number = current_line;
-		//Create the call graph node
-		function_record->call_graph_node = create_call_graph_node(function_record);
-		//By default, this function has never been called
-		function_record->called = FALSE;
+		function_record = create_function_record(function_name, is_public, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -9102,119 +9429,43 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			//It is the main function
 			is_main_function = TRUE;
 		}
+
+	//If we get here, we know that we're defining a predeclared function
+	} else {
+		//Flag this
+		definining_predeclared_function = TRUE;
+		//Set this as well
+		current_function = function_record;
+
+		//Let's now check - if the is_public's don't match here, we can fail already
+		if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == FALSE){
+			sprintf(info, "Function %s was predeclared as public, but defined as private", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+
+		//Other case, still a failure
+		} else if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == TRUE){
+			sprintf(info, "Function %s was predeclared as private, but defined as public", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
 	}
 
-	//We initialize this scope automatically, even if there is no param list.
-	//It will just be empty if this is the case, no big issue
+	//Associate this with the function node
+	function_node->func_record = function_record;
+
+	//We'll need to initialize a new variable scope here. This variable scope is designed
+	//so that we include the function parameters in it. We need to remember to close
+	//this once we leave
 	initialize_variable_scope(variable_symtab);
 
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	generic_ast_node_t* param_list_node = parameter_list(fl);
+	u_int8_t status = parameter_list(fl, function_record, definining_predeclared_function);
 
-	//We have a bad parameter list
-	if(param_list_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Invalid parameter list given in function declaration", current_line);
-		num_errors++;
-		//It's already an error, so just send it back up
-		return param_list_node;
+	//We have a bad parameter list, we just fail out
+	if(status == FAILURE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
-
-	//If we have more than the allowed number of parameters, we fail out
-	if(param_list_node->num_params > 6){
-		return print_and_return_error("Ollie allows only 6 parameters per function", parser_line_num);
-	}
-
-	//Once we make it here, we know that we have a valid param list and valid parenthesis. We can
-	//now parse the param_list and store records to it	
-	//Let's first add the param list in as a child
-	
-	//Let's now iterate over the parameter list and add the parameter records into the function 
-	//record for ease of access later
-	generic_ast_node_t* param_list_cursor = param_list_node->first_child;
-
-	//If we are defining a previously implicit function, we'll need to check the types & order
-	if(defining_prev_implicit == TRUE){
-		//How many params do we have
-		u_int8_t param_count = 0;
-		//The internal function record param
-		symtab_variable_record_t* func_param;
-		//Grab the function signature out for processing
-		function_type_t* function_signature_type = function_record->signature->internal_types.function_type;
-
-		//So long as this isn't null
-		while(param_list_cursor != NULL){
-			//If at any point this is more than the number of parameters this function is meant to have,
-			//we bail
-			if(param_count > function_signature_type->num_params){
-				sprintf(info, "Function \"%s\" was defined implicitly to only have %d parameters. First defined here:", function_record->func_name.string, function_record->number_of_params);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				//Print the function out too
-				print_function_name(function_record);
-				num_errors++;
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-			}
-
-			//Extract the cursor variable for this one
-			func_param = param_list_cursor->variable;
-
-			//Grab the type out for validation 
-			generic_type_t* parameter_type = function_signature_type->parameters[param_count].parameter_type;
-
-			//Let's now compare the types here
-			if(types_assignable(&(func_param->type_defined_as), &(parameter_type)) == NULL){
-				sprintf(info, "Function \"%s\" was defined with parameter %d of type \"%s\", this may not be changed.", function_name.string, param_count, func_param->type_defined_as->type_name.string);
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//Otherwise it's fine, so we'll overwrite the entire thing in the record
-			function_record->func_params[param_count] = param_list_cursor->variable;
-
-			//Advance this
-			param_list_cursor = param_list_cursor->next_sibling;
-			//One more param
-			param_count++;
-		}
-
-	//Otherwise we are defining from scratch here
-	} else {
-		//Grab this out for convenience
-		generic_type_t* function_signature = create_function_pointer_type(parser_line_num);
-
-		//So long as this is not null
-		while(param_list_cursor != NULL){
-			//The variable record for this param node
-			symtab_variable_record_t* param_rec = param_list_cursor->variable;
-
-			//We'll add it in as a reference to the function
-			function_record->func_params[function_record->number_of_params] = param_rec;
-			
-			//Store this into the function signature as well
-			function_signature->internal_types.function_type->parameters[function_record->number_of_params].is_mutable = param_rec->is_mutable;
-			function_signature->internal_types.function_type->parameters[function_record->number_of_params].parameter_type = param_rec->type_defined_as;
-
-			//Increment the parameter count
-			(function_record->number_of_params)++;
-
-			//Set the associated function record
-			param_rec->function_declared_in = function_record;
-
-			//Push the cursor up by 1
-			param_list_cursor = param_list_cursor->next_sibling;
-		}
-
-		//Copy this over for later
-		function_signature->internal_types.function_type->num_params = function_record->number_of_params;
-
-		//Store whether or not this function is public
-		function_signature->internal_types.function_type->is_public = is_public;
-
-		//Store this in here
-		function_record->signature = function_signature;
-	}
-
-	//Once we get down here, the entire parameter list has been stored properly
 
 	//Semantics here, we now must see a valid arrow symbol
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -9238,9 +9489,9 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	generic_type_t* type = dealias_type(return_type);
 
 	//If we're defining a function that was previously implicit, the types have to match exactly
-	if(defining_prev_implicit == TRUE){
+	if(definining_predeclared_function == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
-			sprintf(info, "Function \"%s\" was defined implicitly with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
+			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
@@ -9267,112 +9518,72 @@ static generic_ast_node_t* function_definition(FILE* fl){
 		return print_and_return_error("Invalid definition for main() function", parser_line_num);
 	}
 
-	//Now we have a fork in the road here. We can either define the function implicitly here
-	//or we can do a full definition
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	//Some housekeeping, if there were previously deferred statements, we want them out
+	deferred_stmts_node = NULL;
 
-	//If it's a semicolon, we're done
-	if(lookahead.tok == SEMICOLON){
-		//The main function may not be defined implicitly
-		if(is_main_function == TRUE){
-			print_parse_message(PARSE_ERROR, "The main function may not be defined implicitly. Implicit definition here:", parser_line_num);
-			print_function_name(function_record);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	//We are finally required to see a valid compound statement
+	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+
+	//If this fails we'll just pass it through
+	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return compound_stmt_node;
+	}
+
+	//This function was defined
+	function_record->defined = TRUE;
+
+	//Where was this function defined
+	function_record->line_number = current_line;
+
+	//If this function is a void return type, we need to manually insert
+	//a ret statement at the very end, if there isn't one already
+	//Let's drill down to the very end
+	generic_ast_node_t* cursor = compound_stmt_node->first_child;
+
+	//We could have an entirely null function body
+	if(cursor != NULL){
+		//So long as we don't see ret statements here, we keep going
+		while(cursor->next_sibling != NULL && cursor->ast_node_type != AST_NODE_TYPE_RET_STMT){
+			//Advance
+			cursor = cursor->next_sibling;
 		}
 
-		//If we're for some reason defining a previous implicit function
-		if(defining_prev_implicit == TRUE){
-			sprintf(info, "Function \"%s\" was already defined implicitly here:", function_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			print_function_name(function_record);
-			num_errors++;
+		//If we get here we know that it worked, so we'll add it in as a child
+		add_child_node(function_node, compound_stmt_node);
+	
+		//We now need to check and see if our jump statements are actually valid
+		if(check_jump_labels() == FAILURE){
+			//If this fails, we fail out here too
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
-
-		//Finalize the variable scope
-		finalize_variable_scope(variable_symtab);
-		
-		//This function was not defined
-		function_record->defined = FALSE;
-
-		//Remove the nesting level now that we're not in a function
-		pop_nesting_level(nesting_stack);
-		
-		//Return NULL here
-		return NULL;
 
 	} else {
-		//Put it back
-		push_back_token(lookahead);
-
-		//Some housekeeping, if there were previously deferred statements, we want them out
-		deferred_stmts_node = NULL;
-
-		//We are finally required to see a valid compound statement
-		generic_ast_node_t* compound_stmt_node = compound_statement(fl);
-
-		//If this fails we'll just pass it through
-		if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return compound_stmt_node;
-		}
-	
-		//This function was defined
-		function_record->defined = TRUE;
-
-		//Where was this function defined
-		function_record->line_number = current_line;
-
-		//If this function is a void return type, we need to manually insert
-		//a ret statement at the very end, if there isn't one already
-		//Let's drill down to the very end
-		generic_ast_node_t* cursor = compound_stmt_node->first_child;
-
-		//We could have an entirely null function body
-		if(cursor != NULL){
-			//So long as we don't see ret statements here, we keep going
-			while(cursor->next_sibling != NULL && cursor->ast_node_type != AST_NODE_TYPE_RET_STMT){
-				//Advance
-				cursor = cursor->next_sibling;
-			}
-
-			//If we get here we know that it worked, so we'll add it in as a child
-			add_child_node(function_node, compound_stmt_node);
-		
-			//We now need to check and see if our jump statements are actually valid
-			if(check_jump_labels() == FAILURE){
-				//If this fails, we fail out here too
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-			}
-
-		} else {
-			sprintf(info, "Function %s has no body", function_record->func_name.string);
-			print_parse_message(WARNING, info, parser_line_num);
-		}
-
-		//If this is the main funcition, it has been called implicitly
-		if(is_main_function == TRUE){
-			//Mark that it's been called
-			function_record->called = TRUE;
-			//Call it
-			call_function(os, function_record->call_graph_node);
-		}
-		
-		//Finalize the variable scope for the parameter list
-		finalize_variable_scope(variable_symtab);
-
-		//We're done with this, so destroy it
-		heap_queue_dealloc(current_function_jump_statements);
-
-		//Store the line number
-		function_node->line_number = current_line;
-
-		//Remove the nesting level now that we're not in a function
-		pop_nesting_level(nesting_stack);
-
-		//All good so we can get out
-		return function_node;
+		sprintf(info, "Function %s has no body", function_record->func_name.string);
+		print_parse_message(WARNING, info, parser_line_num);
 	}
+
+	//If this is the main funcition, it has been called implicitly
+	if(is_main_function == TRUE){
+		//Mark that it's been called
+		function_record->called = TRUE;
+		//Call it
+		call_function(os, function_record->call_graph_node);
+	}
+	
+	//We're done with this, so destroy it
+	heap_queue_dealloc(current_function_jump_statements);
+
+	//Store the line number
+	function_node->line_number = current_line;
+
+	//Close the variable scope that we opened for the parameter list
+	finalize_variable_scope(variable_symtab);
+
+	//Remove the nesting level now that we're not in a function
+	pop_nesting_level(nesting_stack);
+
+	//All good so we can get out
+	return function_node;
 }
 
 
