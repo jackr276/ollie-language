@@ -1883,7 +1883,9 @@ u_int8_t is_type_signed(generic_type_t* type){
 		case I8:
 		case I16:
 		case I32:
+		//TODO WE SHOULD REMOVE ENTIRELY
 		case SIGNED_INT_CONST:
+		//TODO WE SHOULD REMOVE ENTIRELY
 		case I64:
 		case F32:
 		case F64:
@@ -1951,7 +1953,6 @@ variable_size_t get_type_size(generic_type_t* type){
 			break;
 
 		//Enumerated types are 32 bits for convenience
-		//THIS IS WRONG!!!!!!!!!!
 		case TYPE_CLASS_ENUMERATED:
 			//An enum is just an integer type, so we can just use the internal type for a size
 			size = get_type_size(type->internal_values.enum_integer_type);
