@@ -1920,12 +1920,14 @@ variable_size_t get_type_size(generic_type_t* type){
 				//These are 32 bit(double word)
 				case I32:
 				case U32:
+				//TODO WE SHOULD REMOVE THESE ENTIRELY
 				case SIGNED_INT_CONST:
 				case UNSIGNED_INT_CONST:
+				//TODO WE SHOULD REMOVE THESE ENTIRELY
 					size = DOUBLE_WORD;
 					break;
 
-				//This is SP
+				//This is single precision
 				case F32:
 					size = SINGLE_PRECISION;
 					break;
@@ -1951,7 +1953,8 @@ variable_size_t get_type_size(generic_type_t* type){
 		//Enumerated types are 32 bits for convenience
 		//THIS IS WRONG!!!!!!!!!!
 		case TYPE_CLASS_ENUMERATED:
-			size = DOUBLE_WORD;
+			//An enum is just an integer type, so we can just use the internal type for a size
+			size = get_type_size(type->internal_values.enum_integer_type);
 			break;
 
 		//These are always 64 bits
