@@ -334,6 +334,14 @@ compiler_test: oc
 		./oc/out/oc -ditsa -f $$input -o $$output; \
 	done
 
+# This is for our comparisons - a non-timed test
+compiler_test_non_timed: oc
+	@for input in $(inputs); do \
+		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		echo "Running ./oc/out/oc -disa -f $$input -o $$output"; \
+		./oc/out/oc -disa -f $$input -o $$output; \
+	done
+
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
 
