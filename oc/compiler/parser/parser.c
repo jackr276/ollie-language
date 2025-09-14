@@ -535,6 +535,19 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f32")->type;
 			break;
 
+		case DOUBLE_CONST:
+			constant_node->constant_type = DOUBLE_CONST;
+			//Grab the float val
+			double double_value = atof(lookahead.lexeme.string);
+
+			//Store the float value we were given
+			constant_node->constant_value.double_value = double_value;
+
+			//Double constants are always an f64
+			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f64")->type;
+
+			break;
+
 		case CHAR_CONST:
 			constant_node->constant_type = CHAR_CONST;
 			//Grab the char val
