@@ -722,8 +722,8 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 				if(ch >= '0' && ch <= '9'){
 					dynamic_string_add_char_to_back(&lexeme, ch);
 				//If we see hex and we're in hex, it's also fine
-				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == 1) 
-						|| ((ch >= 'A' && ch <= 'F') && seen_hex == 1)){
+				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == TRUE) 
+						|| ((ch >= 'A' && ch <= 'F') && seen_hex == TRUE)){
 					dynamic_string_add_char_to_back(&lexeme, ch);
 				} else if(ch == 'x' || ch == 'X'){
 					//Have we seen the hex code?
@@ -753,7 +753,8 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 					//Add the character dynamically
 					dynamic_string_add_char_to_back(&lexeme, ch);
 
-				} else if (ch == 'l'){
+				//The 'l' or 'L' tells us that we're forcing to long
+				} else if (ch == 'l' || ch == 'L'){
 					lex_item.line_num = line_num;
 					lex_item.lexeme = lexeme;
 					lex_item.tok = LONG_CONST;
@@ -765,7 +766,7 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 					ch2 = get_next_char(fl);
 
 					//If this is an l, it's a long
-					if(ch2 == 'l'){
+					if(ch2 == 'l' || ch2 == 'L'){
 						lex_item.tok = LONG_CONST_FORCE_U;
 					} else {
 						//Put it back
