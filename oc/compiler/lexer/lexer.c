@@ -803,6 +803,16 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 				if(ch >= '0' && ch <= '9'){
 					//Add the character in
 					dynamic_string_add_char_to_back(&lexeme, ch);
+
+				//We can now see a D or d here that tells
+				//us to force this to double precision
+				} else if(ch == 'd' || ch == 'D'){
+					//Give this back as a double CONST
+					lex_item.tok = DOUBLE_CONST;
+					lex_item.lexeme = lexeme;
+					lex_item.line_num = line_num;
+					return lex_item;
+
 				} else {
 					//Put back the char
 					put_back_char(fl);
