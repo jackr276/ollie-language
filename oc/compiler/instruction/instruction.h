@@ -451,6 +451,7 @@ struct three_addr_const_t{
 	//Store the constant value in a union
 	union {
 		int64_t long_constant;
+		double double_constant;
 		float float_constant;
 		int32_t integer_constant;
 		char char_constant;
