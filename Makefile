@@ -509,6 +509,9 @@ middle_test-CI: middle_end_test-CI
 compiler_test-CI: oc-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -t -@ -i -d -f
 
+compiler_test-non-timed-CI: oc-CI
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/oc -s -@ -i -d -f
+
 array_test-CI: dynamic_array_test-CI
 	$(OUT_CI)/dynamic_array_test
 
