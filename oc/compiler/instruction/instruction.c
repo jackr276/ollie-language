@@ -1076,6 +1076,9 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 		case FLOAT_CONST:
 			fprintf(fl, "%f", constant->constant_value.float_constant);
 			break;
+		case DOUBLE_CONST:
+			fprintf(fl, "%f", constant->constant_value.double_constant);
+			break;
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
 			break;
@@ -1484,6 +1487,9 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 		case FLOAT_CONST:
 			fprintf(fl, "$%f", constant->constant_value.float_constant);
 			break;
+		case DOUBLE_CONST:
+			fprintf(fl, "$%f", constant->constant_value.double_constant);
+			break;
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
 			break;
@@ -1521,6 +1527,9 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 			break;
 		case FLOAT_CONST:
 			fprintf(fl, "%f", constant->constant_value.float_constant);
+			break;
+		case DOUBLE_CONST:
+			fprintf(fl, "%f", constant->constant_value.double_constant);
 			break;
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->function_name->func_name.string);
@@ -2994,6 +3003,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 				constant->is_value_0 = TRUE;
 			}
 			break;
+		//TODO THIS NEEDS MORE IN HERE
 		case INT_CONST:
 			constant->constant_value.integer_constant = const_node->constant_value.signed_int_value;
 			//Set the 0 flag if true
@@ -3003,6 +3013,9 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 			break;
 		case FLOAT_CONST:
 			constant->constant_value.float_constant = const_node->constant_value.float_value;
+			break;
+		case DOUBLE_CONST:
+			constant->constant_value.double_constant = const_node->constant_value.double_value;
 			break;
 		case STR_CONST:
 			fprintf(stderr, "String constants may not be emitted directly\n");

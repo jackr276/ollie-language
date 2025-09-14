@@ -38,6 +38,9 @@ void negate_constant_value(generic_ast_node_t* constant_node){
 		case FLOAT_CONST:
 			constant_node->constant_value.float_value *= -1;
 			break;
+		case DOUBLE_CONST:
+			constant_node->constant_value.double_value *= -1;
+			break;
 		case CHAR_CONST:
 			constant_node->constant_value.char_value *= -1;
 			break;
@@ -70,6 +73,9 @@ void decrement_constant_value(generic_ast_node_t* constant_node){
 		case FLOAT_CONST:
 			constant_node->constant_value.float_value--;
 			break;
+		case DOUBLE_CONST:
+			constant_node->constant_value.double_value--;
+			break;
 		case CHAR_CONST:
 			constant_node->constant_value.char_value--;
 			break;
@@ -101,6 +107,9 @@ void increment_constant_value(generic_ast_node_t* constant_node){
 			break;
 		case FLOAT_CONST:
 			constant_node->constant_value.float_value++;
+			break;
+		case DOUBLE_CONST:
+			constant_node->constant_value.double_value++;
 			break;
 		case CHAR_CONST:
 			constant_node->constant_value.char_value++;
