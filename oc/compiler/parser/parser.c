@@ -767,6 +767,11 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+		if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			current_param->inferred_type = final_type;
+		}
+
 		//We can now safely add this into the function call node as a child. In the function call node, 
 		//the parameters will appear in order from left to right
 		add_child_node(function_call_node, current_param);
@@ -1285,6 +1290,11 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			}
 		}
 
+		//If the expression is a constant, we force it to be the final type
+		if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			expr->inferred_type = final_type;
+		}
+
 		//Otherwise the overall type is the final type
 		asn_expr_node->inferred_type = final_type;
 
@@ -1325,6 +1335,11 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			if(final_type == NULL){
 				sprintf(info, "Types %s cannot be assigned to a variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
+			}
+
+			//If the expression is a constant, we force it to be the final type
+			if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				expr->inferred_type = final_type;
 			}
 
 			//We'll also want to create a complete, distinct copy of the subtree here
@@ -1629,6 +1644,11 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 	if(final_type == NULL){
 		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
+	}
+
+	//If this is a constant, we'll force it to be the final type
+	if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		expr->inferred_type = final_type;
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets
@@ -6168,6 +6188,11 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
+	//If this is a constant, we'll force it to be whatever the new type is
+	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		expr_node->inferred_type = final_type;
+	}
+
 	//Otherwise it worked, so we'll add it as a child of the other node
 	add_child_node(return_stmt, expr_node);
 
@@ -7469,6 +7494,9 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 				return print_and_return_error(info, parser_line_num);
 			}
 
+			//We'll force this to be whatever we got
+			const_node->inferred_type = case_stmt->inferred_type;
+
 			//We already have the value -- so this doesn't need to be a child node
 			break;
 
@@ -8038,6 +8066,11 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			if(final_type == NULL){
 				sprintf(info, "Attempt to assign expression of type %s to variable of type %s", initializer_node->inferred_type->type_name.string, return_type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
+			}
+
+			//If it is a constant node, we just force the type to be the array type
+			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				initializer_node->inferred_type = final_type;
 			}
 			
 			//Give back the return type
