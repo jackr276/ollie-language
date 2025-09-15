@@ -456,8 +456,8 @@ static generic_ast_node_t* emit_direct_constant(int32_t constant){
 	//This is an int_const
 	constant_node->constant_type = INT_CONST;
 	
-	//This is signed by default
-	constant_node->inferred_type = generic_signed_int;
+	//Just make this one a signed 32 bit integer
+	constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
 
 	//Give it the value
 	constant_node->constant_value.signed_int_value = constant;
@@ -498,8 +498,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Store the integer value
 			constant_node->constant_value.signed_int_value = atoi(lookahead.lexeme.string);
 
-			//This is signed by default
-			constant_node->inferred_type = generic_signed_int;
+			//Use the helper rule to determine what size int we should initially have
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value);
 
 			break;
 
@@ -510,9 +510,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Store the int value we were given
 			constant_node->constant_value.unsigned_int_value = atoi(lookahead.lexeme.string);
 
-			//If we force it to be unsigned then it will be
-			constant_node->inferred_type = generic_unsigned_int;
-
+			//Use the helper rule to determine what size int we should initially have
+			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_int_value); 
 			break;
 
 		//Hex constants are really just integers
@@ -522,8 +521,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Store the int value we were given
 			constant_node->constant_value.signed_int_value = strtol(lookahead.lexeme.string, NULL, 0);
 
-			//If we force it to be unsigned then it will be
-			constant_node->inferred_type = generic_signed_int;
+			//Use the helper rule to determine what size int we should initially have
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value); 
 
 			break;
 
