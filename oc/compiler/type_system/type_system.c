@@ -564,13 +564,6 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 						case VOID:
 							return NULL;
 
-						//These generic constant types will always work
-						case UNSIGNED_INT_CONST:
-						case SIGNED_INT_CONST:
-							//Reassign source type to be whatever this destination ends up being
-							*source_type = deref_destination_type;
-							return deref_destination_type;
-
 						//Otherwise, once we make it here we know that the source type is a basic type and
 						//and integer/char type. We can now just compare the sizes and if the destination is more
 						//than or equal to the source, we're good
@@ -656,62 +649,6 @@ static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t
  * Apply standard coercion rules for basic types
  */
 static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generic_type_t** a, generic_type_t** b){
-	//Grab these to avoid unneeded derefs
-	Token a_basic_type = (*a)->basic_type_token;
-	Token b_basic_type = (*b)->basic_type_token;
-
-	//These are our "flexible types" -- meaning that they can become any other
-	//kind of integer that we want
-	if(a_basic_type == SIGNED_INT_CONST || a_basic_type == UNSIGNED_INT_CONST){
-		//If B is not one of these, we'll just make A whatever B is
-		if(b_basic_type != SIGNED_INT_CONST && b_basic_type != UNSIGNED_INT_CONST){
-			*a = *b;
-			return;
-		}
-
-		//The final type
-		generic_type_t* final_type;
-
-		//Otherwise b is one of these, so we'll just assign them both to be 
-		//the 32-bit(default) version of whatever they are
-		if(a_basic_type == SIGNED_INT_CONST){
-			final_type = lookup_type_name_only(type_symtab, "i32")->type;
-		} else {
-			final_type = lookup_type_name_only(type_symtab, "u32")->type;
-		}
-
-		//These are both now this final type
-		*a = final_type;
-		*b = final_type;
-
-		return;
-
-	//Make sure b isn't a flexible type either
-	} else if(b_basic_type == SIGNED_INT_CONST || b_basic_type == UNSIGNED_INT_CONST){
-		//If B is not one of these, we'll just make A whatever B is
-		if(a_basic_type != SIGNED_INT_CONST && a_basic_type != UNSIGNED_INT_CONST){
-			*b = *a;
-			return;
-		}
-
-		//The final type
-		generic_type_t* final_type;
-
-		//Otherwise b is one of these, so we'll just assign them both to be 
-		//the 32-bit(default) version of whatever they are
-		if(a_basic_type == SIGNED_INT_CONST){
-			final_type = lookup_type_name_only(type_symtab, "i32")->type;
-		} else {
-			final_type = lookup_type_name_only(type_symtab, "u32")->type;
-		}
-
-		//These are both now this final type
-		*a = final_type;
-		*b = final_type;
-
-		return;
-	}
-
 	//Whomever has the largest size wins
 	if((*a)->type_size > (*b)->type_size){
 		//Set b to equal a
@@ -720,7 +657,6 @@ static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generi
 		//Set a to equal b
 		*a = *b;
 	}
-	//No else case - we don't want to deal with any other type size coercions
 }
 
 
@@ -737,8 +673,6 @@ static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a)
 		case U8:
 		case I8:
 		case CHAR:
-		case SIGNED_INT_CONST:
-		case UNSIGNED_INT_CONST:
 		case U16:
 		case I16:
 		case U32:
@@ -1922,10 +1856,6 @@ variable_size_t get_type_size(generic_type_t* type){
 				//These are 32 bit(double word)
 				case I32:
 				case U32:
-				//TODO WE SHOULD REMOVE THESE ENTIRELY
-				case SIGNED_INT_CONST:
-				case UNSIGNED_INT_CONST:
-				//TODO WE SHOULD REMOVE THESE ENTIRELY
 					size = DOUBLE_WORD;
 					break;
 
