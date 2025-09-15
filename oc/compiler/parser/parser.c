@@ -272,6 +272,7 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t
  * tree and we want to propogate it through
  */
 static void update_inferred_type_in_subtree(generic_ast_node_t* sub_tree_node, symtab_variable_record_t* var, generic_type_t* new_inferred_type){
+	/*
 	//Initialize a queue for level-order traversal
 	heap_queue_t* queue = heap_queue_alloc();
 
@@ -306,6 +307,7 @@ static void update_inferred_type_in_subtree(generic_ast_node_t* sub_tree_node, s
 
 	//Once we're done, destroy the whole thing
 	heap_queue_dealloc(queue);
+	*/
 }
 
 
