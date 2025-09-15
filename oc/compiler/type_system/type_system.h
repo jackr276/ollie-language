@@ -210,7 +210,7 @@ generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_ty
  * Are we able to assign something of "source_type" to something on "destination_type"? Returns
  * NULL if we can't
  */
-generic_type_t* types_assignable(generic_type_t** destination_type, generic_type_t** source_type);
+generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t** source_type);
 
 /**
  * Dynamically allocate and create a basic type

@@ -350,16 +350,15 @@ static u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t*
  * 					  Beyond this, the "pointing_to" types have to match when dealiased
  * 5.) Basic Types: See the area below for these rules, there are many
  */
-generic_type_t* types_assignable(generic_type_t** destination_type, generic_type_t** source_type){
-	//Before we go any further - make sure these types are fully raw
-	generic_type_t* deref_destination_type = dealias_type(*destination_type);
+generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t** source_type){
+	//Just for convenience
 	generic_type_t* deref_source_type = dealias_type(*source_type);
 
 	//Predeclare these for now
 	Token source_basic_type;
 	Token dest_basic_type;
 
-	switch(deref_destination_type->type_class){
+	switch(destination_type->type_class){
 		//This is a simpler case - constructs can only be assigned
 		//if they're the exact same
 		case TYPE_CLASS_STRUCT:
@@ -373,7 +372,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				return NULL;
 			} else {
 				//We'll give back the destination type if they are the same
-				return deref_destination_type;
+				return destination_type;
 			}
 
 		/**
@@ -386,8 +385,8 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 			}
 
 			//Otherwise, we'll need to use the helper rule to determine if it's equivalent
-			if(function_signatures_identical(deref_destination_type, deref_source_type) == TRUE){
-				return deref_destination_type;
+			if(function_signatures_identical(destination_type, deref_source_type) == TRUE){
+				return destination_type;
 			} else {
 				return NULL;
 			}
@@ -399,8 +398,8 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 			switch(deref_source_type->type_class){
 				case TYPE_CLASS_ENUMERATED:
 					//These need to be the exact same, otherwise this will not work
-					if(strcmp(deref_source_type->type_name.string, deref_destination_type->type_name.string) == 0){
-						return deref_destination_type;
+					if(strcmp(deref_source_type->type_name.string, destination_type->type_name.string) == 0){
+						return destination_type;
 					} else {
 						return NULL;
 					}
@@ -414,7 +413,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 						case VOID:
 							return NULL;
 						default:
-							return types_assignable(&(deref_destination_type->internal_values.enum_integer_type), source_type);
+							return types_assignable(destination_type->internal_values.enum_integer_type, source_type);
 					}
 
 				//Anything else is bad
@@ -425,8 +424,8 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 		//Only one type of array is assignable - and that would be a char[] to a char*
 		case TYPE_CLASS_ARRAY:
 			//If this isn't a char[], we're done
-			if(deref_destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
-				|| deref_destination_type->internal_types.member_type->basic_type_token != CHAR){
+			if(destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
+				|| destination_type->internal_types.member_type->basic_type_token != CHAR){
 				return NULL;
 			}
 
@@ -441,7 +440,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 				//If it's a char, then we're set
 				if(points_to->basic_type_token == CHAR){
-					return deref_destination_type;
+					return destination_type;
 				}
 			}
 
@@ -454,7 +453,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 					//This needs to be a u64, otherwise it's invalid
 					if(deref_source_type->basic_type_token == U64){
 						//We will keep this as the pointer
-						return deref_destination_type;
+						return destination_type;
 					//Any other basic type will not work here
 					} else {
 						return NULL;
@@ -462,8 +461,8 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 				case TYPE_CLASS_ARRAY:
 					//If these are the exact same types, then we're set
-					if(types_equivalent(deref_destination_type->internal_types.points_to, deref_source_type->internal_types.member_type) == TRUE){
-						return deref_destination_type;
+					if(types_equivalent(destination_type->internal_types.points_to, deref_source_type->internal_types.member_type) == TRUE){
+						return destination_type;
 					//Otherwise this won't work at all
 					} else{
 						return NULL;
@@ -473,15 +472,15 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				case TYPE_CLASS_POINTER:
 					//If this itself is a void pointer, then we're good
 					if(deref_source_type->internal_values.is_void_pointer == TRUE){
-						return deref_destination_type;
+						return destination_type;
 					//This is also fine, we just give the destination type back
-					} else if(deref_destination_type->internal_values.is_void_pointer == TRUE){
-						return deref_destination_type;
+					} else if(destination_type->internal_values.is_void_pointer == TRUE){
+						return destination_type;
 					//Let's see if what they point to is the exact same
 					} else {
 						//They need to be the exact same
-						if(types_equivalent(deref_source_type->internal_types.points_to, deref_destination_type->internal_types.points_to) == TRUE){
-							return deref_destination_type;
+						if(types_equivalent(deref_source_type->internal_types.points_to, destination_type->internal_types.points_to) == TRUE){
+							return destination_type;
 						} else {
 							return NULL;
 						}
@@ -506,7 +505,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 		 */
 		case TYPE_CLASS_BASIC:
 			//Extract the destination's basic type
-			dest_basic_type = deref_destination_type->basic_type_token;
+			dest_basic_type = destination_type->basic_type_token;
 
 			//Switch based on the type that we have here
 			switch(dest_basic_type){
@@ -519,7 +518,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 					if(deref_source_type->type_class == TYPE_CLASS_BASIC
 						&& (deref_source_type->basic_type_token == F64
 						|| deref_source_type->basic_type_token == F32)){
-						return deref_destination_type;
+						return destination_type;
 
 					//Otherwise nothing here will work
 					} else {
@@ -530,7 +529,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 					//We must see another an f32 here
 					if(deref_source_type->type_class == TYPE_CLASS_BASIC
 						&& deref_source_type->basic_type_token == F32){
-						return deref_destination_type;
+						return destination_type;
 
 					//Otherwise nothing here will work
 					} else {
@@ -544,7 +543,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				default:
 					//Special exception - the source type is an enum. These are good to be used with ints
 					if(deref_source_type->type_class == TYPE_CLASS_ENUMERATED){
-						return deref_destination_type;
+						return destination_type;
 					}
 
 					//Now if the source type is not a basic type, we're done here
@@ -568,8 +567,8 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 						//and integer/char type. We can now just compare the sizes and if the destination is more
 						//than or equal to the source, we're good
 						default:
-							if(deref_source_type->type_size <= deref_destination_type->type_size){
-								return deref_destination_type;
+							if(deref_source_type->type_size <= destination_type->type_size){
+								return destination_type;
 							} else {
 								//These wouldn't fit
 								return NULL;
