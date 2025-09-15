@@ -1128,23 +1128,6 @@ void print_constant_name(symtab_constant_record_t* record){
 /**
  * Print a type name. Intended for error messages
  */
-static void print_generic_type(generic_type_t* type){
-	//Print out where it was declared
-	if(type->type_class == TYPE_CLASS_BASIC){
-		printf("---> BASIC TYPE | ");
-	} else {
-		printf("---> %d | ", type->line_number);
-	}
-
-	//Then print out the name
-	printf("%s", type->type_name.string);
-}
-
-
-
-/**
- * Print a type name. Intended for error messages
- */
 void print_type_name(symtab_type_record_t* record){
 	//Print out where it was declared
 	if(record->type->type_class == TYPE_CLASS_BASIC){

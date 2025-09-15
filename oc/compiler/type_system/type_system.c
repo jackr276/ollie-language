@@ -626,7 +626,7 @@ static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t
 /**
  * Apply standard coercion rules for basic types
  */
-static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generic_type_t** a, generic_type_t** b){
+static void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
 	//Whomever has the largest size wins
 	if((*a)->type_size > (*b)->type_size){
 		//Set b to equal a
@@ -781,7 +781,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 
 			//Give back a
 			return *a;
@@ -855,7 +855,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 
 			//Give back a
 			return *a;
@@ -878,7 +878,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 		
 			//Give this back once down
 			return *a;
@@ -906,7 +906,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that we only have basic types here. We can apply
 			//the standard widening conversion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 
 			//We'll give back *a once we're finished
 			return *a;
@@ -995,7 +995,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that we only have basic types here. We can apply
 			//the standard widening conversion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 
 			//We'll give back *a once we're finished
 			return *a;

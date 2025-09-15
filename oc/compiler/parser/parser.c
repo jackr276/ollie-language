@@ -1579,8 +1579,6 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 
 	//We use a u_int64 as our reference
 	generic_type_t* reference_type = lookup_type_name_only(type_symtab, "u64")->type;
-	//Store this for processing
-	generic_type_t* old_type = expr->inferred_type;
 
 	//Find the final type here. If it's not currently a U64, we'll need to coerce it
 	generic_type_t* final_type = types_assignable(reference_type, expr->inferred_type);
@@ -2230,10 +2228,6 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 	generic_ast_node_t* right_child;
 	//Holding the return type
 	generic_type_t* return_type;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid cast expression expression
 	generic_ast_node_t* sub_tree_root = cast_expression(fl, side);
@@ -2293,10 +2287,6 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
-
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
 		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
@@ -2349,10 +2339,6 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* right_child;
 	//Hold the return type for us here
 	generic_type_t* return_type;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid multiplicative expression
 	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl, side);
@@ -2410,10 +2396,6 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
 
 		//We have a pointer here in the temp holder, and we're trying to add/subtract something to it
 		if(temp_holder->inferred_type->type_class != TYPE_CLASS_POINTER){
@@ -2483,10 +2465,6 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid additive expression
 	generic_ast_node_t* sub_tree_root = additive_expression(fl, side);
@@ -2546,10 +2524,6 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
-
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -2599,11 +2573,6 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
-
 
 	//No matter what, we do need to first see a valid shift expression
 	generic_ast_node_t* sub_tree_root = shift_expression(fl, side);
@@ -2663,10 +2632,6 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
-
 		//The return type is always the left child's type
 		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
@@ -2708,11 +2673,6 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
-
 
 	//No matter what, we do need to first see a valid relational expression
 	generic_ast_node_t* sub_tree_root = relational_expression(fl, side);
@@ -2772,10 +2732,6 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
-
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -2818,11 +2774,6 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
-
 
 	//No matter what, we do need to first see a valid equality expression
 	generic_ast_node_t* sub_tree_root = equality_expression(fl, side);
@@ -2879,10 +2830,6 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
-
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -2928,11 +2875,6 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
-
 
 	//No matter what, we do need to first see a valid and expression
 	generic_ast_node_t* sub_tree_root = and_expression(fl, side);
@@ -2989,10 +2931,6 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 		
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
-
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -3037,10 +2975,6 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a valid exclusive or expression
 	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl, side);
@@ -3097,10 +3031,6 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
-
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -3148,11 +3078,6 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
-
 
 	//No matter what, we do need to first see a valid inclusive or expression
 	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl, side);
@@ -3209,10 +3134,6 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
-
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -3263,10 +3184,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
-	//The old temp older type
-	generic_type_t* old_temp_holder_type;
-	//The old right child type
-	generic_type_t* old_right_child_type;
 
 	//No matter what, we do need to first see a logical and expression
 	generic_ast_node_t* sub_tree_root = logical_and_expression(fl, side);
@@ -3323,10 +3240,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Store the old types in here
-		old_temp_holder_type = temp_holder->inferred_type;
-		old_right_child_type = right_child->inferred_type;
-		
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
@@ -6015,9 +5928,6 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	if(current_function == NULL){
 		return print_and_return_error("Fatal internal compiler error. Saw a return statement while current function is null", parser_line_num);
 	}
-
-	//Grab the old type out here
-	generic_type_t* old_expr_node_type = expr_node->inferred_type;
 
 	//Figure out what the final type is here
 	generic_type_t* final_type = types_assignable(current_function->return_type, expr_node->inferred_type);

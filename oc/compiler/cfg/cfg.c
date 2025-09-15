@@ -1817,7 +1817,7 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 
 						//If we make it here that means that we don't already have one, so we'll add it
 						//This function only emits the skeleton of a phi function
-						instruction_t* phi_stmt = emit_phi_function(record, record->type_defined_as);
+						instruction_t* phi_stmt = emit_phi_function(record);
 
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);

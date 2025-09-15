@@ -2236,27 +2236,6 @@ static void print_test_instruction(FILE* fl, instruction_t* instruction, variabl
 
 
 /**
- * Print out a movzbl instruction
- */
-static void print_movzbl_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//First we'll just print out the opcode
-	fprintf(fl, "movzbl ");
-
-	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
-	} else {
-		print_immediate_value(fl, instruction->source_immediate);
-	}
-
-	//Now our comma and the destination
-	fprintf(fl, ",");
-	print_variable(fl, instruction->destination_register, mode);
-	fprintf(fl, "\n");
-}
-
-
-/**
  * Print out an arithmetic left shift instruction
  */
 static void print_sal_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
@@ -3723,7 +3702,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node){
  * Emit a phi function for a given variable. Once emitted, these statements are compiler exclusive,
  * but they are needed for our optimization
  */
-instruction_t* emit_phi_function(symtab_variable_record_t* variable, generic_type_t* type){
+instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 

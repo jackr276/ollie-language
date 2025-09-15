@@ -848,7 +848,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node);
 /**
  * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler
  */
-instruction_t* emit_phi_function(symtab_variable_record_t* variable, generic_type_t* type);
+instruction_t* emit_phi_function(symtab_variable_record_t* variable);
 
 /**
  * Emit an idle statement
