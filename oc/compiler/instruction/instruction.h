@@ -622,6 +622,13 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
 three_addr_var_t* emit_var(symtab_variable_record_t* var);
 
 /**
+ * Emit a variable for an identifier node. This rule is designed to account for the fact that
+ * some identifiers may have had their types casted / coerced, so we need to keep the actual
+ * inferred type here
+*/
+three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generic_type_t* inferred_type);
+
+/**
  * Emit a variable copied from another variable
  */
 three_addr_var_t* emit_var_copy(three_addr_var_t* var);

@@ -416,6 +416,35 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 
 
 /**
+ * Emit a variable for an identifier node. This rule is designed to account for the fact that
+ * some identifiers may have had their types casted / coerced, so we need to keep the actual
+ * inferred type here
+*/
+three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generic_type_t* inferred_type){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Attach it for memory management
+	emitted_var->next_created = emitted_vars;
+	emitted_vars = emitted_var;
+
+	//This is not temporary
+	emitted_var->is_temporary = FALSE;
+	//This variable's type will be what the identifier node deemed it as
+	emitted_var->type = inferred_type;
+	//And store the symtab record
+	emitted_var->linked_var = var;
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+
+/**
  * Create and return a temporary variable from a live range
 */
 three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range){
