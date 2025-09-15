@@ -129,8 +129,6 @@ typedef enum {
 	ERROR,
 	DONE,
 	VOID,
-	SIGNED_INT_CONST, //Generic type as a signed integer constant
-	UNSIGNED_INT_CONST, //Generic type as an unsigned integer constant
 	U8,
 	I8,
 	U16,

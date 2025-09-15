@@ -2572,22 +2572,8 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			//These are all basic types
 			generic_type_t* type = constant_node->inferred_type;
 
-			//Go based on the type
-			switch(type->basic_type_token){
-				//If it's unassigned by this point, we fall to defaults
-				case UNSIGNED_INT_CONST:
-					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u32")->type);
-					break;
-				
-				case SIGNED_INT_CONST:
-					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "i32")->type);
-					break;
-
-				//If we hit the default we just use its type
-				default:
-					assignee = emit_temp_var(type);
-					break;
-			}
+			//Emit the temp var here
+			assignee = emit_temp_var(type);
 
 			//We'll use the constant var feature here
 			const_assignment = emit_assignment_with_const_instruction(assignee, const_val);

@@ -609,8 +609,6 @@ static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generi
 		case U64:
 		case I64:
 			return lookup_type_name_only(symtab, "u64")->type;
-		case SIGNED_INT_CONST:
-			return lookup_type_name_only(symtab, "generic_unsigned_int")->type;
 		//We should never get here
 		default:
 			return lookup_type_name_only(symtab, "u32")->type;
@@ -1817,9 +1815,6 @@ u_int8_t is_type_signed(generic_type_t* type){
 		case I8:
 		case I16:
 		case I32:
-		//TODO WE SHOULD REMOVE ENTIRELY
-		case SIGNED_INT_CONST:
-		//TODO WE SHOULD REMOVE ENTIRELY
 		case I64:
 		case F32:
 		case F64:
