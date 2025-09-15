@@ -310,46 +310,6 @@ static void update_inferred_type_in_subtree(generic_ast_node_t* sub_tree_node, s
 
 
 /**
- * In a given subtree, update everything of type "old_type" to be of type new_inferred_type
- */
-static void update_constant_type_in_subtree(generic_ast_node_t* sub_tree_node, generic_type_t* old_type, generic_type_t* new_inferred_type){
-	//Initialize a queue for level-order traversal
-	heap_queue_t* queue = heap_queue_alloc();
-
-	//Seed the queue with the sub_tree_node
-	enqueue(queue, sub_tree_node);
-
-	//Current pointer
-	generic_ast_node_t* current;
-
-	//So long as the queue isn't empty
-	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
-		//Dequeue off the queue
-		current = dequeue(queue);
-
-		//If the old type has a new inferred type to give, we'll do that
-		if(current->inferred_type == old_type){
-			current->inferred_type = new_inferred_type;
-		}
-
-		//Now enqueue all of the siblings of current
-		generic_ast_node_t* current_sibling = current->first_child;
-		
-		//So long as we have more siblings
-		while(current_sibling != NULL){
-			//Add to the queue
-			enqueue(queue, current_sibling);
-			//Push this one up
-			current_sibling = current_sibling->next_sibling;
-		}
-	}
-
-	//Once we're done, destroy the whole thing
-	heap_queue_dealloc(queue);
-}
-
-
-/**
  * Emit a binary operation for the purpose of address manipulation
  *
  * Example:
