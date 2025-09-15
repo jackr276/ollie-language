@@ -72,10 +72,6 @@ static u_int16_t parser_line_num = 1;
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;
 
-//These types are used *a lot*, so we'll store them to avoid constant lookups
-generic_type_t* generic_unsigned_int;
-generic_type_t* generic_signed_int;
-
 //Are we enabling debug printing? By default no
 u_int8_t enable_debug_printing = FALSE;
 
@@ -812,13 +808,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Otherwise it worked
-		
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		if(expr_type == generic_unsigned_int || expr_type == generic_signed_int){
-			update_constant_type_in_subtree(current_param, expr_type, current_param->inferred_type);
-		}
-
 		//We can now safely add this into the function call node as a child. In the function call node, 
 		//the parameters will appear in order from left to right
 		add_child_node(function_call_node, current_param);
@@ -915,7 +904,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	const_node->constant_value.unsigned_int_value = return_type->type_size;
 	//Grab and store type info
 	//This will always end up as a generic signed int
-	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
+	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(return_type->type_size);
 	//We cannot assign to this
 	const_node->is_assignable = FALSE;
 	//Store this too
@@ -985,7 +974,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	const_node->constant_value.unsigned_int_value = type_size;
 	//Grab and store type info
 	//These will be generic signed ints
-	const_node->inferred_type = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
+	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(type_size);
 
 	//Finally we'll return this constant node
 	return const_node;
@@ -1401,11 +1390,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			//If this is not null, assign the var too
 			if(expr->variable != NULL && expr->variable->type_defined_as != expr->inferred_type){
 				update_inferred_type_in_subtree(expr, expr->variable, expr->inferred_type);
-
-			//If this is the case, we'll need to propogate all of the types down the chain here
-			} else if(right_hand_type == generic_unsigned_int || right_hand_type == generic_signed_int){
-				update_constant_type_in_subtree(expr, right_hand_type, expr->inferred_type);
 			}
+
 
 			//By the time that we get here, we know that all coercion has been completed
 			//We can now construct our final result
@@ -1684,11 +1670,6 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 	if(final_type == NULL){
 		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
-	}
-
-	//If this is the case, we'll need to propogate all of the types down the chain here
-	if(old_type == generic_unsigned_int || old_type == generic_signed_int){
-		update_constant_type_in_subtree(expr, old_type, expr->inferred_type);
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets
@@ -2404,19 +2385,11 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 		//If this is not null, assign the var too
 		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-		//We could also have a case where it's a constant, and needs to be assigned
-		} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 		}
 
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
@@ -2542,19 +2515,11 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			//If this is not null, assign the var too
 			if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 				update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-			//We could also have a case where it's a constant, and needs to be assigned
-			} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-				update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 			}
 
 			//If this is not null, assign the var too
 			if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 				update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-			//If this is the case, we'll need to propogate all of the types down the chain here
-			} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-				update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 			}
 
 		} else {
@@ -2696,19 +2661,11 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 		//If this is not null, assign the var too
 		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-		//We could also have a case where it's a constant, and needs to be assigned
-		} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 		}
 
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 	} else {
@@ -2828,19 +2785,11 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 		//If this is not null, assign the var too
 		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-		//We could also have a case where it's a constant, and needs to be assigned
-		} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 		}
 
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
@@ -2958,19 +2907,11 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 		//If this is not null, assign the var too
 		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-		//We could also have a case where it's a constant, and needs to be assigned
-		} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 		}
 
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
@@ -3083,19 +3024,11 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 		//If this is not null, assign the var too
 		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-		//We could also have a case where it's a constant, and needs to be assigned
-		} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 		}
 
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
@@ -3211,19 +3144,11 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 		//If this is not null, assign the var too
 		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-		//We could also have a case where it's a constant, and needs to be assigned
-		} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 		}
 
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 		//Store the final type
@@ -3337,19 +3262,11 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 		//If this is not null, assign the var too
 		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-		//We could also have a case where it's a constant, and needs to be assigned
-		} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 		}
 
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 		//Store the final type
@@ -3467,19 +3384,11 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 		//If this is not null, assign the var too
 		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-		//We could also have a case where it's a constant, and needs to be assigned
-		} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 		}
 
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 		//Give this to the root
@@ -3599,19 +3508,11 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 		//If this is not null, assign the var too
 		if(temp_holder->variable != NULL && temp_holder->variable->type_defined_as != temp_holder->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, temp_holder->variable, temp_holder->inferred_type);
-
-		//We could also have a case where it's a constant, and needs to be assigned
-		} else if(old_temp_holder_type == generic_unsigned_int || old_temp_holder_type == generic_signed_int){
-			update_constant_type_in_subtree(temp_holder, old_temp_holder_type, temp_holder->inferred_type);
 		}
 
 		//If this is not null, assign the var too
 		if(right_child->variable != NULL && right_child->variable->type_defined_as != right_child->inferred_type){
 			update_inferred_type_in_subtree(sub_tree_root, right_child->variable, right_child->inferred_type);
-
-		//If this is the case, we'll need to propogate all of the types down the chain here
-		} else if(old_right_child_type == generic_unsigned_int || old_right_child_type == generic_signed_int){
-			update_constant_type_in_subtree(right_child, old_right_child_type, right_child->inferred_type);
 		}
 
 		//We now know that the subtree root has a type of u_int8(boolean)
@@ -6306,11 +6207,6 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		print_function_name(current_function);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//If this is the case, we'll need to propogate all of the types down the chain here
-	if(old_expr_node_type == generic_unsigned_int || old_expr_node_type == generic_signed_int){
-		update_constant_type_in_subtree(expr_node, old_expr_node_type, expr_node->inferred_type);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
@@ -9966,9 +9862,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Add all basic types into the type symtab
 	add_all_basic_types(type_symtab);
-
-	generic_unsigned_int = lookup_type_name_only(type_symtab, "generic_unsigned_int")->type;
-	generic_signed_int = lookup_type_name_only(type_symtab, "generic_signed_int")->type;
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	if(grouping_stack == NULL){
