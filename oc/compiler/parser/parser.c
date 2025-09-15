@@ -754,15 +754,14 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	
 		//Let's grab these to check for compatibility
 		generic_type_t* param_type = defined_parameter.parameter_type;
-		generic_type_t* expr_type = current_param->inferred_type;
 
 		//Let's see if we're even able to assign this here
-		generic_type_t* final_type = types_assignable(param_type, &(current_param->inferred_type));
+		generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
 
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
 			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". Defined as: %s",
-		   			function_name.string, param_type->type_name.string, num_params, expr_type->type_name.string, function_type->type_name.string);
+		   			function_name.string, param_type->type_name.string, num_params, current_param->inferred_type->type_name.string, function_type->type_name.string);
 
 			//Use the helper to return this
 			return print_and_return_error(info, parser_line_num);
@@ -1271,7 +1270,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		 * We will make use of the types assignable module here, as the rules are slightly 
 		 * different than the types compatible rule
 		 */
-		final_type = types_assignable(left_hand_type, &right_hand_type);
+		final_type = types_assignable(left_hand_type, right_hand_type);
 
 		//If they're not, we fail here
 		if(final_type == NULL){
@@ -1320,7 +1319,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
 			 * 	As such, we need to check if the types are assignable first
 			 */
-			final_type = types_assignable(left_hand_type, &right_hand_type);
+			final_type = types_assignable(left_hand_type, right_hand_type);
 
 			//If this fails, that means that we have an invalid operation
 			if(final_type == NULL){
@@ -1624,7 +1623,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 	generic_type_t* old_type = expr->inferred_type;
 
 	//Find the final type here. If it's not currently a U64, we'll need to coerce it
-	generic_type_t* final_type = types_assignable(reference_type, &(expr->inferred_type));
+	generic_type_t* final_type = types_assignable(reference_type, expr->inferred_type);
 
 	//Let's make sure that this is an int
 	if(final_type == NULL){
@@ -2232,7 +2231,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	/**
 	 * We will use the types_assignable function to check this
 	 */
-	generic_type_t* return_type = types_assignable(casting_to_type, &being_casted_type);
+	generic_type_t* return_type = types_assignable(casting_to_type, being_casted_type);
 
 	//This is our fail case
 	if(return_type == NULL){
@@ -6156,7 +6155,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	generic_type_t* old_expr_node_type = expr_node->inferred_type;
 
 	//Figure out what the final type is here
-	generic_type_t* final_type = types_assignable(current_function->return_type, &(expr_node->inferred_type));
+	generic_type_t* final_type = types_assignable(current_function->return_type, expr_node->inferred_type);
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
@@ -7406,7 +7405,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 			//Otherwise we know that it is good, but is it the right type
 			//Are the types here compatible?
-			case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, &(enum_record->type_defined_as));
+			case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, enum_record->type_defined_as);
 
 			//If this fails, they're incompatible
 			if(case_stmt->inferred_type == NULL){
@@ -7461,7 +7460,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 			//Otherwise we know that it is good, but is it the right type
 			//Are the types here compatible?
-			case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, &(const_node->inferred_type));
+			case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, const_node->inferred_type);
 
 			//If this fails, they're incompatible
 			if(case_stmt->inferred_type == NULL){
@@ -8033,7 +8032,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			}
 
 			//Use the helper to determine if the types are assignable
-			generic_type_t* final_type = types_assignable(return_type, &(initializer_node->inferred_type));
+			generic_type_t* final_type = types_assignable(return_type, initializer_node->inferred_type);
 
 			//Will be null if we have a failure
 			if(final_type == NULL){
