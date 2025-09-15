@@ -289,28 +289,17 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 }
 
 /**
- * Is a type conversion needed between these two types for b to fit into a
+ * Is a type conversion needed between these two types for the source type to fit into the destination type
  */
-u_int8_t is_expanding_move_required(generic_type_t* a, generic_type_t* b){
-	//If the two types are the exact same, nothing is needed
-	if(a == b){
-		return FALSE;
+u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_type_t* source_type){
+	//If the destination is larger than the source, we must convert
+	if(destination_type->type_size > source_type->type_size){
+		printf("Type conversion between needed for %s to be assigned to %s\n", source_type->type_name.string, destination_type->type_name.string);
+		return TRUE;
 	}
 
-	//If they're both basic types
-	if(a->type_class == TYPE_CLASS_BASIC && b->type_class == TYPE_CLASS_BASIC){
-		//If their float status is the same and they're the same size, no conversion is needed
-		if(a->type_size == b->type_size){
-			return FALSE;
-		} else {
-
-			printf("Type conversion between %s and %s is required\n", a->type_name.string, b->type_name.string);
-			return TRUE;
-		}
-	}
-
-			printf("Type conversion between %s and %s is required\n", a->type_name.string, b->type_name.string);
-	return TRUE;
+	//By default, we say no
+	return FALSE;
 }
 
 

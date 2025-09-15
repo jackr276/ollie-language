@@ -193,7 +193,7 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type);
 /**
  * Do we need an expanding move to convert between two types?
  */
-u_int8_t is_expanding_move_required(generic_type_t* a, generic_type_t* b);
+u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_type_t* source_type);
 
 /**
  * Simple helper to check if a function is void
