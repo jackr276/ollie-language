@@ -1304,7 +1304,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 			//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
 			//don't want to mess with the actual type of the variable
-			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &right_hand_type, binary_op);
+			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(expr->inferred_type), binary_op);
 
 			//If this fails, that means that we have an invalid operation
 			if(final_type == NULL){

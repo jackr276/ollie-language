@@ -291,7 +291,7 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 /**
  * Is a type conversion needed between these two types for b to fit into a
  */
-u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b){
+u_int8_t is_expanding_move_required(generic_type_t* a, generic_type_t* b){
 	//If the two types are the exact same, nothing is needed
 	if(a == b){
 		return FALSE;
@@ -303,10 +303,13 @@ u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b){
 		if(a->type_size == b->type_size){
 			return FALSE;
 		} else {
+
+			printf("Type conversion between %s and %s is required\n", a->type_name.string, b->type_name.string);
 			return TRUE;
 		}
 	}
 
+			printf("Type conversion between %s and %s is required\n", a->type_name.string, b->type_name.string);
 	return TRUE;
 }
 

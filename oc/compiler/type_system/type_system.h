@@ -191,9 +191,9 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type);
 u_int8_t is_type_valid_for_conditional(generic_type_t* type);
 
 /**
- * Is a type conversion needed between these two types for b to fit into a
+ * Do we need an expanding move to convert between two types?
  */
-u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b);
+u_int8_t is_expanding_move_required(generic_type_t* a, generic_type_t* b);
 
 /**
  * Simple helper to check if a function is void
