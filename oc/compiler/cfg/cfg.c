@@ -3346,11 +3346,11 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 	if(current_var->type != postfix_parent->inferred_type){
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(postfix_parent->inferred_type), current_var);
-		//TODO HERE
+		//TODO HERE - TH*S IS THE SOLUTION
 
-		add_statement(current, assignment);
+		//add_statement(current, assignment);
 
-		postfix_package.assignee = assignment->assignee;
+		//postfix_package.assignee = assignment->assignee;
 		printf("MISMATCH\n");
 	}
 
