@@ -3344,16 +3344,21 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 		postfix_package.assignee = current_var;
 	}
 
+	/**
+	 * It is often the case where we require an expanding move after we access memory. In order to
+	 * do this, we'll inject an assignment expression here which will eventually become a converting move
+	 * in the instruction selector
+	 */
 	if(is_expanding_move_required(postfix_parent->inferred_type, current_var->type) == TRUE){
+		//Assigning to something of the inferred type
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(postfix_parent->inferred_type), current_var);
-		//TODO HERE - TH*S IS THE SOLUTION
 
-		//add_statement(current, assignment);
+		//We'll add the assignment in
+		add_statement(current, assignment);
 
-		//postfix_package.assignee = assignment->assignee;
-		printf("MISMATCH\n");
+		//This now becomes the assignee
+		postfix_package.assignee = assignment->assignee;
 	}
-
 
 	//Give back the package
 	return postfix_package;
