@@ -554,14 +554,6 @@ void add_all_basic_types(type_symtab_t* symtab){
 	type = create_pointer_type(char_type, 0);
 	insert_type(symtab,  create_type_record(type));
 
-	//Generic unsigned int
-	type = create_basic_type("generic_unsigned_int", UNSIGNED_INT_CONST);
-	insert_type(symtab,  create_type_record(type));
-
-	//Generic signed int
-	type = create_basic_type("generic_signed_int", SIGNED_INT_CONST);
-	insert_type(symtab,  create_type_record(type));
-
 	//Create "char*" type
 	type = create_pointer_type(type, 0);
 	insert_type(symtab,  create_type_record(type));
@@ -596,10 +588,6 @@ void add_all_basic_types(type_symtab_t* symtab){
 	
 	//float64 type
 	type = create_basic_type("f64", F64);
-	insert_type(symtab,  create_type_record(type));
-
-	//label type
-	type = create_basic_type("label", IDENT);
 	insert_type(symtab,  create_type_record(type));
 }
 
@@ -1135,23 +1123,6 @@ void print_constant_name(symtab_constant_record_t* record){
 	//Now print out the semicolon
 	printf(";\n");
 }
-
-
-/**
- * Print a type name. Intended for error messages
- */
-static void print_generic_type(generic_type_t* type){
-	//Print out where it was declared
-	if(type->type_class == TYPE_CLASS_BASIC){
-		printf("---> BASIC TYPE | ");
-	} else {
-		printf("---> %d | ", type->line_number);
-	}
-
-	//Then print out the name
-	printf("%s", type->type_name.string);
-}
-
 
 
 /**

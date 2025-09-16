@@ -27,6 +27,18 @@ typedef enum{
 	SIDE_TYPE_RIGHT,
 } side_type_t;
 
+/**
+ * What kind of word length do we have -- used for instructions
+ */
+typedef enum{
+	BYTE,
+	WORD,
+	DOUBLE_WORD,
+	QUAD_WORD,
+	SINGLE_PRECISION,
+	DOUBLE_PRECISION //For floats
+} variable_size_t;
+
 
 /**
  * Which class of type is it?
@@ -179,9 +191,9 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type);
 u_int8_t is_type_valid_for_conditional(generic_type_t* type);
 
 /**
- * Is a type conversion needed between these two types for b to fit into a
+ * Do we need an expanding move to convert between two types?
  */
-u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b);
+u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_type_t* source_type);
 
 /**
  * Simple helper to check if a function is void
@@ -198,7 +210,7 @@ generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_ty
  * Are we able to assign something of "source_type" to something on "destination_type"? Returns
  * NULL if we can't
  */
-generic_type_t* types_assignable(generic_type_t** destination_type, generic_type_t** source_type);
+generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type);
 
 /**
  * Dynamically allocate and create a basic type
@@ -299,6 +311,11 @@ u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_t
  * Print a function pointer type out
  */
 void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
+
+/**
+ * Select the size based only on a type
+ */
+variable_size_t get_type_size(generic_type_t* type);
 
 /**
  * Is a type signed?

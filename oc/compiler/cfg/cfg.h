@@ -164,6 +164,13 @@ struct basic_block_t{
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 /**
+ * A simple helper function that allows us to add a used variable into the block's
+ * header. It is important to note that only actual variables(not temp variables) count
+ * as live
+ */
+void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var);
+
+/**
  * Add a statement to the basic block
  */
 void add_statement(basic_block_t* target, instruction_t* statement_node);

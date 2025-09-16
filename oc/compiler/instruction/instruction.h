@@ -37,7 +37,6 @@ typedef enum{
 } jump_category_t;
 
 
-
 /**
  * What type of instruction do we have? This saves us a lot of space
  * as opposed to storing strings. These are x86-64 assembly instructions
@@ -251,20 +250,6 @@ typedef enum{
 	CONDITIONAL_MOVE_B, // LT(UNSIGNED)
 	CONDITIONAL_MOVE_BE, //LE(UNSIGNED)
 } conditional_move_type_t;
-
-
-/**
- * What kind of word length do we have -- used for instructions
- */
-typedef enum{
-	BYTE,
-	WORD,
-	DOUBLE_WORD,
-	QUAD_WORD,
-	SINGLE_PRECISION,
-	DOUBLE_PRECISION //For floats
-} variable_size_t;
-
 
 /**
  * What kind of memory addressing mode do we have?
@@ -568,20 +553,6 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
  */
 void set_new_function(symtab_function_record_t* func);
 
-/**
- * Select the size based only on a type
- */
-variable_size_t select_type_size(generic_type_t* type);
-
-/**
- * Select the size of a constant based on its type
- */
-variable_size_t select_constant_size(three_addr_const_t* constant);
-
-/**
- * Select the size of a given variable based on its type
- */
-variable_size_t select_variable_size(three_addr_var_t* variable);
 
 /**
  * Determine the signedness of a jump type
@@ -651,6 +622,13 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
 three_addr_var_t* emit_var(symtab_variable_record_t* var);
 
 /**
+ * Emit a variable for an identifier node. This rule is designed to account for the fact that
+ * some identifiers may have had their types casted / coerced, so we need to keep the actual
+ * inferred type here
+*/
+three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generic_type_t* inferred_type);
+
+/**
  * Emit a variable copied from another variable
  */
 three_addr_var_t* emit_var_copy(three_addr_var_t* var);
@@ -702,12 +680,12 @@ instruction_t* emit_direct_register_push_instruction(register_holder_t reg);
 /**
  * Emit a movzx(zero extend) instruction
  */
-instruction_t* emit_movzx_instruction(three_addr_var_t* source, three_addr_var_t* destination);
+instruction_t* emit_movzx_instruction(three_addr_var_t* destination, three_addr_var_t* source);
 
 /**
  * Emit a movsx(sign extend) instruction
  */
-instruction_t* emit_movsx_instruction(three_addr_var_t* source, three_addr_var_t* destination);
+instruction_t* emit_movsx_instruction(three_addr_var_t* destination, three_addr_var_t* source);
 
 /**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
@@ -877,7 +855,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node);
 /**
  * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler
  */
-instruction_t* emit_phi_function(symtab_variable_record_t* variable, generic_type_t* type);
+instruction_t* emit_phi_function(symtab_variable_record_t* variable);
 
 /**
  * Emit an idle statement

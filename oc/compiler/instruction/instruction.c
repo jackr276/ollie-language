@@ -179,194 +179,6 @@ u_int8_t is_instruction_assignment_operation(instruction_t* instruction){
 }
 
 
-/**
- * Select the size of a constant based on its type
- */
-variable_size_t select_constant_size(three_addr_const_t* constant){
-	//Switch on the const type
-	switch(constant->const_type){
-		case INT_CONST:
-		case INT_CONST_FORCE_U:
-			return DOUBLE_WORD;
-
-		case FLOAT_CONST:
-			return DOUBLE_PRECISION;
-
-		case LONG_CONST:
-		case LONG_CONST_FORCE_U:
-			return QUAD_WORD;
-
-		case CHAR:
-			return BYTE;
-
-		//Everything is dword by default
-		default:
-			return DOUBLE_WORD;
-	}
-}
-
-
-/**
- * Select the size based only on a type
- *
- * TODO NEEDS REWORK
- */
-variable_size_t select_type_size(generic_type_t* type){
-	//What the size will be
-	variable_size_t size;
-
-	switch(type->type_class){
-		//Probably the most common option
-		case TYPE_CLASS_BASIC:
-			//Switch based on this
-			switch (type->basic_type_token) {
-				case U8:
-				case I8:
-				case CHAR:
-					size = BYTE;
-					break;
-
-				case U16:
-				case I16:
-					size = WORD;
-					break;
-
-				//These are 32 bit(double word)
-				case I32:
-				case U32:
-				case SIGNED_INT_CONST:
-				case UNSIGNED_INT_CONST:
-					size = DOUBLE_WORD;
-					break;
-
-				//This is SP
-				case F32:
-					size = SINGLE_PRECISION;
-					break;
-
-				//This is double precision
-				case F64:
-					size = DOUBLE_PRECISION;
-					break;
-
-				//These are all quad word(64 bit)
-				case U64:
-				case I64:
-					size = QUAD_WORD;
-					break;
-			
-				//We shouldn't get here
-				default:
-					break;
-			}
-
-			break;
-
-		//Enumerated types are 32 bits for convenience
-		//THIS IS WRONG!!!!!!!!!!
-		case TYPE_CLASS_ENUMERATED:
-			size = DOUBLE_WORD;
-			break;
-
-		//These are always 64 bits
-		case TYPE_CLASS_POINTER:
-		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_STRUCT:
-		case TYPE_CLASS_FUNCTION_SIGNATURE:
-		case TYPE_CLASS_ALIAS:
-		case TYPE_CLASS_UNION: //always a memory address
-			size = QUAD_WORD;
-			break;
-
-		//Default is also quad word
-		default:
-			size = QUAD_WORD;
-			break;
-	}
-
-
-	//Give it back
-	return size;
-}
-
-
-/**
- * Select the size of a given variable based on its type
- */
-variable_size_t select_variable_size(three_addr_var_t* variable){
-	//What the size will be
-	variable_size_t size;
-	//Extract for convenience
-	generic_type_t* type = variable->type;
-
-	switch(type->type_class){
-		//Probably the most common option
-		case TYPE_CLASS_BASIC:
-			//Switch based on this
-			switch (type->basic_type_token) {
-				case U8:
-				case I8:
-				case CHAR:
-					size = BYTE;
-					break;
-
-				case U16:
-				case I16:
-					size = WORD;
-					break;
-
-				//These are 32 bit(double word)
-				case I32:
-				case U32:
-					size = DOUBLE_WORD;
-					break;
-
-				//This is SP
-				case F32:
-					size = SINGLE_PRECISION;
-					break;
-
-				//This is double precision
-				case F64:
-					size = DOUBLE_PRECISION;
-					break;
-
-				//These are all quad word(64 bit)
-				case U64:
-				case I64:
-					size = QUAD_WORD;
-					break;
-			
-				//We shouldn't get here
-				default:
-					break;
-			}
-
-			break;
-
-		//Enumerated types are 32 bits for convenience
-		case TYPE_CLASS_ENUMERATED:
-			size = DOUBLE_WORD;
-			break;
-
-		//These are always 64 bits
-		case TYPE_CLASS_POINTER:
-		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_STRUCT:
-		case TYPE_CLASS_FUNCTION_SIGNATURE:
-		case TYPE_CLASS_ALIAS:
-			size = QUAD_WORD;
-			break;
-
-		//Default is also quad word
-		default:
-			size = QUAD_WORD;
-			break;
-	}
-
-	//Give it back
-	return size;
-}
 
 
 /**
@@ -566,7 +378,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	var->temp_var_number = increment_and_get_temp_id();
 
 	//Select the size of this variable
-	var->variable_size = select_variable_size(var);
+	var->variable_size = get_type_size(type);
 
 	//Finally we'll bail out
 	return var;
@@ -596,11 +408,40 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	emitted_var->linked_var = var;
 
 	//Select the size of this variable
-	emitted_var->variable_size = select_variable_size(emitted_var);
+	emitted_var->variable_size = get_type_size(emitted_var->type);
 
 	//And we're all done
 	return emitted_var;
 }
+
+
+/**
+ * Emit a variable for an identifier node. This rule is designed to account for the fact that
+ * some identifiers may have had their types casted / coerced, so we need to keep the actual
+ * inferred type here
+*/
+three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generic_type_t* inferred_type){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Attach it for memory management
+	emitted_var->next_created = emitted_vars;
+	emitted_vars = emitted_var;
+
+	//This is not temporary
+	emitted_var->is_temporary = FALSE;
+	//This variable's type will be what the identifier node deemed it as
+	emitted_var->type = inferred_type;
+	//And store the symtab record
+	emitted_var->linked_var = var;
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
 
 
 /**
@@ -695,7 +536,7 @@ instruction_t* emit_direct_register_push_instruction(register_holder_t reg){
 /**
  * Emit a movzx(zero extend) instruction
  */
-instruction_t* emit_movzx_instruction(three_addr_var_t* source, three_addr_var_t* destination){
+instruction_t* emit_movzx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
 	//First we allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -714,7 +555,7 @@ instruction_t* emit_movzx_instruction(three_addr_var_t* source, three_addr_var_t
 /**
  * Emit a movsx(sign extend) instruction
  */
-instruction_t* emit_movsx_instruction(three_addr_var_t* source, three_addr_var_t* destination){
+instruction_t* emit_movsx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
 	//First we allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -779,7 +620,7 @@ instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_v
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We set the size based on the destination 
-	variable_size_t size = select_variable_size(destination);
+	variable_size_t size = get_type_size(destination->type);
 
 	switch (size) {
 		case BYTE:
@@ -2184,7 +2025,7 @@ static void print_subtraction_instruction(FILE* fl, instruction_t* instruction, 
 	//First we'll print out the appropriate variety of subtraction 
 	switch(instruction->instruction_type){
 		case SUBB:
-			fprintf(fl, "subw ");
+			fprintf(fl, "subb ");
 			break;
 		case SUBW:
 			fprintf(fl, "subw ");
@@ -2419,27 +2260,6 @@ static void print_test_instruction(FILE* fl, instruction_t* instruction, variabl
 	print_variable(fl, instruction->source_register2, mode);
 
 	//And give it a newline
-	fprintf(fl, "\n");
-}
-
-
-/**
- * Print out a movzbl instruction
- */
-static void print_movzbl_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//First we'll just print out the opcode
-	fprintf(fl, "movzbl ");
-
-	//Now we'll need the source immediate/source
-	if(instruction->source_register != NULL){
-		print_variable(fl, instruction->source_register, mode);
-	} else {
-		print_immediate_value(fl, instruction->source_immediate);
-	}
-
-	//Now our comma and the destination
-	fprintf(fl, ",");
-	print_variable(fl, instruction->destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -3120,7 +2940,7 @@ instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_va
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We'll need the size to select the appropriate instruction
-	variable_size_t size = select_variable_size(op1);
+	variable_size_t size = get_type_size(op1->type);
 
 	//Select the size appropriately
 	switch(size){
@@ -3524,7 +3344,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Select the size
-	variable_size_t size = select_variable_size(assignee);
+	variable_size_t size = get_type_size(assignee->type);
 
 	//Select the appropriate register
 	switch(size){
@@ -3565,7 +3385,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Select the size
-	variable_size_t size = select_variable_size(source);
+	variable_size_t size = get_type_size(source->type);
 
 	//Select the appropriate register
 	switch(size){
@@ -3911,7 +3731,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node){
  * Emit a phi function for a given variable. Once emitted, these statements are compiler exclusive,
  * but they are needed for our optimization
  */
-instruction_t* emit_phi_function(symtab_variable_record_t* variable, generic_type_t* type){
+instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 

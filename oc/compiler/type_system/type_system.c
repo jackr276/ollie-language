@@ -289,25 +289,21 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 }
 
 /**
- * Is a type conversion needed between these two types for b to fit into a
+ * Is a type conversion needed between these two types for the source type to fit into the destination type
  */
-u_int8_t is_type_conversion_needed(generic_type_t* a, generic_type_t* b){
-	//If the two types are the exact same, nothing is needed
-	if(a == b){
-		return FALSE;
+u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_type_t* source_type){
+	//The maximum that any of these can ever be is 8
+	u_int32_t destination_size = destination_type->type_size <= 8 ? destination_type->type_size : 8;
+	u_int32_t source_size = source_type->type_size <= 8 ? source_type->type_size : 8;
+
+	//If the destination is larger than the source, we must convert
+	if(destination_size > source_size){
+		//printf("Type conversion between needed for %s to be assigned to %s\n", source_type->type_name.string, destination_type->type_name.string);
+		return TRUE;
 	}
 
-	//If they're both basic types
-	if(a->type_class == TYPE_CLASS_BASIC && b->type_class == TYPE_CLASS_BASIC){
-		//If their float status is the same and they're the same size, no conversion is needed
-		if(a->type_size == b->type_size){
-			return FALSE;
-		} else {
-			return TRUE;
-		}
-	}
-
-	return TRUE;
+	//By default, we say no
+	return FALSE;
 }
 
 
@@ -350,71 +346,59 @@ static u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t*
  * 					  Beyond this, the "pointing_to" types have to match when dealiased
  * 5.) Basic Types: See the area below for these rules, there are many
  */
-generic_type_t* types_assignable(generic_type_t** destination_type, generic_type_t** source_type){
-	//Before we go any further - make sure these types are fully raw
-	generic_type_t* deref_destination_type = dealias_type(*destination_type);
-	generic_type_t* deref_source_type = dealias_type(*source_type);
-
+generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type){
 	//Predeclare these for now
 	Token source_basic_type;
 	Token dest_basic_type;
 
-	switch(deref_destination_type->type_class){
+	switch(destination_type->type_class){
 		//This is a simpler case - constructs can only be assigned
 		//if they're the exact same
 		case TYPE_CLASS_STRUCT:
-			//Not assignable at all
-			if(deref_source_type->type_class != TYPE_CLASS_STRUCT){
-				return NULL;
+			if(destination_type == source_type){
+				return destination_type;
 			}
 
-			//Now let's check to see if they're the exact same type
-			if(strcmp(deref_source_type->type_name.string, deref_source_type->type_name.string) != 0){
-				return NULL;
-			} else {
-				//We'll give back the destination type if they are the same
-				return deref_destination_type;
-			}
+			return NULL;
 
 		/**
 		 * A function signature type is a very special casein terms of assignability
 		 */
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			//If this is not also a function signature, then we're done here
-			if(deref_source_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+			if(source_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 				return NULL;
 			}
 
 			//Otherwise, we'll need to use the helper rule to determine if it's equivalent
-			if(function_signatures_identical(deref_destination_type, deref_source_type) == TRUE){
-				return deref_destination_type;
+			if(function_signatures_identical(destination_type, source_type) == TRUE){
+				return destination_type;
 			} else {
 				return NULL;
 			}
 			
-
-		//Enum's can internally be anything
+		//Enum's can internally be any unsigned integer
 		case TYPE_CLASS_ENUMERATED:
 			//Go based on what the source it
-			switch(deref_source_type->type_class){
+			switch(source_type->type_class){
 				case TYPE_CLASS_ENUMERATED:
 					//These need to be the exact same, otherwise this will not work
-					if(strcmp(deref_source_type->type_name.string, deref_destination_type->type_name.string) == 0){
-						return deref_destination_type;
+					if(destination_type == source_type){
+						return destination_type;
 					} else {
 						return NULL;
 					}
 
 				//If we have a basic type, we can just compare it with the enum's internal int
 				case TYPE_CLASS_BASIC:
-					switch(deref_source_type->basic_type_token){
+					switch(source_type->basic_type_token){
 						//These are all bad
 						case F32:
 						case F64:
 						case VOID:
 							return NULL;
 						default:
-							return types_assignable(&(deref_destination_type->internal_values.enum_integer_type), source_type);
+							return types_assignable(destination_type->internal_values.enum_integer_type, source_type);
 					}
 
 				//Anything else is bad
@@ -425,14 +409,14 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 		//Only one type of array is assignable - and that would be a char[] to a char*
 		case TYPE_CLASS_ARRAY:
 			//If this isn't a char[], we're done
-			if(deref_destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
-				|| deref_destination_type->internal_types.member_type->basic_type_token != CHAR){
+			if(destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
+				|| destination_type->internal_types.member_type->basic_type_token != CHAR){
 				return NULL;
 			}
 
 			//If it's a pointer
-			if(deref_source_type->type_class == TYPE_CLASS_POINTER){
-				generic_type_t* points_to = deref_source_type->internal_types.points_to;
+			if(source_type->type_class == TYPE_CLASS_POINTER){
+				generic_type_t* points_to = source_type->internal_types.points_to;
 
 				//If it's not a basic type then leave
 				if(points_to->type_class != TYPE_CLASS_BASIC){
@@ -441,7 +425,7 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 				//If it's a char, then we're set
 				if(points_to->basic_type_token == CHAR){
-					return deref_destination_type;
+					return destination_type;
 				}
 			}
 
@@ -449,12 +433,12 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
-			switch(deref_source_type->type_class){
+			switch(source_type->type_class){
 				case TYPE_CLASS_BASIC:
 					//This needs to be a u64, otherwise it's invalid
-					if(deref_source_type->basic_type_token == U64){
+					if(source_type->basic_type_token == U64){
 						//We will keep this as the pointer
-						return deref_destination_type;
+						return destination_type;
 					//Any other basic type will not work here
 					} else {
 						return NULL;
@@ -462,8 +446,8 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 				case TYPE_CLASS_ARRAY:
 					//If these are the exact same types, then we're set
-					if(types_equivalent(deref_destination_type->internal_types.points_to, deref_source_type->internal_types.member_type) == TRUE){
-						return deref_destination_type;
+					if(types_equivalent(destination_type->internal_types.points_to, source_type->internal_types.member_type) == TRUE){
+						return destination_type;
 					//Otherwise this won't work at all
 					} else{
 						return NULL;
@@ -472,16 +456,16 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				//Likely the most common case
 				case TYPE_CLASS_POINTER:
 					//If this itself is a void pointer, then we're good
-					if(deref_source_type->internal_values.is_void_pointer == TRUE){
-						return deref_destination_type;
+					if(source_type->internal_values.is_void_pointer == TRUE){
+						return destination_type;
 					//This is also fine, we just give the destination type back
-					} else if(deref_destination_type->internal_values.is_void_pointer == TRUE){
-						return deref_destination_type;
+					} else if(destination_type->internal_values.is_void_pointer == TRUE){
+						return destination_type;
 					//Let's see if what they point to is the exact same
 					} else {
 						//They need to be the exact same
-						if(types_equivalent(deref_source_type->internal_types.points_to, deref_destination_type->internal_types.points_to) == TRUE){
-							return deref_destination_type;
+						if(types_equivalent(source_type->internal_types.points_to, destination_type->internal_types.points_to) == TRUE){
+							return destination_type;
 						} else {
 							return NULL;
 						}
@@ -490,23 +474,15 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				//Otherwise it's bad here
 				default:
 					return NULL;
-		
 			}
 	
 		/**
-		 * The basic type class is the most interesting scenario. We have a great many rules to follow here
-		 *
-		 * 1.) VOID: nothing can be assigned to void. Additionally, nothing can be assigned as void
-		 * 2.) F64: can be assigned anything of type F64 or F32
-		 * 3.) F32: can be assigned anything of type F32
-		 * 4.) Source type as enum: any integer/char can take in an enum type
-		 * 5.) Integers: so long as the size of the destination is >= the size of the source,
-		 *    integers can be assigned around. We will not stop the user from assigning signed to
-		 *    unsigned and vice versa
+		 * Basic types are the most interesting variety because we may need to coerce these values
+		 * according to what the destination type is
 		 */
 		case TYPE_CLASS_BASIC:
 			//Extract the destination's basic type
-			dest_basic_type = deref_destination_type->basic_type_token;
+			dest_basic_type = destination_type->basic_type_token;
 
 			//Switch based on the type that we have here
 			switch(dest_basic_type){
@@ -516,10 +492,10 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				//Float64's can only be assigned to other float64's
 				case F64:
 					//We must see another f64 or an f32(widening) here
-					if(deref_source_type->type_class == TYPE_CLASS_BASIC
-						&& (deref_source_type->basic_type_token == F64
-						|| deref_source_type->basic_type_token == F32)){
-						return deref_destination_type;
+					if(source_type->type_class == TYPE_CLASS_BASIC
+						&& (source_type->basic_type_token == F64
+						|| source_type->basic_type_token == F32)){
+						return destination_type;
 
 					//Otherwise nothing here will work
 					} else {
@@ -528,9 +504,9 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 
 				case F32:
 					//We must see another an f32 here
-					if(deref_source_type->type_class == TYPE_CLASS_BASIC
-						&& deref_source_type->basic_type_token == F32){
-						return deref_destination_type;
+					if(source_type->type_class == TYPE_CLASS_BASIC
+						&& source_type->basic_type_token == F32){
+						return destination_type;
 
 					//Otherwise nothing here will work
 					} else {
@@ -543,18 +519,18 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 				//type is also a basic type. 
 				default:
 					//Special exception - the source type is an enum. These are good to be used with ints
-					if(deref_source_type->type_class == TYPE_CLASS_ENUMERATED){
-						return deref_destination_type;
+					if(source_type->type_class == TYPE_CLASS_ENUMERATED){
+						return destination_type;
 					}
 
 					//Now if the source type is not a basic type, we're done here
-					if(deref_source_type->type_class != TYPE_CLASS_BASIC){
+					if(source_type->type_class != TYPE_CLASS_BASIC){
 						return NULL;
 					}
 					
 					//Once we get here, we know that the source type is a basic type. We now
 					//need to check that it's not a float or void
-					source_basic_type = deref_source_type->basic_type_token;
+					source_basic_type = source_type->basic_type_token;
 
 					//Go based on what we have here
 					switch(source_basic_type){
@@ -564,19 +540,12 @@ generic_type_t* types_assignable(generic_type_t** destination_type, generic_type
 						case VOID:
 							return NULL;
 
-						//These generic constant types will always work
-						case UNSIGNED_INT_CONST:
-						case SIGNED_INT_CONST:
-							//Reassign source type to be whatever this destination ends up being
-							*source_type = deref_destination_type;
-							return deref_destination_type;
-
 						//Otherwise, once we make it here we know that the source type is a basic type and
 						//and integer/char type. We can now just compare the sizes and if the destination is more
 						//than or equal to the source, we're good
 						default:
-							if(deref_source_type->type_size <= deref_destination_type->type_size){
-								return deref_destination_type;
+							if(source_type->type_size <= destination_type->type_size){
+								return destination_type;
 							} else {
 								//These wouldn't fit
 								return NULL;
@@ -616,8 +585,6 @@ static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generi
 		case U64:
 		case I64:
 			return lookup_type_name_only(symtab, "u64")->type;
-		case SIGNED_INT_CONST:
-			return lookup_type_name_only(symtab, "generic_unsigned_int")->type;
 		//We should never get here
 		default:
 			return lookup_type_name_only(symtab, "u32")->type;
@@ -655,63 +622,7 @@ static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t
 /**
  * Apply standard coercion rules for basic types
  */
-static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generic_type_t** a, generic_type_t** b){
-	//Grab these to avoid unneeded derefs
-	Token a_basic_type = (*a)->basic_type_token;
-	Token b_basic_type = (*b)->basic_type_token;
-
-	//These are our "flexible types" -- meaning that they can become any other
-	//kind of integer that we want
-	if(a_basic_type == SIGNED_INT_CONST || a_basic_type == UNSIGNED_INT_CONST){
-		//If B is not one of these, we'll just make A whatever B is
-		if(b_basic_type != SIGNED_INT_CONST && b_basic_type != UNSIGNED_INT_CONST){
-			*a = *b;
-			return;
-		}
-
-		//The final type
-		generic_type_t* final_type;
-
-		//Otherwise b is one of these, so we'll just assign them both to be 
-		//the 32-bit(default) version of whatever they are
-		if(a_basic_type == SIGNED_INT_CONST){
-			final_type = lookup_type_name_only(type_symtab, "i32")->type;
-		} else {
-			final_type = lookup_type_name_only(type_symtab, "u32")->type;
-		}
-
-		//These are both now this final type
-		*a = final_type;
-		*b = final_type;
-
-		return;
-
-	//Make sure b isn't a flexible type either
-	} else if(b_basic_type == SIGNED_INT_CONST || b_basic_type == UNSIGNED_INT_CONST){
-		//If B is not one of these, we'll just make A whatever B is
-		if(a_basic_type != SIGNED_INT_CONST && a_basic_type != UNSIGNED_INT_CONST){
-			*b = *a;
-			return;
-		}
-
-		//The final type
-		generic_type_t* final_type;
-
-		//Otherwise b is one of these, so we'll just assign them both to be 
-		//the 32-bit(default) version of whatever they are
-		if(a_basic_type == SIGNED_INT_CONST){
-			final_type = lookup_type_name_only(type_symtab, "i32")->type;
-		} else {
-			final_type = lookup_type_name_only(type_symtab, "u32")->type;
-		}
-
-		//These are both now this final type
-		*a = final_type;
-		*b = final_type;
-
-		return;
-	}
-
+static void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
 	//Whomever has the largest size wins
 	if((*a)->type_size > (*b)->type_size){
 		//Set b to equal a
@@ -720,7 +631,6 @@ static void basic_type_widening_type_coercion(type_symtab_t* type_symtab, generi
 		//Set a to equal b
 		*a = *b;
 	}
-	//No else case - we don't want to deal with any other type size coercions
 }
 
 
@@ -737,8 +647,6 @@ static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a)
 		case U8:
 		case I8:
 		case CHAR:
-		case SIGNED_INT_CONST:
-		case UNSIGNED_INT_CONST:
 		case U16:
 		case I16:
 		case U32:
@@ -869,7 +777,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 
 			//Give back a
 			return *a;
@@ -943,7 +851,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 
 			//Give back a
 			return *a;
@@ -966,7 +874,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 		
 			//Give this back once down
 			return *a;
@@ -994,7 +902,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that we only have basic types here. We can apply
 			//the standard widening conversion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 
 			//We'll give back *a once we're finished
 			return *a;
@@ -1083,7 +991,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//We already know that we only have basic types here. We can apply
 			//the standard widening conversion
-			basic_type_widening_type_coercion(symtab, a, b);
+			basic_type_widening_type_coercion(a, b);
 
 			//We'll give back *a once we're finished
 			return *a;
@@ -1883,7 +1791,6 @@ u_int8_t is_type_signed(generic_type_t* type){
 		case I8:
 		case I16:
 		case I32:
-		case SIGNED_INT_CONST:
 		case I64:
 		case F32:
 		case F64:
@@ -1892,6 +1799,87 @@ u_int8_t is_type_signed(generic_type_t* type){
 			return FALSE;
 	}
 }
+
+
+/**
+ * Select the size based only on a type
+ */
+variable_size_t get_type_size(generic_type_t* type){
+	//What the size will be
+	variable_size_t size;
+
+	switch(type->type_class){
+		//Probably the most common option
+		case TYPE_CLASS_BASIC:
+			//Switch based on this
+			switch (type->basic_type_token) {
+				case U8:
+				case I8:
+				case CHAR:
+					size = BYTE;
+					break;
+
+				case U16:
+				case I16:
+					size = WORD;
+					break;
+
+				//These are 32 bit(double word)
+				case I32:
+				case U32:
+					size = DOUBLE_WORD;
+					break;
+
+				//This is single precision
+				case F32:
+					size = SINGLE_PRECISION;
+					break;
+
+				//This is double precision
+				case F64:
+					size = DOUBLE_PRECISION;
+					break;
+
+				//These are all quad word(64 bit)
+				case U64:
+				case I64:
+					size = QUAD_WORD;
+					break;
+			
+				//We shouldn't get here
+				default:
+					break;
+			}
+
+			break;
+
+		//Enumerated types are 32 bits for convenience
+		case TYPE_CLASS_ENUMERATED:
+			//An enum is just an integer type, so we can just use the internal type for a size
+			size = get_type_size(type->internal_values.enum_integer_type);
+			break;
+
+		//These are always 64 bits
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ALIAS:
+		case TYPE_CLASS_UNION: //always a memory address
+			size = QUAD_WORD;
+			break;
+
+		//Default is also quad word
+		default:
+			size = QUAD_WORD;
+			break;
+	}
+
+
+	//Give it back
+	return size;
+}
+
 
 /**
  * Convert a generic type to a sring

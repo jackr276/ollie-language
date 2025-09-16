@@ -22,6 +22,8 @@
 
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* u64;
+static generic_type_t* u32;
+static generic_type_t* i32;
 static generic_type_t* u8;
 
 //The window for our "sliding window" optimizer
@@ -89,13 +91,40 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 
 
 /**
+ * Can an assignment statement be optimized away? If the assignment statement
+ * involves converting between types, or it involves memory indirection, then
+ * we cannot simply remove it
+ */
+static u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_instruction){
+	//If this is a constant assignment, then yes we can
+	if(assignment_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		return TRUE;
+	}
+
+	//Otherwise, we know that we have a regular assignment statement
+	//This cannot be optimized away
+	if(is_expanding_move_required(assignment_instruction->assignee->type, assignment_instruction->op1->type) == TRUE){
+		return FALSE;
+	}
+
+	//Otherwise if we get here, then we can
+	return TRUE;
+}
+
+
+/**
  * A helper function that selects and returns the appopriately sized move for 
  * a logical and, or or not statement
  */
-static instruction_t* emit_appropriate_move_statement(three_addr_var_t* source, three_addr_var_t* destination){
+static instruction_t* emit_appropriate_move_statement(three_addr_var_t* destination, three_addr_var_t* source){
 	//We will first compare the sizes and see if a conversion is needed
-	if(is_type_conversion_needed(source->type, destination->type) == TRUE){
-		return emit_movzx_instruction(source, destination);
+	if(is_expanding_move_required(destination->type, source->type) == TRUE){
+		//Go based on whether or not the type is signed
+		if(is_type_signed(destination->type) == TRUE){
+			return emit_movsx_instruction(destination, source);
+		} else {
+			return emit_movzx_instruction(destination, source);
+		}
 	
 	//Otherwise return a regular move instruction
 	} else {
@@ -130,19 +159,19 @@ static void multiply_constants(three_addr_const_t* constant1, three_addr_const_t
 /**
  * Emit a converting move instruction directly, with no need to do instruction selection afterwards
  */
-static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* assignee, three_addr_var_t* source){
+static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* destination, three_addr_var_t* source){
 	//Allocate it
 	instruction_t* converting_move = calloc(1, sizeof(instruction_t));
 
 	//Select type based on signedness
-	if(is_type_signed(assignee->type) == TRUE){
+	if(is_type_signed(destination->type) == TRUE){
 		converting_move->instruction_type = MOVSX;
 	} else {
 		converting_move->instruction_type = MOVZX;
 	}
 
 	//Now load in the registers
-	converting_move->destination_register = assignee;
+	converting_move->destination_register = destination;
 	converting_move->source_register = source;
 
 	//And return it
@@ -154,7 +183,7 @@ static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* 
  * Handle a converting move operation and return the variable that results from it. This function will also handle the implicit conversion
  * between 32 bit and unsigned 64 bit integers
  */
-static three_addr_var_t* handle_converting_move_operation(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* desired_type){
+static three_addr_var_t* handle_expanding_move_operation(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* desired_type){
 	//A generic holder for our assignee
 	three_addr_var_t* assignee;
 
@@ -172,7 +201,7 @@ static three_addr_var_t* handle_converting_move_operation(instruction_t* after_i
 		assignee->type = desired_type;
 
 		//Select the size appropriately after the type is reassigned
-		assignee->variable_size = select_variable_size(assignee);
+		assignee->variable_size = get_type_size(assignee->type);
 
 	//Otherwise we have a normal case here
 	} else {
@@ -261,7 +290,7 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We'll need the size to select the appropriate instruction
-	variable_size_t size = select_variable_size(converted);
+	variable_size_t size = get_type_size(converted->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -333,7 +362,7 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We'll need the size of the variable
-	variable_size_t size = select_variable_size(destination);
+	variable_size_t size = get_type_size(destination->type);
 
 	switch(size){
 		case QUAD_WORD:	
@@ -369,7 +398,7 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We'll need the size of the variable
-	variable_size_t size = select_variable_size(destination);
+	variable_size_t size = get_type_size(destination->type);
 
 	switch(size){
 		case QUAD_WORD:	
@@ -408,7 +437,7 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We set the size based on the destination 
-	variable_size_t size = select_variable_size(assignee);
+	variable_size_t size = get_type_size(assignee->type);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -469,7 +498,7 @@ static instruction_t* emit_mod_instruction(three_addr_var_t* assignee, three_add
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//We set the size based on the destination 
-	variable_size_t size = select_variable_size(assignee);
+	variable_size_t size = get_type_size(assignee->type);
 
 	//Now we'll decide this based on size and signedness
 	switch (size) {
@@ -782,9 +811,9 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 
 	//Select the size based on what we're moving in
 	if(memory_access->op1 != NULL){
-		size = select_variable_size(memory_access->op1);
+		size = get_type_size(memory_access->op1->type);
 	} else {
-		size = select_constant_size(memory_access->op1_const);
+		size = get_type_size(memory_access->op1_const->type);
 	}
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
@@ -824,7 +853,7 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 		//If this is the case, we need a converting move
 		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
 			//Reassign what reg1 is
-			address_calc_reg1 = handle_converting_move_operation(memory_access, address_calc_reg1, u64);
+			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
 		}
 
 		memory_access->address_calc_reg1 = address_calc_reg1;
@@ -841,12 +870,12 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 		//Do we need any conversion for reg1?
 		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
 			//Reassign what reg1 is
-			address_calc_reg1 = handle_converting_move_operation(memory_access, address_calc_reg1, u64);
+			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
 		}
 
 		//Same exact treatment for reg2
 		if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
-			address_calc_reg2 = handle_converting_move_operation(memory_access, address_calc_reg2, u64);
+			address_calc_reg2 = handle_expanding_move_operation(memory_access, address_calc_reg2, u64);
 		}
 
 		//Finally we add these into the conversions
@@ -888,9 +917,9 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 
 	//Select the size based on what we're moving in
 	if(memory_access->op1 != NULL){
-		size = select_variable_size(memory_access->op1);
+		size = get_type_size(memory_access->op1->type);
 	} else {
-		size = select_constant_size(memory_access->op1_const);
+		size = get_type_size(memory_access->op1_const->type);
 	}
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
@@ -926,12 +955,12 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 	//Do we need any conversion for reg1?
 	if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
 		//Reassign what reg1 is
-		address_calc_reg1 = handle_converting_move_operation(memory_access, address_calc_reg1, u64);
+		address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
 	}
 
 	//Same exact treatment for reg2
 	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
-		address_calc_reg2 = handle_converting_move_operation(memory_access, address_calc_reg2, u64);
+		address_calc_reg2 = handle_expanding_move_operation(memory_access, address_calc_reg2, u64);
 	}
 
 	//The first operand also comes from the first instruction
@@ -963,7 +992,7 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
 	three_addr_var_t* address_calc_reg2;
 
 	//Select the variable size based on the assignee
-	variable_size_t size = select_variable_size(memory_access->assignee);
+	variable_size_t size = get_type_size(memory_access->assignee->type);
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
@@ -1007,7 +1036,7 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
 		//Do we need any conversion for reg1?
 		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
 			//Reassign what reg1 is
-			address_calc_reg1 = handle_converting_move_operation(memory_access, address_calc_reg1, u64);
+			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
 		}
 
 		//Once we're done with any needed conversions, we'll add it in here
@@ -1025,12 +1054,12 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
 		//Do we need any conversion for reg1?
 		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
 			//Reassign what reg1 is
-			address_calc_reg1 = handle_converting_move_operation(memory_access, address_calc_reg1, u64);
+			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
 		}
 
 		//Same exact treatment for reg2
 		if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
-			address_calc_reg2 = handle_converting_move_operation(memory_access, address_calc_reg2, u64);
+			address_calc_reg2 = handle_expanding_move_operation(memory_access, address_calc_reg2, u64);
 		}
 
  		//So we know that the destination will be t26, the destination will remain unchanged
@@ -1060,7 +1089,7 @@ static void handle_two_instruction_address_calc_from_memory_move(instruction_t* 
  */
 static void handle_three_instruction_address_calc_from_memory_move(instruction_t* offset_calc, instruction_t* lea_statement, instruction_t* memory_access){
 	//We'll first select the variable size based on the destination
-	variable_size_t size = select_variable_size(memory_access->assignee);
+	variable_size_t size = get_type_size(memory_access->assignee->type);
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
@@ -1092,12 +1121,12 @@ static void handle_three_instruction_address_calc_from_memory_move(instruction_t
 	//Do we need any conversion for reg1?
 	if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
 		//Reassign what reg1 is
-		address_calc_reg1 = handle_converting_move_operation(memory_access, address_calc_reg1, u64);
+		address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
 	}
 
 	//Same exact treatment for reg2
 	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
-		address_calc_reg2 = handle_converting_move_operation(memory_access, address_calc_reg2, u64);
+		address_calc_reg2 = handle_expanding_move_operation(memory_access, address_calc_reg2, u64);
 	}
 
 	//The offset and first register come from the offset calculation
@@ -1129,7 +1158,7 @@ static void handle_three_instruction_registers_and_offset_only_from_memory_move(
 
 	//Let's first decide what the appropriate move instruction would be
 	//We'll first select the variable size based on the destination
-	variable_size_t size = select_variable_size(memory_access->assignee);
+	variable_size_t size = get_type_size(memory_access->assignee->type);
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
@@ -1158,12 +1187,12 @@ static void handle_three_instruction_registers_and_offset_only_from_memory_move(
 	//Do we need any conversion for reg1?
 	if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
 		//Reassign what reg1 is
-		address_calc_reg1 = handle_converting_move_operation(memory_access, address_calc_reg1, u64);
+		address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
 	}
 
 	//Same exact treatment for reg2
 	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
-		address_calc_reg2 = handle_converting_move_operation(memory_access, address_calc_reg2, u64);
+		address_calc_reg2 = handle_expanding_move_operation(memory_access, address_calc_reg2, u64);
 	}
 
 	//Now that we've done any needed conversions, we can reassign
@@ -1201,10 +1230,10 @@ static void handle_three_instruction_registers_and_offset_only_to_memory_move(in
 
 	//Use the op1 if it's there
 	if(memory_access->op1 != NULL){
-		size = select_variable_size(memory_access->op1);
+		size = get_type_size(memory_access->op1->type);
 	//Otherwise we need to use the constant
 	} else {
-		size = select_constant_size(memory_access->op1_const);
+		size = get_type_size(memory_access->op1_const->type);
 	}
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
@@ -1234,12 +1263,12 @@ static void handle_three_instruction_registers_and_offset_only_to_memory_move(in
 	//Do we need any conversion for reg1?
 	if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
 		//Reassign what reg1 is
-		address_calc_reg1 = handle_converting_move_operation(memory_access, address_calc_reg1, u64);
+		address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
 	}
 
 	//Same exact treatment for reg2
 	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
-		address_calc_reg2 = handle_converting_move_operation(memory_access, address_calc_reg2, u64);
+		address_calc_reg2 = handle_expanding_move_operation(memory_access, address_calc_reg2, u64);
 	}
 
 	//We'll get the first and second register from the additive statement
@@ -1291,7 +1320,7 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
 
 	//We'll also need the size of the variable
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch (size) {
 		case BYTE:
@@ -1349,7 +1378,7 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 	u_int8_t is_signed = is_type_signed(instruction->assignee->type);
 
 	//We'll also need the size of the variable
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch (size) {
 		case BYTE:
@@ -1403,7 +1432,7 @@ static void handle_right_shift_instruction(instruction_t* instruction){
  */
 static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -1428,8 +1457,8 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
 		//If we need to convert, we'll do that here
-		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = handle_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise it's a direct translation
 		} else {
@@ -1448,7 +1477,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
  */
 static void handle_bitwise_and_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -1473,8 +1502,8 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
 		//If we need to convert, we'll do that here
-		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = handle_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise it's a direct translation
 		} else {
@@ -1493,7 +1522,7 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
  */
 static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 	//We need to know what size we're dealing with
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -1518,8 +1547,8 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
 		//If we need to convert, we'll do that here
-		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = handle_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise it's a direct translation
 		} else {
@@ -1539,16 +1568,16 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
  */
 static void handle_cmp_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Select this instruction
 	instruction->instruction_type = select_cmp_instruction(size);
 	
 	//Since we have a comparison instruction, we don't actually have a destination
 	//register as the registers remain unmodified in this event
-	if(is_type_conversion_needed(instruction->assignee->type, instruction->op1->type) == TRUE){
+	if(is_expanding_move_required(instruction->assignee->type, instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		instruction->source_register = handle_converting_move_operation(instruction, instruction->op1, instruction->assignee->type);
+		instruction->source_register = handle_expanding_move_operation(instruction, instruction->op1, instruction->assignee->type);
 	} else {
 		//Otherwise we assign directly
 		instruction->source_register = instruction->op1;
@@ -1556,9 +1585,9 @@ static void handle_cmp_instruction(instruction_t* instruction){
 
 	//If we have op2, we'll use source_register2
 	if(instruction->op2 != NULL){
-		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
 			//Let the helper deal with it
-			instruction->source_register2 = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+			instruction->source_register2 = handle_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
 		} else {
 			//Otherwise we assign directly
 			instruction->source_register2 = instruction->op2;
@@ -1577,7 +1606,7 @@ static void handle_cmp_instruction(instruction_t* instruction){
  */
 static void handle_subtraction_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Select the appropriate level of minus instruction
 	instruction->instruction_type = select_sub_instruction(size);
@@ -1588,9 +1617,9 @@ static void handle_subtraction_instruction(instruction_t* instruction){
 	//If we have a register value, we add that
 	if(instruction->op2 != NULL){
 		//Do we need any kind of type conversion here? If so we'll do that now
-		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
 			//If this is needed, we'll let the helper do it
-			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+			instruction->source_register = handle_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise let this deal with it
 		} else {
@@ -1616,7 +1645,7 @@ static void handle_subtraction_instruction(instruction_t* instruction){
  */
 static void handle_addition_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Grab the add instruction that we want
 	instruction->instruction_type = select_add_instruction(size);
@@ -1627,9 +1656,9 @@ static void handle_addition_instruction(instruction_t* instruction){
 	//If we have a register value, we add that
 	if(instruction->op2 != NULL){
 		//Do we need a type conversion? If so, we'll do that here
-		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
 			//Let the helper function deal with this
-			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+			instruction->source_register = handle_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise we'll just do this
 		} else {
@@ -1652,7 +1681,7 @@ static void handle_addition_instruction(instruction_t* instruction){
  */
 static void handle_addition_instruction_lea_modification(instruction_t* instruction){
 	//Determines what instruction to use
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Now we'll get the appropriate lea instruction
 	instruction->instruction_type = select_lea_instruction(size);
@@ -1675,9 +1704,9 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 
 		//Does this adhere to the same type as reg1? It must, so if it does not we will force it
 		//to 
-		if(is_type_conversion_needed(instruction->address_calc_reg1->type, addresss_calc_reg2->type) == TRUE){
+		if(is_expanding_move_required(instruction->address_calc_reg1->type, addresss_calc_reg2->type) == TRUE){
 			//Let the helper deal with it
-			addresss_calc_reg2 = handle_converting_move_operation(instruction, addresss_calc_reg2, instruction->address_calc_reg1->type);
+			addresss_calc_reg2 = handle_expanding_move_operation(instruction, addresss_calc_reg2, instruction->address_calc_reg1->type);
 		}
 
 		//Whether or not a type conversion happened, we can assign this here
@@ -1712,16 +1741,16 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	instruction_t* multiplication_instruction = window->instruction1;
 
 	//We'll need to know the variables size
-	variable_size_t size = select_variable_size(multiplication_instruction->assignee);
+	variable_size_t size = get_type_size(multiplication_instruction->assignee->type);
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* source;
 	three_addr_var_t* source2;
 
 	//If we need to convert, we'll do that here
-	if(is_type_conversion_needed(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
+	if(is_expanding_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
 		//Let the helper deal with it
-		source2 = handle_converting_move_operation(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
+		source2 = handle_expanding_move_operation(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -1736,8 +1765,8 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	}
 
 	//Let's also check is any conversions are needed for the first source register
-	if(is_type_conversion_needed(multiplication_instruction->assignee->type, multiplication_instruction->op1->type) == TRUE){
-		source = handle_converting_move_operation(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
+	if(is_expanding_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op1->type) == TRUE){
+		source = handle_expanding_move_operation(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
 
 	//Otherwise we'll just assign this to be op1
 	} else {
@@ -1788,7 +1817,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
  */
 static void handle_signed_multiplication_instruction(instruction_t* instruction){
 	//We'll need to know the variables size
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//We determine the instruction that we need based on signedness and size
 	switch (size) {
@@ -1813,9 +1842,9 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
 	//Are we using an immediate or register?
 	if(instruction->op2 != NULL){
 		//Do we need a type conversion here?
-		if(is_type_conversion_needed(instruction->assignee->type, instruction->op2->type) == TRUE){
+		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
 			//Let the helper deal with it
-			instruction->source_register = handle_converting_move_operation(instruction, instruction->op2, instruction->assignee->type);
+			instruction->source_register = handle_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise assign directly
 		} else {
@@ -1856,9 +1885,9 @@ static void handle_division_instruction(instruction_window_t* window){
 	three_addr_var_t* source2;
 
 	//If we need to convert, we'll do that here
-	if(is_type_conversion_needed(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
+	if(is_expanding_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		source = handle_converting_move_operation(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+		source = handle_expanding_move_operation(division_instruction, division_instruction->op1, division_instruction->assignee->type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -1885,8 +1914,8 @@ static void handle_division_instruction(instruction_window_t* window){
 	}
 
 	//Do we need to do a type conversion? If so, we'll do a converting move here
-	if(is_type_conversion_needed(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-		source2 = handle_converting_move_operation(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+	if(is_expanding_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
+		source2 = handle_expanding_move_operation(division_instruction, division_instruction->op2, division_instruction->assignee->type);
 
 	//Otherwise source 2 is just the op2
 	} else {
@@ -1943,9 +1972,9 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	three_addr_var_t* source2;
 
 	//If we need to convert, we'll do that here
-	if(is_type_conversion_needed(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
+	if(is_expanding_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		source = handle_converting_move_operation(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+		source = handle_expanding_move_operation(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -1972,8 +2001,8 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	}
 
 	//Do we need to do a type conversion? If so, we'll do a converting move here
-	if(is_type_conversion_needed(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-		source2 = handle_converting_move_operation(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+	if(is_expanding_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
+		source2 = handle_expanding_move_operation(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
 
 	//Otherwise source 2 is just the op2
 	} else {
@@ -2087,14 +2116,27 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
  */
 static void handle_inc_instruction(instruction_t* instruction){
 	//Determine the size of the variable we need
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//If it's a quad word, there's a different instruction to use. Otherwise
 	//it's just a regular inc
-	if(size == QUAD_WORD){
-		instruction->instruction_type = INCQ;
-	} else {
-		instruction->instruction_type = INCL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = INCQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = INCL;
+			break;
+		case WORD:
+			instruction->instruction_type = INCW;
+			break;
+		case BYTE:
+			instruction->instruction_type = INCB;
+			break;
+		//We shouldn't get here, but if we do, make it INCQ
+		default:
+			instruction->instruction_type = INCQ;
+			break;
 	}
 
 	//Set the destination as the assignee
@@ -2106,14 +2148,27 @@ static void handle_inc_instruction(instruction_t* instruction){
  */
 static void handle_dec_instruction(instruction_t* instruction){
 	//Determine the size of the variable we need
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//If it's a quad word, there's a different instruction to use. Otherwise
 	//it's just a regular inc
-	if(size == QUAD_WORD){
-		instruction->instruction_type = DECQ;
-	} else {
-		instruction->instruction_type = DECL;
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = DECQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = DECL;
+			break;
+		case WORD:
+			instruction->instruction_type = DECW;
+			break;
+		case BYTE:
+			instruction->instruction_type = DECB;
+			break;
+		//We shouldn't get here, but if we do, make it INCQ
+		default:
+			instruction->instruction_type = DECQ;
+			break;
 	}
 
 	//Set the destination as the assignee
@@ -2130,10 +2185,10 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 
 	//If this has a 0 indirection, we'll use it's size
 	if(instruction->assignee->indirection_level == 0){
-		size = select_variable_size(instruction->assignee);
+		size = get_type_size(instruction->assignee->type);
 	//Otherwise take the constant's size
 	} else {
-		size = select_constant_size(instruction->op1_const);
+		size = get_type_size(instruction->op1_const->type);
 	}
 
 	//Select based on size
@@ -2167,7 +2222,7 @@ static void handle_register_to_register_move_instruction(instruction_t* instruct
 	//If it's 0(most common), we don't need to do anything fancy
 	if(instruction->assignee->indirection_level == 0){
 		//Use the standard function here
-		destination_size = select_variable_size(instruction->assignee);
+		destination_size = get_type_size(instruction->assignee->type);
 		//Set the flag
 		assignee_is_deref = FALSE;
 	}
@@ -2175,7 +2230,7 @@ static void handle_register_to_register_move_instruction(instruction_t* instruct
 	//If it's 0(most common), we don't need to do anything fancy
 	if(instruction->op1->indirection_level == 0){
 		//Use the standard function here
-		source_size = select_variable_size(instruction->op1);
+		source_size = get_type_size(instruction->op1->type);
 		//Set the flag
 		op1_is_deref = FALSE;
 	}
@@ -2251,7 +2306,7 @@ static void handle_lea_statement(instruction_t* instruction){
 	three_addr_var_t* address_calc_reg2 = instruction->op2;
 	
 	//Select the size of our variable
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -2271,8 +2326,8 @@ static void handle_lea_statement(instruction_t* instruction){
 	//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 	//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 	//must adhere to this one's type
-	if(is_type_conversion_needed(address_calc_reg1->type, address_calc_reg2->type)){
-		address_calc_reg2 = handle_converting_move_operation(instruction, address_calc_reg2, address_calc_reg1->type);
+	if(is_expanding_move_required(address_calc_reg1->type, address_calc_reg2->type)){
+		address_calc_reg2 = handle_expanding_move_operation(instruction, address_calc_reg2, address_calc_reg1->type);
 	}
 
 	//We already know what mode we'll need to use here
@@ -2310,7 +2365,7 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* logical_not = window->instruction1;
 
 	//Ensure that this one's size has been selected
-	logical_not->assignee->variable_size = select_variable_size(logical_not->assignee);
+	logical_not->assignee->variable_size = get_type_size(logical_not->assignee->type);
 
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
@@ -2329,7 +2384,7 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
 
 	//Finally we'll move the contents into t9
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(sete_inst->destination_register, logical_not->assignee);
+	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_not->assignee, sete_inst->destination_register);
 	//Ensure that we set all these flags too
 	movzx_instruction->block_contained_in = logical_not->block_contained_in;
 	movzx_instruction->is_branch_ending = logical_not->is_branch_ending;
@@ -2385,10 +2440,10 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 
 	//Following that we'll need the final movzx instruction
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(setne_instruction->destination_register, logical_or->assignee);
+	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_or->assignee, setne_instruction->destination_register);
 
 	//Select this one's size 
-	logical_or->assignee->variable_size = select_variable_size(logical_or->assignee);
+	logical_or->assignee->variable_size = get_type_size(logical_or->assignee->type);
 
 	//Now we can delete the old logical or instruction
 	delete_statement(logical_or);
@@ -2452,10 +2507,10 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
 
 	//The final thing that we need is a movzx
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(and_inst->destination_register, logical_and->assignee);
+	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_and->assignee, and_inst->destination_register);
 
 	//Select this one's size 
-	logical_and->assignee->variable_size = select_variable_size(logical_and->assignee);
+	logical_and->assignee->variable_size = get_type_size(logical_and->assignee->type);
 
 	//We no longer need the logical and statement
 	delete_statement(logical_and);
@@ -2479,7 +2534,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
  */
 static void handle_neg_instruction(instruction_t* instruction){
 	//Find out what size we have
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -2509,7 +2564,7 @@ static void handle_neg_instruction(instruction_t* instruction){
  */
 static void handle_not_instruction(instruction_t* instruction){
 	//Find out what size we have
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -2539,7 +2594,7 @@ static void handle_not_instruction(instruction_t* instruction){
  */
 static void handle_test_instruction(instruction_t* instruction){
 	//Find out what size we have
-	variable_size_t size = select_variable_size(instruction->assignee);
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -2617,7 +2672,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& is_operator_relational_operator(window->instruction1->op) == TRUE
-		&& (window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT)
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
 		//Set the comparison and assignment instructions
@@ -2639,11 +2694,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		assignment->source_register = set_instruction->destination_register;
 
 		//Now once we have the set instruction, we need to insert it between 1 and 2
-		comparison->next_statement = set_instruction;
-		set_instruction->previous_statement = comparison;
-		//Link to assignment
-		set_instruction->next_statement = assignment;
-		assignment->previous_statement = comparison;
+		insert_instruction_before_given(set_instruction, assignment);
 
 		//Reconstruct the window here, starting at the end
 		reconstruct_window(window, assignment);
@@ -2857,8 +2908,33 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//This will be flagged as an indirect jump
 		window->instruction2->instruction_type = INDIRECT_JMP;
 
+		//By default the true source is this, but we may need to emit a converting move
+		three_addr_var_t* true_source = window->instruction1->op2;
+
+		//What is the size of this source variable? It needs
+		//to be 32 bits or more to avoid needing a conversion
+		switch(true_source->variable_size){
+			//These two mean that we're fine
+			case QUAD_WORD:
+			case DOUBLE_WORD:
+				break;
+
+			//Otherwise, a conversion is required
+			default:
+				//If it is signed, we'll want to preserve the signedness
+				if(is_type_signed(true_source->type) == TRUE){
+					true_source = handle_expanding_move_operation(window->instruction1, window->instruction1->op2, i32);
+
+				//Otherwise, we'll use the unsigned version
+				} else {
+					true_source = handle_expanding_move_operation(window->instruction1, window->instruction1->op2, u32);
+				}
+
+				break;
+		}
+
 		//The source register is op1
-		window->instruction2->source_register = window->instruction1->op2;
+		window->instruction2->source_register = true_source;
 
 		//Store the jumping to block where the jump table is
 		window->instruction2->jumping_to_block = window->instruction1->jumping_to_block;
@@ -3332,8 +3408,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * 
 	 */
 	//If we have two consecutive assignment statements
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT &&
-		window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+	if(window->instruction2 != NULL 
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& can_assignment_instruction_be_removed(window->instruction1) == TRUE
+		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
 		//Grab these out for convenience
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
@@ -3969,7 +4048,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		instruction_t* second = window->instruction2;
 
 		//Calculate this for now in case we need it
-		generic_type_t* final_type = types_assignable(&(second->op1_const->type), &(first->op1_const->type));
+		generic_type_t* final_type = types_assignable(second->op1_const->type, first->op1_const->type);
 
 		//If these are the same variable and the types are compatible, then we're good to go
 		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL){
@@ -4306,6 +4385,8 @@ static void print_ordered_blocks(basic_block_t* head_block, instruction_printing
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Grab these two general use types first
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64")->type;
+	i32 = lookup_type_name_only(cfg->type_symtab, "i32")->type;
+	u32 = lookup_type_name_only(cfg->type_symtab, "u32")->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8")->type;
 
 	//Our very first step in the instruction selector is to order all of the blocks in one 

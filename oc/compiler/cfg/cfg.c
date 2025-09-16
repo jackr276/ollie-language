@@ -317,7 +317,7 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
  * header. It is important to note that only actual variables(not temp variables) count
  * as live
  */
-static void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
+void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	//This can happen, so we'll check here to avoid complexity elsewhere
 	if(var == NULL){
 		return;
@@ -1817,7 +1817,7 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 
 						//If we make it here that means that we don't already have one, so we'll add it
 						//This function only emits the skeleton of a phi function
-						instruction_t* phi_stmt = emit_phi_function(record, record->type_defined_as);
+						instruction_t* phi_stmt = emit_phi_function(record);
 
 						//Add the phi statement into the block	
 						add_phi_statement(df_node, phi_stmt);
@@ -2345,7 +2345,7 @@ static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_bl
  */
 static three_addr_var_t* emit_indirect_jump_address_calculation(basic_block_t* basic_block, jump_table_t* initial_address, three_addr_var_t* mutliplicand, u_int8_t is_branch_ending){
 	//We'll need a new temp var for the assignee
-	three_addr_var_t* assignee = emit_temp_var(lookup_type_name_only(type_symtab, "label")->type);
+	three_addr_var_t* assignee = emit_temp_var(u64);
 
 	//If the multiplicand is not temporary we have a new used variable
 	add_used_variable(basic_block, mutliplicand);
@@ -2572,22 +2572,8 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			//These are all basic types
 			generic_type_t* type = constant_node->inferred_type;
 
-			//Go based on the type
-			switch(type->basic_type_token){
-				//If it's unassigned by this point, we fall to defaults
-				case UNSIGNED_INT_CONST:
-					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u32")->type);
-					break;
-				
-				case SIGNED_INT_CONST:
-					assignee = emit_temp_var(lookup_type_name_only(type_symtab, "i32")->type);
-					break;
-
-				//If we hit the default we just use its type
-				default:
-					assignee = emit_temp_var(type);
-					break;
-			}
+			//Emit the temp var here
+			assignee = emit_temp_var(type);
 
 			//We'll use the constant var feature here
 			const_assignment = emit_assignment_with_const_instruction(assignee, const_val);
@@ -3352,10 +3338,26 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR){
 		//The helper can deal with this. Whatever it gives back is our assignee
-		postfix_package.assignee = emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
+		postfix_package.assignee = emit_postoperation_code(current, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 	} else {
 		//Our assignee here is the current var
 		postfix_package.assignee = current_var;
+	}
+
+	/**
+	 * It is often the case where we require an expanding move after we access memory. In order to
+	 * do this, we'll inject an assignment expression here which will eventually become a converting move
+	 * in the instruction selector
+	 */
+	if(is_expanding_move_required(postfix_parent->inferred_type, current_var->type) == TRUE){
+		//Assigning to something of the inferred type
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(postfix_parent->inferred_type), current_var);
+
+		//We'll add the assignment in
+		add_statement(current, assignment);
+
+		//This now becomes the assignee
+		postfix_package.assignee = assignment->assignee;
 	}
 
 	//Give back the package
@@ -7508,8 +7510,6 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 	//The return package
 	cfg_result_package_t package = {current_block, current_block, NULL, BLANK};
 
-	//TODO: This is probably not going to work. We'll need our own "visit_initializer"
-	//root level node that will be able to decay into an expression or one of these
 	switch(initializer_root->ast_node_type){
 		//Make a direct call to the rule
 		case AST_NODE_TYPE_STRING_INITIALIZER:
