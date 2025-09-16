@@ -292,9 +292,13 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
  * Is a type conversion needed between these two types for the source type to fit into the destination type
  */
 u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_type_t* source_type){
+	//The maximum that any of these can ever be is 8
+	u_int32_t destination_size = destination_type->type_size <= 8 ? destination_type->type_size : 8;
+	u_int32_t source_size = source_type->type_size <= 8 ? source_type->type_size : 8;
+
 	//If the destination is larger than the source, we must convert
-	if(destination_type->type_size > source_type->type_size){
-		printf("Type conversion between needed for %s to be assigned to %s\n", source_type->type_name.string, destination_type->type_name.string);
+	if(destination_size > source_size){
+		//printf("Type conversion between needed for %s to be assigned to %s\n", source_type->type_name.string, destination_type->type_name.string);
 		return TRUE;
 	}
 

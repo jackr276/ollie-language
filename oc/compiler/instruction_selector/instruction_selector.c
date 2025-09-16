@@ -101,16 +101,6 @@ static u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_
 		return TRUE;
 	}
 
-	//If we are derferencing the assignee, we cannot remove this
-	if(assignment_instruction->assignee->indirection_level > 0){
-		return FALSE;
-	}
-
-	//If we are derferencing the operand, we cannot remove this
-	if(assignment_instruction->op1->indirection_level > 0){
-		return FALSE;
-	}
-
 	//Otherwise, we know that we have a regular assignment statement
 	//This cannot be optimized away
 	if(is_expanding_move_required(assignment_instruction->assignee->type, assignment_instruction->op1->type) == TRUE){
@@ -3418,8 +3408,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * 
 	 */
 	//If we have two consecutive assignment statements
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT &&
-		window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+	if(window->instruction2 != NULL 
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
 		//Grab these out for convenience
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
