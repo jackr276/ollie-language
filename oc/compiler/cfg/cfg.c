@@ -3344,7 +3344,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 		postfix_package.assignee = current_var;
 	}
 
-	if(current_var->type != postfix_parent->inferred_type){
+	if(is_expanding_move_required(postfix_parent->inferred_type, current_var->type) == TRUE){
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(postfix_parent->inferred_type), current_var);
 		//TODO HERE - TH*S IS THE SOLUTION
 
@@ -7505,8 +7505,6 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 	//The return package
 	cfg_result_package_t package = {current_block, current_block, NULL, BLANK};
 
-	//TODO: This is probably not going to work. We'll need our own "visit_initializer"
-	//root level node that will be able to decay into an expression or one of these
 	switch(initializer_root->ast_node_type){
 		//Make a direct call to the rule
 		case AST_NODE_TYPE_STRING_INITIALIZER:
