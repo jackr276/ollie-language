@@ -4,9 +4,13 @@
 */
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	let mut x:u8 := 'a';
-	let mut y:i32 := 32;
+	define struct s {
+		x:i32;
+		y:char;
+	} as my_struct;
+
+	let mut custom:my_struct := {5, 'a'};
 
 	//Should be casted to an int
-	ret y + x;
+	ret custom:y + custom:x;
 }

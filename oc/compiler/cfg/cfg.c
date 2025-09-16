@@ -3338,11 +3338,22 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR){
 		//The helper can deal with this. Whatever it gives back is our assignee
-		postfix_package.assignee = emit_postoperation_code(basic_block, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
+		postfix_package.assignee = emit_postoperation_code(current, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
 	} else {
 		//Our assignee here is the current var
 		postfix_package.assignee = current_var;
 	}
+
+	if(current_var->type != postfix_parent->inferred_type){
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(postfix_parent->inferred_type), current_var);
+		//TODO HERE
+
+		add_statement(current, assignment);
+
+		postfix_package.assignee = assignment->assignee;
+		printf("MISMATCH\n");
+	}
+
 
 	//Give back the package
 	return postfix_package;
