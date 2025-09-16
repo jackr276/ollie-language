@@ -680,12 +680,12 @@ instruction_t* emit_direct_register_push_instruction(register_holder_t reg);
 /**
  * Emit a movzx(zero extend) instruction
  */
-instruction_t* emit_movzx_instruction(three_addr_var_t* source, three_addr_var_t* destination);
+instruction_t* emit_movzx_instruction(three_addr_var_t* destination, three_addr_var_t* source);
 
 /**
  * Emit a movsx(sign extend) instruction
  */
-instruction_t* emit_movsx_instruction(three_addr_var_t* source, three_addr_var_t* destination);
+instruction_t* emit_movsx_instruction(three_addr_var_t* destination, three_addr_var_t* source);
 
 /**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't

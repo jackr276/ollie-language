@@ -97,7 +97,12 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 static instruction_t* emit_appropriate_move_statement(three_addr_var_t* destination, three_addr_var_t* source){
 	//We will first compare the sizes and see if a conversion is needed
 	if(is_expanding_move_required(destination->type, source->type) == TRUE){
-		return emit_movzx_instruction(source, destination);
+		//Go based on whether or not the type is signed
+		if(is_type_signed(destination->type) == TRUE){
+			return emit_movsx_instruction(destination, source);
+		} else {
+			return emit_movzx_instruction(destination, source);
+		}
 	
 	//Otherwise return a regular move instruction
 	} else {
@@ -132,19 +137,19 @@ static void multiply_constants(three_addr_const_t* constant1, three_addr_const_t
 /**
  * Emit a converting move instruction directly, with no need to do instruction selection afterwards
  */
-static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* assignee, three_addr_var_t* source){
+static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* destination, three_addr_var_t* source){
 	//Allocate it
 	instruction_t* converting_move = calloc(1, sizeof(instruction_t));
 
 	//Select type based on signedness
-	if(is_type_signed(assignee->type) == TRUE){
+	if(is_type_signed(destination->type) == TRUE){
 		converting_move->instruction_type = MOVSX;
 	} else {
 		converting_move->instruction_type = MOVZX;
 	}
 
 	//Now load in the registers
-	converting_move->destination_register = assignee;
+	converting_move->destination_register = destination;
 	converting_move->source_register = source;
 
 	//And return it
