@@ -317,7 +317,7 @@ static void print_cfg_message(parse_message_type_t message_type, char* info, u_i
  * header. It is important to note that only actual variables(not temp variables) count
  * as live
  */
-static void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
+void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	//This can happen, so we'll check here to avoid complexity elsewhere
 	if(var == NULL){
 		return;
