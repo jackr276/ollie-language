@@ -3411,6 +3411,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& can_assignment_instruction_be_removed(window->instruction1) == TRUE
 		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
 		//Grab these out for convenience
 		instruction_t* first = window->instruction1;
