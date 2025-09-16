@@ -91,6 +91,38 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 
 
 /**
+ * Can an assignment statement be optimized away? If the assignment statement
+ * involves converting between types, or it involves memory indirection, then
+ * we cannot simply remove it
+ */
+static u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_instruction){
+	//If this is a constant assignment, then yes we can
+	if(assignment_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		return TRUE;
+	}
+
+	//If we are derferencing the assignee, we cannot remove this
+	if(assignment_instruction->assignee->indirection_level > 0){
+		return FALSE;
+	}
+
+	//If we are derferencing the operand, we cannot remove this
+	if(assignment_instruction->op1->indirection_level > 0){
+		return FALSE;
+	}
+
+	//Otherwise, we know that we have a regular assignment statement
+	//This cannot be optimized away
+	if(is_expanding_move_required(assignment_instruction->assignee->type, assignment_instruction->op1->type) == TRUE){
+		return FALSE;
+	}
+
+	//Otherwise if we get here, then we can
+	return TRUE;
+}
+
+
+/**
  * A helper function that selects and returns the appopriately sized move for 
  * a logical and, or or not statement
  */
@@ -2650,7 +2682,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& is_operator_relational_operator(window->instruction1->op) == TRUE
-		&& (window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT)
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
 		//Set the comparison and assignment instructions
@@ -2672,11 +2704,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		assignment->source_register = set_instruction->destination_register;
 
 		//Now once we have the set instruction, we need to insert it between 1 and 2
-		comparison->next_statement = set_instruction;
-		set_instruction->previous_statement = comparison;
-		//Link to assignment
-		set_instruction->next_statement = assignment;
-		assignment->previous_statement = comparison;
+		insert_instruction_before_given(set_instruction, assignment);
 
 		//Reconstruct the window here, starting at the end
 		reconstruct_window(window, assignment);
