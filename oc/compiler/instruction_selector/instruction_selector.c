@@ -96,7 +96,7 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
  */
 static instruction_t* emit_appropriate_move_statement(three_addr_var_t* source, three_addr_var_t* destination){
 	//We will first compare the sizes and see if a conversion is needed
-	if(is_expanding_move_required(source->type, destination->type) == TRUE){
+	if(is_expanding_move_required(destination->type, source->type) == TRUE){
 		return emit_movzx_instruction(source, destination);
 	
 	//Otherwise return a regular move instruction
