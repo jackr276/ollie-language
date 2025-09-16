@@ -94,7 +94,7 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
  * A helper function that selects and returns the appopriately sized move for 
  * a logical and, or or not statement
  */
-static instruction_t* emit_appropriate_move_statement(three_addr_var_t* source, three_addr_var_t* destination){
+static instruction_t* emit_appropriate_move_statement(three_addr_var_t* destination, three_addr_var_t* source){
 	//We will first compare the sizes and see if a conversion is needed
 	if(is_expanding_move_required(destination->type, source->type) == TRUE){
 		return emit_movzx_instruction(source, destination);
@@ -2357,7 +2357,7 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
 
 	//Finally we'll move the contents into t9
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(sete_inst->destination_register, logical_not->assignee);
+	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_not->assignee, sete_inst->destination_register);
 	//Ensure that we set all these flags too
 	movzx_instruction->block_contained_in = logical_not->block_contained_in;
 	movzx_instruction->is_branch_ending = logical_not->is_branch_ending;
@@ -2413,7 +2413,7 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 
 	//Following that we'll need the final movzx instruction
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(setne_instruction->destination_register, logical_or->assignee);
+	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_or->assignee, setne_instruction->destination_register);
 
 	//Select this one's size 
 	logical_or->assignee->variable_size = get_type_size(logical_or->assignee->type);
@@ -2480,7 +2480,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
 
 	//The final thing that we need is a movzx
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(and_inst->destination_register, logical_and->assignee);
+	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_and->assignee, and_inst->destination_register);
 
 	//Select this one's size 
 	logical_and->assignee->variable_size = get_type_size(logical_and->assignee->type);
