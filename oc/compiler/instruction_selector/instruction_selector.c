@@ -2209,6 +2209,8 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 
 /**
  * Handle a register to register move condition
+ *
+ * TODO - probably need to redo this whole thing
  */
 static void handle_register_to_register_move_instruction(instruction_t* instruction){
 	//We have both a destination and source size to look at here
@@ -2247,6 +2249,7 @@ static void handle_register_to_register_move_instruction(instruction_t* instruct
 
 	//If the assignee is being dereferenced, we'll need to rely on the souce
 	} else if(assignee_is_deref == TRUE && op1_is_deref == FALSE){
+		printf("Destination size is %d\n\n", instruction->assignee->type->type_size);
 		instruction->instruction_type = select_move_instruction(source_size);
 
 	//Final case - the source is being derferenced. We'll need to rely on the destination
