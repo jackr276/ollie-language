@@ -1661,7 +1661,8 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	switch(lookahead.tok){
 		case L_BRACKET:
 		case COLON:
-		case DOUBLE_COLON:
+		case ARROW: /* Union pointer access */
+		case FAT_ARROW: /* Struct pointer access */
 		case DOT:
 		case PLUSPLUS:
 		case MINUSMINUS:
@@ -1697,7 +1698,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	postfix_expr_node->is_assignable = ASSIGNABLE;
 
 	//Now we can see as many construct accessor and array accessors as we can take
-	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON || lookahead.tok == DOUBLE_COLON || lookahead.tok == DOT){
+	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON 
+		|| lookahead.tok == FAT_ARROW || lookahead.tok == DOT
+		|| lookahead.tok == ARROW){
 		//Go based on what's in here
 		switch(lookahead.tok){
 			case L_BRACKET:
@@ -1717,11 +1720,15 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 				break;
 			
 			//This is a struct pointer accessor
-			case DOUBLE_COLON:
+			case FAT_ARROW:
 				//Let's have the rule do it.
 				accessor_node = struct_pointer_accessor(fl, current_type, side);
 
 				break;
+
+			//This is a union pointer accessor
+			case ARROW:
+				return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
 
 			//And this is a union accessor
 			case DOT:
