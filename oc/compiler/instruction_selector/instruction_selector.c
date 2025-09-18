@@ -2245,7 +2245,6 @@ static void handle_simple_movement_instruction(instruction_t* instruction){
 	//If we get here this means that we do have a dereference of some kind. We'll invoke a different rule,
 	//but we will still rely on the destination type
 	} else {
-		//printf("Destination size is %d\n\n", instruction->assignee->type->type_size);
 		instruction->instruction_type = select_move_instruction(destination_size);
 
 		//Handle the indirection levels here if we have a deref only case

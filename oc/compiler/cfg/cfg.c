@@ -3966,7 +3966,6 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			 */
 			if(left_hand_var->indirection_level > 0 &&
 				is_expanding_move_required(left_hand_var->type, expression_package.assignee->type) == TRUE){
-				printf("HERE\n");
 
 				//Assigning to something of the inferred type
 				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(left_hand_var->type), final_op1);
@@ -7494,7 +7493,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
-				address = emit_pointer_indirection(current_block, address, base_address->type);
+				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
 				
 				//This is a write access type
 				address->access_type = MEMORY_ACCESS_WRITE;
