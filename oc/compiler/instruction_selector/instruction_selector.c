@@ -2214,8 +2214,8 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
  */
 static void handle_register_to_register_move_instruction(instruction_t* instruction){
 	//We have both a destination and source size to look at here
-	variable_size_t destination_size;
-	variable_size_t source_size;
+	variable_size_t destination_size = get_type_size(instruction->assignee->type);
+	variable_size_t source_size = get_type_size(instruction->op1->type);
 
 	//Are these being dereferenced?
 	u_int8_t assignee_is_deref = TRUE;
@@ -2223,16 +2223,12 @@ static void handle_register_to_register_move_instruction(instruction_t* instruct
 
 	//If it's 0(most common), we don't need to do anything fancy
 	if(instruction->assignee->indirection_level == 0){
-		//Use the standard function here
-		destination_size = get_type_size(instruction->assignee->type);
 		//Set the flag
 		assignee_is_deref = FALSE;
 	}
 
 	//If it's 0(most common), we don't need to do anything fancy
 	if(instruction->op1->indirection_level == 0){
-		//Use the standard function here
-		source_size = get_type_size(instruction->op1->type);
 		//Set the flag
 		op1_is_deref = FALSE;
 	}
