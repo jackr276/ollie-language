@@ -3956,16 +3956,40 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				expression_package.final_block = current_block;
 			}
 
+			//The final first operand will be the expression package's assignee for now
+			three_addr_var_t* final_op1 = expression_package.assignee;
+
+			/**
+			 * It is often the case where we require an expanding move after we access memory. In order to
+			 * do this, we'll inject an assignment expression here which will eventually become a converting move
+			 * in the instruction selector
+			 */
+			if(left_hand_var->indirection_level > 0 &&
+				is_expanding_move_required(left_hand_var->type, expression_package.assignee->type) == TRUE){
+
+				//Assigning to something of the inferred type
+				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(left_hand_var->type), final_op1);
+
+				//The final op1 has been used
+				add_used_variable(current_block, final_op1);
+
+				//Now the final_op1 becomes this result
+				final_op1 = assignment->assignee;
+
+				//We'll add the assignment in
+				add_statement(current_block, assignment);
+			}
+
 			//Finally we'll struct the whole thing
-			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, expression_package.assignee);
+			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
 			//If this is not a temp var, then we can flag it as being assigned
 			if(left_hand_var->is_temporary == FALSE){
 				add_assigned_variable(current_block, left_hand_var);
 			}
 
-			//If the package's assignee is not temp, it counts as used
-			add_used_variable(current_block, expression_package.assignee);
+			//This counts as a use
+			add_used_variable(current_block, final_op1);
 			
 			//Mark this with what was passed through
 			final_assignment->is_branch_ending = is_branch_ending;
@@ -7469,7 +7493,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
-				address = emit_pointer_indirection(current_block, address, base_address->type);
+				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
 				
 				//This is a write access type
 				address->access_type = MEMORY_ACCESS_WRITE;

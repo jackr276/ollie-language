@@ -3,6 +3,10 @@
  * Utility file that contains the compiler option type
  */
 
+//Include guards
+#ifndef UTILITY_STRUCTS_H
+#define UTILITY_STRUCTS_H
+
 #include <sys/types.h>
 
 //Compiler option type
@@ -58,3 +62,5 @@ struct module_times_t {
 	//Overall compilation time
 	double total_time;
 };
+
+#endif /* UTILITY_STRUCTS_H */
