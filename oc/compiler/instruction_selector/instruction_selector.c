@@ -2208,11 +2208,10 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 
 
 /**
- * Handle a register to register move condition
- *
- * TODO - probably need to redo this whole thing
+ * Handle a simple movement instruction. In this context, simple just means that
+ * we have a source and a destination, and now address calculation moves in between
  */
-static void handle_register_to_register_move_instruction(instruction_t* instruction){
+static void handle_simple_movement_instruction(instruction_t* instruction){
 	//We have both a destination and source size to look at here
 	variable_size_t destination_size = get_type_size(instruction->assignee->type);
 	variable_size_t source_size = get_type_size(instruction->op1->type);
@@ -2243,24 +2242,21 @@ static void handle_register_to_register_move_instruction(instruction_t* instruct
 		//Use the helper to get the right sized move instruction
 		instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(instruction->assignee->type));
 
-	//If the assignee is being dereferenced, we'll need to rely on the souce
-	} else if(assignee_is_deref == TRUE && op1_is_deref == FALSE){
-		printf("Destination size is %d\n\n", instruction->assignee->type->type_size);
-		instruction->instruction_type = select_move_instruction(source_size);
-
-	//Final case - the source is being derferenced. We'll need to rely on the destination
-	} else if(assignee_is_deref == FALSE && op1_is_deref == TRUE){
+	//If we get here this means that we do have a dereference of some kind. We'll invoke a different rule,
+	//but we will still rely on the destination type
+	} else {
+		//printf("Destination size is %d\n\n", instruction->assignee->type->type_size);
 		instruction->instruction_type = select_move_instruction(destination_size);
-	}
 
-	//Handle the indirection levels here if we have a deref only case
-	if(instruction->destination_register->indirection_level > 0){
-		instruction->indirection_level = instruction->destination_register->indirection_level;
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+		//Handle the indirection levels here if we have a deref only case
+		if(assignee_is_deref == TRUE){
+			instruction->indirection_level = instruction->destination_register->indirection_level;
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
 
-	} else if(instruction->source_register->indirection_level > 0){
-		instruction->indirection_level = instruction->source_register->indirection_level;
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+		} else if(op1_is_deref == TRUE){
+			instruction->indirection_level = instruction->source_register->indirection_level;
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+		}
 	}
 }
 
@@ -2956,7 +2952,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	switch (instruction->statement_type) {
 		//These have a helper
 		case THREE_ADDR_CODE_ASSN_STMT:
-			handle_register_to_register_move_instruction(instruction);
+			handle_simple_movement_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 			handle_logical_not_instruction(cfg, window);
