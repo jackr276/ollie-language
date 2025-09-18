@@ -121,11 +121,11 @@ typedef enum {
 	G_THAN_OR_EQ,
 	L_THAN_OR_EQ,
 	COLON,
-	DOUBLE_COLON,
 	COMMA,
 	SEMICOLON,
 	DOLLAR, /* $ */
-	ARROW,
+	ARROW, /* -> */
+	FAT_ARROW, /* => */
 	ERROR,
 	DONE,
 	VOID,
