@@ -280,28 +280,54 @@ u_int8_t is_division_instruction(instruction_t* instruction){
  */
 u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 	switch(constant->const_type){
-		case FUNC_CONST:
-			return FALSE;
-		case STR_CONST:
-			return FALSE;
 		case INT_CONST:
 			if(constant->constant_value.integer_constant == 0){
 				return TRUE;
-			} else {
-				return FALSE;
 			}
+			return FALSE;
+
 		case LONG_CONST:
 			if(constant->constant_value.long_constant == 0){
 				return TRUE;
-			} else {
-				return FALSE;
 			}
+			return FALSE;
+
 		case CHAR_CONST:
 			if(constant->constant_value.char_constant == 0){
 				return TRUE;
-			} else {
-				return FALSE;
 			}
+			return FALSE;
+
+		//By default just return false
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is this constant value 1?
+ */
+u_int8_t is_constant_value_one(three_addr_const_t* constant){
+	switch(constant->const_type){
+		case INT_CONST:
+			if(constant->constant_value.integer_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
+		case LONG_CONST:
+			if(constant->constant_value.long_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
+		case CHAR_CONST:
+			if(constant->constant_value.char_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
 		//By default just return false
 		default:
 			return FALSE;

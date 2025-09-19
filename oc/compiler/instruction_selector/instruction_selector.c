@@ -82,12 +82,18 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 				return TRUE;
 			}
 
+			//If it's 1, then yes we can do this
+			if(is_constant_value_one(constant) == TRUE){
+				return TRUE;
+			}
+
 			//If this is unsigned, we cannot do this
 			if(is_type_signed(instruction->assignee->type) == FALSE){
 				return FALSE;
 			}
 			//But if it is signed, we can
 			return TRUE;
+
 		default:
 			return TRUE;
 	}
