@@ -20,8 +20,8 @@ pub fn mutate_structure_pointer(mut struct_pointer:custom_struct*) -> i32 {
 	//Reassign the pointer
 	let mut ptr:custom_struct* := struct_pointer;
 
-	ptr::y[2] := 32;
-	ptr::lch := 'a';
+	ptr=>y[2] := 32;
+	ptr=>lch := 'a';
 
 	ret 0;
 }
@@ -34,8 +34,8 @@ pub fn mutate_structure_double_pointer(mut struct_pointer:custom_struct**) -> i3
 	//Reassign the pointer
 	let mut ptr:custom_struct* := *struct_pointer;
 
-	ptr::y[2] := 32;
-	ptr::lch := 'a';
+	ptr=>y[2] := 32;
+	ptr=>lch := 'a';
 
 	ret 0;
 }

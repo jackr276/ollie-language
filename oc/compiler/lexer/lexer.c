@@ -389,6 +389,14 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 							lex_item.tok = DOUBLE_EQUALS;
 							lex_item.line_num = line_num;
 							return lex_item;
+
+						//We could also have a fat arrow here
+						} else if (ch2 == '>'){
+							//Prepare and return
+							lex_item.tok = FAT_ARROW;
+							lex_item.line_num = line_num;
+							return lex_item;
+
 						} else {
 							//"Put back" the char
 							put_back_char(fl);
@@ -464,13 +472,9 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 
 					case ':':
 						ch2 = get_next_char(fl);
-						if(ch2 == ':'){
-							//Prepare and return
-							lex_item.tok = DOUBLE_COLON;
-							lex_item.line_num = line_num;
-							return lex_item;
+
 						//We have a ":="
-						} else if(ch2 == '='){
+						if(ch2 == '='){
 							//Prepare and return
 							lex_item.tok = COLONEQ;
 							lex_item.line_num = line_num;

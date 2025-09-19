@@ -51,7 +51,8 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_UNARY_OPERATOR,
 	AST_NODE_TYPE_STRUCT_ACCESSOR,
 	AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR,
-	AST_NODE_TYPE_UNION_ACCESSOR, //For accessing union types
+	AST_NODE_TYPE_UNION_ACCESSOR, //For accessing union types on the stack
+	AST_NODE_TYPE_UNION_POINTER_ACCESSOR, //Accessing union pointers(->)
 	AST_NODE_TYPE_ARRAY_ACCESSOR,
 	AST_NODE_TYPE_FUNCTION_CALL,
 	AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, //An indirect call, for function pointers
