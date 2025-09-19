@@ -17,8 +17,8 @@ define struct my_struct{
 * A function that will mutate a structure in its entirety
 */
 pub fn mutate_structure_pointer(mut struct_pointer:custom_struct*) -> i32 {
-	struct_pointer::y[2] := 32;
-	struct_pointer::lch := 'a';
+	struct_pointer=>y[2] := 32;
+	struct_pointer=>lch := 'a';
 
 	ret 0;
 }

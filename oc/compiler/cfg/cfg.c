@@ -3043,56 +3043,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 	while(cursor != NULL && cursor->ast_node_type != AST_NODE_TYPE_UNARY_OPERATOR){
 		//Go based on what our node type is
 		switch(cursor->ast_node_type){
-			//Union accessors should be simple because there are no offsets
-			//to speak of. The union type just changes what value we get out of the
-			//union
-			case AST_NODE_TYPE_UNION_ACCESSOR:
-				//Set the current address
-				union_address = current_var;
-
-				//Set what the current type is
-				current_type = cursor->inferred_type;
-
-				//Now based on what side we're on, we'll emit the appropriate indirection
-				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
-				//we're done here. We'll emit our memory code and leave this part of the loop
-				if(cursor->next_sibling == NULL){
-					//We're using indirection, address is being wiped out
-					current_address = NULL;
-
-					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-					if(postfix_expr_side == SIDE_TYPE_LEFT){
-						//Emit the indirection for this one
-						current_var = emit_pointer_indirection(current, union_address, current_type);
-						//It's a write
-						current_var->access_type = MEMORY_ACCESS_WRITE;
-
-					//Otherwise we're dealing with a read
-					} else {
-						//Still emit the memory code
-						current_var = emit_pointer_indirection(current, union_address, current_type);
-						//It's a read
-						current_var->access_type = MEMORY_ACCESS_READ;
-
-						//We will perform the deref here, as we can't do it in the lea 
-						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
-
-						//Is this branch ending?
-						deref_stmt->is_branch_ending = is_branch_ending;
-						//And add it in
-						add_statement(current, deref_stmt);
-
-						//Update the current bar too
-						current_var = deref_stmt->assignee;
-					}
-
-				} else {
-					//Otherwise, the current var is the address
-					current_var = union_address;
-				}
-
-				break;
-				
 			//Array access
 			case AST_NODE_TYPE_ARRAY_ACCESSOR:
 				//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
@@ -3185,6 +3135,118 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				}
 
 				break;
+
+			//Union accessors should be simple because there are no offsets
+			//to speak of. The union type just changes what value we get out of the
+			//union
+			case AST_NODE_TYPE_UNION_ACCESSOR:
+				//Set the current address
+				union_address = current_var;
+
+				//Set what the current type is
+				current_type = cursor->inferred_type;
+
+				//Now based on what side we're on, we'll emit the appropriate indirection
+				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
+				//we're done here. We'll emit our memory code and leave this part of the loop
+				if(cursor->next_sibling == NULL){
+					//We're using indirection, address is being wiped out
+					current_address = NULL;
+
+					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
+					if(postfix_expr_side == SIDE_TYPE_LEFT){
+						//Emit the indirection for this one
+						current_var = emit_pointer_indirection(current, union_address, current_type);
+						//It's a write
+						current_var->access_type = MEMORY_ACCESS_WRITE;
+
+					//Otherwise we're dealing with a read
+					} else {
+						//Still emit the memory code
+						current_var = emit_pointer_indirection(current, union_address, current_type);
+						//It's a read
+						current_var->access_type = MEMORY_ACCESS_READ;
+
+						//We will perform the deref here, as we can't do it in the lea 
+						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
+
+						//Is this branch ending?
+						deref_stmt->is_branch_ending = is_branch_ending;
+						//And add it in
+						add_statement(current, deref_stmt);
+
+						//Update the current bar too
+						current_var = deref_stmt->assignee;
+					}
+
+				} else {
+					//Otherwise, the current var is the address
+					current_var = union_address;
+				}
+
+				break;
+
+			//A union pointer accessor does the same thing as a union accessor, just with a dereference 
+			//beforehand
+			case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
+				//Dereference this out
+				dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.points_to);
+
+				//Now we'll grab a temp assignment for the current address
+				instruction_t* pointer_deref_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+
+				//This now counts as a use
+				add_used_variable(current, dereferenced);
+
+				//Now we add the statement in
+				add_statement(current, pointer_deref_assignment);
+
+				//This is the union address here
+				union_address = pointer_deref_assignment->assignee;
+
+				//The current type is what the cursor points to
+				current_type = cursor->inferred_type;
+
+				//Now based on what side we're on, we'll emit the appropriate indirection
+				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
+				//we're done here. We'll emit our memory code and leave this part of the loop
+				if(cursor->next_sibling == NULL){
+					//We're using indirection, address is being wiped out
+					current_address = NULL;
+
+					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
+					if(postfix_expr_side == SIDE_TYPE_LEFT){
+						//Emit the indirection for this one
+						current_var = emit_pointer_indirection(current, union_address, current_type);
+						//It's a write
+						current_var->access_type = MEMORY_ACCESS_WRITE;
+
+					//Otherwise we're dealing with a read
+					} else {
+						//Still emit the memory code
+						current_var = emit_pointer_indirection(current, union_address, current_type);
+						//It's a read
+						current_var->access_type = MEMORY_ACCESS_READ;
+
+						//We will perform the deref here, as we can't do it in the lea 
+						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
+
+						//Is this branch ending?
+						deref_stmt->is_branch_ending = is_branch_ending;
+						//And add it in
+						add_statement(current, deref_stmt);
+
+						//Update the current bar too
+						current_var = deref_stmt->assignee;
+					}
+
+				} else {
+					//Otherwise, the current var is the address
+					current_var = union_address;
+				}
+
+				break;
+
 
 			//A struct pointer accessor does essentially the
 			//same thing as a regular struct accessor, with a dereference
@@ -7427,7 +7489,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 	generic_type_t* char_type = lookup_type_name_only(type_symtab, "char")->type;
 
 	//Now we'll go through every single character here and emit a load instruction for them
-	while(current_offset < string_initializer->string_value.current_length + 1){
+	while(current_offset <= string_initializer->string_value.current_length){
 		//Grab the value that we want out
 		char char_value = string_initializer->string_value.string[current_offset];
 
