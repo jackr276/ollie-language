@@ -7489,7 +7489,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 	generic_type_t* char_type = lookup_type_name_only(type_symtab, "char")->type;
 
 	//Now we'll go through every single character here and emit a load instruction for them
-	while(current_offset < string_initializer->string_value.current_length + 1){
+	while(current_offset <= string_initializer->string_value.current_length){
 		//Grab the value that we want out
 		char char_value = string_initializer->string_value.string[current_offset];
 
