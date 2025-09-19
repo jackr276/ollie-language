@@ -1392,9 +1392,30 @@ static generic_ast_node_t* union_pointer_accessor(FILE* fl, generic_type_t* curr
 		return print_and_return_error("Identifier required after the . operator", parser_line_num);
 	}
 
+	//Extract the actual name
+	dynamic_string_t variable_name = lookahead.lexeme;
 
+	//Now we need to see if this is acutally a variable in the union
+	symtab_variable_record_t* union_member = get_union_member(points_to, variable_name.string);
 
+	//If this ends up being NULL, then we have an incorrect access
+	if(union_member == NULL){
+		sprintf(info, "Type %s does not have a member %s", points_to->type_name.string, variable_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now we'll allocate and pack up everything that we need
+	generic_ast_node_t* union_accessor_node = ast_node_alloc(AST_NODE_TYPE_UNION_POINTER_ACCESSOR, side);
+
+	union_accessor_node->line_number = parser_line_num;
+	union_accessor_node->variable = union_member;
+ 	union_accessor_node->inferred_type = union_member->type_defined_as;
+	union_accessor_node->is_assignable = TRUE;
+
+	//And give it back
+	return union_accessor_node;
 }
+
 
 /**
  * A construct accessor is used to access a construct either on the heap of or on the stack.
@@ -1408,11 +1429,6 @@ static generic_ast_node_t* union_pointer_accessor(FILE* fl, generic_type_t* curr
 static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
-
-	//Otherwise we'll now make the node here
-	generic_ast_node_t* struct_pointer_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR, side);
-	//Add the line number
-	struct_pointer_access_node->line_number = parser_line_num;
 
 	//Grab a convenient reference to the type that we're working with
 	current_type = dealias_type(current_type);
@@ -1451,6 +1467,11 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
+
+	//Otherwise we'll now make the node here
+	generic_ast_node_t* struct_pointer_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR, side);
+	//Add the line number
+	struct_pointer_access_node->line_number = parser_line_num;
 	
 	//Add the variable record into the node
 	struct_pointer_access_node->is_assignable = TRUE;
@@ -1483,11 +1504,6 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	//The lookahead token
 	lexitem_t lookahead;
 
-	//Otherwise we'll now make the node here
-	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_ACCESSOR, side);
-	//Add the line number
-	struct_access_node->line_number = current_line;
-
 	//Grab a convenient reference to the type that we're working with
 	current_type = dealias_type(current_type);
 
@@ -1516,7 +1532,12 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
-	
+
+	//Otherwise we'll now make the node here
+	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_ACCESSOR, side);
+	//Add the line number
+	struct_access_node->line_number = current_line;
+
 	//Add the variable record into the node
 	struct_access_node->is_assignable = TRUE;
 
@@ -1572,6 +1593,7 @@ static generic_ast_node_t* union_accessor(FILE* fl, generic_type_t* type, side_t
 	//Let's now populate with the appropriate variable and type
 	union_accessor->variable = union_variable;
 	union_accessor->inferred_type = union_variable->type_defined_as;
+	union_accessor->is_assignable = TRUE;
 
 	//And give this back
 	return union_accessor;
