@@ -69,7 +69,7 @@ static void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
  * Is an operation valid for token folding? If it is, we'll return true
  * The invalid operations are &&, ||, / and %, and * *when* it is unsigned
  */
-static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instruction){
+static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instruction, three_addr_const_t* constant){
 	switch(instruction->op){
 		case DOUBLE_AND:
 		case DOUBLE_OR:
@@ -77,6 +77,11 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 		case MOD:
 			return FALSE;
 		case STAR:
+			//If it's 0, then yes we can do this
+			if(is_constant_value_zero(constant) == TRUE){
+				return TRUE;
+			}
+
 			//If this is unsigned, we cannot do this
 			if(is_type_signed(instruction->assignee->type) == FALSE){
 				return FALSE;
@@ -3458,7 +3463,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction1->assignee->is_temporary == TRUE
 			//Validate that the use count is less than 1
 			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction2) == TRUE //And it's valid for constant folding
+			&& is_operation_valid_for_constant_folding(window->instruction2, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
@@ -3494,7 +3499,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction1->assignee->is_temporary == TRUE
 			//Validate that this is not being used more than once
 			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction3) == TRUE //And it's valid for constant folding
+			&& is_operation_valid_for_constant_folding(window->instruction3, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
 			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 

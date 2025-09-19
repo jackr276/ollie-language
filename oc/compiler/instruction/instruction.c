@@ -3011,9 +3011,15 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 				constant->is_value_0 = TRUE;
 			}
 			break;
-		//TODO THIS NEEDS MORE IN HERE
 		case INT_CONST:
 			constant->constant_value.integer_constant = const_node->constant_value.signed_int_value;
+			//Set the 0 flag if true
+			if(const_node->constant_value.signed_int_value == 0){
+				constant->is_value_0 = TRUE;
+			}
+			break;
+		case INT_CONST_FORCE_U:
+			constant->constant_value.integer_constant = const_node->constant_value.unsigned_int_value;
 			//Set the 0 flag if true
 			if(const_node->constant_value.signed_int_value == 0){
 				constant->is_value_0 = TRUE;
@@ -3035,6 +3041,15 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 				constant->is_value_0 = TRUE;
 			}
 			break;
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.long_constant = const_node->constant_value.unsigned_long_value;
+			//Set the 0 flag if 
+			if(const_node->constant_value.signed_long_value == 0){
+				constant->is_value_0 = TRUE;
+			}
+			break;
+
+			
 		//If we have a function constant, we'll add the function record in
 		//as a value
 		case FUNC_CONST:
