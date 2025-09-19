@@ -1355,33 +1355,71 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 
 /**
+ * Handle a union pointer accessor(->) and return an appropriate AST node that
+ * represents it
+ *
+ * BNF RULE: <union-pointer-accessor> ::= -> <identifier>
+ *
+ * NOTE: by the time we reach here, we'll have already seen the -> lexeme
+ */
+static generic_ast_node_t* union_pointer_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//If the current type here is not a pointer, then we can't do this
+	current_type = dealias_type(current_type);
+
+	//If this is not a pointer, then we can't use ::
+	if(current_type->type_class != TYPE_CLASS_POINTER){
+		sprintf(info, "Type \"%s\" is not a pointer to a union and cannot be accessed with the -> operator.", current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now that we know this is a pointer, let's get what it points to
+	generic_type_t* points_to = current_type->internal_types.points_to;
+
+	//If this is not a union type, it immediately cannot be correct
+	if(points_to->type_class != TYPE_CLASS_UNION){
+		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the -> operator", points_to->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Following this, we need to see an identifier
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If this is not an identifier, we fail out
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Identifier required after the . operator", parser_line_num);
+	}
+
+
+
+}
+
+/**
  * A construct accessor is used to access a construct either on the heap of or on the stack.
  * Like all rules, it will return a reference to the root node of the tree that it created
  *
  * A constructor accessor node will be a subtree with the parent holding the actual operator
  * and its child holding the variable identifier
  *
- * We will expect to see the => or : here
- *
- * BNF Rule: <struct-pointer-accessor> ::= :: <variable-identifier> 
+ * BNF Rule: <struct-pointer-accessor> ::= => <variable-identifier> 
  */
 static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* current_type, side_type_t side){
-	//Freeze the current line
-	u_int16_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
 
 	//Otherwise we'll now make the node here
 	generic_ast_node_t* struct_pointer_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR, side);
 	//Add the line number
-	struct_pointer_access_node->line_number = current_line;
+	struct_pointer_access_node->line_number = parser_line_num;
 
 	//Grab a convenient reference to the type that we're working with
 	current_type = dealias_type(current_type);
 
 	//If this is not a pointer, then we can't use ::
 	if(current_type->type_class != TYPE_CLASS_POINTER){
-		sprintf(info, "Type \"%s\" is not a pointer to a struct and cannot be accessed with the : operator.", current_type->type_name.string);
+		sprintf(info, "Type \"%s\" is not a pointer to a struct and cannot be accessed with the => operator.", current_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1399,7 +1437,7 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 
 	//For now we're just doing error checking
 	if(lookahead.tok != IDENT){
-		return print_and_return_error("Struct accessor could not find valid identifier", current_line);
+		return print_and_return_error("Struct accessor could not find valid identifier", parser_line_num);
 	}
 
 	//Grab this for nicety
@@ -1728,7 +1766,10 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 			//This is a union pointer accessor
 			case ARROW:
-				return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
+				//Let the union pointer rule do it
+				accessor_node = union_pointer_accessor(fl, current_type, side);
+
+				break;
 
 			//And this is a union accessor
 			case DOT:
