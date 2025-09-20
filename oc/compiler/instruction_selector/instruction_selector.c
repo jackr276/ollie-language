@@ -3831,7 +3831,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			three_addr_const_t* constant = current_instruction->op1_const;
 
 			//If this is 0, then we can optimize
-			if(is_constant_value_one(constant) == TRUE){
+			if(is_constant_value_zero(constant) == TRUE){
 				//Switch based on current instruction's op
 				switch(current_instruction->op){
 					//If we made it out of this conditional with the flag being set, we can simplify.
