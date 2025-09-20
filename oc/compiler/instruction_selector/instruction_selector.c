@@ -3816,66 +3816,22 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Grab the current instruction out
 		current_instruction = instructions[i];
 
-		if(current_instruction != NULL && current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		//Skip if NULL
+		if(current_instruction == NULL){
+			continue;
+		}
+
+		/**
+		 * We have a chance to do some optimizations if we see a BIN_OP_WITH_CONST. It will
+		 * have been primed for us by the constant folding portion. Now, we'll search and see
+		 * if we're able to simplify some instructions
+		 */
+		if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 			//Grab this out for convenience
 			three_addr_const_t* constant = current_instruction->op1_const;
 
-			//By default, we assume it's not 0
-			u_int8_t const_is_0 = FALSE;
-			//Is the const a 1?
-			u_int8_t const_is_1 = FALSE;
-			//Is the const a power of 2?
-			u_int8_t const_is_power_of_2 = FALSE;
-
-			//Switch based on the constant type
-			switch(constant->const_type){
-				case INT_CONST:
-				case INT_CONST_FORCE_U:
-					//Set the flag if we find anything
-					if(constant->constant_value.integer_constant == 0){
-						const_is_0 = TRUE;
-					} else if (constant->constant_value.integer_constant == 1){
-						const_is_1 = TRUE;
-					} else {
-						const_is_power_of_2 = is_power_of_2(constant->constant_value.integer_constant);
-					}
-					
-					break;
-
-
-				case LONG_CONST:
-				case LONG_CONST_FORCE_U:
-					//Set the flag if we find zero
-					if(constant->constant_value.long_constant == 0){
-						const_is_0 = TRUE;
-					} else if(constant->constant_value.long_constant == 1){
-						const_is_1 = TRUE;
-					} else {
-						const_is_power_of_2 = is_power_of_2(constant->constant_value.long_constant);
-					}
-					
-					break;
-
-				case CHAR_CONST:
-					//Set the flag if we find zero
-					if(constant->constant_value.char_constant == 0){
-						const_is_0 = TRUE;
-					} else if(constant->constant_value.char_constant == 1){
-						const_is_1 = TRUE;
-					} else {
-						const_is_power_of_2 = is_power_of_2(constant->constant_value.long_constant);
-					}
-
-					break;
-					
-
-				//Just do nothing in the default case
-				default:
-					break;
-			}
-
 			//If this is 0, then we can optimize
-			if(const_is_0 == TRUE){
+			if(is_constant_value_one(constant) == TRUE){
 				//Switch based on current instruction's op
 				switch(current_instruction->op){
 					//If we made it out of this conditional with the flag being set, we can simplify.
@@ -3920,7 +3876,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
 			//if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
 			//or division
-			} else if(const_is_1 == TRUE){
+			} else if(is_constant_value_one(constant) == TRUE){
 				//Switch based on the op in the current instruction
 				switch(current_instruction->op){
 					//If it's an addition statement, turn it into an inc statement
@@ -3981,10 +3937,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 			//What if we have a power of 2 here? For any kind of multiplication or division, this can
 			//be optimized into a left or right shift if we have a compatible type(not a float)
-			} else if(const_is_power_of_2 && current_instruction->assignee->type->type_class == TYPE_CLASS_BASIC 
-				&& current_instruction->assignee->type->basic_type_token != F32 
-				&& current_instruction->assignee->type->basic_type_token != F64){
-
+			} else if(is_constant_power_of_2(constant) == TRUE){
 				//If we have a star that's a left shift
 				if(current_instruction->op == STAR){
 					//Multiplication is a left shift
@@ -4002,7 +3955,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//We changed something
 					changed = TRUE;
 				}
-				//Otherwise, we don't need this
 			}
 		}
 	}
