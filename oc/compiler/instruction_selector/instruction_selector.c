@@ -69,20 +69,70 @@ static void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
  * Is an operation valid for token folding? If it is, we'll return true
  * The invalid operations are &&, ||, / and %, and * *when* it is unsigned
  */
-static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instruction){
+static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instruction, three_addr_const_t* constant){
 	switch(instruction->op){
 		case DOUBLE_AND:
 		case DOUBLE_OR:
-		case F_SLASH:
-		case MOD:
 			return FALSE;
+
+		//Division will work for one and a power of 2
+		case F_SLASH:
+			//If it's 1, then yes we can do this
+			if(is_constant_value_one(constant) == TRUE){
+				return TRUE;
+			}
+
+			//If this is the case, then we are also able to constant fold
+			if(is_constant_power_of_2(constant) == TRUE){
+				return TRUE;
+			}
+			
+			//Otherwise it won't work
+			return FALSE;
+
+		//For modulus, we can only do this when the constant is one. Anything
+		//modulo'd by 1 is just 0
+		case MOD:
+			//If it's 1, then yes we can do this
+			if(is_constant_value_one(constant) == TRUE){
+				return TRUE;
+			}
+
+			//Otherwise it won't work
+			return FALSE;
+
 		case STAR:
+			//If it's 0, then yes we can do this
+			if(is_constant_value_zero(constant) == TRUE){
+				return TRUE;
+			}
+
+			//If it's 1, then yes we can do this
+			if(is_constant_value_one(constant) == TRUE){
+				return TRUE;
+			}
+
+			//If this is the case, then we are also able to constant fold
+			if(is_constant_power_of_2(constant) == TRUE){
+				return TRUE;
+			}
+
+			/**
+			 * Once we make it all the way down here, we no longer have
+			 * the chance to do any clever optimizations or use shifting.
+			 * If this is an unsigned operation, we'll have to use the
+			 * MULL opcode, which only takes one operand. As such, we'll
+			 * reject anything that is unsigned for folding
+			 */
+
 			//If this is unsigned, we cannot do this
 			if(is_type_signed(instruction->assignee->type) == FALSE){
 				return FALSE;
 			}
+
 			//But if it is signed, we can
 			return TRUE;
+
 		default:
 			return TRUE;
 	}
@@ -3090,43 +3140,6 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 
 /**
- * Let's determine if a value is a positive power of 2.
- * Here's how this will work. In binary, powers of 2 look like:
- * 0010
- * 0100
- * 1000
- * ....
- *
- * In other words, they have exactly 1 on bit that is not in the LSB position
- *
- * Here's an example: 5 = 0101, so 5-1 = 0100
- *
- * 0101 & (0100) = 0100 which is 4, not 0
- *
- * How about 8?
- * 8 is 1000
- * 8 - 1 = 0111
- *
- * 1000 & 0111 = 0, so 8 is a power of 2
- *
- * Therefore, the formula we will use is value & (value - 1) == 0
- */
-static u_int8_t is_power_of_2(int64_t value){
-	//If it's negative or 0, we're done here
-	if(value <= 0){
-		return FALSE;
-	}
-
-	//Using the bitwise formula described above
-	if((value & (value - 1)) == 0){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
-}
-
-
-/**
  * Take the binary logarithm of something that we already know
  * is a power of 2. 
  *
@@ -3458,7 +3471,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction1->assignee->is_temporary == TRUE
 			//Validate that the use count is less than 1
 			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction2) == TRUE //And it's valid for constant folding
+			&& is_operation_valid_for_constant_folding(window->instruction2, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
 			//Grab this out for convenience
@@ -3494,7 +3507,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction1->assignee->is_temporary == TRUE
 			//Validate that this is not being used more than once
 			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction3) == TRUE //And it's valid for constant folding
+			&& is_operation_valid_for_constant_folding(window->instruction3, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
 			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
 			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
 			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
@@ -3813,8 +3826,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * t2 <- t4 / 0 will stay the same, but we will produce an error
 	 * 
 	 *
-	 *
-	 *
 	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
 	 */
 
@@ -3829,76 +3840,37 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Grab the current instruction out
 		current_instruction = instructions[i];
 
-		if(current_instruction != NULL && current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		//Skip if NULL
+		if(current_instruction == NULL){
+			continue;
+		}
+
+		/**
+		 * We have a chance to do some optimizations if we see a BIN_OP_WITH_CONST. It will
+		 * have been primed for us by the constant folding portion. Now, we'll search and see
+		 * if we're able to simplify some instructions
+		 */
+		if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
 			//Grab this out for convenience
 			three_addr_const_t* constant = current_instruction->op1_const;
 
-			//By default, we assume it's not 0
-			u_int8_t const_is_0 = FALSE;
-			//Is the const a 1?
-			u_int8_t const_is_1 = FALSE;
-			//Is the const a power of 2?
-			u_int8_t const_is_power_of_2 = FALSE;
-
-			//Switch based on the constant type
-			switch(constant->const_type){
-				case INT_CONST:
-				case INT_CONST_FORCE_U:
-					//Set the flag if we find anything
-					if(constant->constant_value.integer_constant == 0){
-						const_is_0 = TRUE;
-					} else if (constant->constant_value.integer_constant == 1){
-						const_is_1 = TRUE;
-					} else {
-						const_is_power_of_2 = is_power_of_2(constant->constant_value.integer_constant);
-					}
-					
-					break;
-
-
-				case LONG_CONST:
-				case LONG_CONST_FORCE_U:
-					//Set the flag if we find zero
-					if(constant->constant_value.long_constant == 0){
-						const_is_0 = TRUE;
-					} else if(constant->constant_value.long_constant == 1){
-						const_is_1 = TRUE;
-					} else {
-						const_is_power_of_2 = is_power_of_2(constant->constant_value.long_constant);
-					}
-					
-					break;
-
-				case CHAR_CONST:
-					//Set the flag if we find zero
-					if(constant->constant_value.char_constant == 0){
-						const_is_0 = TRUE;
-					} else if(constant->constant_value.char_constant == 1){
-						const_is_1 = TRUE;
-					} else {
-						const_is_power_of_2 = is_power_of_2(constant->constant_value.long_constant);
-					}
-
-					break;
-					
-
-				//Just do nothing in the default case
-				default:
-					break;
-			}
-
 			//If this is 0, then we can optimize
-			if(const_is_0 == TRUE){
+			if(is_constant_value_zero(constant) == TRUE){
 				//Switch based on current instruction's op
 				switch(current_instruction->op){
 					//If we made it out of this conditional with the flag being set, we can simplify.
 					//If this is the case, then this just becomes a regular assignment expression
 					case PLUS:
 					case MINUS:
+					case L_SHIFT:
+					case R_SHIFT:
 						//We're just assigning here
 						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 						//Wipe the values out
 						current_instruction->op1_const = NULL;
+
+						//Also scrap the op
+						current_instruction->op = BLANK;
 
 						//We changed something
 						changed = TRUE;
@@ -3914,6 +3886,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 							current_instruction->op1->use_count--;
 							current_instruction->op1 = NULL;
 						}
+
 						//We changed something
 						changed = TRUE;
 
@@ -3933,7 +3906,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
 			//if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
 			//or division
-			} else if(const_is_1 == TRUE){
+			} else if(is_constant_value_one(constant) == TRUE){
 				//Switch based on the op in the current instruction
 				switch(current_instruction->op){
 					//If it's an addition statement, turn it into an inc statement
@@ -3974,7 +3947,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 						break;
 
-					//These are both the same - handle a 1 multiply
+					//These are both the same - handle a 1 multiply, 1 divide
 					case STAR:
 					case F_SLASH:
 						//Change it to a regular assignment statement
@@ -3987,6 +3960,27 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 						break;
 
+					//Modulo by 1 will always result in 0
+					case MOD:
+						//Change it to a regular assignment statement
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+						//This is blank
+						current_instruction->op = BLANK;
+
+						//We no longer even need our op1
+						if(current_instruction->op1 != NULL){
+							current_instruction->op1->use_count--;
+							current_instruction->op1 = NULL;
+						}
+
+						//We can modify op1 const to just be 0 now. This is lazy but it
+						//works, we'll just 0 out all 64 bits
+						current_instruction->op1_const->constant_value.long_constant = 0;
+
+						//We changed something
+						changed = TRUE;
+
 					//Just bail out
 					default:
 						break;
@@ -3994,10 +3988,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 			//What if we have a power of 2 here? For any kind of multiplication or division, this can
 			//be optimized into a left or right shift if we have a compatible type(not a float)
-			} else if(const_is_power_of_2 && current_instruction->assignee->type->type_class == TYPE_CLASS_BASIC 
-				&& current_instruction->assignee->type->basic_type_token != F32 
-				&& current_instruction->assignee->type->basic_type_token != F64){
-
+			} else if(is_constant_power_of_2(constant) == TRUE){
 				//If we have a star that's a left shift
 				if(current_instruction->op == STAR){
 					//Multiplication is a left shift
@@ -4015,7 +4006,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//We changed something
 					changed = TRUE;
 				}
-				//Otherwise, we don't need this
 			}
 		}
 	}

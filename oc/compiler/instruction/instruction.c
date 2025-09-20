@@ -37,6 +37,75 @@ int32_t increment_and_get_temp_id(){
 
 
 /**
+ * Let's determine if a value is a positive power of 2.
+ * Here's how this will work. In binary, powers of 2 look like:
+ * 0010
+ * 0100
+ * 1000
+ * ....
+ *
+ * In other words, they have exactly 1 on bit that is not in the LSB position
+ *
+ * Here's an example: 5 = 0101, so 5-1 = 0100
+ *
+ * 0101 & (0100) = 0100 which is 4, not 0
+ *
+ * How about 8?
+ * 8 is 1000
+ * 8 - 1 = 0111
+ *
+ * 1000 & 0111 = 0, so 8 is a power of 2
+ *
+ * Therefore, the formula we will use is value & (value - 1) == 0
+ */
+static u_int8_t is_signed_power_of_2(int64_t value){
+	//If it's negative or 0, we're done here
+	if(value <= 0){
+		return FALSE;
+	}
+
+	//Using the bitwise formula described above
+	if((value & (value - 1)) == 0){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
+ * Let's determine if a value is a positive power of 2.
+ * Here's how this will work. In binary, powers of 2 look like:
+ * 0010
+ * 0100
+ * 1000
+ * ....
+ *
+ * In other words, they have exactly 1 on bit that is not in the LSB position
+ *
+ * Here's an example: 5 = 0101, so 5-1 = 0100
+ *
+ * 0101 & (0100) = 0100 which is 4, not 0
+ *
+ * How about 8?
+ * 8 is 1000
+ * 8 - 1 = 0111
+ *
+ * 1000 & 0111 = 0, so 8 is a power of 2
+ *
+ * Therefore, the formula we will use is value & (value - 1) == 0
+ */
+static u_int8_t is_unsigned_power_of_2(u_int64_t value){
+	//Using the bitwise formula described above
+	if((value & (value - 1)) == 0){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * Insert an instruction in a block before the given instruction
  */
 void insert_instruction_before_given(instruction_t* insertee, instruction_t* given){
@@ -280,28 +349,85 @@ u_int8_t is_division_instruction(instruction_t* instruction){
  */
 u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 	switch(constant->const_type){
-		case FUNC_CONST:
-			return FALSE;
-		case STR_CONST:
-			return FALSE;
 		case INT_CONST:
+		case INT_CONST_FORCE_U:
 			if(constant->constant_value.integer_constant == 0){
 				return TRUE;
-			} else {
-				return FALSE;
 			}
+			return FALSE;
+
 		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
 			if(constant->constant_value.long_constant == 0){
 				return TRUE;
-			} else {
-				return FALSE;
 			}
+			return FALSE;
+
 		case CHAR_CONST:
 			if(constant->constant_value.char_constant == 0){
 				return TRUE;
-			} else {
-				return FALSE;
 			}
+			return FALSE;
+
+		//By default just return false
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is this constant value 1?
+ */
+u_int8_t is_constant_value_one(three_addr_const_t* constant){
+	switch(constant->const_type){
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+			if(constant->constant_value.integer_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+			if(constant->constant_value.long_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
+		case CHAR_CONST:
+			if(constant->constant_value.char_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
+		//By default just return false
+		default:
+			return FALSE;
+	}
+}
+
+/**
+ * Is this constant a power of 2? We mainly rely on the helper above to do this
+ */
+u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
+	switch(constant->const_type){
+		case INT_CONST:
+			return is_signed_power_of_2(constant->constant_value.integer_constant);
+
+		case INT_CONST_FORCE_U:
+			return is_unsigned_power_of_2(constant->constant_value.integer_constant);
+
+		case LONG_CONST:
+			return is_signed_power_of_2(constant->constant_value.long_constant);
+
+		case LONG_CONST_FORCE_U:
+			return is_unsigned_power_of_2(constant->constant_value.long_constant);
+
+		//Chars are always unsigned
+		case CHAR_CONST:
+			return is_unsigned_power_of_2(constant->constant_value.char_constant);
+
 		//By default just return false
 		default:
 			return FALSE;
@@ -3011,9 +3137,15 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 				constant->is_value_0 = TRUE;
 			}
 			break;
-		//TODO THIS NEEDS MORE IN HERE
 		case INT_CONST:
 			constant->constant_value.integer_constant = const_node->constant_value.signed_int_value;
+			//Set the 0 flag if true
+			if(const_node->constant_value.signed_int_value == 0){
+				constant->is_value_0 = TRUE;
+			}
+			break;
+		case INT_CONST_FORCE_U:
+			constant->constant_value.integer_constant = const_node->constant_value.unsigned_int_value;
 			//Set the 0 flag if true
 			if(const_node->constant_value.signed_int_value == 0){
 				constant->is_value_0 = TRUE;
@@ -3035,6 +3167,15 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 				constant->is_value_0 = TRUE;
 			}
 			break;
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.long_constant = const_node->constant_value.unsigned_long_value;
+			//Set the 0 flag if 
+			if(const_node->constant_value.signed_long_value == 0){
+				constant->is_value_0 = TRUE;
+			}
+			break;
+
+			
 		//If we have a function constant, we'll add the function record in
 		//as a value
 		case FUNC_CONST:
