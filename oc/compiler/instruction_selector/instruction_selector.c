@@ -73,9 +73,34 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 	switch(instruction->op){
 		case DOUBLE_AND:
 		case DOUBLE_OR:
-		case F_SLASH:
-		case MOD:
 			return FALSE;
+
+		//Division will work for one and a power of 2
+		case F_SLASH:
+			//If it's 1, then yes we can do this
+			if(is_constant_value_one(constant) == TRUE){
+				return TRUE;
+			}
+
+			//If this is the case, then we are also able to constant fold
+			if(is_constant_power_of_2(constant) == TRUE){
+				return TRUE;
+			}
+			
+			//Otherwise it won't work
+			return FALSE;
+
+		//For modulus, we can only do this when the constant is one. Anything
+		//modulo'd by 1 is just 0
+		case MOD:
+			//If it's 1, then yes we can do this
+			if(is_constant_value_one(constant) == TRUE){
+				return TRUE;
+			}
+
+			//Otherwise it won't work
+			return FALSE;
+
 		case STAR:
 			//If it's 0, then yes we can do this
 			if(is_constant_value_zero(constant) == TRUE){
