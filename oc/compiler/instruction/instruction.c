@@ -318,12 +318,14 @@ u_int8_t is_division_instruction(instruction_t* instruction){
 u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
+		case INT_CONST_FORCE_U:
 			if(constant->constant_value.integer_constant == 0){
 				return TRUE;
 			}
 			return FALSE;
 
 		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
 			if(constant->constant_value.long_constant == 0){
 				return TRUE;
 			}
@@ -348,12 +350,14 @@ u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 u_int8_t is_constant_value_one(three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
+		case INT_CONST_FORCE_U:
 			if(constant->constant_value.integer_constant == 1){
 				return TRUE;
 			}
 			return FALSE;
 
 		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
 			if(constant->constant_value.long_constant == 1){
 				return TRUE;
 			}
@@ -372,34 +376,26 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant){
 }
 
 /**
- * Is this constant a power of 2?
+ * Is this constant a power of 2? We mainly rely on the helper above to do this
  */
 u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			if(constant->constant_value.integer_constant == 1){
-				return TRUE;
-			}
-			return FALSE;
+		case INT_CONST_FORCE_U:
+			return is_power_of_2(constant->constant_value.integer_constant);
 
 		case LONG_CONST:
-			if(constant->constant_value.long_constant == 1){
-				return TRUE;
-			}
-			return FALSE;
+		case LONG_CONST_FORCE_U:
+			return is_power_of_2(constant->constant_value.long_constant);
 
 		case CHAR_CONST:
-			if(constant->constant_value.char_constant == 1){
-				return TRUE;
-			}
-			return FALSE;
+			return is_power_of_2(constant->constant_value.char_constant);
 
 		//By default just return false
 		default:
 			return FALSE;
 	}
 }
-
 
 
 /**

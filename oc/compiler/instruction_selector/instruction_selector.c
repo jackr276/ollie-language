@@ -87,7 +87,18 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 				return TRUE;
 			}
 
-			if(is_const)
+			//If this is the case, then we are also able to constant fold
+			if(is_constant_power_of_2(constant) == TRUE){
+				return TRUE;
+			}
+
+			/**
+			 * Once we make it all the way down here, we no longer have
+			 * the chance to do any clever optimizations or use shifting.
+			 * If this is an unsigned operation, we'll have to use the
+			 * MULL opcode, which only takes one operand. As such, we'll
+			 * reject anything that is unsigned for folding
+			 */
 
 			//If this is unsigned, we cannot do this
 			if(is_type_signed(instruction->assignee->type) == FALSE){

@@ -606,6 +606,11 @@ u_int8_t is_constant_value_zero(three_addr_const_t* constant);
 u_int8_t is_constant_value_one(three_addr_const_t* constant);
 
 /**
+ * Is this constant a power of 2?
+ */
+u_int8_t is_constant_power_of_2(three_addr_const_t* constant);
+
+/**
  * Is this a division instruction that is intended for modulus?
  */
 u_int8_t is_modulus_instruction(instruction_t* instruction);
