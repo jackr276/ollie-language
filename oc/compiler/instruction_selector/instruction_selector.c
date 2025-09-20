@@ -3862,10 +3862,15 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//If this is the case, then this just becomes a regular assignment expression
 					case PLUS:
 					case MINUS:
+					case L_SHIFT:
+					case R_SHIFT:
 						//We're just assigning here
 						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 						//Wipe the values out
 						current_instruction->op1_const = NULL;
+
+						//Also scrap the op
+						current_instruction->op = BLANK;
 
 						//We changed something
 						changed = TRUE;
