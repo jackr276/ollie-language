@@ -87,6 +87,8 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 				return TRUE;
 			}
 
+			if(is_const)
+
 			//If this is unsigned, we cannot do this
 			if(is_type_signed(instruction->assignee->type) == FALSE){
 				return FALSE;
@@ -3097,43 +3099,6 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 	//Give back whatever we found
 	return jumps_to;
-}
-
-
-/**
- * Let's determine if a value is a positive power of 2.
- * Here's how this will work. In binary, powers of 2 look like:
- * 0010
- * 0100
- * 1000
- * ....
- *
- * In other words, they have exactly 1 on bit that is not in the LSB position
- *
- * Here's an example: 5 = 0101, so 5-1 = 0100
- *
- * 0101 & (0100) = 0100 which is 4, not 0
- *
- * How about 8?
- * 8 is 1000
- * 8 - 1 = 0111
- *
- * 1000 & 0111 = 0, so 8 is a power of 2
- *
- * Therefore, the formula we will use is value & (value - 1) == 0
- */
-static u_int8_t is_power_of_2(int64_t value){
-	//If it's negative or 0, we're done here
-	if(value <= 0){
-		return FALSE;
-	}
-
-	//Using the bitwise formula described above
-	if((value & (value - 1)) == 0){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
 }
 
 

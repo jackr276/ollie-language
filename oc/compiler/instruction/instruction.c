@@ -37,6 +37,43 @@ int32_t increment_and_get_temp_id(){
 
 
 /**
+ * Let's determine if a value is a positive power of 2.
+ * Here's how this will work. In binary, powers of 2 look like:
+ * 0010
+ * 0100
+ * 1000
+ * ....
+ *
+ * In other words, they have exactly 1 on bit that is not in the LSB position
+ *
+ * Here's an example: 5 = 0101, so 5-1 = 0100
+ *
+ * 0101 & (0100) = 0100 which is 4, not 0
+ *
+ * How about 8?
+ * 8 is 1000
+ * 8 - 1 = 0111
+ *
+ * 1000 & 0111 = 0, so 8 is a power of 2
+ *
+ * Therefore, the formula we will use is value & (value - 1) == 0
+ */
+static u_int8_t is_power_of_2(int64_t value){
+	//If it's negative or 0, we're done here
+	if(value <= 0){
+		return FALSE;
+	}
+
+	//Using the bitwise formula described above
+	if((value & (value - 1)) == 0){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * Insert an instruction in a block before the given instruction
  */
 void insert_instruction_before_given(instruction_t* insertee, instruction_t* given){
@@ -333,6 +370,36 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant){
 			return FALSE;
 	}
 }
+
+/**
+ * Is this constant a power of 2?
+ */
+u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
+	switch(constant->const_type){
+		case INT_CONST:
+			if(constant->constant_value.integer_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
+		case LONG_CONST:
+			if(constant->constant_value.long_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
+		case CHAR_CONST:
+			if(constant->constant_value.char_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
+		//By default just return false
+		default:
+			return FALSE;
+	}
+}
+
 
 
 /**
