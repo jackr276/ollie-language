@@ -129,6 +129,7 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 			if(is_type_signed(instruction->assignee->type) == FALSE){
 				return FALSE;
 			}
+
 			//But if it is signed, we can
 			return TRUE;
 
@@ -3825,8 +3826,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * t2 <- t4 / 0 will stay the same, but we will produce an error
 	 * 
 	 *
-	 *
-	 *
 	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
 	 */
 
@@ -3882,6 +3881,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 							current_instruction->op1->use_count--;
 							current_instruction->op1 = NULL;
 						}
+
 						//We changed something
 						changed = TRUE;
 
@@ -3942,7 +3942,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 						break;
 
-					//These are both the same - handle a 1 multiply
+					//These are both the same - handle a 1 multiply, 1 divide
 					case STAR:
 					case F_SLASH:
 						//Change it to a regular assignment statement
@@ -3954,6 +3954,27 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 						changed = TRUE;
 
 						break;
+
+					//Modulo by 1 will always result in 0
+					case MOD:
+						//Change it to a regular assignment statement
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+						//This is blank
+						current_instruction->op = BLANK;
+
+						//We no longer even need our op1
+						if(current_instruction->op1 != NULL){
+							current_instruction->op1->use_count--;
+							current_instruction->op1 = NULL;
+						}
+
+						//We can modify op1 const to just be 0 now. This is lazy but it
+						//works, we'll just 0 out all 64 bits
+						current_instruction->op1_const->constant_value.long_constant = 0;
+
+						//We changed something
+						changed = TRUE;
 
 					//Just bail out
 					default:
