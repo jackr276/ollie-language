@@ -1703,9 +1703,14 @@ static generic_ast_node_t* postoperation(FILE* fl, generic_type_t* current_type,
 	//Otherwise let's allocate this
 	generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
 
+	//The parent node is a child of this one
+	add_child_node(postoperation_node, parent_node);
+
 	//The inferred type is the current type
 	postoperation_node->inferred_type = current_type;
 	postoperation_node->line_number = parser_line_num;
+	//Store the unary operator too
+	postoperation_node->unary_operator = operator;
 
 	//Add this in here
 	postoperation_node->variable = parent_node->variable;

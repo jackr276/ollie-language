@@ -13,8 +13,6 @@ pub fn main() -> i32 {
 	//in the array initializer list.
 	let mut arr:i32[] := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-	arr[3] := 3;
-
 	//Make the call
 	ret @array_call(arr);
 }

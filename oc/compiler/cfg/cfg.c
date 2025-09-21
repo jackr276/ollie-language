@@ -2912,54 +2912,6 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 
 
 /**
- * Handle a postincrement/postdecrement operation
- *
- * THIS IS COMPLETELY INCORRECT
- */
-static three_addr_var_t* emit_postoperation_code2(basic_block_t* basic_block, three_addr_var_t* current_var, Token unary_operator, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
-	//This is either a postincrement or postdecrement. Regardless, we emit
-	//a temp var for this because we assign before we mutate
-
-	//Emit the temp var with the current type
-	three_addr_var_t* temp_var = emit_temp_var(current_var->type);
-
-	//Now we'll need to emit the assignment operation
-	instruction_t* assignment = emit_assignment_instruction(temp_var, current_var);
-
-	//Mark this for later
-	assignment->is_branch_ending = is_branch_ending;
-
-	//Ensure that we add this into the block
-	add_statement(basic_block, assignment);
-
-	//We'll now perform the actual operation
-	if(unary_operator == PLUSPLUS){
-		//If we have a pointer, use the helper
-		if(current_var->type->type_class == TYPE_CLASS_POINTER){
-			handle_pointer_arithmetic(basic_block, PLUS, current_var, is_branch_ending);
-		} else {
-			//Use the helper for this
-			emit_inc_code(basic_block, current_var, is_branch_ending);
-		}
-
-	//Otherwise we know that it has to be minusminus
-	} else {
-		//If we have a pointer, use the helper
-		if(current_var->type->type_class == TYPE_CLASS_POINTER){
-			handle_pointer_arithmetic(basic_block, MINUS, current_var, is_branch_ending);
-		} else {
-			//Use the helper here as well
-			emit_dec_code(basic_block, current_var, is_branch_ending);
-		}
-	}
-
-	//This is the variable that we'll use if we make use of this after
-	//the fact
-	return temp_var;
-}
-
-
-/**
  * Emit the code needed to perform an array access
  *
  * This rule returns *the address* of the value that we've asked for
@@ -3264,8 +3216,11 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Store the current block
 	basic_block_t* current_block = basic_block;
 
+	//The postfix node is always the first child
+	generic_ast_node_t* postfix_node = node->first_child;
+
 	//We will first emit the postfix expression code that comes from this
-	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, node->first_child, temp_assignment_required, is_branch_ending);
+	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, temp_assignment_required, is_branch_ending);
 
 	//If this is now different, which it could be, we'll change what current is
 	if(postfix_expression_results.final_block != NULL && postfix_expression_results.final_block != current_block){
@@ -3274,6 +3229,12 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 	//This is the value that we will be modifying
 	three_addr_var_t* assignee = postfix_expression_results.assignee;
+
+	/**
+	 */
+
+	//
+	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 
 	//If the assignee is not a pointer, we'll handle the normal case
 	if(assignee->type->type_class == TYPE_CLASS_BASIC){
@@ -3289,7 +3250,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 				break;
 
 			//We shouldn't ever hit here
-			default:	
+			default:
 				break;
 		}
 
@@ -3310,10 +3271,10 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	 */
 	if(node->first_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
 		//Duplicate the subtree here for us to use
-		generic_ast_node_t* copy = duplicate_subtree(node->first_child, SIDE_TYPE_LEFT);
+		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
 
 		//Now we emit the copied package
-		cfg_result_package_t copied_package = emit_postfix_expression(current_block, node->first_child, temp_assignment_required, is_branch_ending);
+		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, temp_assignment_required, is_branch_ending);
 
 		//If this is now different, which it could be, we'll change what current is
 		if(copied_package.final_block != NULL && copied_package.final_block != current_block){
