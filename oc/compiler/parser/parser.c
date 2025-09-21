@@ -1723,41 +1723,59 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		return primary_expression_node;
 	}
 
-	//Initialize the parent and the left child holder here
-	generic_ast_node_t* parent = NULL;
+	//The parent initially is the primary expression
+	generic_ast_node_t* parent = primary_expression_node;
 	//The temp holder node
 	generic_ast_node_t* temp_holder = NULL;
-	//Whatever the current postfix node we're dealing with is
-	generic_ast_node_t* postfix_node = NULL;
 	//Hold onto the operator node here
 	generic_ast_node_t* operator_node = NULL;
-
-	//Let's grab whatever type that we currently have
-	generic_type_t* current_type = dealias_type(primary_expression_node->inferred_type);
 
 	//So long as we keep seeing operators here, we keep chaining them
 	while(TRUE){
 		//Refresh the token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
+		//Let's grab whatever type that we currently have
+		generic_type_t* current_type = parent->inferred_type;
+
 		//Go based on what the token is
 		switch(lookahead.tok){
+			//Array accessor
 			case L_BRACKET:
 				//We'll push this onto the grouping stack for later matching
 				push_token(grouping_stack, lookahead);
 
-				//Let the array accessor handle it
-				accessor_node = array_accessor(fl, current_type, side);
-
+				operator_node = array_accessor(fl, current_type, side);
 				break;
 
+			//Struct accessor
 			case COLON:
+				operator_node = struct_accessor(fl, current_type, side);
+				break;
 
+			//Struct pointer accessor
 			case FAT_ARROW:
+				operator_node = struct_pointer_accessor(fl, current_type, side);
+				break;
 
+			//Union accessor
 			case DOT:
+				//Let the rule handle it
+				operator_node = union_accessor(fl, current_type, side);
+				break;
 
+			//Union pointer accessor
 			case ARROW:
+				operator_node = union_pointer_accessor(fl, current_type, side);
+				break;
+
+			//Postincrement
+			case PLUSPLUS:
+				return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
+
+			//Postdecrement
+			case MINUSMINUS:
+				return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
 
 			//When we hit this, it means that we're done. We return the parent
 			//node in this case
@@ -1765,138 +1783,32 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 				push_back_token(lookahead);
 				return parent;
 		}
-	}
 
-
-	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
-	//post operation, so we can make the node for it
-	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
-
-
-	//Add in the first child which is the primary expression
-	add_child_node(postfix_expr_node, primary_expression_node);
-
-	//The accessor node for each go around
-	generic_ast_node_t* accessor_node = NULL;
-
-	//We assume it's assignable, that will only change if we have a basic type that is 
-	//post inc'd/dec'd
-	postfix_expr_node->is_assignable = ASSIGNABLE;
-
-	//Now we can see as many construct accessor and array accessors as we can take
-	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON 
-		|| lookahead.tok == FAT_ARROW || lookahead.tok == DOT
-		|| lookahead.tok == ARROW){
-		//Go based on what's in here
-		switch(lookahead.tok){
-			case L_BRACKET:
-			
-
-			//A raw construct accessor, not syntactic sugar for the deref operator
-			case COLON:
-				//Let's have the rule do it.
-				accessor_node = struct_accessor(fl, current_type, side);
-
-				break;
-			
-			//This is a struct pointer accessor
-			case FAT_ARROW:
-				//Let's have the rule do it.
-				accessor_node = struct_pointer_accessor(fl, current_type, side);
-
-				break;
-
-			//This is a union pointer accessor
-			case ARROW:
-				//Let the union pointer rule do it
-				accessor_node = union_pointer_accessor(fl, current_type, side);
-
-				break;
-
-			//And this is a union accessor
-			case DOT:
-				//Let the rule handle it
-				accessor_node = union_accessor(fl, current_type, side);
-
-				break;
-
-			//We shouldn't ever hit here, but if we do then leave
-			default:
-				return print_and_return_error("Expected :, ::, [] or ., but got none", parser_line_num);
+		//If this is invalid, then we'll just leave
+		if(operator_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid postfix operation", parser_line_num);
 		}
 
-		//We have our fail case here
-		if(accessor_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid accessor found in postfix expression", parser_line_num);
-		}
+		//Now we do the required reordering
 
-		//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
-		//node
-		add_child_node(postfix_expr_node, accessor_node);
+		//Hang onto the old parent
+		temp_holder = parent;
 
-		//The type is just this one's inferred type
-		current_type = accessor_node->inferred_type;
+		//The new parent now becomes a postfix expression
+		parent = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
 
-		//refresh the lookahead for the next iteration
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		//The old parent now becomes a child to the new postfix expression node
+		add_child_node(parent, temp_holder);
+		
+		//And the operator is the other child
+		add_child_node(parent, operator_node);
+
+		//The type of this parent is always the type of the operator node
+		parent->inferred_type = operator_node->inferred_type;
 	}
 
-	//We now have whatever the end type is stored in current type. Let's make sure it's raw
-	generic_type_t* return_type = dealias_type(current_type);
-
-	//Now once we get here, we know that we have something that isn't one of accessor rules
-	//It could however be postinc/postdec. Let's first see if it isn't
-	switch(lookahead.tok){
-		case PLUSPLUS:
-		case MINUSMINUS:
-			break;
-		//If it's not that, then we're done here and we can leave
-		default:
-			//Put the token back
-			push_back_token(lookahead);
-			//Assign the type
-			postfix_expr_node->inferred_type = return_type;
-			//Assign the variable
-			postfix_expr_node->variable = primary_expression_node->variable;
-			//This was assigned to
-			primary_expression_node->variable->assigned_to = TRUE;
-			//And we'll give back what we had constructed so far
-			return postfix_expr_node;
-	}
-
-	//Let's see if it's valid
-	u_int8_t is_valid = is_unary_operation_valid_for_type(return_type, lookahead.tok);
-
-	//If it it's invalid, we fail here
-	if(is_valid == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", return_type->type_name.string, operator_to_string(lookahead.tok));
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//You cannot assign to a basic variable that is
-	//post-inc'd
-	if(return_type->type_class == TYPE_CLASS_BASIC){
-		postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
-	}
-
-	//Otherwise if we get here we know that we either have post inc or dec
-	//Create the unary operator node
-	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
-
-	//Store the token
-	unary_post_op->unary_operator = lookahead.tok;
-
-	//This will always be the last child of whatever we've built so far
-	add_child_node(postfix_expr_node, unary_post_op);
-	
-	//Add the inferred type in
-	postfix_expr_node->inferred_type = return_type;
-
-	//Carry through
-	postfix_expr_node->variable = primary_expression_node->variable;
-
-	//Now that we're done, we can get out
-	return postfix_expr_node;
+	//We should never get here - just to make the static analyzer happy
+	return parent;
 }
 
 
