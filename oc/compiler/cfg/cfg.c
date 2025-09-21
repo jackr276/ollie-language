@@ -3477,10 +3477,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					case PLUSPLUS:
 						//We really just have an "inc" instruction here
 						assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+						break;
 						
 					case MINUSMINUS:
 						//We really just have an "dec" instruction here
 						assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+						break;
 
 					//We shouldn't ever hit here
 					default:	
