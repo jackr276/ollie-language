@@ -2095,9 +2095,21 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			break;
 
-		//Pre-inc/dec case
+		/**
+		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
+		 * that is returned to be used by the user is the incremented/decremented value unlike in a
+		 * postfix expression
+		 *
+		 * We'll need to apply desugaring here
+		 * ++x is really temp = x + 1
+		 * 				 x = temp
+		 * 				 use temp going forward
+		 *
+		 * We must note that preincrement is not assignable at all
+		 */
 		case PLUSPLUS:
 		case MINUSMINUS:
+			//Check to see if it is valid
 			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
 			//If it it's invalid, we fail here
@@ -2114,13 +2126,11 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				cast_expr->variable->assigned_to = TRUE;
 			}
 
-			//This is only not assignable if we have a basic variable
-			if(return_type->type_class == TYPE_CLASS_BASIC){
-				is_assignable = NOT_ASSIGNABLE;
-			} else {
-				//Otherwise it is assignable
-				is_assignable = ASSIGNABLE;
-			}
+			//Force this to be an rvalue for the cfg constructor
+			cast_expr->side = SIDE_TYPE_RIGHT;
+
+			//These expressions are never assignable
+			is_assignable = NOT_ASSIGNABLE;
 
 			break;
 

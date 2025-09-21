@@ -3460,24 +3460,60 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case MINUSMINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
-			//The assignee comes from our package. This is what we are ultimately using in the final result
-			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
 			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
+			//The assignee comes from our package. This is what we are ultimately using in the final result
+			assignee = unary_package.assignee;
+
 			//If the assignee is not a pointer, we'll handle the normal case
 			if(assignee->type->type_class == TYPE_CLASS_BASIC){
-				//We really just have an "inc" instruction here
-				unary_package.assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+				switch(first_child->unary_operator){
+					case PLUSPLUS:
+						//We really just have an "inc" instruction here
+						assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+						
+					case MINUSMINUS:
+						//We really just have an "dec" instruction here
+						assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+
+					//We shouldn't ever hit here
+					default:	
+						break;
+				}
+
 			//If we actually do have a pointer, we need the helper to deal with this
 			} else {
 				//Let the helper deal with this
-				unary_package.assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
+				assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
 			}
 
+			//Duplicate the subtree here for us to use
+			generic_ast_node_t* copy = duplicate_subtree(first_child->next_sibling, SIDE_TYPE_LEFT);
+
+			//Now we emit the copied package
+			cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, temp_assignment_required, is_branch_ending);
+
+			//If this is now different, which it could be, we'll change what current is
+			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				current_block = unary_package.final_block;
+			}
+
+			//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
+			instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+			assignment_instruction->is_branch_ending = is_branch_ending;
+
+			//Add this into the block
+			add_statement(current_block, assignment_instruction);
+
+			//Store the assignee as this
+			unary_package.assignee = assignee;
+			//Update the final block if it has change
+			unary_package.final_block = current_block;
+		
 			//Give back the final unary package
 			return unary_package;
 
