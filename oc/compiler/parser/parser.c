@@ -1688,6 +1688,26 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 
 
 /**
+ * Increments a value before use
+ *
+ * BNF Rule: <postincrement> ::= ++
+ */
+static generic_ast_node_t* postincrement(FILE* fl, generic_type_t* current_type, side_type_t side){
+	return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
+}
+
+
+/**
+ * decrements a value before use
+ *
+ * BNF Rule: <postdecrement> ::= ++
+ */
+static generic_ast_node_t* postdecrement(FILE* fl, generic_type_t* current_type, side_type_t side){
+	return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
+}
+
+
+/**
  * A postfix expression decays into a primary expression, and there are certain
  * operators that can be chained if context allows. Like all other rules, this rule
  * returns a reference to the root node that it creates
@@ -1771,11 +1791,13 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 			//Postincrement
 			case PLUSPLUS:
-				return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
+				operator_node = postincrement(fl, current_type, side);
+				break;
 
 			//Postdecrement
 			case MINUSMINUS:
-				return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
+				operator_node = postdecrement(fl, current_type, side);
+				break;
 
 			//When we hit this, it means that we're done. We return the parent
 			//node in this case
@@ -1788,8 +1810,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		if(operator_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid postfix operation", parser_line_num);
 		}
-
-		//Now we do the required reordering
 
 		//Hang onto the old parent
 		temp_holder = parent;
