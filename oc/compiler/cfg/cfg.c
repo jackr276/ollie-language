@@ -3033,6 +3033,36 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 }
 
 
+/**
+ * Emit the code needed to perform a union pointer access
+ *
+ * This rule returns *the address* of the value that we've asked for
+ */
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t* base_address){
+	//Store the current block
+	basic_block_t* current_block = block;
+	
+	//The type is stored within the accessor
+	three_addr_var_t* dereferenced = emit_pointer_indirection(current_block, base_address, base_address->type);
+
+	//Now we'll grab a temp assignment for the current address
+	instruction_t* pointer_deref_assignment = emit_assignment_instruction(emit_temp_var(base_address->type), dereferenced);
+
+	//This now counts as a use
+	add_used_variable(current_block, dereferenced);
+
+	//Now we add the statement in
+	add_statement(current_block, pointer_deref_assignment);
+
+	//This is the union address here
+	three_addr_var_t* union_address = pointer_deref_assignment->assignee;
+
+	//Construct and return
+	cfg_result_package_t return_package = {current_block, current_block, union_address, BLANK};
+	return return_package;
+}
+
+
 
 /**
  * Emit a postifx expression tree's code. This rule is recursive by nature
@@ -3085,6 +3115,8 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 		//Union pointer accessor - a bit more complex than the prior one
 		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
+			postfix_expression_results = emit_union_pointer_accessor_expression(current_block, operator_node, base_address);
+
 			break;
 
 
@@ -3092,9 +3124,49 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		default:
 			break;
 	}
-	
 
-	//TODO NOT DONE
+	//There is a special flag that stores whether or not this is the final postfix expression or not
+	u_int8_t dereference_needed = node->constant_value.is_final;
+
+	//We'll package up the final results and leave here
+	if(dereference_needed == TRUE){
+
+	} else {
+
+	}
+
+	//Now based on what side we're on, we'll emit the appropriate indirection
+	//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
+	//we're done here. We'll emit our memory code and leave this part of the loop
+	if(cursor->next_sibling == NULL){
+		//We're using indirection, address is being wiped out
+		current_address = NULL;
+
+		//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
+		if(postfix_expr_side == SIDE_TYPE_LEFT){
+			//Emit the indirection for this one
+			current_var = emit_pointer_indirection(current, union_address, current_type);
+			//It's a write
+			current_var->access_type = MEMORY_ACCESS_WRITE;
+
+		//Otherwise we're dealing with a read
+		} else {
+			//Still emit the memory code
+			current_var = emit_pointer_indirection(current, union_address, current_type);
+			//It's a read
+			current_var->access_type = MEMORY_ACCESS_READ;
+
+			//We will perform the deref here, as we can't do it in the lea 
+			instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
+
+			//Is this branch ending?
+			deref_stmt->is_branch_ending = is_branch_ending;
+			//And add it in
+			add_statement(current, deref_stmt);
+
+			//Update the current bar too
+			current_var = deref_stmt->assignee;
+		}
 	
 }
 
@@ -3200,39 +3272,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 				//Set what the current type is
 				current_type = cursor->inferred_type;
 
-				//Now based on what side we're on, we'll emit the appropriate indirection
-				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
-				//we're done here. We'll emit our memory code and leave this part of the loop
-				if(cursor->next_sibling == NULL){
-					//We're using indirection, address is being wiped out
-					current_address = NULL;
-
-					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-					if(postfix_expr_side == SIDE_TYPE_LEFT){
-						//Emit the indirection for this one
-						current_var = emit_pointer_indirection(current, union_address, current_type);
-						//It's a write
-						current_var->access_type = MEMORY_ACCESS_WRITE;
-
-					//Otherwise we're dealing with a read
-					} else {
-						//Still emit the memory code
-						current_var = emit_pointer_indirection(current, union_address, current_type);
-						//It's a read
-						current_var->access_type = MEMORY_ACCESS_READ;
-
-						//We will perform the deref here, as we can't do it in the lea 
-						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
-
-						//Is this branch ending?
-						deref_stmt->is_branch_ending = is_branch_ending;
-						//And add it in
-						add_statement(current, deref_stmt);
-
-						//Update the current bar too
-						current_var = deref_stmt->assignee;
-					}
-
+				
 				} else {
 					//Otherwise, the current var is the address
 					current_var = union_address;
@@ -3243,23 +3283,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 			//A union pointer accessor does the same thing as a union accessor, just with a dereference 
 			//beforehand
 			case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-				//Dereference this out
-				dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.points_to);
-
-				//Now we'll grab a temp assignment for the current address
-				instruction_t* pointer_deref_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
-
-				//This now counts as a use
-				add_used_variable(current, dereferenced);
-
-				//Now we add the statement in
-				add_statement(current, pointer_deref_assignment);
-
-				//This is the union address here
-				union_address = pointer_deref_assignment->assignee;
-
-				//The current type is what the cursor points to
-				current_type = cursor->inferred_type;
 
 				//Now based on what side we're on, we'll emit the appropriate indirection
 				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
