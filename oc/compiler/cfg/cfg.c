@@ -11,6 +11,7 @@
 */
 
 #include "cfg.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -2960,10 +2961,70 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
 
 
 /**
+ * Emit the code needed to perform an array access
+ *
+ * This rule returns *the address* of the value that we've asked for
+ */
+static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block, generic_ast_node_t* array_accessor, three_addr_var_t* base_address, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	//Keep track of whatever the current block is
+	basic_block_t* current_block = block;
+
+	//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
+	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child, is_branch_ending, FALSE);
+
+	//If there is a difference in current and the final block, we'll reassign here
+	if(expression_package.final_block != NULL && current_block != expression_package.final_block){
+		//Set this to be at the end
+		current_block = expression_package.final_block;
+	}
+
+	//This is whatever was emitted by the expression
+	three_addr_var_t* array_offset = expression_package.assignee;
+
+	//The current type will always be what was inferred here
+	generic_type_t* current_type = array_accessor->inferred_type;
+	
+	//What is the internal type that we're pointing to? This will determine our scale
+	if(current_type->type_class == TYPE_CLASS_ARRAY){
+		//We'll dereference the current type
+		current_type = current_type->internal_types.member_type;
+	} else {
+		//We'll dereference the current type
+		current_type = current_type->internal_types.points_to;
+	}
+
+	/**
+	 * The formula for array subscript is: base_address + type_size * subscript
+	 * 
+	 * However, if we're on our second or third round, the current var may be an address
+	 *
+	 * This can be done using a lea instruction, so we will emit that directly
+	 */
+	three_addr_var_t* address;
+
+	//Remember, we can only use lea if we have a power of 2 
+	if(is_power_of_2(current_type->type_size) == TRUE){
+		address = emit_lea(current_block, base_address, array_offset, current_type, is_branch_ending);
+	} else {
+		address = emit_address_offset_calculation(current_block, base_address, array_offset, current_type, is_branch_ending);
+	}
+
+	//The assignee is the address
+	expression_package.assignee = address;
+	//And the final block is this as well
+	expression_package.final_block = current_block;
+
+	//And finally we give this back
+	return expression_package;
+}
+
+
+
+/**
  * Emit a postifx expression tree's code. This rule is recursive by nature
  *
  * They all look like this:
- * 			<postfix-expression>
+ * 			 <postfix-expression>
  * 			  / 			\
  *  <postfix-expression>	<postfix-operator>
  */
@@ -2982,15 +3043,34 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_ast_node_t* operator_node = first_child->next_sibling;
 
 	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
-	cfg_result_package_t first_child_results = emit_postfix_expression(basic_block, first_child, temp_assignment_required, is_branch_ending);
+	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, temp_assignment_required, is_branch_ending);
 
 	//Reassign the current block if need be
 	if(first_child_results.final_block != NULL && first_child_results.final_block != current_block){
 		current_block = first_child_results.final_block;
 	}
 
+	//We know that whatever we are operating on is always going to be the assignee of what we've received
+	three_addr_var_t* base_address = first_child_results.assignee;
+
+	//Grab a holder for our results
+	cfg_result_package_t postfix_expression_results = {NULL, NULL, NULL, BLANK};
+
 	//Now that we have the first child, we can go through and determine what kind of operator we need to deal with
+	switch(operator_node->ast_node_type){
+		//Array accessor node
+		case AST_NODE_TYPE_ARRAY_ACCESSOR:
+			//Emits the address of what we want
+			postfix_expression_results = emit_array_accessor_expression(current_block, operator_node, base_address, temp_assignment_required, is_branch_ending);
+			break;
+
+
+		//TODO ADD POST INC/DEC
+		default:
+			break;
+	}
 	
+
 	//TODO NOT DONE
 	
 }
@@ -3084,95 +3164,7 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 		switch(cursor->ast_node_type){
 			//Array access
 			case AST_NODE_TYPE_ARRAY_ACCESSOR:
-				//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
-				expression_package = emit_expression(current, cursor->first_child, is_branch_ending, FALSE);
-
-				//If there is a difference in current and the final block, we'll reassign here
-				if(expression_package.final_block != NULL && current != expression_package.final_block){
-					//Set this to be at the end
-					current = expression_package.final_block;
-
-					//This is also the new final block
-					postfix_package.final_block = current;
-				}
-
-				//This is whatever was emitted by the expression
-				three_addr_var_t* array_offset = expression_package.assignee;
-				
-				//What is the internal type that we're pointing to? This will determine our scale
-				if(current_type->type_class == TYPE_CLASS_ARRAY){
-					//We'll dereference the current type
-					current_type = current_type->internal_types.member_type;
-				} else {
-					//We'll dereference the current type
-					current_type = current_type->internal_types.points_to;
-				}
-
-				/**
-				 * The formula for array subscript is: base_address + type_size * subscript
-				 * 
-				 * However, if we're on our second or third round, the current var may be an address
-				 *
-				 * This can be done using a lea instruction, so we will emit that directly
-				 */
-				three_addr_var_t* address;
-				//Calculate the address using the current var or current address
-				if(current_address == NULL){
-					//Remember, we can only use lea if we have a power of 2 
-					if(is_power_of_2(current_type->type_size) == TRUE){
-						address = emit_lea(current, current_var, array_offset, current_type, is_branch_ending);
-					} else {
-						address = emit_address_offset_calculation(current, current_var, array_offset, current_type, is_branch_ending);
-					}
-				} else {
-					//Remember, we can only use lea if we have a power of 2 
-					if(is_power_of_2(current_type->type_size) == TRUE){
-						address = emit_lea(current, current_address, array_offset, current_type, is_branch_ending);
-					} else {
-						address = emit_address_offset_calculation(current, current_address, array_offset, current_type, is_branch_ending);
-					}
-				}
-
-				//Now this is the current address
-				current_address = address;
-
-				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
-				//we're done here. We'll emit our memory code and leave this part of the loop
-				if(cursor->next_sibling == NULL){
-					//We're using indirection, address is being wiped out
-					current_address = NULL;
-
-					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-					if(postfix_expr_side == SIDE_TYPE_LEFT){
-						//Emit the indirection for this one
-						current_var = emit_pointer_indirection(current, address, current_type);
-						//It's a write
-						current_var->access_type = MEMORY_ACCESS_WRITE;
-
-					//Otherwise we're dealing with a read
-					} else {
-						//Still emit the memory code
-						current_var = emit_pointer_indirection(current, address, current_type);
-						//It's a read
-						current_var->access_type = MEMORY_ACCESS_READ;
-
-						//We will perform the deref here, as we can't do it in the lea 
-						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
-
-						//Is this branch ending?
-						deref_stmt->is_branch_ending = is_branch_ending;
-						//And add it in
-						add_statement(current, deref_stmt);
-
-						//Update the current bar too
-						current_var = deref_stmt->assignee;
-					}
-
-				} else {
-					//Otherwise, the current var is the address
-					current_var = address;
-				}
-
+			
 				break;
 
 			//Union accessors should be simple because there are no offsets
