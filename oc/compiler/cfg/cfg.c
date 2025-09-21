@@ -3222,25 +3222,26 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 				//Update the final assignee
 				final_assignee = deref_stmt->assignee;
+
+				/**
+				 * It is often the case where we require an expanding move after we access memory. In order to
+				 * do this, we'll inject an assignment expression here which will eventually become a converting move
+				 * in the instruction selector
+				*/
+				if(is_expanding_move_required(node->inferred_type, final_assignee->type) == TRUE){
+					//Assigning to something of the inferred type
+					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(node->inferred_type), final_assignee);
+
+					//We'll add the assignment in
+					add_statement(current_block, assignment);
+
+					//Reassign this
+					final_assignee = assignment->assignee;
+				}
+
 				break;
 		}
 	}
-
-	/**
-	 * It is often the case where we require an expanding move after we access memory. In order to
-	 * do this, we'll inject an assignment expression here which will eventually become a converting move
-	 * in the instruction selector
-	if(is_expanding_move_required(postfix_parent->inferred_type, current_var->type) == TRUE){
-		//Assigning to something of the inferred type
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(postfix_parent->inferred_type), current_var);
-
-		//We'll add the assignment in
-		add_statement(current, assignment);
-
-		//This now becomes the assignee
-		postfix_package.assignee = assignment->assignee;
-	}
-	*/
 
 	//Let's package and return everything that we need
 	cfg_result_package_t final_result = {basic_block, current_block, final_assignee, BLANK};
