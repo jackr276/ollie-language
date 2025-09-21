@@ -3446,11 +3446,21 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 	//Now that we've emitted the assignee, we can handle the specific unary operators
 	switch(first_child->unary_operator){
-		//Handle the case of a preincrement
+		/**
+		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
+		 * that is returned to be used by the user is the incremented/decremented value unlike in a
+		 * postfix expression
+		 *
+		 * We'll need to apply desugaring here
+		 * ++x is really temp = x + 1
+		 * 				 x = temp
+		 * 				 use temp going forward
+		 */
 		case PLUSPLUS:
+		case MINUSMINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
-			//The assignee comes from our package
+			//The assignee comes from our package. This is what we are ultimately using in the final result
 			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
@@ -3463,31 +3473,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				//We really just have an "inc" instruction here
 				unary_package.assignee = emit_inc_code(current_block, assignee, is_branch_ending);
 			//If we actually do have a pointer, we need the helper to deal with this
-			} else {
-				//Let the helper deal with this
-				unary_package.assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
-			}
-
-			//Give back the final unary package
-			return unary_package;
-
-		//Handle the case of a predecrement
-		case MINUSMINUS:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
-
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
-
-			//If we have a basic type, we can use the regular process
-			if(assignee->type->type_class == TYPE_CLASS_BASIC){
-				//We really just have an "inc" instruction here
-				unary_package.assignee = emit_dec_code(current_block, assignee, is_branch_ending);
-			//If we actually have a pointer, we'll let the helper deal with it
 			} else {
 				//Let the helper deal with this
 				unary_package.assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);

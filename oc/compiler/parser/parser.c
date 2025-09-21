@@ -103,7 +103,6 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side);
 static generic_ast_node_t* function_predeclaration(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
-static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee);
 static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node);
 
 
@@ -958,7 +957,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//If this is in fact a constant, we'll duplicate the whole thing and send it
 			//out the door
 			if(found_const != NULL){
-				return duplicate_node(found_const->constant_node);
+				return duplicate_node(found_const->constant_node, side);
 			}
 
 			//Now we will look this up in the variable symbol table
@@ -1300,7 +1299,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			}
 
 			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, left_hand_unary->side);
 
 			//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
 			//don't want to mess with the actual type of the variable
@@ -1330,7 +1329,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//Otherwise we do have a pointer type
 		} else {
 			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, left_hand_unary->side);
 
 			//Let's first determine if they're compatible
 			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(right_hand_type), binary_op);
@@ -6036,7 +6035,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//If we have deferred statements
 	if(deferred_stmts_node != NULL){
 		//Then we'll duplicate
-		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node);
+		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node, deferred_stmts_node->side);
 
 		//This node will now come before the ret statement
 		deferred_stmts->next_sibling = return_stmt;
@@ -8291,43 +8290,6 @@ static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
 			sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
 			return print_and_return_error(info, parser_line_num);
 	}
-}
-
-
-/**
- * We will completely duplicate a deferred statement here. Since all deferred statements
- * are logical expressions, we will perform a deep copy to create an entirely new
- * chain of deferred statements
- */
-static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee){
-	//Base case here -- although in theory we shouldn't make it here
-	if(duplicatee == NULL){
-		return NULL;
-	}
-
-	//Duplicate the node here
-	generic_ast_node_t* duplicated_root = duplicate_node(duplicatee);
-
-	//Now for each child in the node, we duplicate it and add it in as a child
-	generic_ast_node_t* child_cursor = duplicatee->first_child;
-
-	//The duplicated child
-	generic_ast_node_t* duplicated_child = NULL;
-
-	//So long as we aren't null
-	while(child_cursor != NULL){
-		//Recursive call
-		duplicated_child = duplicate_subtree(child_cursor);
-
-		//Add the duplicate child into the node
-		add_child_node(duplicated_root, duplicated_child);
-
-		//Advance the cursor
-		child_cursor = child_cursor->next_sibling;
-	}
-
-	//Return the duplicate root
-	return duplicated_root;
 }
 
 

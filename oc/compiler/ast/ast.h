@@ -178,9 +178,14 @@ void logical_not_constant_value(generic_ast_node_t* constant_node);
 generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side);
 
 /**
+ * Perform a deep copy on a subtree
+ */
+generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side);
+
+/**
  * A utility function for node duplication
  */
-generic_ast_node_t* duplicate_node(generic_ast_node_t* node);
+generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side);
 
 /**
  * A helper function that will appropriately add a child node into the parent
