@@ -2960,6 +2960,43 @@ static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, thr
 
 
 /**
+ * Emit a postifx expression tree's code. This rule is recursive by nature
+ *
+ * They all look like this:
+ * 			<postfix-expression>
+ * 			  / 			\
+ *  <postfix-expression>	<postfix-operator>
+ */
+static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	//Acts as a base case/stopper. We'll just go right through in this case
+	if(node->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
+		return emit_primary_expr_code(basic_block, node, temp_assignment_required, is_branch_ending);
+	}
+
+	//Keep track of the current block here
+	basic_block_t* current_block = basic_block;
+
+	//The first child is always the other postfix expression node
+	generic_ast_node_t* first_child = node->first_child;
+	//And the operator node is always what comes after the first child
+	generic_ast_node_t* operator_node = first_child->next_sibling;
+
+	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
+	cfg_result_package_t first_child_results = emit_postfix_expression(basic_block, first_child, temp_assignment_required, is_branch_ending);
+
+	//Reassign the current block if need be
+	if(first_child_results.final_block != NULL && first_child_results.final_block != current_block){
+		current_block = first_child_results.final_block;
+	}
+
+	//Now that we have the first child, we can go through and determine what kind of operator we need to deal with
+	
+	//TODO NOT DONE
+	
+}
+
+
+/**
  * Emit the abstract machine code for various different kinds of postfix expressions
  * that we could see. The two that we'll need to be concerned about are struct
  * and array access
