@@ -1806,6 +1806,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 			//node in this case
 			default:
 				push_back_token(lookahead);
+				//Store the variable too
+				parent->variable = primary_expression_node->variable;
+
 				//Mark as final
 				parent->is_final = TRUE;
 				//And give it back
