@@ -1692,17 +1692,27 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
  * operators that can be chained if context allows. Like all other rules, this rule
  * returns a reference to the root node that it creates
  *
- * As an important note here: We can chain construct accessors and array accessors as much as we wish, 
- * but seeing a plusplus or minusminus is the defintive end of this rule if we see it
- *
  * <postfix-expression> ::= <primary-expression> 
- *						  | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
+ *						  | <postfix-expression> => <identifier>
+ *						  | <postfix-expression> [ <expression> ]
+ *						  | <postfix-expression> : <identifier>
+ *						  | <postfix-expression> . <identifier>
+ *						  | <postfix-expression> -> <identifier>
+ *						  | <postfix-expression> ++
+ *						  | <postfix-expression> --
+ *
+ * We need to use factored form to avoid the left recursive issue
+ *
+ * The primary expression becomes the very bottom most part of the tree. We'll construct a tree in a similar was
+ * as we do the expression trees, with each new postfix node becoming the new parent
+ *
+ *
+ * <factored_postfix_expression> ::= <primary-expression> <postfix-tail>
+ * 			<postfix-tail> ::= {=> <identifier> | : <identifier> | . <identifier> | -> <identifier> | [ <expression> ] | ++ | --}
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
-	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
 
 	//No matter what, we have to first see a valid primary expression
 	generic_ast_node_t* primary_expression_node = primary_expression(fl, side);
@@ -1713,10 +1723,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		return primary_expression_node;
 	}
 
-	//Peek at the next token
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//Let's see if we're able to leave immediately or not
 	switch(lookahead.tok){
 		case L_BRACKET:
 		case COLON:
@@ -1737,8 +1743,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
 	//post operation, so we can make the node for it
 	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
-	//Add the line number
-	postfix_expr_node->line_number = current_line;
 
 	//Let's grab whatever type that we currently have
 	generic_type_t* current_type = primary_expression_node->inferred_type;
@@ -1806,7 +1810,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 		//We have our fail case here
 		if(accessor_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid accessor found in postfix expression", current_line);
+			return print_and_return_error("Invalid accessor found in postfix expression", parser_line_num);
 		}
 
 		//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
@@ -1857,8 +1861,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	if(return_type->type_class == TYPE_CLASS_BASIC){
 		postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
 	}
-
-	//TODO THIS IS BROKEN
 
 	//Otherwise if we get here we know that we either have post inc or dec
 	//Create the unary operator node
