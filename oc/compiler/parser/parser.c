@@ -1682,6 +1682,9 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 		accessor_node->inferred_type = type->internal_types.member_type;
 	}
 
+	//This is assignable
+	accessor_node->is_assignable = TRUE;
+
 	//And now we're done so give back the root reference
 	return accessor_node;
 }
@@ -1828,6 +1831,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 		//The type of this parent is always the type of the operator node
 		parent->inferred_type = operator_node->inferred_type;
+
+		//The parent's assignability inherits from the operator
+		parent->is_assignable = operator_node->is_assignable;
 	}
 
 	//We should never get here - just to make the static analyzer happy

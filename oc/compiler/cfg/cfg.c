@@ -2983,15 +2983,6 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 
 	//The current type will always be what was inferred here
 	generic_type_t* current_type = array_accessor->inferred_type;
-	
-	//What is the internal type that we're pointing to? This will determine our scale
-	if(current_type->type_class == TYPE_CLASS_ARRAY){
-		//We'll dereference the current type
-		current_type = current_type->internal_types.member_type;
-	} else {
-		//We'll dereference the current type
-		current_type = current_type->internal_types.points_to;
-	}
 
 	/**
 	 * The formula for array subscript is: base_address + type_size * subscript
