@@ -14,6 +14,31 @@ define struct custom {
 } as my_struct;
 
 
+pub fn postfix_in_use(arg:i32) -> i32{
+	declare mut x:i32;
+
+	switch(arg){
+		case 2 -> {
+			x := 32;
+		}
+		case 1 -> {
+			x := 3;
+		}
+		case 7 -> {
+			x := 2;
+		}
+		// Empty default
+		default -> {}
+	}
+
+	//Very basic initializer
+	let tester:my_struct := {x, 7, 'a'};
+
+	//So it isn't optimized away
+	ret tester:x--;
+}
+
+
 pub fn main(arg:i32, argv:char**) -> i32{
 	declare mut x:i32;
 
