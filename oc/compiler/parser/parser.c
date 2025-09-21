@@ -1691,56 +1691,27 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 
 
 /**
- * Increments a value before use
- *
- * BNF Rule: <postincrement> ::= ++
+ * Operates on a value before usage. This could be postincrement or postdecrement
  */
-static generic_ast_node_t* postincrement(FILE* fl, generic_type_t* current_type, side_type_t side){
+static generic_ast_node_t* postoperation(FILE* fl, generic_type_t* current_type, generic_ast_node_t* parent_node, Token operator, side_type_t side){
 	//Let's first check and see if this is valid. If it's not we fail out
-	if(is_unary_operation_valid_for_type(current_type, PLUSPLUS) == FALSE){
-		sprintf(info, "Type %s cannot be postincremented", current_type->type_name.string);
+	if(is_unary_operation_valid_for_type(current_type, operator) == FALSE){
+		sprintf(info, "Type %s is invalid for operator %s", current_type->type_name.string, operator_to_string(operator));
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Otherwise let's allocate this
-	generic_ast_node_t* postincrement_node = ast_node_alloc(AST_NODE_TYPE_POSTINCREMENT, side);
+	generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
+
 	//The inferred type is the current type
-	postincrement_node->inferred_type = current_type;
-	postincrement_node->line_number = parser_line_num;
+	postoperation_node->inferred_type = current_type;
+	postoperation_node->line_number = parser_line_num;
 
 	//This is *not* assignable
-	postincrement_node->is_assignable = FALSE;
+	postoperation_node->is_assignable = FALSE;
 
 	//And give it back
-	return postincrement_node;
-}
-
-
-/**
- * decrements a value before use
- *
- * BNF Rule: <postdecrement> ::= ++
- */
-static generic_ast_node_t* postdecrement(FILE* fl, generic_type_t* current_type, side_type_t side){
-	//Let's first check and see if this is valid. If it's not we fail out
-	if(is_unary_operation_valid_for_type(current_type, MINUSMINUS) == FALSE){
-		sprintf(info, "Type %s cannot be postincremented", current_type->type_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Otherwise let's allocate this
-	generic_ast_node_t* postincrement_node = ast_node_alloc(AST_NODE_TYPE_POSTDECREMENT, side);
-	//The inferred type is the current type
-	postincrement_node->inferred_type = current_type;
-	postincrement_node->line_number = parser_line_num;
-
-	//This is *not* assignable
-	postincrement_node->is_assignable = FALSE;
-
-	//And give it back
-	return postincrement_node;
-
-	return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
+	return postoperation_node;
 }
 
 
@@ -1828,13 +1799,14 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 			//Postincrement
 			case PLUSPLUS:
-				operator_node = postincrement(fl, current_type, side);
-				break;
-
-			//Postdecrement
 			case MINUSMINUS:
-				operator_node = postdecrement(fl, current_type, side);
-				break;
+				//Copy this over
+				parent->variable = primary_expression_node->variable;
+				//Flag the parent as final - you can't go on past this
+				parent->is_final = TRUE;
+
+				//We let this rule handle everything
+				return postoperation(fl, current_type, parent, lookahead.tok, side);
 
 			//When we hit this, it means that we're done. We return the parent
 			//node in this case
@@ -1871,12 +1843,6 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 		//The parent's assignability inherits from the operator
 		parent->is_assignable = operator_node->is_assignable;
-
-		//These are terminal values - they cannot be added to anymore
-		if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUSMINUS){
-			return parent;
-
-		}
 	}
 
 	//We should never get here - just to make the static analyzer happy

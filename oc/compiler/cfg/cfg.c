@@ -11,7 +11,6 @@
 */
 
 #include "cfg.h"
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -3182,10 +3181,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			postfix_expression_results = emit_struct_pointer_accessor_expression(current_block, operator_node, base_address, is_branch_ending);
 			break;
 
-		//TODO ADD POST INC/DEC
 		default:
 			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Unrecognized node type", node->line_number);
-		exit(0);
+			exit(0);
 	}
 
 	//There is a special flag that stores whether or not this is the final postfix expression or not
@@ -3521,6 +3519,9 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 		//If we see the actual node here, we know that we are actually doing a unary operation
 		case AST_NODE_TYPE_UNARY_EXPR:	
 			return emit_unary_operation(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
+		case AST_NODE_TYPE_POSTOPERATION:
+			print_parse_message(PARSE_ERROR, "NOT IMPLEMENTED", 0);
+			exit(0);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
 			return emit_postfix_expression(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
