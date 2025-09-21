@@ -2929,6 +2929,9 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 		current_block = expression_package.final_block;
 	}
 
+	printf("The base address has a type of %s\n", base_address->type->type_name.string);
+	printf("The result has a type of %s\n", array_accessor->inferred_type->type_name.string);
+
 	//This is whatever was emitted by the expression
 	three_addr_var_t* array_offset = expression_package.assignee;
 
@@ -3078,6 +3081,13 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  * 			 <postfix-expression>
  * 			  / 			\
  *  <postfix-expression>	<postfix-operator>
+ *
+ * The right child's type is the original access value type(as defined)
+ * The left child's type is the type of the memory region being accessed(struct, union, array, pointer)
+ *
+ * The parent node though, is prone to type inference by the parser. As such, we *do not* want to use
+ * the parent node's type in our decision making. We *will* use it at the very end to determine if any kind
+ * of converting move is required for us to make
  */
 static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//Acts as a base case/stopper. We'll just go right through in this case
@@ -3092,6 +3102,15 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_ast_node_t* first_child = node->first_child;
 	//And the operator node is always what comes after the first child
 	generic_ast_node_t* operator_node = first_child->next_sibling;
+
+	//These 3 types are what we have to work with
+	generic_type_t* parent_node_type = node->inferred_type;
+	generic_type_t* memory_region_type = first_child->inferred_type;
+	generic_type_t* original_memory_access_type = operator_node->inferred_type;
+
+	//printf("Parent node type: %s\n", parent_node_type->type_name.string);
+	//printf("Memory region type: %s\n", memory_region_type->type_name.string);
+	//printf("Original memory access type: %s\n", original_memory_access_type->type_name.string);
 
 	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
 	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, temp_assignment_required, is_branch_ending);
@@ -3148,12 +3167,16 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 	//We'll package up the final results and leave here
 	if(dereference_needed == TRUE){
+		/**
+		 * An important note: we *always* use the original memory access type to determine what our variable's
+		 * type is. This ensures that we are insulated from the type inference that the parser performs
+		 */
 		//Go based on what side we have here
 		switch(node->side){
 			//Left side - this is a write operation
 			case SIDE_TYPE_LEFT:
 				//Emit the indirection for this one
-				final_assignee = emit_pointer_indirection(current_block, final_assignee, node->inferred_type);
+				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
 				//It's a write
 				final_assignee->access_type = MEMORY_ACCESS_WRITE;
 				break;
@@ -3161,12 +3184,12 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			//Right side, this is a read operations
 			case SIDE_TYPE_RIGHT:
 				//Still emit the memory code
-				final_assignee = emit_pointer_indirection(current_block, final_assignee, node->inferred_type);
+				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
 				//It's a read
 				final_assignee->access_type = MEMORY_ACCESS_READ;
 
 				//We will perform the deref here, as we can't do it in the lea 
-				instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(node->inferred_type), final_assignee);
+				instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(original_memory_access_type), final_assignee);
 
 				//Is this branch ending?
 				deref_stmt->is_branch_ending = is_branch_ending;
@@ -3181,9 +3204,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				 * do this, we'll inject an assignment expression here which will eventually become a converting move
 				 * in the instruction selector
 				*/
-				if(is_expanding_move_required(node->inferred_type, final_assignee->type) == TRUE){
+				if(is_expanding_move_required(parent_node_type, final_assignee->type) == TRUE){
 					//Assigning to something of the inferred type
-					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(node->inferred_type), final_assignee);
+					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parent_node_type), final_assignee);
 
 					//We'll add the assignment in
 					add_statement(current_block, assignment);
