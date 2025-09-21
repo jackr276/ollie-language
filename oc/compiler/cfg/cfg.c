@@ -3188,7 +3188,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	}
 
 	//There is a special flag that stores whether or not this is the final postfix expression or not
-	u_int8_t dereference_needed = node->constant_value.is_final;
+	u_int8_t dereference_needed = node->is_final;
 
 	//By default, the final assignee is just the results that we got
 	three_addr_var_t* final_assignee = postfix_expression_results.assignee;

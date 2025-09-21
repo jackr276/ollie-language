@@ -125,7 +125,6 @@ struct generic_ast_node_t{
 		double double_value;
 		float float_value;
 		char char_value;
-		u_int8_t is_final; //For postfix expressions
 	} constant_value;
 	//Holds the token for what kind of constant it is
 	Token constant_type;
@@ -140,6 +139,8 @@ struct generic_ast_node_t{
 	Token unary_operator;
 	//Is this assignable?
 	variable_assignability_t is_assignable;
+	//Is this final or not?
+	u_int8_t is_final;
 	//What side is this node on
 	side_type_t side;
 	//What kind of node is it?
