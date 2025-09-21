@@ -13,6 +13,14 @@ define struct custom {
 		y:char;
 } as my_struct;
 
+fn preinc_pointer(mut x:i32*) -> i32{
+	//Should trigger pointer math
+	++x;
+
+	ret *x;
+}
+
+
 
 pub fn main(arg:i32, argv:char**) -> i32{
 	declare mut x:i32;
@@ -30,6 +38,10 @@ pub fn main(arg:i32, argv:char**) -> i32{
 		// Empty default
 		default -> {}
 	}
+
+	//Preincrement x(this is a simple preinc)	
+	++x;
+	
 
 	//Very basic initializer
 	let tester:my_struct := {x, 7, 'a'};
