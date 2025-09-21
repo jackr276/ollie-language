@@ -2916,7 +2916,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
  *
  * THIS IS COMPLETELY INCORRECT
  */
-static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, three_addr_var_t* current_var, Token unary_operator, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_postoperation_code2(basic_block_t* basic_block, three_addr_var_t* current_var, Token unary_operator, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//This is either a postincrement or postdecrement. Regardless, we emit
 	//a temp var for this because we assign before we mutate
 
@@ -3173,10 +3173,12 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			postfix_expression_results = emit_union_pointer_accessor_expression(current_block, operator_node, base_address);
 			break;
 
+		//Struct accessor
 		case AST_NODE_TYPE_STRUCT_ACCESSOR:
 			postfix_expression_results = emit_struct_accessor_expression(current_block, operator_node, base_address, is_branch_ending);
 			break;
 
+		//Struct pointer accessor
 		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
 			postfix_expression_results = emit_struct_pointer_accessor_expression(current_block, operator_node, base_address, is_branch_ending);
 			break;
@@ -3245,6 +3247,91 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	//Let's package and return everything that we need
 	cfg_result_package_t final_result = {basic_block, current_block, final_assignee, BLANK};
 	return final_result;
+}
+
+
+/**
+ * Emit a postoperation(postincrement or postdecrement) expression
+ *
+ * These are of the form:
+ * 		<postincrement-expression>
+ * 				  | 
+ * 		  <primary-expression>
+ *
+ * It is up to use in the CFG to appropriately clone/reconstruct the way that this works
+ */
+static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	//Store the current block
+	basic_block_t* current_block = basic_block;
+
+	//We will first emit the postfix expression code that comes from this
+	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, node->first_child, temp_assignment_required, is_branch_ending);
+
+	//If this is now different, which it could be, we'll change what current is
+	if(postfix_expression_results.final_block != NULL && postfix_expression_results.final_block != current_block){
+		current_block = postfix_expression_results.final_block;
+	}
+
+	//This is the value that we will be modifying
+	three_addr_var_t* assignee = postfix_expression_results.assignee;
+
+	//If the assignee is not a pointer, we'll handle the normal case
+	if(assignee->type->type_class == TYPE_CLASS_BASIC){
+		switch(node->unary_operator){
+			case PLUSPLUS:
+				//We really just have an "inc" instruction here
+				assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+				break;
+				
+			case MINUSMINUS:
+				//We really just have an "dec" instruction here
+				assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+				break;
+
+			//We shouldn't ever hit here
+			default:	
+				break;
+		}
+
+	//If we actually do have a pointer, we need the helper to deal with this
+	} else {
+		//Let the helper deal with this
+		assignee = handle_pointer_arithmetic(current_block, node->unary_operator, assignee, is_branch_ending);
+	}
+
+	//Initialize this off the bat
+	cfg_result_package_t postoperation_package = {basic_block, current_block, assignee, BLANK};
+
+	//Now that we've handled all of the emitting, we need to check and see if we have any special cases here where 
+	//we need to do additional work to reassign this
+	/**
+	 * Logic here: if this is not some simple identifier(it could be array access, struct access, etc.), then
+	 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
+	 */
+	if(node->first_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+		//Duplicate the subtree here for us to use
+		generic_ast_node_t* copy = duplicate_subtree(node->first_child, SIDE_TYPE_LEFT);
+
+		//Now we emit the copied package
+		cfg_result_package_t copied_package = emit_postfix_expression(current_block, node->first_child, temp_assignment_required, is_branch_ending);
+
+		//If this is now different, which it could be, we'll change what current is
+		if(copied_package.final_block != NULL && copied_package.final_block != current_block){
+			current_block = copied_package.final_block;
+		}
+
+		//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
+		instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+		assignment_instruction->is_branch_ending = is_branch_ending;
+
+		//Add this into the block
+		add_statement(current_block, assignment_instruction);
+
+		postoperation_package.final_block = current_block;
+	}
+
+	//Give back the final unary package
+	return postoperation_package;
 }
 
 
@@ -3520,8 +3607,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 		case AST_NODE_TYPE_UNARY_EXPR:	
 			return emit_unary_operation(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
 		case AST_NODE_TYPE_POSTOPERATION:
-			print_parse_message(PARSE_ERROR, "NOT IMPLEMENTED", 0);
-			exit(0);
+			return emit_postoperation_code(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
 			return emit_postfix_expression(basic_block, unary_expression, temp_assignment_required, is_branch_ending);

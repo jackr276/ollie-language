@@ -1707,6 +1707,9 @@ static generic_ast_node_t* postoperation(FILE* fl, generic_type_t* current_type,
 	postoperation_node->inferred_type = current_type;
 	postoperation_node->line_number = parser_line_num;
 
+	//Add this in here
+	postoperation_node->variable = parent_node->variable;
+
 	//This is *not* assignable
 	postoperation_node->is_assignable = FALSE;
 
