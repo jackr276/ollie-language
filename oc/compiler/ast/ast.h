@@ -125,6 +125,7 @@ struct generic_ast_node_t{
 		double double_value;
 		float float_value;
 		char char_value;
+		u_int8_t is_final; //For postfix expressions
 	} constant_value;
 	//Holds the token for what kind of constant it is
 	Token constant_type;

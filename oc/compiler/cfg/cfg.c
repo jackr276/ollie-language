@@ -3019,6 +3019,20 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 }
 
 
+/**
+ * Emit the code needed to perform a regular union access
+ *
+ * This rule returns *the address* of the value that we've asked for
+ */
+static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, three_addr_var_t* base_address){
+	//Very simple rule, we just have this for consistency
+	cfg_result_package_t accessor = {block, block, base_address, BLANK};
+
+	//Give it back
+	return accessor;
+}
+
+
 
 /**
  * Emit a postifx expression tree's code. This rule is recursive by nature
@@ -3062,6 +3076,15 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		case AST_NODE_TYPE_ARRAY_ACCESSOR:
 			//Emits the address of what we want
 			postfix_expression_results = emit_array_accessor_expression(current_block, operator_node, base_address, temp_assignment_required, is_branch_ending);
+			break;
+
+		//Union accessor node
+		case AST_NODE_TYPE_UNION_ACCESSOR:
+			postfix_expression_results = emit_union_accessor_expression(current_block, base_address);
+			break;
+
+		//Union pointer accessor - a bit more complex than the prior one
+		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
 			break;
 
 
