@@ -3063,6 +3063,30 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 }
 
 
+/**
+ * Emit the code needed to perform a union pointer access
+ *
+ * This rule returns *the address* of the value that we've asked for
+ */
+static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
+	//Grab the variable that we need
+	symtab_variable_record_t* struct_variable = struct_accessor->variable;
+
+	//Now we'll grab the associated struct record
+	symtab_variable_record_t* struct_record = get_struct_member(base_address->type, struct_variable->var_name.string);
+
+	//The constant that represents the offset
+	three_addr_const_t* struct_offset = emit_int_constant_direct(struct_record->struct_offset, type_symtab);
+
+	//Now we'll emit the address using the helper
+	three_addr_var_t* struct_address = emit_struct_address_calculation(block, struct_accessor->inferred_type, base_address, struct_offset, is_branch_ending);
+
+	//Package & return the results
+	cfg_result_package_t results = {block, block, struct_address, BLANK};
+	return results;
+}
+
+
 
 /**
  * Emit a postifx expression tree's code. This rule is recursive by nature
@@ -3119,9 +3143,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			break;
 
 		case AST_NODE_TYPE_STRUCT_ACCESSOR:
+			postfix_expression_results = emit_struct_accessor_expression(current_block, operator_node, base_address);
 			break;
 
 		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
+			postfix_expression_results = emit_struct_pointer_accessor_expression(current_block, operator_node, base_address);
 			break;
 
 
@@ -3411,25 +3437,6 @@ static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, g
 
 			//A struct accessor
 			case AST_NODE_TYPE_STRUCT_ACCESSOR:
-				//What we'll do first is grab the associated fields that we need out
-				variable = cursor->variable;
-
-				//Now we'll grab the associated nstruct record
-				member = get_struct_member(current_type, variable->var_name.string);
-
-				//The constant that represents the offset
-				struct_offset = emit_int_constant_direct(member->struct_offset, type_symtab);
-
-				//If the current address is NULL, we'll use the current var. Otherwise, we use the address
-				//we've already gotten
-				if(current_address == NULL){
-					struct_address = emit_struct_address_calculation(current, current_type, current_var, struct_offset, is_branch_ending);
-				} else {
-					struct_address = emit_struct_address_calculation(basic_block, current_type, current_address, struct_offset, is_branch_ending);
-				}
-
-				//This is now the member's type
-				current_type = member->type_defined_as;
 
 				//Do we need to do more memory work? We can tell if the array accessor node is next
 				if(cursor->next_sibling == NULL){
