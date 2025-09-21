@@ -3231,10 +3231,21 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	three_addr_var_t* assignee = postfix_expression_results.assignee;
 
 	/**
+	 * Remember that for a postoperation, we save the value that we get before
+	 * we apply the operation. The "postoperation" does not happen until after the value is
+	 * used. To facilitate this, we will perform a temp assignment here. The result of
+	 * this temp assignment is actually what the user will be using
 	 */
 
-	//
+	//Emit the assignment
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+	temp_assignment->is_branch_ending = is_branch_ending;
+
+	//Add this statement in
+	add_statement(current_block, temp_assignment);
+
+	//Initialize this off the bat
+	cfg_result_package_t postoperation_package = {basic_block, current_block, temp_assignment->assignee, BLANK};
 
 	//If the assignee is not a pointer, we'll handle the normal case
 	if(assignee->type->type_class == TYPE_CLASS_BASIC){
@@ -3259,9 +3270,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		//Let the helper deal with this
 		assignee = handle_pointer_arithmetic(current_block, node->unary_operator, assignee, is_branch_ending);
 	}
-
-	//Initialize this off the bat
-	cfg_result_package_t postoperation_package = {basic_block, current_block, assignee, BLANK};
 
 	//Now that we've handled all of the emitting, we need to check and see if we have any special cases here where 
 	//we need to do additional work to reassign this
