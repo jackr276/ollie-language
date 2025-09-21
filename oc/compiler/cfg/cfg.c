@@ -2913,6 +2913,8 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 
 /**
  * Handle a postincrement/postdecrement operation
+ *
+ * THIS IS COMPLETELY INCORRECT
  */
 static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, three_addr_var_t* current_var, Token unary_operator, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
 	//This is either a postincrement or postdecrement. Regardless, we emit
@@ -3491,23 +3493,29 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
 			}
 
-			//Duplicate the subtree here for us to use
-			generic_ast_node_t* copy = duplicate_subtree(first_child->next_sibling, SIDE_TYPE_LEFT);
+			/**
+			 * Logic here: if this is not some simple identifier(it could be array access, struct access, etc.), then
+			 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
+			 */
+			if(first_child->next_sibling->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+				//Duplicate the subtree here for us to use
+				generic_ast_node_t* copy = duplicate_subtree(first_child->next_sibling, SIDE_TYPE_LEFT);
 
-			//Now we emit the copied package
-			cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, temp_assignment_required, is_branch_ending);
+				//Now we emit the copied package
+				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, temp_assignment_required, is_branch_ending);
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
+				//If this is now different, which it could be, we'll change what current is
+				if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+					current_block = unary_package.final_block;
+				}
+
+				//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
+				instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+				assignment_instruction->is_branch_ending = is_branch_ending;
+
+				//Add this into the block
+				add_statement(current_block, assignment_instruction);
 			}
-
-			//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-			instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
-			assignment_instruction->is_branch_ending = is_branch_ending;
-
-			//Add this into the block
-			add_statement(current_block, assignment_instruction);
 
 			//Store the assignee as this
 			unary_package.assignee = assignee;
