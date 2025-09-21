@@ -342,7 +342,7 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	//Create the identifier node
 	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side); //Add the identifier into the node itself
 	//Idents are assignable
-	ident_node->is_assignable = ASSIGNABLE;
+	ident_node->is_assignable = TRUE;
 	//Clone the string in
 	ident_node->string_value = clone_dynamic_string(&(lookahead.lexeme));
 
@@ -971,7 +971,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 				//Store the variable that's associated
 				ident->variable = found_var;
 				//Idents are assignable
-				ident->is_assignable = ASSIGNABLE;
+				ident->is_assignable = TRUE;
 
 				//Give back the ident node
 				return ident;
@@ -996,7 +996,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 				ident->func_record = found_func;
 
 				//It is not assignable
-				ident->is_assignable = NOT_ASSIGNABLE;
+				ident->is_assignable = FALSE;
 
 				//Give it back
 				return ident;
@@ -1175,7 +1175,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 	
 	//If it isn't assignable, we also fail
-	if(left_hand_unary->is_assignable == NOT_ASSIGNABLE){
+	if(left_hand_unary->is_assignable == FALSE){
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
@@ -1696,7 +1696,23 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
  * BNF Rule: <postincrement> ::= ++
  */
 static generic_ast_node_t* postincrement(FILE* fl, generic_type_t* current_type, side_type_t side){
-	return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
+	//Let's first check and see if this is valid. If it's not we fail out
+	if(is_unary_operation_valid_for_type(current_type, PLUSPLUS) == FALSE){
+		sprintf(info, "Type %s cannot be postincremented", current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Otherwise let's allocate this
+	generic_ast_node_t* postincrement_node = ast_node_alloc(AST_NODE_TYPE_POSTINCREMENT, side);
+	//The inferred type is the current type
+	postincrement_node->inferred_type = current_type;
+	postincrement_node->line_number = parser_line_num;
+
+	//This is *not* assignable
+	postincrement_node->is_assignable = FALSE;
+
+	//And give it back
+	return postincrement_node;
 }
 
 
@@ -1706,6 +1722,24 @@ static generic_ast_node_t* postincrement(FILE* fl, generic_type_t* current_type,
  * BNF Rule: <postdecrement> ::= ++
  */
 static generic_ast_node_t* postdecrement(FILE* fl, generic_type_t* current_type, side_type_t side){
+	//Let's first check and see if this is valid. If it's not we fail out
+	if(is_unary_operation_valid_for_type(current_type, MINUSMINUS) == FALSE){
+		sprintf(info, "Type %s cannot be postincremented", current_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Otherwise let's allocate this
+	generic_ast_node_t* postincrement_node = ast_node_alloc(AST_NODE_TYPE_POSTDECREMENT, side);
+	//The inferred type is the current type
+	postincrement_node->inferred_type = current_type;
+	postincrement_node->line_number = parser_line_num;
+
+	//This is *not* assignable
+	postincrement_node->is_assignable = FALSE;
+
+	//And give it back
+	return postincrement_node;
+
 	return print_and_return_error("TODO NOT IMPLEMENTED", parser_line_num);
 }
 
@@ -1837,6 +1871,12 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 
 		//The parent's assignability inherits from the operator
 		parent->is_assignable = operator_node->is_assignable;
+
+		//These are terminal values - they cannot be added to anymore
+		if(lookahead.tok == PLUSPLUS || lookahead.tok == MINUSMINUS){
+			return parent;
+
+		}
 	}
 
 	//We should never get here - just to make the static analyzer happy
@@ -1895,7 +1935,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Is this assignable
-	variable_assignability_t is_assignable = ASSIGNABLE;
+	u_int8_t is_assignable = TRUE;
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -1960,7 +2000,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			}
 
 			//This is assignable
-			is_assignable = ASSIGNABLE;
+			is_assignable = TRUE;
 
 			break;
 
@@ -1997,7 +2037,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			}
 
 			//This is not assignable
-			is_assignable = NOT_ASSIGNABLE;
+			is_assignable = FALSE;
 
 			break;
 
@@ -2016,7 +2056,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			return_type = cast_expr->inferred_type;
 			
 			//This is not assignable
-			is_assignable = NOT_ASSIGNABLE;
+			is_assignable = FALSE;
 			
 			break;
 	
@@ -2035,7 +2075,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			return_type = cast_expr->inferred_type;
 
 			//This is not assignable
-			is_assignable = NOT_ASSIGNABLE;
+			is_assignable = FALSE;
 			
 			break;
 	
@@ -2054,7 +2094,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			return_type = cast_expr->inferred_type;
 
 			//This is not assignable
-			is_assignable = NOT_ASSIGNABLE;
+			is_assignable = FALSE;
 
 			break;
 
@@ -2093,7 +2133,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			cast_expr->side = SIDE_TYPE_RIGHT;
 
 			//These expressions are never assignable
-			is_assignable = NOT_ASSIGNABLE;
+			is_assignable = FALSE;
 
 			break;
 

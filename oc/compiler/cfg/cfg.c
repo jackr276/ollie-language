@@ -3184,7 +3184,8 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 		//TODO ADD POST INC/DEC
 		default:
-			break;
+			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Unrecognized node type", node->line_number);
+		exit(0);
 	}
 
 	//There is a special flag that stores whether or not this is the final postfix expression or not

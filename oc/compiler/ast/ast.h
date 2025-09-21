@@ -24,14 +24,6 @@
 //A generic AST node can be any AST node
 typedef struct generic_ast_node_t generic_ast_node_t;
 
-/**
- * Is this an assignable variable?
- */
-typedef enum{
-	NOT_ASSIGNABLE,
-	ASSIGNABLE
-} variable_assignability_t;
-
 //What type is in the AST node?
 typedef enum ast_node_type_t{
 	AST_NODE_TYPE_PROG,
@@ -48,6 +40,8 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_BINARY_EXPR,
 	AST_NODE_TYPE_POSTFIX_EXPR,
 	AST_NODE_TYPE_UNARY_EXPR,
+	AST_NODE_TYPE_POSTINCREMENT,
+	AST_NODE_TYPE_POSTDECREMENT,
 	AST_NODE_TYPE_UNARY_OPERATOR,
 	AST_NODE_TYPE_STRUCT_ACCESSOR,
 	AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR,
@@ -137,8 +131,8 @@ struct generic_ast_node_t{
 	Token binary_operator;
 	//Store a unary operator(if one exists)
 	Token unary_operator;
-	//Is this assignable?
-	variable_assignability_t is_assignable;
+	//Is this assignable
+	u_int8_t is_assignable;
 	//Is this final or not?
 	u_int8_t is_final;
 	//What side is this node on

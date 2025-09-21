@@ -1019,18 +1019,23 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 		//This will pull double duty for pre/post increment operators
 		case PLUSPLUS:
 		case MINUSMINUS:
-			//This is invalid for construct types
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_STRUCT){
-				return FALSE;
-			}
+			switch(type->type_class){
+				case TYPE_CLASS_ARRAY:
+				case TYPE_CLASS_STRUCT:
+				case TYPE_CLASS_ALIAS:
+				case TYPE_CLASS_FUNCTION_SIGNATURE:
+				case TYPE_CLASS_UNION:
+					return FALSE;
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID){
+						return FALSE;
+					}
+					
+					return TRUE;
 
-			//It's also invalid for void types
-			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
-				return FALSE;
+				default:
+					return TRUE;
 			}
-
-			//Otherwise, it's completely fine
-			return TRUE;
 
 		//We can only dereference arrays and pointers
 		case STAR:
