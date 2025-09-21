@@ -1723,32 +1723,55 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		return primary_expression_node;
 	}
 
-	switch(lookahead.tok){
-		case L_BRACKET:
-		case COLON:
-		case ARROW: /* Union pointer access */
-		case FAT_ARROW: /* Struct pointer access */
-		case DOT:
-		case PLUSPLUS:
-		case MINUSMINUS:
-			//We need to keep going here, so leave
-			break;
-		default:
-			//Push this back
-			push_back_token(lookahead);
-			//Return the result
-			return primary_expression_node;
+	//Initialize the parent and the left child holder here
+	generic_ast_node_t* parent = NULL;
+	//The temp holder node
+	generic_ast_node_t* temp_holder = NULL;
+	//Whatever the current postfix node we're dealing with is
+	generic_ast_node_t* postfix_node = NULL;
+	//Hold onto the operator node here
+	generic_ast_node_t* operator_node = NULL;
+
+	//Let's grab whatever type that we currently have
+	generic_type_t* current_type = dealias_type(primary_expression_node->inferred_type);
+
+	//So long as we keep seeing operators here, we keep chaining them
+	while(TRUE){
+		//Refresh the token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Go based on what the token is
+		switch(lookahead.tok){
+			case L_BRACKET:
+				//We'll push this onto the grouping stack for later matching
+				push_token(grouping_stack, lookahead);
+
+				//Let the array accessor handle it
+				accessor_node = array_accessor(fl, current_type, side);
+
+				break;
+
+			case COLON:
+
+			case FAT_ARROW:
+
+			case DOT:
+
+			case ARROW:
+
+			//When we hit this, it means that we're done. We return the parent
+			//node in this case
+			default:
+				push_back_token(lookahead);
+				return parent;
+		}
 	}
+
 
 	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
 	//post operation, so we can make the node for it
 	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
 
-	//Let's grab whatever type that we currently have
-	generic_type_t* current_type = primary_expression_node->inferred_type;
-
-	//Do any kind of dealiasing that we need to do
-	current_type = dealias_type(current_type);
 
 	//Add in the first child which is the primary expression
 	add_child_node(postfix_expr_node, primary_expression_node);
@@ -1767,13 +1790,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		//Go based on what's in here
 		switch(lookahead.tok){
 			case L_BRACKET:
-				//We'll push this onto the grouping stack for later matching
-				push_token(grouping_stack, lookahead);
-
-				//Let the array accessor handle it
-				accessor_node = array_accessor(fl, current_type, side);
-
-				break;
+			
 
 			//A raw construct accessor, not syntactic sugar for the deref operator
 			case COLON:
