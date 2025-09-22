@@ -2661,7 +2661,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 
 	//This will count as live if we read from it
 	if(incrementee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, incrementee);
+		add_assigned_variable(basic_block, inc_code->assignee);
 	}
 
 	//This is a rare case were we're assigning to AND using
@@ -2674,7 +2674,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 	add_statement(basic_block, inc_code);
 
 	//Return the incrementee
-	return incrementee;
+	return inc_code->assignee;
 }
 
 
@@ -2687,7 +2687,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 
 	//This will count as live if we read from it
 	if(decrementee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, decrementee);
+		add_assigned_variable(basic_block, dec_code->assignee);
 	}
 
 	//This is a rare case were we're assigning to AND using
@@ -2700,7 +2700,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 	add_statement(basic_block, dec_code);
 
 	//Return the incrementee
-	return decrementee;
+	return dec_code->assignee;
 }
 
 
