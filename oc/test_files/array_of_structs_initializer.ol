@@ -11,6 +11,8 @@ define struct my_struct{
 
 
 pub fn main(arg:i32, argv:char**) -> i32{
+	//Declare an array of such items
+
 	//Declare the struct array
 	let structure_arr:my_struct[] := [{'a', 'b', 23}, {'b', 'a', 22}, {'a', 'b', 222}];
 

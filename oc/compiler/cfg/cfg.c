@@ -2916,7 +2916,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block, generic_ast_node_t* array_accessor, three_addr_var_t* base_address, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block, generic_ast_node_t* array_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
@@ -2980,15 +2980,18 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t* base_address){
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_type_t* union_pointer_type, three_addr_var_t* base_address){
+	//Get the current type
+	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
+
 	//Store the current block
 	basic_block_t* current_block = block;
 	
 	//The type is stored within the accessor
-	three_addr_var_t* dereferenced = emit_pointer_indirection(current_block, base_address, base_address->type);
+	three_addr_var_t* dereferenced = emit_pointer_indirection(current_block, base_address, raw_union_type);
 
 	//Now we'll grab a temp assignment for the current address
-	instruction_t* pointer_deref_assignment = emit_assignment_instruction(emit_temp_var(base_address->type), dereferenced);
+	instruction_t* pointer_deref_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
 	//This now counts as a use
 	add_used_variable(current_block, dereferenced);
@@ -3035,8 +3038,6 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
  * This rule returns *the address* of the value that we've asked for
  */
 static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
-	printf("Struct pointer accessor is called with a struct type of %s\n", struct_pointer_type->type_name.string);
-
 	//Get the current type
 	generic_type_t* raw_struct_type = struct_pointer_type->internal_types.points_to;
 
@@ -3107,10 +3108,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_type_t* memory_region_type = first_child->inferred_type;
 	generic_type_t* original_memory_access_type = operator_node->inferred_type;
 
-	//printf("Parent node type: %s\n", parent_node_type->type_name.string);
-	//printf("Memory region type: %s\n", memory_region_type->type_name.string);
-	//printf("Original memory access type: %s\n", original_memory_access_type->type_name.string);
-
 	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
 	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, temp_assignment_required, is_branch_ending);
 
@@ -3130,7 +3127,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		//Array accessor node
 		case AST_NODE_TYPE_ARRAY_ACCESSOR:
 			//Emits the address of what we want
-			postfix_expression_results = emit_array_accessor_expression(current_block, operator_node, base_address, temp_assignment_required, is_branch_ending);
+			postfix_expression_results = emit_array_accessor_expression(current_block, operator_node, base_address, is_branch_ending);
 			break;
 
 		//Union accessor node
@@ -3140,7 +3137,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 		//Union pointer accessor - a bit more complex than the prior one
 		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-			postfix_expression_results = emit_union_pointer_accessor_expression(current_block, operator_node, base_address);
+			postfix_expression_results = emit_union_pointer_accessor_expression(current_block, memory_region_type, base_address);
 			break;
 
 		//Struct accessor
