@@ -48,7 +48,7 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 		y:char;
 	} as my_struct;
 
-	let mut custom:my_struct := {5, 'a'};
+	let custom:my_struct := {5, 'a'};
 
 	//Should be casted to an int
 	ret custom:y + custom:x;

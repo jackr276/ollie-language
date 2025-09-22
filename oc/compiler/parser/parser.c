@@ -1193,7 +1193,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 
 	//If it was already intialized, this means that it's been "assigned to"
-	if(assignee->initialized == TRUE){
+	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == TRUE){
 		assignee->assigned_to = TRUE;
 	} else {
 		//Mark that this var was in fact initialized

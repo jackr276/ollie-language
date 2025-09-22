@@ -3011,9 +3011,6 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
  * This rule returns *the address* of the value that we've asked for
  */
 static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
-	printf("Struct accessor is called with a struct type of %s\n", struct_type->type_name.string);
-
-
 	//Grab the variable that we need
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
 
@@ -3110,9 +3107,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_type_t* memory_region_type = first_child->inferred_type;
 	generic_type_t* original_memory_access_type = operator_node->inferred_type;
 
-	printf("Parent node type: %s\n", parent_node_type->type_name.string);
-	printf("Memory region type: %s\n", memory_region_type->type_name.string);
-	printf("Original memory access type: %s\n", original_memory_access_type->type_name.string);
+	//printf("Parent node type: %s\n", parent_node_type->type_name.string);
+	//printf("Memory region type: %s\n", memory_region_type->type_name.string);
+	//printf("Original memory access type: %s\n", original_memory_access_type->type_name.string);
 
 	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
 	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, temp_assignment_required, is_branch_ending);
