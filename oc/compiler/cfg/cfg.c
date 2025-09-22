@@ -3068,7 +3068,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	three_addr_const_t* struct_offset = emit_int_constant_direct(struct_record->struct_offset, type_symtab);
 
 	//Now we'll emit the address using the helper
-	three_addr_var_t* struct_address = emit_struct_address_calculation(block, raw_struct_type, base_address, struct_offset, is_branch_ending);
+	three_addr_var_t* struct_address = emit_struct_address_calculation(block, raw_struct_type, assignment->assignee, struct_offset, is_branch_ending);
 
 	//Package & return the results
 	cfg_result_package_t results = {block, block, struct_address, BLANK};
