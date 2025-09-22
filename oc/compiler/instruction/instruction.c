@@ -3020,7 +3020,18 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 
 	//Now we populate
 	dec_stmt->statement_type = THREE_ADDR_CODE_DEC_STMT;
-	dec_stmt->assignee = emit_var_copy(decrementee);
+
+	//If this is not a temporary variable, then we'll
+	//emit an exact copy and let the SSA system handle it
+	if(decrementee->is_temporary == FALSE){
+		dec_stmt->assignee = emit_var_copy(decrementee);
+
+	//Otherwise, we'll need to spawn a new temporary variable
+	} else {
+		dec_stmt->assignee = emit_temp_var(decrementee->type);
+	}
+
+	//This is always our input variable
 	dec_stmt->op1 = decrementee;
 	//What function are we in
 	dec_stmt->function = current_function;
@@ -3096,7 +3107,7 @@ instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_va
 
 
 /**
- * Emit a decrement instruction
+ * Emit an increment instruction
  */
 instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 	//First allocate it
@@ -3104,7 +3115,18 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 
 	//Now we populate
 	inc_stmt->statement_type = THREE_ADDR_CODE_INC_STMT;
-	inc_stmt->assignee = emit_var_copy(incrementee);
+
+	//If this is not a temporary variable, then we'll
+	//emit an exact copy and let the SSA system handle it
+	if(incrementee->is_temporary == FALSE){
+		inc_stmt->assignee = emit_var_copy(incrementee);
+
+	//Otherwise, we'll need to spawn a new temporary variable
+	} else {
+		inc_stmt->assignee = emit_temp_var(incrementee->type);
+	}
+
+	//No matter what this is the op1
 	inc_stmt->op1 = incrementee;
 	//What function are we in
 	inc_stmt->function = current_function;
