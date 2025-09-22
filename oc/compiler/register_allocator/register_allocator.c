@@ -692,6 +692,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 			if(is_instruction_pure_copy(instruction) == TRUE){
 				//If our live ranges interfere, we can perform the coalescing
 				if(do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE
+					&& instruction->cannot_be_combined == FALSE //Ensure that we actually can combine this
 					//Also check for precoloring interference
 					&& does_precoloring_interference_exist(instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
 					printf("Can coalesce LR%d and LR%d\n", instruction->source_register->associated_live_range->live_range_id, instruction->destination_register->associated_live_range->live_range_id);
