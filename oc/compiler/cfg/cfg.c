@@ -2929,9 +2929,6 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 		current_block = expression_package.final_block;
 	}
 
-	printf("\n\n\nThe base address has a type of %s\n", base_address->type->type_name.string);
-	printf("The result has a type of %s\n", array_accessor->inferred_type->type_name.string);
-
 	//This is whatever was emitted by the expression
 	three_addr_var_t* array_offset = expression_package.assignee;
 
@@ -2954,8 +2951,6 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 		address = emit_address_offset_calculation(current_block, base_address, array_offset, member_type, is_branch_ending);
 	}
 
-	printf("The final type of th result address is: %s\n\n\n", address->type->type_name.string);
-	//address->type = array_accessor->inferred_type;
 	//The assignee is the address
 	expression_package.assignee = address;
 	//And the final block is this as well
@@ -3015,18 +3010,21 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
+	printf("Struct accessor is called with a struct type of %s\n", struct_type->type_name.string);
+
+
 	//Grab the variable that we need
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
 
 	//Now we'll grab the associated struct record
-	symtab_variable_record_t* struct_record = get_struct_member(base_address->type, struct_variable->var_name.string);
+	symtab_variable_record_t* struct_record = get_struct_member(struct_type, struct_variable->var_name.string);
 
 	//The constant that represents the offset
 	three_addr_const_t* struct_offset = emit_int_constant_direct(struct_record->struct_offset, type_symtab);
 
 	//Now we'll emit the address using the helper
-	three_addr_var_t* struct_address = emit_struct_address_calculation(block, struct_accessor->inferred_type, base_address, struct_offset, is_branch_ending);
+	three_addr_var_t* struct_address = emit_struct_address_calculation(block, struct_type, base_address, struct_offset, is_branch_ending);
 
 	//Package & return the results
 	cfg_result_package_t results = {block, block, struct_address, BLANK};
@@ -3148,7 +3146,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 		//Struct accessor
 		case AST_NODE_TYPE_STRUCT_ACCESSOR:
-			postfix_expression_results = emit_struct_accessor_expression(current_block, operator_node, base_address, is_branch_ending);
+			postfix_expression_results = emit_struct_accessor_expression(current_block, memory_region_type, operator_node, base_address, is_branch_ending);
 			break;
 
 		//Struct pointer accessor
