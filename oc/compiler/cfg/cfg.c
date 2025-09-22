@@ -3260,6 +3260,9 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 	temp_assignment->is_branch_ending = is_branch_ending;
 
+	//This counts as a use for the assignee
+	add_used_variable(current_block, assignee);
+
 	//Add this statement in
 	add_statement(current_block, temp_assignment);
 
