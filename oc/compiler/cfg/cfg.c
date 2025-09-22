@@ -2149,7 +2149,7 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
-static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
 	//We assume this is the true base address
 	three_addr_var_t* true_base_address = base_addr;
 
@@ -2180,7 +2180,7 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 	add_used_variable(basic_block, offset);
 
 	//Now we leverage the helper to emit this
-	instruction_t* stmt = emit_lea_instruction(assignee, true_base_address, offset, base_type->type_size);
+	instruction_t* stmt = emit_lea_instruction(assignee, true_base_address, offset, member_type->type_size);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2196,7 +2196,7 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 /**
  * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
  */
-static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
 	//We assume this is the true base address
 	three_addr_var_t* true_base_address = base_addr;
 
@@ -2218,7 +2218,7 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 	}
 
 	//We'll need the size to multiply by
-	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(base_type->type_size, type_symtab);
+	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(member_type->type_size, type_symtab);
 
 	//We'll need a temp assignment if this isn't temporary
 	if(offset->is_temporary == FALSE){
@@ -2929,14 +2929,14 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 		current_block = expression_package.final_block;
 	}
 
-	printf("The base address has a type of %s\n", base_address->type->type_name.string);
+	printf("\n\n\nThe base address has a type of %s\n", base_address->type->type_name.string);
 	printf("The result has a type of %s\n", array_accessor->inferred_type->type_name.string);
 
 	//This is whatever was emitted by the expression
 	three_addr_var_t* array_offset = expression_package.assignee;
 
 	//The current type will always be what was inferred here
-	generic_type_t* current_type = array_accessor->inferred_type;
+	generic_type_t* member_type = array_accessor->inferred_type;
 
 	/**
 	 * The formula for array subscript is: base_address + type_size * subscript
@@ -2948,12 +2948,14 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 	three_addr_var_t* address;
 
 	//Remember, we can only use lea if we have a power of 2 
-	if(is_power_of_2(current_type->type_size) == TRUE){
-		address = emit_lea(current_block, base_address, array_offset, current_type, is_branch_ending);
+	if(is_power_of_2(member_type->type_size) == TRUE){
+		address = emit_lea(current_block, base_address, array_offset, member_type, is_branch_ending);
 	} else {
-		address = emit_address_offset_calculation(current_block, base_address, array_offset, current_type, is_branch_ending);
+		address = emit_address_offset_calculation(current_block, base_address, array_offset, member_type, is_branch_ending);
 	}
 
+	printf("The final type of th result address is: %s\n\n\n", address->type->type_name.string);
+	//address->type = array_accessor->inferred_type;
 	//The assignee is the address
 	expression_package.assignee = address;
 	//And the final block is this as well
@@ -3108,9 +3110,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_type_t* memory_region_type = first_child->inferred_type;
 	generic_type_t* original_memory_access_type = operator_node->inferred_type;
 
-	//printf("Parent node type: %s\n", parent_node_type->type_name.string);
-	//printf("Memory region type: %s\n", memory_region_type->type_name.string);
-	//printf("Original memory access type: %s\n", original_memory_access_type->type_name.string);
+	printf("Parent node type: %s\n", parent_node_type->type_name.string);
+	printf("Memory region type: %s\n", memory_region_type->type_name.string);
+	printf("Original memory access type: %s\n", original_memory_access_type->type_name.string);
 
 	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
 	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, temp_assignment_required, is_branch_ending);
