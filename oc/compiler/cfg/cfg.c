@@ -2144,7 +2144,7 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 	add_statement(basic_block, final_assignment);
 
 	//Give back the assignee
-	return assignee;
+	return final_assignment->assignee;
 }
 
 

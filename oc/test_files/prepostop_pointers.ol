@@ -27,6 +27,8 @@ pub fn main(arg:i32, argv:char**) -> i32 {
 	let mut ptr:i32* := arr[0];
 
 	//(ptr++)[3] := 7;
-	
-	ret (++ptr)[2];
+
+	(++ptr)[2] := 3;
+
+	ret ptr[3];
 }
