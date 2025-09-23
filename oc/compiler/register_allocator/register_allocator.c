@@ -817,7 +817,6 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			case DECL:
 			case DECW:
 			case DECB:
-				/*
 				//If this is not a temp - the regular rule can handle it
 				if(current->assignee->is_temporary == FALSE){
 					break;
@@ -839,12 +838,11 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				add_variable_to_live_range(live_range, basic_block, current->assignee);
 
 				//IMPORTANT - we also add the source to this
+				add_variable_to_live_range(live_range, basic_block, current->op1);
 
 				//And we're done - no need to go further
 				current = current->next_statement;
 				continue;
-				*/
-				break;
 
 			//Just head out
 			default:
