@@ -3053,9 +3053,6 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	//Add it into the block
 	add_statement(block, assignment);
 
-	//Reassign what current address really is
-	three_addr_var_t* current_address = assignment->assignee;
-
 	//Grab the variable that we need
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
 
@@ -4588,21 +4585,6 @@ void dealloc_cfg(cfg_t* cfg){
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
-}
-
-
-/**
- * Helper for returning error blocks. Error blocks always have an ID of -1
- */
-static cfg_result_package_t create_and_return_err(){
-	//Create the error
-	basic_block_t* err_block = basic_block_alloc(1);
-	//Set the ID to -1
-	err_block->block_id = -1;
-
-	//Packaage and return the results
-	cfg_result_package_t results = {err_block, err_block, NULL, BLANK};
-	return results;
 }
 
 

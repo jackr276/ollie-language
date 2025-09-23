@@ -1693,7 +1693,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 /**
  * Operates on a value before usage. This could be postincrement or postdecrement
  */
-static generic_ast_node_t* postoperation(FILE* fl, generic_type_t* current_type, generic_ast_node_t* parent_node, Token operator, side_type_t side){
+static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_ast_node_t* parent_node, Token operator, side_type_t side){
 	//Let's first check and see if this is valid. If it's not we fail out
 	if(is_unary_operation_valid_for_type(current_type, operator) == FALSE){
 		sprintf(info, "Type %s is invalid for operator %s", current_type->type_name.string, operator_to_string(operator));
@@ -1814,7 +1814,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 				parent->is_final = TRUE;
 
 				//We let this rule handle everything
-				return postoperation(fl, current_type, parent, lookahead.tok, side);
+				return postoperation(current_type, parent, lookahead.tok, side);
 
 			//When we hit this, it means that we're done. We return the parent
 			//node in this case
