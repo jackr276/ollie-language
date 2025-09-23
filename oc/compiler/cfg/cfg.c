@@ -2137,6 +2137,9 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 	//This now counts as used
 	add_used_variable(basic_block, operation->assignee);
 
+	//This variable was assigned, so we must mark it
+	add_assigned_variable(basic_block, final_assignment->assignee); 
+
 	//And add this one in
 	add_statement(basic_block, final_assignment);
 
@@ -3367,29 +3370,29 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
 			assignee = unary_package.assignee;
-
-			//If we have a temporary variable, then we need to perform
-			//a reassignment here for analysis purposes
-			if(unary_package.assignee->is_temporary == TRUE){
-				//Emit the assignment
-				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-				temp_assignment->is_branch_ending = is_branch_ending;
-
-				//This now counts as a use
-				add_used_variable(current_block, assignee);
-
-				//Throw it in the block
-				add_statement(current_block, temp_assignment);
-
-				//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
-				temp_assignment->cannot_be_combined = TRUE;
-
-				//Now the new assignee equals this new temp that we have
-				assignee = temp_assignment->assignee;
-			}
-
+		
 			//If the assignee is not a pointer, we'll handle the normal case
 			if(assignee->type->type_class == TYPE_CLASS_BASIC){
+				//If we have a temporary variable, then we need to perform
+				//a reassignment here for analysis purposes
+				if(unary_package.assignee->is_temporary == TRUE){
+					//Emit the assignment
+					instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+					temp_assignment->is_branch_ending = is_branch_ending;
+
+					//This now counts as a use
+					add_used_variable(current_block, assignee);
+
+					//Throw it in the block
+					add_statement(current_block, temp_assignment);
+
+					//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
+					temp_assignment->cannot_be_combined = TRUE;
+
+					//Now the new assignee equals this new temp that we have
+					assignee = temp_assignment->assignee;
+				}
+				
 				switch(first_child->unary_operator){
 					case PLUSPLUS:
 						//We really just have an "inc" instruction here
