@@ -178,11 +178,47 @@ void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 	}
 }
 
+/**
+ * We will completely duplicate a deferred statement here. Since all deferred statements
+ * are logical expressions, we will perform a deep copy to create an entirely new
+ * chain of deferred statements
+ */
+generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side){
+	//Base case here -- although in theory we shouldn't make it here
+	if(duplicatee == NULL){
+		return NULL;
+	}
+
+	//Duplicate the node here
+	generic_ast_node_t* duplicated_root = duplicate_node(duplicatee, side);
+
+	//Now for each child in the node, we duplicate it and add it in as a child
+	generic_ast_node_t* child_cursor = duplicatee->first_child;
+
+	//The duplicated child
+	generic_ast_node_t* duplicated_child = NULL;
+
+	//So long as we aren't null
+	while(child_cursor != NULL){
+		//Recursive call
+		duplicated_child = duplicate_subtree(child_cursor, side);
+
+		//Add the duplicate child into the node
+		add_child_node(duplicated_root, duplicated_child);
+
+		//Advance the cursor
+		child_cursor = child_cursor->next_sibling;
+	}
+
+	//Return the duplicate root
+	return duplicated_root;
+}
+
 
 /**
  * A utility function for duplicating nodes
  */
-generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
+generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side){
 	//First allocate the overall node here
 	generic_ast_node_t* duplicated = calloc(1, sizeof(generic_ast_node_t));
 
@@ -216,6 +252,9 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node){
 	duplicated->first_child = NULL;
 	duplicated->next_sibling = NULL;
 	duplicated->next_created_ast_node = NULL;
+
+	//Add the appropriate side
+	duplicated->side = side;
 
 	//And now we'll link this in to our linked list here
 	//If we have the very first node

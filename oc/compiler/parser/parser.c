@@ -103,7 +103,6 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side);
 static generic_ast_node_t* function_predeclaration(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
-static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee);
 static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node);
 
 
@@ -343,7 +342,7 @@ static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	//Create the identifier node
 	generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side); //Add the identifier into the node itself
 	//Idents are assignable
-	ident_node->is_assignable = ASSIGNABLE;
+	ident_node->is_assignable = TRUE;
 	//Clone the string in
 	ident_node->string_value = clone_dynamic_string(&(lookahead.lexeme));
 
@@ -958,7 +957,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//If this is in fact a constant, we'll duplicate the whole thing and send it
 			//out the door
 			if(found_const != NULL){
-				return duplicate_node(found_const->constant_node);
+				return duplicate_node(found_const->constant_node, side);
 			}
 
 			//Now we will look this up in the variable symbol table
@@ -972,7 +971,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 				//Store the variable that's associated
 				ident->variable = found_var;
 				//Idents are assignable
-				ident->is_assignable = ASSIGNABLE;
+				ident->is_assignable = TRUE;
 
 				//Give back the ident node
 				return ident;
@@ -997,7 +996,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 				ident->func_record = found_func;
 
 				//It is not assignable
-				ident->is_assignable = NOT_ASSIGNABLE;
+				ident->is_assignable = FALSE;
 
 				//Give it back
 				return ident;
@@ -1176,7 +1175,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 	
 	//If it isn't assignable, we also fail
-	if(left_hand_unary->is_assignable == NOT_ASSIGNABLE){
+	if(left_hand_unary->is_assignable == FALSE){
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
@@ -1194,7 +1193,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	}
 
 	//If it was already intialized, this means that it's been "assigned to"
-	if(assignee->initialized == TRUE){
+	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == TRUE){
 		assignee->assigned_to = TRUE;
 	} else {
 		//Mark that this var was in fact initialized
@@ -1300,7 +1299,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			}
 
 			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, left_hand_unary->side);
 
 			//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
 			//don't want to mess with the actual type of the variable
@@ -1330,7 +1329,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//Otherwise we do have a pointer type
 		} else {
 			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary);
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, left_hand_unary->side);
 
 			//Let's first determine if they're compatible
 			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(right_hand_type), binary_op);
@@ -1683,8 +1682,44 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 		accessor_node->inferred_type = type->internal_types.member_type;
 	}
 
+	//This is assignable
+	accessor_node->is_assignable = TRUE;
+
 	//And now we're done so give back the root reference
 	return accessor_node;
+}
+
+
+/**
+ * Operates on a value before usage. This could be postincrement or postdecrement
+ */
+static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_ast_node_t* parent_node, Token operator, side_type_t side){
+	//Let's first check and see if this is valid. If it's not we fail out
+	if(is_unary_operation_valid_for_type(current_type, operator) == FALSE){
+		sprintf(info, "Type %s is invalid for operator %s", current_type->type_name.string, operator_to_string(operator));
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Otherwise let's allocate this
+	generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
+
+	//The parent node is a child of this one
+	add_child_node(postoperation_node, parent_node);
+
+	//The inferred type is the current type
+	postoperation_node->inferred_type = current_type;
+	postoperation_node->line_number = parser_line_num;
+	//Store the unary operator too
+	postoperation_node->unary_operator = operator;
+
+	//Add this in here
+	postoperation_node->variable = parent_node->variable;
+
+	//This is *not* assignable
+	postoperation_node->is_assignable = FALSE;
+
+	//And give it back
+	return postoperation_node;
 }
 
 
@@ -1693,17 +1728,27 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
  * operators that can be chained if context allows. Like all other rules, this rule
  * returns a reference to the root node that it creates
  *
- * As an important note here: We can chain construct accessors and array accessors as much as we wish, 
- * but seeing a plusplus or minusminus is the defintive end of this rule if we see it
- *
  * <postfix-expression> ::= <primary-expression> 
- *						  | <primary-expression> {{<construct-accessor>}*{<array-accessor>*}}* {++|--}?
+ *						  | <postfix-expression> => <identifier>
+ *						  | <postfix-expression> [ <expression> ]
+ *						  | <postfix-expression> : <identifier>
+ *						  | <postfix-expression> . <identifier>
+ *						  | <postfix-expression> -> <identifier>
+ *						  | <postfix-expression> ++
+ *						  | <postfix-expression> --
+ *
+ * We need to use factored form to avoid the left recursive issue
+ *
+ * The primary expression becomes the very bottom most part of the tree. We'll construct a tree in a similar was
+ * as we do the expression trees, with each new postfix node becoming the new parent
+ *
+ *
+ * <factored_postfix_expression> ::= <primary-expression> <postfix-tail>
+ * 			<postfix-tail> ::= {=> <identifier> | : <identifier> | . <identifier> | -> <identifier> | [ <expression> ] | ++ | --}
  */ 
 static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
-	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
 
 	//No matter what, we have to first see a valid primary expression
 	generic_ast_node_t* primary_expression_node = primary_expression(fl, side);
@@ -1714,171 +1759,102 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		return primary_expression_node;
 	}
 
-	//Peek at the next token
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//Let's see if we're able to leave immediately or not
-	switch(lookahead.tok){
-		case L_BRACKET:
-		case COLON:
-		case ARROW: /* Union pointer access */
-		case FAT_ARROW: /* Struct pointer access */
-		case DOT:
-		case PLUSPLUS:
-		case MINUSMINUS:
-			//We need to keep going here, so leave
-			break;
-		default:
-			//Push this back
-			push_back_token(lookahead);
-			//Return the result
-			return primary_expression_node;
-	}
+	//The parent initially is the primary expression
+	generic_ast_node_t* parent = primary_expression_node;
+	//The temp holder node
+	generic_ast_node_t* temp_holder = NULL;
+	//Hold onto the operator node here
+	generic_ast_node_t* operator_node = NULL;
 
-	//Otherwise if we make it here, we know that we will have some kind of complex accessor or 
-	//post operation, so we can make the node for it
-	generic_ast_node_t* postfix_expr_node = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
-	//Add the line number
-	postfix_expr_node->line_number = current_line;
+	//So long as we keep seeing operators here, we keep chaining them
+	while(TRUE){
+		//Refresh the token
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//Let's grab whatever type that we currently have
-	generic_type_t* current_type = primary_expression_node->inferred_type;
+		//Let's grab whatever type that we currently have
+		generic_type_t* current_type = parent->inferred_type;
 
-	//Do any kind of dealiasing that we need to do
-	current_type = dealias_type(current_type);
-
-	//Add in the first child which is the primary expression
-	add_child_node(postfix_expr_node, primary_expression_node);
-
-	//The accessor node for each go around
-	generic_ast_node_t* accessor_node = NULL;
-
-	//We assume it's assignable, that will only change if we have a basic type that is 
-	//post inc'd/dec'd
-	postfix_expr_node->is_assignable = ASSIGNABLE;
-
-	//Now we can see as many construct accessor and array accessors as we can take
-	while(lookahead.tok == L_BRACKET || lookahead.tok == COLON 
-		|| lookahead.tok == FAT_ARROW || lookahead.tok == DOT
-		|| lookahead.tok == ARROW){
-		//Go based on what's in here
+		//Go based on what the token is
 		switch(lookahead.tok){
+			//Array accessor
 			case L_BRACKET:
 				//We'll push this onto the grouping stack for later matching
 				push_token(grouping_stack, lookahead);
 
-				//Let the array accessor handle it
-				accessor_node = array_accessor(fl, current_type, side);
-
+				operator_node = array_accessor(fl, current_type, side);
 				break;
 
-			//A raw construct accessor, not syntactic sugar for the deref operator
+			//Struct accessor
 			case COLON:
-				//Let's have the rule do it.
-				accessor_node = struct_accessor(fl, current_type, side);
-
+				operator_node = struct_accessor(fl, current_type, side);
 				break;
-			
-			//This is a struct pointer accessor
+
+			//Struct pointer accessor
 			case FAT_ARROW:
-				//Let's have the rule do it.
-				accessor_node = struct_pointer_accessor(fl, current_type, side);
-
+				operator_node = struct_pointer_accessor(fl, current_type, side);
 				break;
 
-			//This is a union pointer accessor
-			case ARROW:
-				//Let the union pointer rule do it
-				accessor_node = union_pointer_accessor(fl, current_type, side);
-
-				break;
-
-			//And this is a union accessor
+			//Union accessor
 			case DOT:
 				//Let the rule handle it
-				accessor_node = union_accessor(fl, current_type, side);
-
+				operator_node = union_accessor(fl, current_type, side);
 				break;
 
-			//We shouldn't ever hit here, but if we do then leave
+			//Union pointer accessor
+			case ARROW:
+				operator_node = union_pointer_accessor(fl, current_type, side);
+				break;
+
+			//Postincrement
+			case PLUSPLUS:
+			case MINUSMINUS:
+				//Copy this over
+				parent->variable = primary_expression_node->variable;
+				//Flag the parent as final - you can't go on past this
+				parent->is_final = TRUE;
+
+				//We let this rule handle everything
+				return postoperation(current_type, parent, lookahead.tok, side);
+
+			//When we hit this, it means that we're done. We return the parent
+			//node in this case
 			default:
-				return print_and_return_error("Expected :, ::, [] or ., but got none", parser_line_num);
+				push_back_token(lookahead);
+				//Store the variable too
+				parent->variable = primary_expression_node->variable;
+
+				//Mark as final
+				parent->is_final = TRUE;
+				//And give it back
+				return parent;
 		}
 
-		//We have our fail case here
-		if(accessor_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid accessor found in postfix expression", current_line);
+		//If this is invalid, then we'll just leave
+		if(operator_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid postfix operation", parser_line_num);
 		}
 
-		//Otherwise we know it worked. Since this is the case, we can add it as a child to the overall
-		//node
-		add_child_node(postfix_expr_node, accessor_node);
+		//Hang onto the old parent
+		temp_holder = parent;
 
-		//The type is just this one's inferred type
-		current_type = accessor_node->inferred_type;
+		//The new parent now becomes a postfix expression
+		parent = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
 
-		//refresh the lookahead for the next iteration
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		//The old parent now becomes a child to the new postfix expression node
+		add_child_node(parent, temp_holder);
+		
+		//And the operator is the other child
+		add_child_node(parent, operator_node);
+
+		//The type of this parent is always the type of the operator node
+		parent->inferred_type = operator_node->inferred_type;
+
+		//The parent's assignability inherits from the operator
+		parent->is_assignable = operator_node->is_assignable;
 	}
 
-	//We now have whatever the end type is stored in current type. Let's make sure it's raw
-	generic_type_t* return_type = dealias_type(current_type);
-
-	//Now once we get here, we know that we have something that isn't one of accessor rules
-	//It could however be postinc/postdec. Let's first see if it isn't
-	switch(lookahead.tok){
-		case PLUSPLUS:
-		case MINUSMINUS:
-			break;
-		//If it's not that, then we're done here and we can leave
-		default:
-			//Put the token back
-			push_back_token(lookahead);
-			//Assign the type
-			postfix_expr_node->inferred_type = return_type;
-			//Assign the variable
-			postfix_expr_node->variable = primary_expression_node->variable;
-			//This was assigned to
-			primary_expression_node->variable->assigned_to = TRUE;
-			//And we'll give back what we had constructed so far
-			return postfix_expr_node;
-	}
-
-	//Let's see if it's valid
-	u_int8_t is_valid = is_unary_operation_valid_for_type(return_type, lookahead.tok);
-
-	//If it it's invalid, we fail here
-	if(is_valid == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", return_type->type_name.string, operator_to_string(lookahead.tok));
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//You cannot assign to a basic variable that is
-	//post-inc'd
-	if(return_type->type_class == TYPE_CLASS_BASIC){
-		postfix_expr_node->is_assignable = NOT_ASSIGNABLE;
-	}
-
-	//TODO THIS IS BROKEN
-
-	//Otherwise if we get here we know that we either have post inc or dec
-	//Create the unary operator node
-	generic_ast_node_t* unary_post_op = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
-
-	//Store the token
-	unary_post_op->unary_operator = lookahead.tok;
-
-	//This will always be the last child of whatever we've built so far
-	add_child_node(postfix_expr_node, unary_post_op);
-	
-	//Add the inferred type in
-	postfix_expr_node->inferred_type = return_type;
-
-	//Carry through
-	postfix_expr_node->variable = primary_expression_node->variable;
-
-	//Now that we're done, we can get out
-	return postfix_expr_node;
+	//We should never get here - just to make the static analyzer happy
+	return parent;
 }
 
 
@@ -1933,7 +1909,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Is this assignable
-	variable_assignability_t is_assignable = ASSIGNABLE;
+	u_int8_t is_assignable = TRUE;
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -1998,7 +1974,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			}
 
 			//This is assignable
-			is_assignable = ASSIGNABLE;
+			is_assignable = TRUE;
 
 			break;
 
@@ -2035,7 +2011,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			}
 
 			//This is not assignable
-			is_assignable = NOT_ASSIGNABLE;
+			is_assignable = FALSE;
 
 			break;
 
@@ -2054,7 +2030,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			return_type = cast_expr->inferred_type;
 			
 			//This is not assignable
-			is_assignable = NOT_ASSIGNABLE;
+			is_assignable = FALSE;
 			
 			break;
 	
@@ -2073,7 +2049,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			return_type = cast_expr->inferred_type;
 
 			//This is not assignable
-			is_assignable = NOT_ASSIGNABLE;
+			is_assignable = FALSE;
 			
 			break;
 	
@@ -2092,13 +2068,25 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			return_type = cast_expr->inferred_type;
 
 			//This is not assignable
-			is_assignable = NOT_ASSIGNABLE;
+			is_assignable = FALSE;
 
 			break;
 
-		//Pre-inc/dec case
+		/**
+		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
+		 * that is returned to be used by the user is the incremented/decremented value unlike in a
+		 * postfix expression
+		 *
+		 * We'll need to apply desugaring here
+		 * ++x is really temp = x + 1
+		 * 				 x = temp
+		 * 				 use temp going forward
+		 *
+		 * We must note that preincrement is not assignable at all
+		 */
 		case PLUSPLUS:
 		case MINUSMINUS:
+			//Check to see if it is valid
 			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
 			//If it it's invalid, we fail here
@@ -2115,13 +2103,11 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				cast_expr->variable->assigned_to = TRUE;
 			}
 
-			//This is only not assignable if we have a basic variable
-			if(return_type->type_class == TYPE_CLASS_BASIC){
-				is_assignable = NOT_ASSIGNABLE;
-			} else {
-				//Otherwise it is assignable
-				is_assignable = ASSIGNABLE;
-			}
+			//Force this to be an rvalue for the cfg constructor
+			cast_expr->side = SIDE_TYPE_RIGHT;
+
+			//These expressions are never assignable
+			is_assignable = FALSE;
 
 			break;
 
@@ -6036,7 +6022,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 	//If we have deferred statements
 	if(deferred_stmts_node != NULL){
 		//Then we'll duplicate
-		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node);
+		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node, deferred_stmts_node->side);
 
 		//This node will now come before the ret statement
 		deferred_stmts->next_sibling = return_stmt;
@@ -8291,43 +8277,6 @@ static generic_ast_node_t* declaration(FILE* fl, u_int8_t is_global){
 			sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
 			return print_and_return_error(info, parser_line_num);
 	}
-}
-
-
-/**
- * We will completely duplicate a deferred statement here. Since all deferred statements
- * are logical expressions, we will perform a deep copy to create an entirely new
- * chain of deferred statements
- */
-static generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee){
-	//Base case here -- although in theory we shouldn't make it here
-	if(duplicatee == NULL){
-		return NULL;
-	}
-
-	//Duplicate the node here
-	generic_ast_node_t* duplicated_root = duplicate_node(duplicatee);
-
-	//Now for each child in the node, we duplicate it and add it in as a child
-	generic_ast_node_t* child_cursor = duplicatee->first_child;
-
-	//The duplicated child
-	generic_ast_node_t* duplicated_child = NULL;
-
-	//So long as we aren't null
-	while(child_cursor != NULL){
-		//Recursive call
-		duplicated_child = duplicate_subtree(child_cursor);
-
-		//Add the duplicate child into the node
-		add_child_node(duplicated_root, duplicated_child);
-
-		//Advance the cursor
-		child_cursor = child_cursor->next_sibling;
-	}
-
-	//Return the duplicate root
-	return duplicated_root;
 }
 
 

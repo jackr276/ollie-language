@@ -2137,11 +2137,14 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 	//This now counts as used
 	add_used_variable(basic_block, operation->assignee);
 
+	//This variable was assigned, so we must mark it
+	add_assigned_variable(basic_block, final_assignment->assignee); 
+
 	//And add this one in
 	add_statement(basic_block, final_assignment);
 
 	//Give back the assignee
-	return assignee;
+	return final_assignment->assignee;
 }
 
 
@@ -2149,7 +2152,7 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
-static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
 	//We assume this is the true base address
 	three_addr_var_t* true_base_address = base_addr;
 
@@ -2180,7 +2183,7 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 	add_used_variable(basic_block, offset);
 
 	//Now we leverage the helper to emit this
-	instruction_t* stmt = emit_lea_instruction(assignee, true_base_address, offset, base_type->type_size);
+	instruction_t* stmt = emit_lea_instruction(assignee, true_base_address, offset, member_type->type_size);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2196,7 +2199,7 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 /**
  * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
  */
-static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* base_type, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
 	//We assume this is the true base address
 	three_addr_var_t* true_base_address = base_addr;
 
@@ -2218,7 +2221,7 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 	}
 
 	//We'll need the size to multiply by
-	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(base_type->type_size, type_symtab);
+	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(member_type->type_size, type_symtab);
 
 	//We'll need a temp assignment if this isn't temporary
 	if(offset->is_temporary == FALSE){
@@ -2661,7 +2664,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 
 	//This will count as live if we read from it
 	if(incrementee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, incrementee);
+		add_assigned_variable(basic_block, inc_code->assignee);
 	}
 
 	//This is a rare case were we're assigning to AND using
@@ -2674,7 +2677,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 	add_statement(basic_block, inc_code);
 
 	//Return the incrementee
-	return incrementee;
+	return inc_code->assignee;
 }
 
 
@@ -2687,7 +2690,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 
 	//This will count as live if we read from it
 	if(decrementee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, decrementee);
+		add_assigned_variable(basic_block, dec_code->assignee);
 	}
 
 	//This is a rare case were we're assigning to AND using
@@ -2700,7 +2703,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 	add_statement(basic_block, dec_code);
 
 	//Return the incrementee
-	return decrementee;
+	return dec_code->assignee;
 }
 
 
@@ -2912,518 +2915,417 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 
 
 /**
- * Handle a postincrement/postdecrement operation
+ * Emit the code needed to perform an array access
+ *
+ * This rule returns *the address* of the value that we've asked for
  */
-static three_addr_var_t* emit_postoperation_code(basic_block_t* basic_block, three_addr_var_t* current_var, Token unary_operator, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
-	//This is either a postincrement or postdecrement. Regardless, we emit
-	//a temp var for this because we assign before we mutate
+static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block, generic_ast_node_t* array_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
+	//Keep track of whatever the current block is
+	basic_block_t* current_block = block;
 
-	//Emit the temp var with the current type
-	three_addr_var_t* temp_var = emit_temp_var(current_var->type);
+	//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
+	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child, is_branch_ending, FALSE);
 
-	//Now we'll need to emit the assignment operation
-	instruction_t* assignment = emit_assignment_instruction(temp_var, current_var);
-
-	//Mark this for later
-	assignment->is_branch_ending = is_branch_ending;
-
-	//Ensure that we add this into the block
-	add_statement(basic_block, assignment);
-
-	//We'll now perform the actual operation
-	if(unary_operator == PLUSPLUS){
-		//If we have a pointer, use the helper
-		if(current_var->type->type_class == TYPE_CLASS_POINTER){
-			handle_pointer_arithmetic(basic_block, PLUS, current_var, is_branch_ending);
-		} else {
-			//Use the helper for this
-			emit_inc_code(basic_block, current_var, is_branch_ending);
-		}
-
-	//Otherwise we know that it has to be minusminus
-	} else {
-		//If we have a pointer, use the helper
-		if(current_var->type->type_class == TYPE_CLASS_POINTER){
-			handle_pointer_arithmetic(basic_block, MINUS, current_var, is_branch_ending);
-		} else {
-			//Use the helper here as well
-			emit_dec_code(basic_block, current_var, is_branch_ending);
-		}
+	//If there is a difference in current and the final block, we'll reassign here
+	if(expression_package.final_block != NULL && current_block != expression_package.final_block){
+		//Set this to be at the end
+		current_block = expression_package.final_block;
 	}
 
-	//This is the variable that we'll use if we make use of this after
-	//the fact
-	return temp_var;
+	//This is whatever was emitted by the expression
+	three_addr_var_t* array_offset = expression_package.assignee;
+
+	//The current type will always be what was inferred here
+	generic_type_t* member_type = array_accessor->inferred_type;
+
+	/**
+	 * The formula for array subscript is: base_address + type_size * subscript
+	 * 
+	 * However, if we're on our second or third round, the current var may be an address
+	 *
+	 * This can be done using a lea instruction, so we will emit that directly
+	 */
+	three_addr_var_t* address;
+
+	//Remember, we can only use lea if we have a power of 2 
+	if(is_power_of_2(member_type->type_size) == TRUE){
+		address = emit_lea(current_block, base_address, array_offset, member_type, is_branch_ending);
+	} else {
+		address = emit_address_offset_calculation(current_block, base_address, array_offset, member_type, is_branch_ending);
+	}
+
+	//The assignee is the address
+	expression_package.assignee = address;
+	//And the final block is this as well
+	expression_package.final_block = current_block;
+
+	//And finally we give this back
+	return expression_package;
 }
 
 
 /**
- * Emit the abstract machine code for various different kinds of postfix expressions
- * that we could see. The two that we'll need to be concerned about are struct
- * and array access
+ * Emit the code needed to perform a regular union access
+ *
+ * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_postfix_expr_code(basic_block_t* basic_block, generic_ast_node_t* postfix_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
-	//Our own return package - we may or may not use it
-	cfg_result_package_t postfix_package = {basic_block, basic_block, NULL, BLANK};
+static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, three_addr_var_t* base_address){
+	//Very simple rule, we just have this for consistency
+	cfg_result_package_t accessor = {block, block, base_address, BLANK};
 
-	//If this is itself not a postfix expression, we need to lose it here
-	if(postfix_parent->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
-		return emit_primary_expr_code(basic_block, postfix_parent, temp_assignment_required, is_branch_ending);
-	}
+	//Give it back
+	return accessor;
+}
 
-	//We'll need to keep track of the current block - in case we hit expressions that expand blocks
-	basic_block_t* current = basic_block;
 
-	//We'll also keep track of our current variable
-	three_addr_var_t* current_var;
+/**
+ * Emit the code needed to perform a union pointer access
+ *
+ * This rule returns *the address* of the value that we've asked for
+ */
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_type_t* union_pointer_type, three_addr_var_t* base_address){
+	//Get the current type
+	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
 
-	//We'll first want a cursor
-	generic_ast_node_t* cursor = postfix_parent->first_child;
+	//Store the current block
+	basic_block_t* current_block = block;
 	
-	//Extract the side for later use here
-	side_type_t postfix_expr_side = cursor->side;
+	//The type is stored within the accessor
+	three_addr_var_t* dereferenced = emit_pointer_indirection(current_block, base_address, raw_union_type);
 
-	//We should always have a primary expression first. We'll first call the primary expression
-	cfg_result_package_t primary_package = emit_primary_expr_code(current, cursor, temp_assignment_required, is_branch_ending);
+	//Now we'll grab a temp assignment for the current address
+	instruction_t* pointer_deref_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
-	//Move the cursor along
-	cursor = cursor->next_sibling;
+	//This now counts as a use
+	add_used_variable(current_block, dereferenced);
 
-	//This will happen a lot - we'll have nowhere else to go. When that happens,
-	//all that we need to do is return the primary package
-	if(cursor == NULL){
-		return primary_package;
-	} 
+	//Now we add the statement in
+	add_statement(current_block, pointer_deref_assignment);
 
-	//The current variable is now his assignee
-	current_var = primary_package.assignee;
+	//This is the union address here
+	three_addr_var_t* union_address = pointer_deref_assignment->assignee;
 
-	//If this happens, it means that we hit a ternary at some point, and need to reassign
-	if(primary_package.final_block != NULL && primary_package.final_block != current){
-		current = primary_package.final_block;
+	//Construct and return
+	cfg_result_package_t return_package = {current_block, current_block, union_address, BLANK};
+	return return_package;
+}
 
-		//This package's final block is now current
-		postfix_package.final_block = current;
+
+/**
+ * Emit the code needed to perform a struct access
+ *
+ * This rule returns *the address* of the value that we've asked for
+ */
+static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
+	//Grab the variable that we need
+	symtab_variable_record_t* struct_variable = struct_accessor->variable;
+
+	//Now we'll grab the associated struct record
+	symtab_variable_record_t* struct_record = get_struct_member(struct_type, struct_variable->var_name.string);
+
+	//The constant that represents the offset
+	three_addr_const_t* struct_offset = emit_int_constant_direct(struct_record->struct_offset, type_symtab);
+
+	//Now we'll emit the address using the helper
+	three_addr_var_t* struct_address = emit_struct_address_calculation(block, struct_type, base_address, struct_offset, is_branch_ending);
+
+	//Package & return the results
+	cfg_result_package_t results = {block, block, struct_address, BLANK};
+	return results;
+}
+
+
+/**
+ * Emit the code needed to perform a struct pointer access
+ *
+ * This rule returns *the address* of the value that we've asked for
+ */
+static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
+	//Get the current type
+	generic_type_t* raw_struct_type = struct_pointer_type->internal_types.points_to;
+
+	//We need to first dereference this
+	three_addr_var_t* dereferenced = emit_pointer_indirection(block, base_address, raw_struct_type);
+
+	//Assign temp to be the current address
+	instruction_t* assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+
+	//The dereferenced variable here is used
+	add_used_variable(block, dereferenced);
+
+	//Add it into the block
+	add_statement(block, assignment);
+
+	//Grab the variable that we need
+	symtab_variable_record_t* struct_variable = struct_accessor->variable;
+
+	//Now we'll grab the associated struct record
+	symtab_variable_record_t* struct_record = get_struct_member(raw_struct_type, struct_variable->var_name.string);
+
+	//The constant that represents the offset
+	three_addr_const_t* struct_offset = emit_int_constant_direct(struct_record->struct_offset, type_symtab);
+
+	//Now we'll emit the address using the helper
+	three_addr_var_t* struct_address = emit_struct_address_calculation(block, raw_struct_type, assignment->assignee, struct_offset, is_branch_ending);
+
+	//Package & return the results
+	cfg_result_package_t results = {block, block, struct_address, BLANK};
+	return results;
+}
+
+
+/**
+ * Emit a postifx expression tree's code. This rule is recursive by nature
+ *
+ * They all look like this:
+ * 			 <postfix-expression>
+ * 			  / 			\
+ *  <postfix-expression>	<postfix-operator>
+ *
+ * The right child's type is the original access value type(as defined)
+ * The left child's type is the type of the memory region being accessed(struct, union, array, pointer)
+ *
+ * The parent node though, is prone to type inference by the parser. As such, we *do not* want to use
+ * the parent node's type in our decision making. We *will* use it at the very end to determine if any kind
+ * of converting move is required for us to make
+ */
+static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	//Acts as a base case/stopper. We'll just go right through in this case
+	if(node->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
+		return emit_primary_expr_code(basic_block, node, temp_assignment_required, is_branch_ending);
 	}
 
-	//We could also go right into a terminal expression like a unary operator. If so
-	//handle it and then bail
-	if(cursor->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR){
-		//We'll let our helper do it here
-		postfix_package.assignee = emit_postoperation_code(current, primary_package.assignee, cursor->unary_operator, temp_assignment_required, is_branch_ending);
+	//Keep track of the current block here
+	basic_block_t* current_block = basic_block;
 
-		//Now give back the postfix package
-		return postfix_package;
+	//The first child is always the other postfix expression node
+	generic_ast_node_t* first_child = node->first_child;
+	//And the operator node is always what comes after the first child
+	generic_ast_node_t* operator_node = first_child->next_sibling;
+
+	//These 3 types are what we have to work with
+	generic_type_t* parent_node_type = node->inferred_type;
+	generic_type_t* memory_region_type = first_child->inferred_type;
+	generic_type_t* original_memory_access_type = operator_node->inferred_type;
+
+	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
+	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, temp_assignment_required, is_branch_ending);
+
+	//Reassign the current block if need be
+	if(first_child_results.final_block != NULL && first_child_results.final_block != current_block){
+		current_block = first_child_results.final_block;
 	}
 
-	//If we get here we know that we have at least one struct/array access statement
+	//We know that whatever we are operating on is always going to be the assignee of what we've received
+	three_addr_var_t* base_address = first_child_results.assignee;
 
-	//The currently calculated address
-	three_addr_var_t* current_address = NULL;
+	//Grab a holder for our results
+	cfg_result_package_t postfix_expression_results = {NULL, NULL, NULL, BLANK};
 
-	//What is the type of our current variable?
-	//The current type is intended to represent what we'll get out
-	//when we dereference
-	generic_type_t* current_type = current_var->type;
+	//Now that we have the first child, we can go through and determine what kind of operator we need to deal with
+	switch(operator_node->ast_node_type){
+		//Array accessor node
+		case AST_NODE_TYPE_ARRAY_ACCESSOR:
+			//Emits the address of what we want
+			postfix_expression_results = emit_array_accessor_expression(current_block, operator_node, base_address, is_branch_ending);
+			break;
 
-	//Another holder
-	three_addr_var_t* dereferenced = NULL;
-	three_addr_var_t* union_address = NULL;
-	three_addr_var_t* struct_address = NULL;
-	three_addr_const_t* struct_offset = NULL;
+		//Union accessor node
+		case AST_NODE_TYPE_UNION_ACCESSOR:
+			postfix_expression_results = emit_union_accessor_expression(current_block, base_address);
+			break;
 
-	//A generic holder for our variables
-	symtab_variable_record_t* variable = NULL;
-	symtab_variable_record_t* member = NULL;
+		//Union pointer accessor - a bit more complex than the prior one
+		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
+			postfix_expression_results = emit_union_pointer_accessor_expression(current_block, memory_region_type, base_address);
+			break;
 
-	//An expression package for use in the rule
-	cfg_result_package_t expression_package;
+		//Struct accessor
+		case AST_NODE_TYPE_STRUCT_ACCESSOR:
+			postfix_expression_results = emit_struct_accessor_expression(current_block, memory_region_type, operator_node, base_address, is_branch_ending);
+			break;
 
-	//While we're hitting arrays and structs, we'll need to be memory conscious
-	while(cursor != NULL && cursor->ast_node_type != AST_NODE_TYPE_UNARY_OPERATOR){
-		//Go based on what our node type is
-		switch(cursor->ast_node_type){
-			//Array access
-			case AST_NODE_TYPE_ARRAY_ACCESSOR:
-				//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
-				expression_package = emit_expression(current, cursor->first_child, is_branch_ending, FALSE);
+		//Struct pointer accessor
+		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
+			postfix_expression_results = emit_struct_pointer_accessor_expression(current_block, memory_region_type, operator_node, base_address, is_branch_ending);
+			break;
 
-				//If there is a difference in current and the final block, we'll reassign here
-				if(expression_package.final_block != NULL && current != expression_package.final_block){
-					//Set this to be at the end
-					current = expression_package.final_block;
+		default:
+			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Unrecognized node type", node->line_number);
+			exit(0);
+	}
 
-					//This is also the new final block
-					postfix_package.final_block = current;
-				}
+	//There is a special flag that stores whether or not this is the final postfix expression or not
+	u_int8_t dereference_needed = node->is_final;
 
-				//This is whatever was emitted by the expression
-				three_addr_var_t* array_offset = expression_package.assignee;
-				
-				//What is the internal type that we're pointing to? This will determine our scale
-				if(current_type->type_class == TYPE_CLASS_ARRAY){
-					//We'll dereference the current type
-					current_type = current_type->internal_types.member_type;
-				} else {
-					//We'll dereference the current type
-					current_type = current_type->internal_types.points_to;
-				}
+	//By default, the final assignee is just the results that we got
+	three_addr_var_t* final_assignee = postfix_expression_results.assignee;
+
+	//We'll package up the final results and leave here
+	if(dereference_needed == TRUE){
+		/**
+		 * An important note: we *always* use the original memory access type to determine what our variable's
+		 * type is. This ensures that we are insulated from the type inference that the parser performs
+		 */
+		//Go based on what side we have here
+		switch(node->side){
+			//Left side - this is a write operation
+			case SIDE_TYPE_LEFT:
+				//Emit the indirection for this one
+				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
+				//It's a write
+				final_assignee->access_type = MEMORY_ACCESS_WRITE;
+				break;
+
+			//Right side, this is a read operations
+			case SIDE_TYPE_RIGHT:
+				//Still emit the memory code
+				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
+				//It's a read
+				final_assignee->access_type = MEMORY_ACCESS_READ;
+
+				//We will perform the deref here, as we can't do it in the lea 
+				instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(original_memory_access_type), final_assignee);
+
+				//Is this branch ending?
+				deref_stmt->is_branch_ending = is_branch_ending;
+				//And add it in
+				add_statement(current_block, deref_stmt);
+
+				//Update the final assignee
+				final_assignee = deref_stmt->assignee;
 
 				/**
-				 * The formula for array subscript is: base_address + type_size * subscript
-				 * 
-				 * However, if we're on our second or third round, the current var may be an address
-				 *
-				 * This can be done using a lea instruction, so we will emit that directly
-				 */
-				three_addr_var_t* address;
-				//Calculate the address using the current var or current address
-				if(current_address == NULL){
-					//Remember, we can only use lea if we have a power of 2 
-					if(is_power_of_2(current_type->type_size) == TRUE){
-						address = emit_lea(current, current_var, array_offset, current_type, is_branch_ending);
-					} else {
-						address = emit_address_offset_calculation(current, current_var, array_offset, current_type, is_branch_ending);
-					}
-				} else {
-					//Remember, we can only use lea if we have a power of 2 
-					if(is_power_of_2(current_type->type_size) == TRUE){
-						address = emit_lea(current, current_address, array_offset, current_type, is_branch_ending);
-					} else {
-						address = emit_address_offset_calculation(current, current_address, array_offset, current_type, is_branch_ending);
-					}
-				}
+				 * It is often the case where we require an expanding move after we access memory. In order to
+				 * do this, we'll inject an assignment expression here which will eventually become a converting move
+				 * in the instruction selector
+				*/
+				if(is_expanding_move_required(parent_node_type, final_assignee->type) == TRUE){
+					//Assigning to something of the inferred type
+					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parent_node_type), final_assignee);
 
-				//Now this is the current address
-				current_address = address;
+					//We'll add the assignment in
+					add_statement(current_block, assignment);
 
-				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
-				//we're done here. We'll emit our memory code and leave this part of the loop
-				if(cursor->next_sibling == NULL){
-					//We're using indirection, address is being wiped out
-					current_address = NULL;
-
-					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-					if(postfix_expr_side == SIDE_TYPE_LEFT){
-						//Emit the indirection for this one
-						current_var = emit_pointer_indirection(current, address, current_type);
-						//It's a write
-						current_var->access_type = MEMORY_ACCESS_WRITE;
-
-					//Otherwise we're dealing with a read
-					} else {
-						//Still emit the memory code
-						current_var = emit_pointer_indirection(current, address, current_type);
-						//It's a read
-						current_var->access_type = MEMORY_ACCESS_READ;
-
-						//We will perform the deref here, as we can't do it in the lea 
-						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
-
-						//Is this branch ending?
-						deref_stmt->is_branch_ending = is_branch_ending;
-						//And add it in
-						add_statement(current, deref_stmt);
-
-						//Update the current bar too
-						current_var = deref_stmt->assignee;
-					}
-
-				} else {
-					//Otherwise, the current var is the address
-					current_var = address;
+					//Reassign this
+					final_assignee = assignment->assignee;
 				}
 
 				break;
+		}
+	}
 
-			//Union accessors should be simple because there are no offsets
-			//to speak of. The union type just changes what value we get out of the
-			//union
-			case AST_NODE_TYPE_UNION_ACCESSOR:
-				//Set the current address
-				union_address = current_var;
+	//Let's package and return everything that we need
+	cfg_result_package_t final_result = {basic_block, current_block, final_assignee, BLANK};
+	return final_result;
+}
 
-				//Set what the current type is
-				current_type = cursor->inferred_type;
 
-				//Now based on what side we're on, we'll emit the appropriate indirection
-				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
-				//we're done here. We'll emit our memory code and leave this part of the loop
-				if(cursor->next_sibling == NULL){
-					//We're using indirection, address is being wiped out
-					current_address = NULL;
+/**
+ * Emit a postoperation(postincrement or postdecrement) expression
+ *
+ * These are of the form:
+ * 		<postincrement-expression>
+ * 				  | 
+ * 		  <primary-expression>
+ *
+ * It is up to use in the CFG to appropriately clone/reconstruct the way that this works
+ */
+static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+	//Store the current block
+	basic_block_t* current_block = basic_block;
 
-					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-					if(postfix_expr_side == SIDE_TYPE_LEFT){
-						//Emit the indirection for this one
-						current_var = emit_pointer_indirection(current, union_address, current_type);
-						//It's a write
-						current_var->access_type = MEMORY_ACCESS_WRITE;
+	//The postfix node is always the first child
+	generic_ast_node_t* postfix_node = node->first_child;
 
-					//Otherwise we're dealing with a read
-					} else {
-						//Still emit the memory code
-						current_var = emit_pointer_indirection(current, union_address, current_type);
-						//It's a read
-						current_var->access_type = MEMORY_ACCESS_READ;
+	//We will first emit the postfix expression code that comes from this
+	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, temp_assignment_required, is_branch_ending);
 
-						//We will perform the deref here, as we can't do it in the lea 
-						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
+	//If this is now different, which it could be, we'll change what current is
+	if(postfix_expression_results.final_block != NULL && postfix_expression_results.final_block != current_block){
+		current_block = postfix_expression_results.final_block;
+	}
 
-						//Is this branch ending?
-						deref_stmt->is_branch_ending = is_branch_ending;
-						//And add it in
-						add_statement(current, deref_stmt);
+	//This is the value that we will be modifying
+	three_addr_var_t* assignee = postfix_expression_results.assignee;
 
-						//Update the current bar too
-						current_var = deref_stmt->assignee;
-					}
+	/**
+	 * Remember that for a postoperation, we save the value that we get before
+	 * we apply the operation. The "postoperation" does not happen until after the value is
+	 * used. To facilitate this, we will perform a temp assignment here. The result of
+	 * this temp assignment is actually what the user will be using
+	 */
 
-				} else {
-					//Otherwise, the current var is the address
-					current_var = union_address;
-				}
+	//Emit the assignment
+	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+	temp_assignment->is_branch_ending = is_branch_ending;
 
+	//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
+	temp_assignment->cannot_be_combined = TRUE;
+
+	//This counts as a use for the assignee
+	add_used_variable(current_block, assignee);
+
+	//Add this statement in
+	add_statement(current_block, temp_assignment);
+
+	//Initialize this off the bat
+	cfg_result_package_t postoperation_package = {basic_block, current_block, temp_assignment->assignee, BLANK};
+
+	//If the assignee is not a pointer, we'll handle the normal case
+	if(assignee->type->type_class == TYPE_CLASS_BASIC){
+		switch(node->unary_operator){
+			case PLUSPLUS:
+				//We really just have an "inc" instruction here
+				assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+				break;
+				
+			case MINUSMINUS:
+				//We really just have an "dec" instruction here
+				assignee = emit_dec_code(current_block, assignee, is_branch_ending);
 				break;
 
-			//A union pointer accessor does the same thing as a union accessor, just with a dereference 
-			//beforehand
-			case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-				//Dereference this out
-				dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.points_to);
-
-				//Now we'll grab a temp assignment for the current address
-				instruction_t* pointer_deref_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
-
-				//This now counts as a use
-				add_used_variable(current, dereferenced);
-
-				//Now we add the statement in
-				add_statement(current, pointer_deref_assignment);
-
-				//This is the union address here
-				union_address = pointer_deref_assignment->assignee;
-
-				//The current type is what the cursor points to
-				current_type = cursor->inferred_type;
-
-				//Now based on what side we're on, we'll emit the appropriate indirection
-				//If we see that the next sibling is NULL or it's not an array accessor(i.e. struct accessor),
-				//we're done here. We'll emit our memory code and leave this part of the loop
-				if(cursor->next_sibling == NULL){
-					//We're using indirection, address is being wiped out
-					current_address = NULL;
-
-					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-					if(postfix_expr_side == SIDE_TYPE_LEFT){
-						//Emit the indirection for this one
-						current_var = emit_pointer_indirection(current, union_address, current_type);
-						//It's a write
-						current_var->access_type = MEMORY_ACCESS_WRITE;
-
-					//Otherwise we're dealing with a read
-					} else {
-						//Still emit the memory code
-						current_var = emit_pointer_indirection(current, union_address, current_type);
-						//It's a read
-						current_var->access_type = MEMORY_ACCESS_READ;
-
-						//We will perform the deref here, as we can't do it in the lea 
-						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
-
-						//Is this branch ending?
-						deref_stmt->is_branch_ending = is_branch_ending;
-						//And add it in
-						add_statement(current, deref_stmt);
-
-						//Update the current bar too
-						current_var = deref_stmt->assignee;
-					}
-
-				} else {
-					//Otherwise, the current var is the address
-					current_var = union_address;
-				}
-
-				break;
-
-
-			//A struct pointer accessor does essentially the
-			//same thing as a regular struct accessor, with a dereference
-			//first
-			case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
-				//We need to first dereference this
-				dereferenced = emit_pointer_indirection(current, current_var, current_type->internal_types.points_to);
-
-				//Assign temp to be the current address
-				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
-
-				//The dereferenced variable here is used
-				add_used_variable(current, dereferenced);
-
-				//Add it into the block
-				add_statement(current, assignment);
-
-				//Reassign what current address really is
-				current_address = assignment->assignee;
-
-				//Dereference the current type
-				current_type = current_type->internal_types.points_to;	
-
-				//What we'll do first is grab the associated fields that we need out
-				variable = cursor->variable;
-
-				//Now we'll grab the associated nstruct record
-				member = get_struct_member(current_type, variable->var_name.string);
-
-				//The constant that represents the offset
-				struct_offset = emit_int_constant_direct(member->struct_offset, type_symtab);
-
-				//If the current address is NULL, we'll use the current var. Otherwise, we use the address
-				//we've already gotten
-				if(current_address == NULL){
-					struct_address = emit_struct_address_calculation(current, current_type, current_var, struct_offset, is_branch_ending);
-				} else {
-					struct_address = emit_struct_address_calculation(basic_block, current_type, current_address, struct_offset, is_branch_ending);
-				}
-
-				//This is now the member's type
-				current_type = member->type_defined_as;
-
-				//Do we need to do more memory work? We can tell if the array accessor node is next
-				if(cursor->next_sibling == NULL){
-					//We're using indirection, address is being wiped out
-					current_address = NULL;
-
-					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-					if(postfix_expr_side == SIDE_TYPE_LEFT){
-						//Emit the indirection for this one
-						current_var = emit_pointer_indirection(current, struct_address, current_type);
-						//It's a write
-						current_var->access_type = MEMORY_ACCESS_WRITE;
-					
-					//Otherwise we're dealing with a read
-					} else {
-						//Still emit the memory code
-						current_var = emit_pointer_indirection(current, struct_address, current_type);
-						//It's a read
-						current_var->access_type = MEMORY_ACCESS_READ;
-
-						//We will perform the deref here, as we can't do it in the lea 
-						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
-
-						//Is this branch ending?
-						deref_stmt->is_branch_ending = is_branch_ending;
-						//And add it in
-						add_statement(current, deref_stmt);
-
-						//Update the current bar too
-						current_var = deref_stmt->assignee;
-					}
-
-				//Otherwise, our current var is this address
-				} else {
-					current_var = struct_address;
-				}
-
-				break;
-
-			//A struct accessor
-			case AST_NODE_TYPE_STRUCT_ACCESSOR:
-				//What we'll do first is grab the associated fields that we need out
-				variable = cursor->variable;
-
-				//Now we'll grab the associated nstruct record
-				member = get_struct_member(current_type, variable->var_name.string);
-
-				//The constant that represents the offset
-				struct_offset = emit_int_constant_direct(member->struct_offset, type_symtab);
-
-				//If the current address is NULL, we'll use the current var. Otherwise, we use the address
-				//we've already gotten
-				if(current_address == NULL){
-					struct_address = emit_struct_address_calculation(current, current_type, current_var, struct_offset, is_branch_ending);
-				} else {
-					struct_address = emit_struct_address_calculation(basic_block, current_type, current_address, struct_offset, is_branch_ending);
-				}
-
-				//This is now the member's type
-				current_type = member->type_defined_as;
-
-				//Do we need to do more memory work? We can tell if the array accessor node is next
-				if(cursor->next_sibling == NULL){
-					//We're using indirection, address is being wiped out
-					current_address = NULL;
-
-					//If we're on the left hand side, we're trying to write to this variable. NO deref statement here
-					if(postfix_expr_side == SIDE_TYPE_LEFT){
-						//Emit the indirection for this one
-						current_var = emit_pointer_indirection(current, struct_address, current_type);
-						//It's a write
-						current_var->access_type = MEMORY_ACCESS_WRITE;
-					
-					//Otherwise we're dealing with a read
-					} else {
-						//Still emit the memory code
-						current_var = emit_pointer_indirection(current, struct_address, current_type);
-						//It's a read
-						current_var->access_type = MEMORY_ACCESS_READ;
-
-						//We will perform the deref here, as we can't do it in the lea 
-						instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(current_type), current_var);
-
-						//Is this branch ending?
-						deref_stmt->is_branch_ending = is_branch_ending;
-						//And add it in
-						add_statement(current, deref_stmt);
-
-						//Update the current bar too
-						current_var = deref_stmt->assignee;
-					}
-
-				//Otherwise, our current var is this address
-				} else {
-					current_var = struct_address;
-				}
-
-				break;
-
-			//This should never happen
+			//We shouldn't ever hit here
 			default:
 				break;
 		}
 
-		//Advance to the next sibling 
-		cursor = cursor->next_sibling;
-	}
-
-	//We could have a post inc/dec afterwards, so we'll let the helper hand if we do
-	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR){
-		//The helper can deal with this. Whatever it gives back is our assignee
-		postfix_package.assignee = emit_postoperation_code(current, current_var, cursor->unary_operator, temp_assignment_required, is_branch_ending);
+	//If we actually do have a pointer, we need the helper to deal with this
 	} else {
-		//Our assignee here is the current var
-		postfix_package.assignee = current_var;
+		//Let the helper deal with this
+		assignee = handle_pointer_arithmetic(current_block, node->unary_operator, assignee, is_branch_ending);
 	}
 
+	//Now that we've handled all of the emitting, we need to check and see if we have any special cases here where 
+	//we need to do additional work to reassign this
 	/**
-	 * It is often the case where we require an expanding move after we access memory. In order to
-	 * do this, we'll inject an assignment expression here which will eventually become a converting move
-	 * in the instruction selector
+	 * Logic here: if this is not some simple identifier(it could be array access, struct access, etc.), then
+	 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
 	 */
-	if(is_expanding_move_required(postfix_parent->inferred_type, current_var->type) == TRUE){
-		//Assigning to something of the inferred type
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(postfix_parent->inferred_type), current_var);
+	if(node->first_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+		//Duplicate the subtree here for us to use
+		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
 
-		//We'll add the assignment in
-		add_statement(current, assignment);
+		//Now we emit the copied package
+		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, temp_assignment_required, is_branch_ending);
 
-		//This now becomes the assignee
-		postfix_package.assignee = assignment->assignee;
+		//If this is now different, which it could be, we'll change what current is
+		if(copied_package.final_block != NULL && copied_package.final_block != current_block){
+			current_block = copied_package.final_block;
+		}
+
+		//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
+		instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+		assignment_instruction->is_branch_ending = is_branch_ending;
+
+		//Add this into the block
+		add_statement(current_block, assignment_instruction);
+
+		postoperation_package.final_block = current_block;
 	}
 
-	//Give back the package
-	return postfix_package;
+	//Give back the final unary package
+	return postoperation_package;
 }
 
 
@@ -3446,53 +3348,102 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 	//Now that we've emitted the assignee, we can handle the specific unary operators
 	switch(first_child->unary_operator){
-		//Handle the case of a preincrement
+		/**
+		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
+		 * that is returned to be used by the user is the incremented/decremented value unlike in a
+		 * postfix expression
+		 *
+		 * We'll need to apply desugaring here
+		 * ++x is really temp = x + 1
+		 * 				 x = temp
+		 * 				 use temp going forward
+		 */
 		case PLUSPLUS:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
-			//The assignee comes from our package
-			assignee = unary_package.assignee;
-
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
-
-			//If the assignee is not a pointer, we'll handle the normal case
-			if(assignee->type->type_class == TYPE_CLASS_BASIC){
-				//We really just have an "inc" instruction here
-				unary_package.assignee = emit_inc_code(current_block, assignee, is_branch_ending);
-			//If we actually do have a pointer, we need the helper to deal with this
-			} else {
-				//Let the helper deal with this
-				unary_package.assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
-			}
-
-			//Give back the final unary package
-			return unary_package;
-
-		//Handle the case of a predecrement
 		case MINUSMINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
 			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
-			//If we have a basic type, we can use the regular process
+			//The assignee comes from our package. This is what we are ultimately using in the final result
+			assignee = unary_package.assignee;
+		
+			//If the assignee is not a pointer, we'll handle the normal case
 			if(assignee->type->type_class == TYPE_CLASS_BASIC){
-				//We really just have an "inc" instruction here
-				unary_package.assignee = emit_dec_code(current_block, assignee, is_branch_ending);
-			//If we actually have a pointer, we'll let the helper deal with it
+				//If we have a temporary variable, then we need to perform
+				//a reassignment here for analysis purposes
+				if(unary_package.assignee->is_temporary == TRUE){
+					//Emit the assignment
+					instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+					temp_assignment->is_branch_ending = is_branch_ending;
+
+					//This now counts as a use
+					add_used_variable(current_block, assignee);
+
+					//Throw it in the block
+					add_statement(current_block, temp_assignment);
+
+					//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
+					temp_assignment->cannot_be_combined = TRUE;
+
+					//Now the new assignee equals this new temp that we have
+					assignee = temp_assignment->assignee;
+				}
+				
+				switch(first_child->unary_operator){
+					case PLUSPLUS:
+						//We really just have an "inc" instruction here
+						assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+						break;
+						
+					case MINUSMINUS:
+						//We really just have an "dec" instruction here
+						assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+						break;
+
+					//We shouldn't ever hit here
+					default:	
+						break;
+				}
+
+			//If we actually do have a pointer, we need the helper to deal with this
 			} else {
 				//Let the helper deal with this
-				unary_package.assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
+				assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
 			}
 
+			/**
+			 * Logic here: if this is not some simple identifier(it could be array access, struct access, etc.), then
+			 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
+			 */
+			if(first_child->next_sibling->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+				//Duplicate the subtree here for us to use
+				generic_ast_node_t* copy = duplicate_subtree(first_child->next_sibling, SIDE_TYPE_LEFT);
+
+				//Now we emit the copied package
+				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, temp_assignment_required, is_branch_ending);
+
+				//If this is now different, which it could be, we'll change what current is
+				if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+					current_block = unary_package.final_block;
+				}
+
+				//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
+				instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+				assignment_instruction->is_branch_ending = is_branch_ending;
+
+				//Add this into the block
+				add_statement(current_block, assignment_instruction);
+			}
+
+			//Store the assignee as this
+			unary_package.assignee = assignee;
+			//Update the final block if it has change
+			unary_package.final_block = current_block;
+		
 			//Give back the final unary package
 			return unary_package;
 
@@ -3669,9 +3620,11 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 		//If we see the actual node here, we know that we are actually doing a unary operation
 		case AST_NODE_TYPE_UNARY_EXPR:	
 			return emit_unary_operation(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
+		case AST_NODE_TYPE_POSTOPERATION:
+			return emit_postoperation_code(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
-			return emit_postfix_expr_code(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
+			return emit_postfix_expression(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
 	}
 }
 
@@ -4635,21 +4588,6 @@ void dealloc_cfg(cfg_t* cfg){
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
-}
-
-
-/**
- * Helper for returning error blocks. Error blocks always have an ID of -1
- */
-static cfg_result_package_t create_and_return_err(){
-	//Create the error
-	basic_block_t* err_block = basic_block_alloc(1);
-	//Set the ID to -1
-	err_block->block_id = -1;
-
-	//Packaage and return the results
-	cfg_result_package_t results = {err_block, err_block, NULL, BLANK};
-	return results;
 }
 
 

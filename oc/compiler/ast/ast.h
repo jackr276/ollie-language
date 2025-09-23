@@ -24,14 +24,6 @@
 //A generic AST node can be any AST node
 typedef struct generic_ast_node_t generic_ast_node_t;
 
-/**
- * Is this an assignable variable?
- */
-typedef enum{
-	NOT_ASSIGNABLE,
-	ASSIGNABLE
-} variable_assignability_t;
-
 //What type is in the AST node?
 typedef enum ast_node_type_t{
 	AST_NODE_TYPE_PROG,
@@ -48,6 +40,7 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_BINARY_EXPR,
 	AST_NODE_TYPE_POSTFIX_EXPR,
 	AST_NODE_TYPE_UNARY_EXPR,
+	AST_NODE_TYPE_POSTOPERATION, //Postincrement & postdecrement
 	AST_NODE_TYPE_UNARY_OPERATOR,
 	AST_NODE_TYPE_STRUCT_ACCESSOR,
 	AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR,
@@ -137,8 +130,10 @@ struct generic_ast_node_t{
 	Token binary_operator;
 	//Store a unary operator(if one exists)
 	Token unary_operator;
-	//Is this assignable?
-	variable_assignability_t is_assignable;
+	//Is this assignable
+	u_int8_t is_assignable;
+	//Is this final or not?
+	u_int8_t is_final;
 	//What side is this node on
 	side_type_t side;
 	//What kind of node is it?
@@ -178,9 +173,14 @@ void logical_not_constant_value(generic_ast_node_t* constant_node);
 generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side);
 
 /**
+ * Perform a deep copy on a subtree
+ */
+generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side);
+
+/**
  * A utility function for node duplication
  */
-generic_ast_node_t* duplicate_node(generic_ast_node_t* node);
+generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side);
 
 /**
  * A helper function that will appropriately add a child node into the parent

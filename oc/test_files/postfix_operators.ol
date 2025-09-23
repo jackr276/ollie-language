@@ -1,3 +1,8 @@
+/**
+* Author: Jack Robbins
+* Testing of basic postfix operator functionality
+*/
+
 pub fn main(arg:i32, argv:char**) -> i32 {
 	//The array that we have
 	declare mut arr:i32[14][2];

@@ -931,6 +931,10 @@ void print_token(lexitem_t* l){
  */
 char* operator_to_string(Token op){
 	switch(op){
+		case PLUSPLUS:
+			return "++";
+		case MINUSMINUS:
+			return "--";
 		case PLUS:
 			return "+";
 		case MINUS:

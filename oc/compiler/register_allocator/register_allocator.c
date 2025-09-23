@@ -692,6 +692,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 			if(is_instruction_pure_copy(instruction) == TRUE){
 				//If our live ranges interfere, we can perform the coalescing
 				if(do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE
+					&& instruction->cannot_be_combined == FALSE //Ensure that we actually can combine this
 					//Also check for precoloring interference
 					&& does_precoloring_interference_exist(instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
 					printf("Can coalesce LR%d and LR%d\n", instruction->source_register->associated_live_range->live_range_id, instruction->destination_register->associated_live_range->live_range_id);
@@ -779,26 +780,73 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 	//Run through every instruction in the block
 	while(current != NULL){
-		//Special case - we only need to add the assignee here 
-		if(current->instruction_type == PHI_FUNCTION){
-			//Let's see if we can find this
-			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->assignee);
+		//Predeclare for switch
+		live_range_t* live_range;
 
-			//If it's null we need to make one
-			if(live_range == NULL){
-				//Create it
-				live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
+		//Handle special cases
+		switch(current->instruction_type){
+			case PHI_FUNCTION:
+				//Let's see if we can find this
+				live_range = find_live_range_with_variable(live_ranges, current->assignee);
 
-				//Add it into the overall set
-				dynamic_array_add(live_ranges, live_range);
-			}
+				//If it's null we need to make one
+				if(live_range == NULL){
+					//Create it
+					live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
 
-			//Add this into the live range
-			add_variable_to_live_range(live_range, basic_block, current->assignee);
+					//Add it into the overall set
+					dynamic_array_add(live_ranges, live_range);
+				}
 
-			//And we're done - no need to go further
-			current = current->next_statement;
-			continue;
+				//Add this into the live range
+				add_variable_to_live_range(live_range, basic_block, current->assignee);
+
+				//And we're done - no need to go further
+				current = current->next_statement;
+				continue;
+
+			/**
+			 * For increment/decrement instructions - the only variable that we have just so happens to also
+			 * be the source. As such, we need to ensure that both of these end up in the same live range
+			 */
+			case INCB:
+			case INCL:
+			case INCQ:
+			case INCW:
+			case DECQ:
+			case DECL:
+			case DECW:
+			case DECB:
+				//If this is not a temp - the regular rule can handle it
+				if(current->assignee->is_temporary == FALSE){
+					break;
+				}
+
+				//Let's see if we can find this
+				live_range = find_live_range_with_variable(live_ranges, current->assignee);
+
+				//If it's null we need to make one
+				if(live_range == NULL){
+					//Create it
+					live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
+
+					//Add it into the overall set
+					dynamic_array_add(live_ranges, live_range);
+				}
+
+				//Add this into the live range
+				add_variable_to_live_range(live_range, basic_block, current->assignee);
+
+				//IMPORTANT - we also add the source to this
+				add_variable_to_live_range(live_range, basic_block, current->op1);
+
+				//And we're done - no need to go further
+				current = current->next_statement;
+				continue;
+
+			//Just head out
+			default:
+				break;
 		}
 
 		/**

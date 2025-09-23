@@ -14,7 +14,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	//Declare an array of such items
 
 	//Declare the struct array
-	let mut structure_arr:my_struct[] := [{'a', 'b', 23}, {'b', 'a', 22}, {'a', 'b', 222}];
+	let structure_arr:my_struct[] := [{'a', 'b', 23}, {'b', 'a', 22}, {'a', 'b', 222}];
 
 	//grab the structure array at the argument at y
 	ret structure_arr[arg]:y;
