@@ -1502,16 +1502,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_INC_STMT:
 			fprintf(fl, "inc ");
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			//fprintf(fl, " source: ");
-			//print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
 		case THREE_ADDR_CODE_DEC_STMT:
 			fprintf(fl, "dec ");
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			//fprintf(fl, " source: ");
-			//print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
