@@ -1,6 +1,6 @@
 /**
 * Author: Jack Robbins
-* Testing of basic postfix operator functionality
+* Test a bad postfix operator use
 */
 
 pub fn main(arg:i32, argv:char**) -> i32 {
@@ -24,6 +24,8 @@ pub fn main(arg:i32, argv:char**) -> i32 {
 		i := arr[0][0];
 	}
 
-	//So it isn't optimized away
-	ret arr[7][2]--;
+	let mut ptr:i32* := arr[0];
+	
+	//Fails currently
+	ret (++ptr)[2];
 }
