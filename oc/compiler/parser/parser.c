@@ -138,7 +138,7 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
  */
 static u_int8_t is_assignment_operator(Token op){
 	switch(op){
-		case COLONEQ:
+		case EQUALS:
 		case LSHIFTEQ:
 		case RSHIFTEQ:
 		case XOREQ:
@@ -1224,9 +1224,9 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//What is our final type?
 	generic_type_t* final_type = NULL;
 
-	//If we have a generic assignment(:=), we can just do the assignability
+	//If we have a generic assignment(=), we can just do the assignability
 	//check
-	if(assignment_operator == COLONEQ){
+	if(assignment_operator == EQUALS){
 		/**
 		 * We will make use of the types assignable module here, as the rules are slightly 
 		 * different than the types compatible rule
@@ -8017,8 +8017,8 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Assop is mandatory here
-	if(lookahead.tok != COLONEQ){
-		return print_and_return_error("Assignment operator(:=) required after identifier in let statement", parser_line_num);
+	if(lookahead.tok != EQUALS){
+		return print_and_return_error("Assignment operator(=) required after identifier in let statement", parser_line_num);
 	}
 
 	//Now we need to see a valid initializer
