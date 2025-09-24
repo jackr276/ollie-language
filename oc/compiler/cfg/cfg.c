@@ -1701,9 +1701,9 @@ static void build_dominator_trees(cfg_t* cfg, u_int8_t build_fresh){
 
 /**
  * if(x0 == 0){
- * 	asn x1 := 2;
+ * 	x1 = 2;
  * } else {
- * 	asn x2 := 3;
+ * 	x2 = 3;
  * }
  * 
  * x3 <- phi(x1, x2)
