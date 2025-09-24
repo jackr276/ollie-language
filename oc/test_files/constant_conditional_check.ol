@@ -4,7 +4,7 @@
 */
 
 pub fn main() -> i32 {
-	let mut x:i32 := 232;
+	let mut x:i32 = 232;
 
 	//Checking while
 	while(1){
@@ -22,7 +22,7 @@ pub fn main() -> i32 {
 	} while(1);
 
 	//checking for
-	for(let mut a:i32 := 32; a; a--){
+	for(let mut a:i32 = 32; a; a--){
 		x--;
 	}
 

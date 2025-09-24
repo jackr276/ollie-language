@@ -21,13 +21,13 @@ pub fn main() -> i32{
 	//Get x as a struct
 	declare mut x:custom_struct;
 
-	x:tester.ch := 'a';
+	x:tester.ch = 'a';
 
-	x:tester.x[2] := 2;
-	x:tester.x[3] := 2;
-	x:tester.x[4] := 2;
+	x:tester.x[2] = 2;
+	x:tester.x[3] = 2;
+	x:tester.x[4] = 2;
 
-	x:a := 'a';
+	x:a = 'a';
 
 	ret x:a + x:tester.x[3];
 }

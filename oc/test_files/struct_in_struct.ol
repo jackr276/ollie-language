@@ -30,14 +30,14 @@ pub fn main(arg:i32, argv:char**) -> i32{
 
 	switch(arg){
 		case 2 -> {
-			parent:internal:x := 32;
-			internal_struct:x := 322;
+			parent:internal:x = 32;
+			internal_struct:x = 322;
 		}
 		case 1 -> {
-			parent:internal:x := 32;
+			parent:internal:x = 32;
 		}
 		case 7 -> {
-			parent:internal:y := 32;
+			parent:internal:y = 32;
 		}
 
 		// Empty default

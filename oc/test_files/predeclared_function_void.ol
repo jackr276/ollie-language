@@ -7,7 +7,7 @@
 declare fn predeclared(void) -> i32;
 
 fn test_func() -> i32 {
-	let i:i32 := @predeclared();
+	let i:i32 = @predeclared();
 
 	ret i;
 }
@@ -18,7 +18,7 @@ fn predeclared() -> i32{
 
 pub fn main() -> i32 {
 	//Example call
-	let mut i:i32 := @test_func();
+	let mut i:i32 = @test_func();
 
 	ret i;
 }

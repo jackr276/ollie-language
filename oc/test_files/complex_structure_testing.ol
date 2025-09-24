@@ -16,11 +16,11 @@ pub fn main(arg:i32, argv:char**) -> i32{
 
 	declare mut structure:my_struct;
 
-	structure:ch := 'a';
-	structure:x[3] := 3;
-	structure:x[5] := 2;
-	structure:lch := 'b';
-	structure:y := 5;
+	structure:ch = 'a';
+	structure:x[3] = 3;
+	structure:x[5] = 2;
+	structure:lch = 'b';
+	structure:y = 5;
 
 	//So it isn't optimized away
 	ret structure:x[2];

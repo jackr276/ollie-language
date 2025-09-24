@@ -18,7 +18,7 @@ define struct my_struct{
 * Test reassigning a double pointer
 */
 pub fn double_pointer_reassign(mut ptr:i64**) -> i64**{
-	**ptr := 32;
+	**ptr = 32;
 
 	ret ptr;
 }
@@ -27,7 +27,7 @@ pub fn double_pointer_reassign(mut ptr:i64**) -> i64**{
 * Test reassigning a double pointer
 */
 pub fn single_pointer_reassign(mut ptr:i64*) -> void{
-	*ptr := 32;
+	*ptr = 32;
 
 	ret;
 }
@@ -39,8 +39,8 @@ pub fn single_pointer_reassign(mut ptr:i64*) -> void{
 * A function that will mutate a structure in its entirety
 */
 pub fn mutate_structure_pointer(mut struct_pointer:custom_struct**) -> i32 {
-	(*struct_pointer)=>y[2] := 32;
-	(*struct_pointer)=>lch := 'a';
+	(*struct_pointer)=>y[2] = 32;
+	(*struct_pointer)=>lch = 'a';
 
 	ret 0;
 }
@@ -48,13 +48,13 @@ pub fn mutate_structure_pointer(mut struct_pointer:custom_struct**) -> i32 {
 
 pub fn main(arg:i32, argv:char**) -> i32{
 	//Declare and initialize a struct
-	let mut a:custom_struct := {'a', [2,3,4], 'b'};
+	let mut a:custom_struct = {'a', [2,3,4], 'b'};
 	
 	//One more pointer
-	let mut b:custom_struct* := &a;
+	let mut b:custom_struct* = &a;
 
-	let mut x:i64 := 32;
-	let mut ptr:i64* := &x;
+	let mut x:i64 = 32;
+	let mut ptr:i64* = &x;
 
 	@double_pointer_reassign(&ptr);
 

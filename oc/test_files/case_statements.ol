@@ -3,26 +3,26 @@
 */
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let mut x:i32 := 32;
+	let mut x:i32 = 32;
 
 	switch(x){
 		case 2 -> {
-			x := 32;
+			x = 32;
 		}
 		case 1 -> {
-			x := -3;
+			x = -3;
 		}
 		case 4 -> {}
 		case 3 -> {
-			x := 211;
+			x = 211;
 		}
 
 		case 6 -> {
-			x := 22;
+			x = 22;
 		}
 
 		default -> {
-			x := x - 22;
+			x = x - 22;
 		}
 	}
 
@@ -31,10 +31,10 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	
 	switch(x){
 		default -> {
-			let i:i32 := 2;
+			let i:i32 = 2;
 		}
 		case 2 -> {
-			let i:i32 := 3;
+			let i:i32 = 3;
 		}
 	}
 	

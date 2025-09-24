@@ -5,26 +5,26 @@
 */
 
 pub fn main(argc:i32, argv:char**) -> i32{
-	let mut x:i32 := 32;
+	let mut x:i32 = 32;
 
 	switch(argc < 2 ? x else argc){
 		case 2 -> {
-			x := 32;
+			x = 32;
 		}
 		case 1 -> {
-			x := -3;
+			x = -3;
 		}
 		case 4 -> {}
 		case 3 -> {
-			x := 211;
+			x = 211;
 		}
 
 		case 6 -> {
-			x := 22;
+			x = 22;
 		}
 
 		default -> {
-			x := x - 22;
+			x = x - 22;
 		}
 	}
 

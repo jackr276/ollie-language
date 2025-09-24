@@ -27,13 +27,13 @@ pub fn main(arg:i32, argv:char**) -> i32{
 
 	switch(arg){
 		case 2 -> {
-			x := 32;
+			x = 32;
 		}
 		case 1 -> {
-			x := 3;
+			x = 3;
 		}
 		case 7 -> {
-			x := 2;
+			x = 2;
 		}
 		// Empty default
 		default -> {}
@@ -44,7 +44,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	
 
 	//Very basic initializer
-	let tester:my_struct := {x, 7, 'a'};
+	let tester:my_struct = {x, 7, 'a'};
 
 	//preincrement this
 	++tester:x;

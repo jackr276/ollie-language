@@ -5,8 +5,8 @@
 
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	let mut x:i32 := 3;
-	let mut y:i32 := 5;
+	let mut x:i32 = 3;
+	let mut y:i32 = 5;
 
 	switch (argc) {
 		case 1 -> {
@@ -19,7 +19,7 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 
 		//Invalid, we can't mix the two
 		case 7:
-			x := y;
+			x = y;
 			break;
 	
 

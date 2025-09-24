@@ -8,7 +8,7 @@ alias char as character;
 
 fn string_init() -> char {
 	//Invoke the string initializer
-	let my_str:character[] := "The quick brown fox";
+	let my_str:character[] = "The quick brown fox";
 
 	//And return it
 	ret my_str[2];

@@ -23,11 +23,11 @@ pub fn main() -> i32 {
 	define fn(mut i32, i32) -> i32 as arithmetic_function;
 
 	//This is the add function
-	let mut x:arithmetic_function := add;
-	let mut y:arithmetic_function := subtract;
+	let mut x:arithmetic_function = add;
+	let mut y:arithmetic_function = subtract;
 
 	//A more complex example
-	let mut a:i32 := @x(1, 3) + @y(2, 7);
+	let mut a:i32 = @x(1, 3) + @y(2, 7);
 	
 	ret a;
 }

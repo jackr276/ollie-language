@@ -20,9 +20,9 @@ fn my_func(mut args:u32) -> u32{
 		args++;
 	} 
 
-	for(let mut i:u32 := 0; i < 232; i++){
+	for(let mut i:u32 = 0; i < 232; i++){
 		i--;
-		let j:i32 := 32;
+		let j:i32 = 32;
 		continue when (i == 32);
 	}
 
@@ -31,7 +31,7 @@ fn my_func(mut args:u32) -> u32{
 
 
 fn test_func(mut i:u32) -> void{
-	i := 32;
+	i = 32;
 }
 
 
@@ -39,23 +39,23 @@ pub fn main(argc:i32, argv:char**) -> i32{
 	//Allocate a struct
 	declare mut my_structure:my_struct;
 
-	my_structure:a := 2;
-	my_structure:b := 3;
-	my_structure:c := 32;
+	my_structure:a = 2;
+	my_structure:b = 3;
+	my_structure:c = 32;
 
-	let j:i64 := 2342l;
+	let j:i64 = 2342l;
 
 	//Sample call
 	@test_func(2);
 
-	let mut idx:u32 := 0;
+	let mut idx:u32 = 0;
 
 	while(idx < 15){
-		let bab:u32 := @my_func(idx);
+		let bab:u32 = @my_func(idx);
 		idx++;
 	}
 	
-	idx := 23;
+	idx = 23;
 
 	do{
 		idx--;
@@ -63,13 +63,13 @@ pub fn main(argc:i32, argv:char**) -> i32{
 
 		if(idx == 12)  {
 			ret idx;
-			idx := 23;
+			idx = 23;
 		}
 
 	} while (idx > 0);
 
 	//Example for loop
-	for(let mut i:u32 := 0; i <= 234; i := i + 2){
+	for(let mut i:u32 = 0; i <= 234; i = i + 2){
 		@test_func(i);
 	}
 

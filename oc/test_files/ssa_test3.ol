@@ -3,12 +3,12 @@
 */
 
 pub fn main() -> i32{
-	let mut x:u32 := 33;
+	let mut x:u32 = 33;
 
 	if( x == 3222) {
 		ret x;
 	} else if (x == 11) {
-		x := x + 33;
+		x = x + 33;
 	} else {
 		x--;
 	}

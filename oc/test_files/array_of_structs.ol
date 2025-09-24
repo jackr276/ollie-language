@@ -13,8 +13,8 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	//Declare an array of such items
 	declare mut structure_arr:my_struct[32];
 
-	structure_arr[2]:y := 23;
-	structure_arr[2]:ch := 'a';
+	structure_arr[2]:y = 23;
+	structure_arr[2]:ch = 'a';
 
 	ret structure_arr[3]:y;
 }

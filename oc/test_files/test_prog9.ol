@@ -8,12 +8,12 @@ fn tester(i:u32) -> i32{
  */
 pub fn main() -> i32{
 	
-	let mut a:i32 := 23;
+	let mut a:i32 = 23;
 	
 	if(a == 32) {
-		let k:i32 := 232332222;
+		let k:i32 = 232332222;
 	} else {
-		let p:i32 := -2322;
+		let p:i32 = -2322;
 	}
 	
 	ret 0;

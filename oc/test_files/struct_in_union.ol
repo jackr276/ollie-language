@@ -22,8 +22,8 @@ pub fn main() -> i32{
 	declare my_union:custom_union;
 	
 	//Store x
-	my_union.x:a := 32;
-	my_union.x:y := 'a';
+	my_union.x:a = 32;
+	my_union.x:y = 'a';
 	
 	//Read as char
 	ret my_union.ch + my_union.x:x;

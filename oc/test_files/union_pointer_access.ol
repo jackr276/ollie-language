@@ -12,8 +12,8 @@ define union my_union {
 
 pub fn mut_union(mut x:custom_union*) -> i32 {
 	//We'll use the special union pointer accessor here
-	x->x := 4;
-	x->y := 2;
+	x->x = 4;
+	x->y = 2;
 
 	ret x->x;
 }
@@ -23,7 +23,7 @@ pub fn main() -> i32{
 	declare my_union:custom_union;
 	
 	//Store x
-	my_union.x := 32;
+	my_union.x = 32;
 
 	@mut_union(&my_union);
 	

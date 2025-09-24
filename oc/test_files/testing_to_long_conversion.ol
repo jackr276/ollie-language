@@ -5,21 +5,21 @@
 */
 
 fn test_subtraction() -> u64 {
-	let mut y:u64 := 32;
-	let mut x:i16 := 3;
+	let mut y:u64 = 32;
+	let mut x:i16 = 3;
 
-	y := y - x;
-	y := y * x;
-	y := y % x;
+	y = y - x;
+	y = y * x;
+	y = y % x;
 	ret y;
 }
 
 
 fn test() -> u64 {
-	let mut y:u64 := 32;
-	let mut x:i32 := 3;
+	let mut y:u64 = 32;
+	let mut x:i32 = 3;
 
-	y := y + x;
+	y = y + x;
 	ret y;
 }
 

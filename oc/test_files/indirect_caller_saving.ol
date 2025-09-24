@@ -10,7 +10,7 @@
 define fn(mut u32) -> u32 as count_function;
 
 fn pcount_r(mut x:u32) -> u32 {
-	let mut y:u32 := 32;
+	let mut y:u32 = 32;
 	if( x == 0) {
 		ret (x & 1) + @pcount_r(x >> 1) + y;
 	} else if (x == 1) {
@@ -18,7 +18,7 @@ fn pcount_r(mut x:u32) -> u32 {
 			ret 1 + y;
 		}
 
-		x := x + 1;
+		x = x + 1;
 	} else {
 		ret 0;
 	}
@@ -27,14 +27,14 @@ fn pcount_r(mut x:u32) -> u32 {
 }
 
 fn lcount_r(mut x:u32) -> u32 {
-	let mut y:u32 := 32;
+	let mut y:u32 = 32;
 	if( x == 0) {
 		ret (x & 3) + @pcount_r(x >> 5) + y;
 	} else if (x == 5) {
 		if(x > 3) {
 			ret 1 + y;
 		}
-		x := x + 1;
+		x = x + 1;
 	} else {
 		ret 3;
 	}
@@ -45,18 +45,18 @@ fn lcount_r(mut x:u32) -> u32 {
 
 pub fn main(argc:i32, argv:char**) -> i32 {
 	declare mut a:u32;
-	let mut x:u32 := 433;
+	let mut x:u32 = 433;
 
-	a := (x * -128) + (x - 11);
-	x := x / 9;
-	x := x && 21;
-	x := x || 32;
-	x := a - 3 + x;
-	x := x && 21;
+	a = (x * -128) + (x - 11);
+	x = x / 9;
+	x = x && 21;
+	x = x || 32;
+	x = a - 3 + x;
+	x = x && 21;
 
 	//Both defined indirectly
-	let z:count_function := pcount_r;
-	let y:count_function := lcount_r;
+	let z:count_function = pcount_r;
+	let y:count_function = lcount_r;
 
 	ret @z(32) + @z(32) + @y(17) + x;
 }

@@ -7,14 +7,14 @@ fn tester(arg:i32) -> void{
 }
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let mut x:u32 := 232;
+	let mut x:u32 = 232;
 
 	//Assign B a start
-	let mut b:i32 := 33;
+	let mut b:i32 = 33;
 
-	for(let a:u32 := 0; b != 0 || a < 33; a++) {
+	for(let a:u32 = 0; b != 0 || a < 33; a++) {
 		b--;
-		x := x - 5;
+		x = x - 5;
 	}
 
 	//So it isn't optimized away

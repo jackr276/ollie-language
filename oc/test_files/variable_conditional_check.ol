@@ -4,7 +4,7 @@
 */
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	let mut x:i32 := 232;
+	let mut x:i32 = 232;
 
 	//Checking while
 	while(*argv){

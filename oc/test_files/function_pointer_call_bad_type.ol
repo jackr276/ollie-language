@@ -14,9 +14,9 @@ pub fn main() -> i32 {
 	define fn(i32, i8) -> i32 as test_func;
 
 	//This one is tester
-	let my_func:test_func := tester;
+	let my_func:test_func = tester;
 
-	let mut x:i32 := 6;
+	let mut x:i32 = 6;
 
 	//Bad type, x is too large
 	ret @my_func(3, x);

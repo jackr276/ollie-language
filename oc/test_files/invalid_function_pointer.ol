@@ -24,7 +24,7 @@ pub fn main() -> i32 {
 	define fn(mut i32, i32) -> i32 as arithmetic_function;
 
 	//Just a random variable
-	let mut x:i32 := 3;
+	let mut x:i32 = 3;
 
 	//An attempt to call a variable that is not a function pointer. Should error out right here
 	ret @x(1, 3);

@@ -9,20 +9,20 @@ define struct my_struct{
 } as aliased_struct;
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	let i:u32 := 0;
+	let i:u32 = 0;
 	declare j:u32;
 
-	j := i;
+	j = i;
 
-	let k:u32 := 0;
-	let l:u32 := 0;
+	let k:u32 = 0;
+	let l:u32 = 0;
 	declare float_arr:f32[10];
 
 	if(i == 0) {
-		i := 2;
+		i = 2;
 	} else {
 		if(i == 3) {
-			i := 3;
+			i = 3;
 		}
 	}
 }
