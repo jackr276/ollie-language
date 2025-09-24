@@ -4,7 +4,7 @@
 */
 
 fn pcount_r(mut x:u64) -> u64 {
-	let mut y:u64 := 32;
+	let mut y:u64 = 32;
 	if( x == 0) {
 		ret (x & 1) + @pcount_r(x >> 1) + y;
 	} else if (x == 1) {
@@ -12,7 +12,7 @@ fn pcount_r(mut x:u64) -> u64 {
 			ret 1 + y;
 		}
 
-		x := x + 1;
+		x = x + 1;
 	} else {
 		ret 0;
 	}

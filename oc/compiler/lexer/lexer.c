@@ -945,6 +945,8 @@ char* operator_to_string(Token op){
 			return "/";
 		case MOD:
 			return "%";
+		case EQUALS:
+			return "=";
 		case PLUSEQ:
 			return "+=";
 		case MINUSEQ:

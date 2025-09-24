@@ -15,26 +15,26 @@ define enum type_enum{
 } as my_enum_type;
 
 fn tester(param:i32) -> i32{
-	let mut x:i32 := 32;
+	let mut x:i32 = 32;
 
 	switch(param){
 		case TYPE_ONE -> {
-			x := 32;
+			x = 32;
 		}
 		case TYPE_TWO -> {
-			x := -3;
+			x = -3;
 		}
 		case 7 -> {}
 		case TYPE_THREE -> {
-			x := 211;
+			x = 211;
 		}
 
 		case 9 -> {
-			x := 22;
+			x = 22;
 		}
 
 		default -> {
-			x := x - 22;
+			x = x - 22;
 		}
 	}
 

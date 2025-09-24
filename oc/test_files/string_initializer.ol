@@ -6,8 +6,8 @@
 
 fn string_init() -> char* {
 	//Invoke the string initializer
-	let my_str:char[] := "Hello world";
-	let ptr:char* := my_str;
+	let my_str:char[] = "Hello world";
+	let ptr:char* = my_str;
 
 	ret ptr;
 }

@@ -4,9 +4,9 @@
 */
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	let mut x:i32 := 2;
-	let mut a:u64 := x;
-	let mut y:i8 := 'a';
+	let mut x:i32 = 2;
+	let mut a:u64 = x;
+	let mut y:i8 = 'a';
 
 	if( x > y ) {
 		ret y;

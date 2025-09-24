@@ -13,7 +13,7 @@ pub fn main() -> i32 {
 	define fn(i32, i32) -> i32 as test_func;
 
 	//This one is tester
-	let my_func:test_func := tester;
+	let my_func:test_func = tester;
 
 	//Too few parameters
 	ret @my_func(3);

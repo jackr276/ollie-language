@@ -5,12 +5,12 @@
 
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	let mut x:i32 := 3;
-	let mut y:i32 := 5;
+	let mut x:i32 = 3;
+	let mut y:i32 = 5;
 
 	switch (argc) {
 		default -> {
-			x := y * 2;
+			x = y * 2;
 		}
 
 		case 1 -> {

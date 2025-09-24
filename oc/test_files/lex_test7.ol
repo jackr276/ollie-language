@@ -13,10 +13,10 @@ define struct con{
 pub fn main(argc:i32, argv:char**) -> i32
 {
 	if(argv) {
-		let i:str := "hi";
+		let i:str = "hi";
 	} else if(argc >= 2) {
 		if(argc == 3) {
-			let i:str := "hi";
+			let i:str = "hi";
 		}
 	}
 

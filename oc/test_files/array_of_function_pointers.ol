@@ -30,11 +30,11 @@ pub fn main() -> i32{
 
 	declare mut functions:arithmetic_function[3];
 
-	functions[0] := add;
-	functions[1] := subtract;
-	functions[2] := multiply;
+	functions[0] = add;
+	functions[1] = subtract;
+	functions[2] = multiply;
 
-	let x:arithmetic_function := functions[2];
+	let x:arithmetic_function = functions[2];
 
 	ret @x(1, 3);
 }

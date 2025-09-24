@@ -1072,7 +1072,7 @@ void print_variable_name(symtab_variable_record_t* record){
 			
 			//We'll print out some abbreviated stuff with the let record
 			if(record->declare_or_let == 1){
-				printf(" := <initializer>;\n\n");
+				printf("= <initializer>;\n\n");
 			} else {
 				printf(";\n");
 			}

@@ -11,26 +11,26 @@ define enum my_enum {
 } as custom_enum;
 
 fn tester(param:custom_enum) -> i32{
-	let mut x:i32 := 32;
+	let mut x:i32 = 32;
 
 	switch(param){
 		case A -> {
-			x := 32;
+			x = 32;
 		}
 		case B -> {
-			x := -3;
+			x = -3;
 		}
 		case C -> {}
 		case D -> {
-			x := 211;
+			x = 211;
 		}
 
 		case 11 -> {
-			x := 22;
+			x = 22;
 		}
 
 		default -> {
-			x := x - 22;
+			x = x - 22;
 		}
 	}
 

@@ -5,10 +5,10 @@
 */
 
 fn tester() -> u8 {
-	let mut x:u8 := 2;
-	let mut y:u8 := 3;
+	let mut x:u8 = 2;
+	let mut y:u8 = 3;
 
-	let mut z:u8 := x && y;
+	let mut z:u8 = x && y;
 
 	ret z;
 }

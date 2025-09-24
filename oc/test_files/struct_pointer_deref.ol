@@ -17,8 +17,8 @@ define struct my_struct{
 * A function that will mutate a structure in its entirety
 */
 pub fn mutate_structure_pointer(mut struct_pointer:custom_struct*) -> i32 {
-	(*struct_pointer):y[2] := 32;
-	(*struct_pointer):lch := 'a';
+	(*struct_pointer):y[2] = 32;
+	(*struct_pointer):lch = 'a';
 
 	ret (*struct_pointer):lch;
 }
@@ -26,7 +26,7 @@ pub fn mutate_structure_pointer(mut struct_pointer:custom_struct*) -> i32 {
 
 pub fn main(arg:i32, argv:char**) -> i32{
 	//Declare and initialize a struct
-	let mut a:custom_struct := {'a', [2,3,4], 'b'};
+	let mut a:custom_struct = {'a', [2,3,4], 'b'};
 
 	//Call the mutator
 	@mutate_structure_pointer(&a);

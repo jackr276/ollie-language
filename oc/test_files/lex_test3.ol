@@ -12,17 +12,17 @@ pub fn main(arg_count:u32, arg_vector:str_arr) -> i32{
 	declare c:u32;
 
 	if(arg_count != 0) {
-		arg_count := -1;
-		//arg_vector := "hello";
+		arg_count = -1;
+		//arg_vector = "hello";
 
 	} else if(arg_count >= -1) {
-		let a:f32 := .23;
-		let b:f32 := 2.322;
-		let c:f32 := a + b;
+		let a:f32 = .23;
+		let b:f32 = 2.322;
+		let c:f32 = a + b;
 
 
 	} else {
-		arg_count := -2;
+		arg_count = -2;
 	}
 
 	ret c >> 3;

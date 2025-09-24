@@ -4,8 +4,8 @@
 */
 
 pub fn main() -> i32 {
-	let i:u32 := 2;
-	let j:i32 := 3;
+	let i:u32 = 2;
+	let j:i32 = 3;
 
 	ret j < i;
 }

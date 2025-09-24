@@ -4,15 +4,15 @@
 */
 
 fn parameter_pass(x:i32, y:i32, z:i32, a:char, b:char, c:char) -> i32 {
-	let mut k:i32 := x + y + z;
-	let mut c:char := a + b + c;
+	let mut k:i32 = x + y + z;
+	let mut c:char = a + b + c;
 
 	ret k + c;
 }
 
 fn parameter_pass2(x:i32, y:i32, z:i32, a:char, b:char, c:char) -> i32 {
-	let mut k:i32 := x + y + z;
-	let mut c:char := a + b + c;
+	let mut k:i32 = x + y + z;
+	let mut c:char = a + b + c;
 
 	ret k + c;
 }
@@ -29,7 +29,7 @@ fn pcount_r(mut x:u64) -> u64 {
 			ret 1;
 		}
 
-		x := x + 1;
+		x = x + 1;
 	} else {
 		ret 0;
 	}
@@ -39,22 +39,22 @@ fn pcount_r(mut x:u64) -> u64 {
 
 
 pub fn main() -> i32{
-	let mut x:i32 := 3;
-	let mut y:i32 := x - 1;
-	let mut aa:i32 := x - y;
-	let mut bb:i32 := x - y;
-	let mut cc:i32 := x - y;
-	let mut dd:i32 := x - y;
-	let mut ee:i32 := x - y;
-	let mut ff:i32 := x - y;
+	let mut x:i32 = 3;
+	let mut y:i32 = x - 1;
+	let mut aa:i32 = x - y;
+	let mut bb:i32 = x - y;
+	let mut cc:i32 = x - y;
+	let mut dd:i32 = x - y;
+	let mut ee:i32 = x - y;
+	let mut ff:i32 = x - y;
 
-	let mut z:i32 := y + x;
-	let a:char := 'a';
-	let b:char := 'b';
-	let ch:char := 'c';
+	let mut z:i32 = y + x;
+	let a:char = 'a';
+	let b:char = 'b';
+	let ch:char = 'c';
 
-	let mut k:i32 := y / z + aa;
-	let mut c:i32 := y % k + cc + ee + ff;
+	let mut k:i32 = y / z + aa;
+	let mut c:i32 = y % k + cc + ee + ff;
 
 	//Testing complexities
 	if(k == 0) {

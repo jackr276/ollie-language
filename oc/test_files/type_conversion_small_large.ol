@@ -21,13 +21,13 @@ pub fn test_unions() -> i32{
 	//Get x as a struct
 	declare mut x:custom_struct;
 
-	x:tester.ch := 'a';
+	x:tester.ch = 'a';
 
-	x:tester.x[2] := 2;
-	x:tester.x[3] := 2;
-	x:tester.x[4] := 2;
+	x:tester.x[2] = 2;
+	x:tester.x[3] = 2;
+	x:tester.x[4] = 2;
 
-	x:a := 'a';
+	x:a = 'a';
 
 	ret x:a + x:tester.x[3];
 }
@@ -36,7 +36,7 @@ pub fn test_array_in_union() -> i32{
 	declare my_union:custom_union;
 	
 	//Store x
-	my_union.x[2] := 32;
+	my_union.x[2] = 32;
 	
 	//Read as char
 	ret my_union.ch + my_union.x[3];
@@ -48,7 +48,7 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 		y:char;
 	} as my_struct;
 
-	let custom:my_struct := {5, 'a'};
+	let custom:my_struct = {5, 'a'};
 
 	//Should be casted to an int
 	ret custom:y + custom:x;

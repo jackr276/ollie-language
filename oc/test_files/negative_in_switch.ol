@@ -5,25 +5,25 @@
 */
 
 fn negative_c_style(arg:i32) -> i32{
-	let mut x:i32 := 32;
+	let mut x:i32 = 32;
 
 	switch(arg){
 		case 2:
-			x := 32;
+			x = 32;
 		case 1:
-			x := -3;
+			x = -3;
 		case 4: 
 			break;
 		case -3:
-			x := 211;
+			x = 211;
 			break;
 
 		case 6:
-			x := 22;
+			x = 22;
 			break;
 
 		default:
-			x := x - 22;
+			x = x - 22;
 			break;
 	}
 
@@ -32,26 +32,26 @@ fn negative_c_style(arg:i32) -> i32{
 }
 
 fn negative_ollie_style(arg:i32) -> i32{
-	let mut x:i32 := 32;
+	let mut x:i32 = 32;
 
 	switch(x){
 		case -3 -> {
-			x := 32;
+			x = 32;
 		}
 		case 1 -> {
-			x := -3;
+			x = -3;
 		}
 		case 4 -> {}
 		case 3 -> {
-			x := 211;
+			x = 211;
 		}
 
 		case 6 -> {
-			x := 22;
+			x = 22;
 		}
 
 		default -> {
-			x := x - 22;
+			x = x - 22;
 		}
 	}
 

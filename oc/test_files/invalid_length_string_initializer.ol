@@ -9,8 +9,8 @@ fn string_init() -> char* {
 	//Invoke the string initializer with an extremely common error -
 	// forgetting that the string's true length is actually one more than
 	// what's shown due to the \0
-	let my_str:char[11] := "Hello world";
-	let ptr:char* := my_str;
+	let my_str:char[11] = "Hello world";
+	let ptr:char* = my_str;
 
 	ret ptr;
 }

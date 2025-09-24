@@ -6,10 +6,10 @@
 
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	let mut x:i32 := 3;
-	let mut y:i32 := 5;
+	let mut x:i32 = 3;
+	let mut y:i32 = 5;
 	//This will be totally useless
-	let mut z:i32 := 0;
+	let mut z:i32 = 0;
 
 	switch (argc) {
 		case 1 -> {
