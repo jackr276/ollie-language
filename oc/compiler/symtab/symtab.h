@@ -164,8 +164,9 @@ struct symtab_variable_record_t{
 	u_int8_t is_mutable;
 	//What type structure or language concept does this variable belong to?
 	variable_membership_t membership;
-	//Does this need to be spilled
-	u_int8_t must_be_spilled;
+	//Where does this variable get stored? By default we assume register, so
+	//this flag will only be set if we have a memory address value
+	u_int8_t stack_variable;
 	//What's the storage class?
 	STORAGE_CLASS_T storage_class;
 	//Was it declared or letted

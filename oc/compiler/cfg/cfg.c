@@ -3576,22 +3576,25 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				current_block = unary_package.final_block;
 			}
 
-			//We'll need to assign to a temp here, these are
-			//only ever on the RHS
-			assignment = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), assignee);
-			assignment->is_branch_ending = is_branch_ending;
+			//Add this variable onto the stack now
+			add_variable_to_stack(&(current_function->data_area), unary_package.assignee);
 
+			//==================== TODO NOT DONE ========================
+			
 			//We will count the assignee here as a used variable
 			add_used_variable(current_block, assignee);
 
 			//We now need to flag that the assignee here absolutely must be spilled by the register allocator
-			assignee->linked_var->must_be_spilled = TRUE;
+			assignee->linked_var->stack_variable = TRUE;
 
 			//Add this into the block
 			add_statement(current_block, assignment);
 
 			//This assignee comes from the last assignment
 			unary_package.assignee = assignment->assignee;
+
+			printf("NOT IMPLEMENTED\n");
+			exit(0);
 
 			//Give back the unary package
 			return unary_package;

@@ -451,11 +451,6 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 		return;
 	}
 
-	//If this needs to be spilled, then the whole live range needs to be spilled
-	if(variable->linked_var != NULL && variable->linked_var->must_be_spilled == TRUE){
-		live_range->must_be_spilled = TRUE;
-	}
-
 	//Otherwise we'll add this in here
 	dynamic_array_add(live_range->variables, variable);
 

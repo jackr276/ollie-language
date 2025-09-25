@@ -337,8 +337,6 @@ typedef enum{
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A memory access statement
 	THREE_ADDR_CODE_MEM_ACCESS_STMT,
-	//An address assignment instruction for memory address
-	THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT
 } instruction_stmt_type_t;
 
 
@@ -367,8 +365,6 @@ struct live_range_t{
 	u_int8_t carries_function_param;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
-	//Does this live range need to be spilled?
-	u_int8_t must_be_spilled;
 	//What register is this live range in?
 	register_holder_t reg; 
 	//The size of the variable in the live range
@@ -752,11 +748,6 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
  * Emit a statement that only uses two vars of the form var1 <- var2
  */
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
-
-/**
- * Emit a memory address assignment statement
- */
-instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
