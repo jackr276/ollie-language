@@ -1980,9 +1980,12 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 		//Address operator case
 		case SINGLE_AND:
-			//Is there an attempt to take the address of a constant
-			if(cast_expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				return print_and_return_error("The address of a constant cannot be taken", parser_line_num);
+			/**
+			 * We can only take the address of an identifier. Anything else would not make sense for
+			 * us. As such - if this is not an identifier, we fail out
+			 */
+			if(cast_expr->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+				return print_and_return_error("Invalid value for address operator &", parser_line_num);
 			}
 
 			//Check to see if it's valid
