@@ -1526,6 +1526,15 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		//A load statement takes a variable out of memory and stores
+		//it into a temp
+		case THREE_ADDR_CODE_LOAD_CONST_STATEMENT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- load ");
+			print_three_addr_constant(fl, stmt->op1_const);
+			fprintf(fl, "\n");
+			break;
+
 		//A store statement takes a value and stores it into a variable's
 		//memory location on the stack
 		case THREE_ADDR_CODE_STORE_STATEMENT:
@@ -3586,6 +3595,63 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 	stmt->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 	stmt->assignee = assignee;
 	stmt->op1_const = constant;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll now just give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a store statement. This is like an assignment instruction, but we're explicitly
+ * using stack memory here
+ */
+instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll now just give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a load statement. This is like an assignment instruction, but we're explicitly
+ * using stack memory here
+ */
+instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll now just give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a load statement. This is like an assignment instruction, but we're explicitly
+ * using stack memory here
+ */
+instruction_t* emit_load_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_CONST_STATEMENT;
+	stmt->assignee = assignee;
+	stmt->op1_const = op1_const;
 	//What function are we in
 	stmt->function = current_function;
 	//And that's it, we'll now just give it back
