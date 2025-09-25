@@ -137,6 +137,11 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 	//with the needed padding and the new type's size added onto it
 	area->total_size = area->total_size + needed_padding + var->type->type_size;
 
+	//Copy this over to the variable itself if it's there
+	if(var->linked_var != NULL){
+		var->linked_var->stack_offset = var->stack_offset;
+	}
+
 	//Finally add this to the array
 	dynamic_array_add(area->variables, var);
 }

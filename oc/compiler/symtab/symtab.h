@@ -142,6 +142,8 @@ struct symtab_variable_record_t{
 	symtab_variable_record_t* next;
 	//What is the enum member value
 	u_int64_t enum_member_value;
+	//The stack offset of this variable, if it is a stack variable
+	u_int32_t stack_offset;
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The hash of it
