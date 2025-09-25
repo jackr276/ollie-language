@@ -1517,6 +1517,24 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		//A load statement takes a variable out of memory and stores
+		//it into a temp
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- load ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		//A store statement takes a value and stores it into a variable's
+		//memory location on the stack
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- store ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			//We will use a sequence of commands to do this
