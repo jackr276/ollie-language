@@ -2149,17 +2149,6 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 
 
 /**
- * Emit an address calculation statement to get the address of a given variable
- */
-static three_addr_var_t* emit_stack_address_calculation(basic_block_t* basic_block, three_addr_var_t* variable, generic_type_t* return_type){
-
-	//TODO STUB
-	return NULL;
-}
-
-
-
-/**
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
@@ -3356,6 +3345,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 	//Extract the first child from the unary expression parent node
 	generic_ast_node_t* first_child = unary_expression_parent->first_child;
+	// For use later on
+	generic_ast_node_t* second_child;
 
 	//Now that we've emitted the assignee, we can handle the specific unary operators
 	switch(first_child->unary_operator){
@@ -3575,20 +3566,17 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//And give back the final value
 			return unary_package;
 
-		//Handle the case of the address operator
+		//Handle the case of the address operator - this is a very unique case, we will not call the unary expression
+		//helper here, because we know that this must always be an identifier node
 		case SINGLE_AND:
-			//This should always just be an identifier - the parser will have validated this for us
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, FALSE, is_branch_ending);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
+			//Grab this out
+			second_child = first_child->next_sibling;
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Extract the variable from it
+			three_addr_var_t* ident_var = emit_identifier(current_block, second_child, FALSE, is_branch_ending);
 
-			//Grab the assignee out
-			symtab_variable_record_t* variable = assignee->linked_var;
+			//And finally extract this
+			symtab_variable_record_t* variable = ident_var->linked_var;
 
 			/**
 			 * KEY DETAIL HERE: the variable may already be in the stack. If we're requesting
@@ -3599,31 +3587,19 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			if(does_stack_contain_symtab_variable(&(current_function->data_area), variable) == FALSE){
 				//Add this variable onto the stack now, since we know it is not already on it
 				add_variable_to_stack(&(current_function->data_area), unary_package.assignee);
-			} else {
-				//Otherwise we have found a variable that is on the stack
-				printf("Variable %s is already on the stack\n", variable->var_name.string);
-
 			}
 
+			//We'll now emit the actual address calculation using the offset
+			three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(unary_expression_parent->inferred_type), stack_pointer_var, PLUS, emit_int_constant_direct(variable->stack_offset, type_symtab), FALSE);
 
+			//Mark that this is indeed a stack variable
+			variable->stack_variable = TRUE;
 
-			//We will count the assignee here as a used variable
-			add_used_variable(current_block, assignee);
+			//Emit the assignment for the address
+			assignment = emit_assignment_instruction(emit_temp_var(unary_expression_parent->inferred_type), address);
 
-
-			//==================== TODO NOT DONE ========================
-
-			//We now need to flag that the assignee here absolutely must be spilled by the register allocator
-			assignee->linked_var->stack_variable = TRUE;
-
-			//Add this into the block
-			add_statement(current_block, assignment);
-
-			//This assignee comes from the last assignment
+			//And package the value up as what we want here
 			unary_package.assignee = assignment->assignee;
-
-			printf("NOT IMPLEMENTED\n");
-			exit(0);
 
 			//Give back the unary package
 			return unary_package;
