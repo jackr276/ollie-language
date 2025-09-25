@@ -1531,9 +1531,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		//A load statement takes a variable out of memory and stores
 		//it into a temp
-		case THREE_ADDR_CODE_LOAD_CONST_STATEMENT:
+		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- load ");
+			fprintf(fl, " <- store ");
 			print_three_addr_constant(fl, stmt->op1_const);
 			fprintf(fl, "\n");
 			break;
@@ -3644,15 +3644,15 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 
 
 /**
- * Emit a load statement. This is like an assignment instruction, but we're explicitly
+ * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_load_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const){
+instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
-	stmt->statement_type = THREE_ADDR_CODE_LOAD_CONST_STATEMENT;
+	stmt->statement_type = THREE_ADDR_CODE_STORE_CONST_STATEMENT;
 	stmt->assignee = assignee;
 	stmt->op1_const = op1_const;
 	//What function are we in

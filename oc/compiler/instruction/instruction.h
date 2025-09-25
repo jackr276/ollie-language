@@ -327,8 +327,8 @@ typedef enum{
 	THREE_ADDR_CODE_NEG_STATEMENT,
 	//A load statement
 	THREE_ADDR_CODE_LOAD_STATEMENT,
-	//A load statement, but explicitly with a constant
-	THREE_ADDR_CODE_LOAD_CONST_STATEMENT,
+	//A store statement, but explicitly with a constant
+	THREE_ADDR_CODE_STORE_CONST_STATEMENT,
 	//And a store statement
 	THREE_ADDR_CODE_STORE_STATEMENT,
 	//SPECIAL CASE - assembly inline statement
@@ -768,10 +768,10 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
- * Emit a load statement. This is like an assignment instruction, but we're explicitly
+ * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_load_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const);
+instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const

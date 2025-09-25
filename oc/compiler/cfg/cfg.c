@@ -2625,23 +2625,50 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 
 	//Is temp assignment required? This usually indicates that we're on the right hand side of some equation
 	if(temp_assignment_required == TRUE){
-		//First we'll create the non-temp var here
-		three_addr_var_t* non_temp_var = emit_var(ident_node->variable);
+		//Extract the symtab var
+		symtab_variable_record_t* symtab_variable = ident_node->variable;
 
-		//Let's first create the assignment statement
-		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
+		//The final assignee
+		three_addr_var_t* assignee;
 
-		//Add this in as a used variable
-		add_used_variable(basic_block, non_temp_var);
+		//If this is not a stack variable, we can just do the basic steps
+		if(symtab_variable->stack_variable == FALSE){
+			//First we'll create the non-temp var here
+			three_addr_var_t* non_temp_var = emit_var(ident_node->variable);
 
-		//Carry this through
-		temp_assignment->is_branch_ending = is_branch_ending;
+			//Let's first create the assignment statement
+			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
 
-		//Add the statement in
-		add_statement(basic_block, temp_assignment);
+			//Add this in as a used variable
+			add_used_variable(basic_block, non_temp_var);
+
+			//Carry this through
+			temp_assignment->is_branch_ending = is_branch_ending;
+
+			//Add the statement in
+			add_statement(basic_block, temp_assignment);
+
+			//For the rvalue
+			assignee = temp_assignment->assignee;
+
+		//Otherwise, we need to start emitting some load logic here
+		} else {
+			//Emit the load instruction
+			instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
+			load_instruction->is_branch_ending = is_branch_ending;
+
+			//Add it to the block
+			add_statement(basic_block, load_instruction);
+
+			//This counts as a use
+			add_used_variable(basic_block, load_instruction->op1);
+
+			//And the final assignee is this load
+			assignee = load_instruction->assignee;
+		}
 
 		//Just give back the temp var here
-		return temp_assignment->assignee;
+		return assignee;
 
 	//Otherwise, the temporary assignment is not required. This usually means that we're on the left
 	//hand side of an equation
@@ -3588,9 +3615,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//We'll now emit the actual address calculation using the offset
 			three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(unary_expression_parent->inferred_type), stack_pointer_var, PLUS, emit_int_constant_direct(variable->stack_offset, type_symtab), FALSE);
-
-			//Mark that this is indeed a stack variable
-			variable->stack_variable = TRUE;
 
 			//And package the value up as what we want here
 			unary_package.assignee = address;

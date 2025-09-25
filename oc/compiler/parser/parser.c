@@ -2013,6 +2013,9 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				return_type = type_record->type;
 			}
 
+			//IMPORTANT - we need to flag this as a stack variable now
+			cast_expr->variable->stack_variable = TRUE;
+
 			//This is not assignable
 			is_assignable = FALSE;
 
