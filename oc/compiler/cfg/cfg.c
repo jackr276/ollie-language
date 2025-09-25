@@ -3572,11 +3572,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Grab this out
 			second_child = first_child->next_sibling;
 
-			//Extract the variable from it
-			three_addr_var_t* ident_var = emit_identifier(current_block, second_child, FALSE, is_branch_ending);
-
 			//And finally extract this
-			symtab_variable_record_t* variable = ident_var->linked_var;
+			symtab_variable_record_t* variable = second_child->variable;
 
 			/**
 			 * KEY DETAIL HERE: the variable may already be in the stack. If we're requesting
@@ -3586,7 +3583,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
 			if(does_stack_contain_symtab_variable(&(current_function->data_area), variable) == FALSE){
 				//Add this variable onto the stack now, since we know it is not already on it
-				add_variable_to_stack(&(current_function->data_area), unary_package.assignee);
+				add_variable_to_stack(&(current_function->data_area), emit_var(variable));
 			}
 
 			//We'll now emit the actual address calculation using the offset
@@ -3595,11 +3592,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Mark that this is indeed a stack variable
 			variable->stack_variable = TRUE;
 
-			//Emit the assignment for the address
-			assignment = emit_assignment_instruction(emit_temp_var(unary_expression_parent->inferred_type), address);
-
 			//And package the value up as what we want here
-			unary_package.assignee = assignment->assignee;
+			unary_package.assignee = address;
+			unary_package.final_block = current_block;
 
 			//Give back the unary package
 			return unary_package;
