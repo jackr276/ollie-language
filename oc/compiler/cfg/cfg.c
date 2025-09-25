@@ -3566,11 +3566,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 		//Handle the case of the address operator
 		case SINGLE_AND:
-			/**
-			 * An important distinction here between this and the rest - we'll need to emit
-			 * this unary expression as if it is on the left hand side. We cannot have temporary
-			 * variables in this assignee
-			 */
+			//This should always just be an identifier - the parser will have validated this for us
 			unary_package = emit_unary_expression(current_block, first_child->next_sibling, FALSE, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
