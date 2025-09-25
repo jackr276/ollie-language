@@ -45,6 +45,27 @@ static u_int8_t does_stack_contain_variable(stack_data_area_t* area, three_addr_
 
 
 /**
+ * Does the stack already contain this variable? This is important for types like
+ * constructs and arrays
+ */
+u_int8_t does_stack_contain_symtab_variable(stack_data_area_t* area, void* symtab_variable){
+	//Run through and try to find this
+	for(u_int16_t i = 0; i < area->variables->current_index; i++){
+		//Grab it out
+		three_addr_var_t* ir_variable = dynamic_array_get_at(area->variables, i);
+
+		//This is our success case
+		if(ir_variable->linked_var != NULL && ir_variable->linked_var == symtab_variable){
+			return TRUE;
+		}
+	}
+
+	//Return false if we get here
+	return FALSE;
+}
+
+
+/**
  * Align the stack data area size to be 16-byte aligned
  */
 void align_stack_data_area(stack_data_area_t* area){

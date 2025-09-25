@@ -2149,6 +2149,17 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 
 
 /**
+ * Emit an address calculation statement to get the address of a given variable
+ */
+static three_addr_var_t* emit_stack_address_calculation(basic_block_t* basic_block, three_addr_var_t* variable, generic_type_t* return_type){
+
+	//TODO STUB
+	return NULL;
+}
+
+
+
+/**
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
@@ -3576,13 +3587,31 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				current_block = unary_package.final_block;
 			}
 
-			//Add this variable onto the stack now
-			add_variable_to_stack(&(current_function->data_area), unary_package.assignee);
+			//Grab the assignee out
+			symtab_variable_record_t* variable = assignee->linked_var;
 
-			//==================== TODO NOT DONE ========================
-			
+			/**
+			 * KEY DETAIL HERE: the variable may already be in the stack. If we're requesting
+			 * the address of a struct for example, we don't need to add said struct to the
+			 * stack - it is already there. We need to account for these nuances when
+			 * we do this
+			 */
+			if(does_stack_contain_symtab_variable(&(current_function->data_area), variable) == FALSE){
+				//Add this variable onto the stack now, since we know it is not already on it
+				add_variable_to_stack(&(current_function->data_area), unary_package.assignee);
+			} else {
+				//Otherwise we have found a variable that is on the stack
+				printf("Variable %s is already on the stack\n", variable->var_name.string);
+
+			}
+
+
+
 			//We will count the assignee here as a used variable
 			add_used_variable(current_block, assignee);
+
+
+			//==================== TODO NOT DONE ========================
 
 			//We now need to flag that the assignee here absolutely must be spilled by the register allocator
 			assignee->linked_var->stack_variable = TRUE;

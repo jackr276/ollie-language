@@ -41,6 +41,11 @@ void stack_data_area_alloc(stack_data_area_t* area);
 void add_variable_to_stack(stack_data_area_t* area, void* variable);
 
 /**
+ * Does a stack contain a given *symtab variable* address?
+ */
+u_int8_t does_stack_contain_symtab_variable(stack_data_area_t* area, void* symtab_variable);
+
+/**
  * Remove a node from the stack if it is deemed useless
  */
 void remove_variable_from_stack(stack_data_area_t* area, void* variable);
