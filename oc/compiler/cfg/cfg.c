@@ -107,8 +107,8 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, 
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending);
-static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
-static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
+static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t is_branch_ending);
+static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_initialization(basic_block_t* current_block, three_addr_var_t* assignee, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
@@ -2421,7 +2421,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//not happen all the time naturally. As such, we need this assignment here
 	if(ret_node->first_child != NULL){
 		//Perform the binary operation here
-		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
+		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending);
 
 		//If we hit a ternary here, we'll need to reassign what our current block is
 		if(expression_package.final_block != NULL && expression_package.final_block != current){
@@ -2616,15 +2616,17 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
  */
-static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t is_branch_ending){
 	//Handle an enumerated type right here
 	if(ident_node->variable->membership == ENUM_MEMBER) {
 		//Just create a constant here with the enum
 		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), ident_node->variable->type_defined_as, is_branch_ending);
 	}
 
+	/*
 	//Is temp assignment required? This usually indicates that we're on the right hand side of some equation
 	if(temp_assignment_required == TRUE){
+		printf("TEMP ASSIGNMENT IS NEEDED\n\n\n");
 		//Extract the symtab var
 		symtab_variable_record_t* symtab_variable = ident_node->variable;
 
@@ -2673,12 +2675,16 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	//Otherwise, the temporary assignment is not required. This usually means that we're on the left
 	//hand side of an equation
 	} else {
-		//Create our variable
-		three_addr_var_t* returned_variable = emit_var(ident_node->variable);
 
-		//Give our variable back
-		return returned_variable;
 	}
+	*/
+	
+
+	//Create our variable
+	three_addr_var_t* returned_variable = emit_var(ident_node->variable);
+
+	//Give our variable back
+	return returned_variable;
 }
 
 
@@ -2910,7 +2916,7 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
  */
-static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t is_branch_ending){
 	//Initialize these results at first
 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
@@ -2918,7 +2924,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 	switch(primary_parent->ast_node_type){
 		//In this case we'll only worry about the assignee
 		case AST_NODE_TYPE_IDENTIFIER:
-		 	result_package.assignee = emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
+		 	result_package.assignee = emit_identifier(basic_block, primary_parent, is_branch_ending);
 			return result_package;
 
 		//Same in this case - just an assignee in basic block
@@ -2936,7 +2942,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 
 		//By default, we're emitting some kind of expression here
 		default:
-			return emit_expression(basic_block, primary_parent, is_branch_ending, FALSE);
+			return emit_expression(basic_block, primary_parent, is_branch_ending);
 	}
 }
 
@@ -2951,7 +2957,7 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 	basic_block_t* current_block = block;
 
 	//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
-	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child, is_branch_ending, FALSE);
+	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child, is_branch_ending);
 
 	//If there is a difference in current and the final block, we'll reassign here
 	if(expression_package.final_block != NULL && current_block != expression_package.final_block){
@@ -3116,10 +3122,10 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  * the parent node's type in our decision making. We *will* use it at the very end to determine if any kind
  * of converting move is required for us to make
  */
-static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Acts as a base case/stopper. We'll just go right through in this case
 	if(node->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
-		return emit_primary_expr_code(basic_block, node, temp_assignment_required, is_branch_ending);
+		return emit_primary_expr_code(basic_block, node, is_branch_ending);
 	}
 
 	//Keep track of the current block here
@@ -3136,7 +3142,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_type_t* original_memory_access_type = operator_node->inferred_type;
 
 	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
-	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, temp_assignment_required, is_branch_ending);
+	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, is_branch_ending);
 
 	//Reassign the current block if need be
 	if(first_child_results.final_block != NULL && first_child_results.final_block != current_block){
@@ -3258,7 +3264,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
  *
  * It is up to use in the CFG to appropriately clone/reconstruct the way that this works
  */
-static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Store the current block
 	basic_block_t* current_block = basic_block;
 
@@ -3266,7 +3272,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	generic_ast_node_t* postfix_node = node->first_child;
 
 	//We will first emit the postfix expression code that comes from this
-	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, temp_assignment_required, is_branch_ending);
+	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, is_branch_ending);
 
 	//If this is now different, which it could be, we'll change what current is
 	if(postfix_expression_results.final_block != NULL && postfix_expression_results.final_block != current_block){
@@ -3334,7 +3340,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
 
 		//Now we emit the copied package
-		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, temp_assignment_required, is_branch_ending);
+		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, is_branch_ending);
 
 		//If this is now different, which it could be, we'll change what current is
 		if(copied_package.final_block != NULL && copied_package.final_block != current_block){
@@ -3359,7 +3365,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 /**
  * Handle a unary operator, in whatever form it may be
  */
-static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent, u_int8_t is_branch_ending){
 	//Top level declarations to avoid using them in the switch statement
 	three_addr_var_t* dereferenced;
 	instruction_t* assignment;
@@ -3390,7 +3396,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case PLUSPLUS:
 		case MINUSMINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 
 			//If this is now different, which it could be, we'll change what current is
 			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
@@ -3453,7 +3459,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				generic_ast_node_t* copy = duplicate_subtree(first_child->next_sibling, SIDE_TYPE_LEFT);
 
 				//Now we emit the copied package
-				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, temp_assignment_required, is_branch_ending);
+				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, is_branch_ending);
 
 				//If this is now different, which it could be, we'll change what current is
 				if(unary_package.final_block != NULL && unary_package.final_block != current_block){
@@ -3479,7 +3485,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Handle a dereference
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3524,7 +3530,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Bitwise not operator
 		case B_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3542,7 +3548,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Logical not operator
 		case L_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3568,7 +3574,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 */
 		case MINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3636,18 +3642,18 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t is_branch_ending){
 	//Switch based on what class this node actually is
 	switch(unary_expression->ast_node_type){
 		//If it's actually a unary expression, we can do some processing
 		//If we see the actual node here, we know that we are actually doing a unary operation
 		case AST_NODE_TYPE_UNARY_EXPR:	
-			return emit_unary_operation(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
+			return emit_unary_operation(basic_block, unary_expression, is_branch_ending);
 		case AST_NODE_TYPE_POSTOPERATION:
-			return emit_postoperation_code(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
+			return emit_postoperation_code(basic_block, unary_expression, is_branch_ending);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
-			return emit_postfix_expression(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
+			return emit_postfix_expression(basic_block, unary_expression, is_branch_ending);
 	}
 }
 
@@ -3730,7 +3736,9 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cursor = cursor->next_sibling;
 
 	//Emit this in our new if block
-	cfg_result_package_t if_branch = emit_expression(if_block, cursor, is_branch_ending, TRUE);
+	cfg_result_package_t if_branch = emit_expression(if_block, cursor, is_branch_ending);
+
+	//TODO ADD IN HERE
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	if(if_branch.final_block != NULL && if_branch.final_block != if_block){
@@ -3756,7 +3764,9 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cursor = cursor->next_sibling;
 
 	//Emit this in our else block
-	cfg_result_package_t else_branch = emit_expression(else_block, cursor, is_branch_ending, TRUE);
+	cfg_result_package_t else_branch = emit_expression(else_block, cursor, is_branch_ending);
+
+	//TODO ADD IN HERE
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
 	if(else_branch.final_block != NULL && else_branch.final_block != else_block){
@@ -3826,7 +3836,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Have we hit the so-called "root level" here? If we have, then we're just going to pass this
 	//down to another rule
 	if(logical_or_expr->ast_node_type != AST_NODE_TYPE_BINARY_EXPR){
-		return emit_unary_expression(current_block, logical_or_expr, FALSE, is_branch_ending);
+		return emit_unary_expression(current_block, logical_or_expr, is_branch_ending);
 	}
 
 	//Otherwise, when we get here, we know that we have a binary expression of some kind
@@ -3945,7 +3955,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition){
+static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
@@ -3965,7 +3975,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			cursor = expr_node->first_child;
 
 			//Emit the left hand unary expression
-			cfg_result_package_t unary_package = emit_unary_expression(current_block, cursor, FALSE, is_branch_ending);
+			cfg_result_package_t unary_package = emit_unary_expression(current_block, cursor, is_branch_ending);
 
 			//If this is different(which it could be), we'll reassign current
 			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
@@ -3983,7 +3993,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			cursor = cursor->next_sibling;
 
 			//Now emit the right hand expression
-			cfg_result_package_t expression_package = emit_expression(current_block, cursor, is_branch_ending, FALSE);
+			cfg_result_package_t expression_package = emit_expression(current_block, cursor, is_branch_ending);
 
 			//Again, if this is different(which it could be), we'll reassign current
 			if(expression_package.final_block != NULL && expression_package.final_block != current_block){
@@ -4067,7 +4077,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			 * ensures that we have a conditional to read even if a user puts something like if(x)
 			*/
 			//Let this rule handle it
-			return emit_unary_expression(basic_block, expr_node, is_condition, is_branch_ending);
+			return emit_unary_expression(basic_block, expr_node, is_branch_ending);
 	}
 }
 
@@ -4125,7 +4135,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
 		//Emit whatever we have here into the basic block
-		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending);
 
 		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
 		//to reassign
@@ -4243,7 +4253,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
 		//Emit whatever we have here into the basic block
-		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending);
 
 		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
 		//to reassign
@@ -4856,7 +4866,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 				break;
 			default:
 				//Let the subrule handle this
-				first_child_result_package = emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
+				first_child_result_package = emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE);
 
 				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
 				if(first_child_result_package.final_block != NULL && first_child_result_package.final_block != for_stmt_entry_block){
@@ -4883,7 +4893,9 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	ast_cursor = ast_cursor->next_sibling;
 
 	//The condition block values package
-	cfg_result_package_t condition_block_vals = emit_expression(condition_block, ast_cursor->first_child, TRUE, TRUE);
+	cfg_result_package_t condition_block_vals = emit_expression(condition_block, ast_cursor->first_child, TRUE);
+
+	//TODO ADD IN HERE
 
 	//Store this for later
 	three_addr_var_t* conditional_decider = condition_block_vals.assignee;
@@ -4906,7 +4918,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//If the third one is not blank
 	if(ast_cursor->first_child != NULL){
 		//Emit the update expression
-		emit_expression(for_stmt_update_block, ast_cursor->first_child, FALSE, FALSE);
+		emit_expression(for_stmt_update_block, ast_cursor->first_child, FALSE);
 	}
 	
 	//Unconditional jump to condition block
@@ -5042,7 +5054,9 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	}
 
 	//Add the conditional check into the end here
-	cfg_result_package_t package = emit_expression(compound_stmt_end, ast_cursor->next_sibling, TRUE, TRUE);
+	cfg_result_package_t package = emit_expression(compound_stmt_end, ast_cursor->next_sibling, TRUE);
+
+	//TODO ADD IN HERE
 
 	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
 	//exit block
@@ -5127,7 +5141,9 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	generic_ast_node_t* ast_cursor = while_stmt_node->first_child;
 
 	//The entry block contains our expression statement
-	cfg_result_package_t package = emit_expression(while_statement_entry_block, ast_cursor, TRUE, TRUE);
+	cfg_result_package_t package = emit_expression(while_statement_entry_block, ast_cursor, TRUE);
+
+	//TODO ADD IN HERE
 
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
@@ -5224,7 +5240,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	generic_ast_node_t* cursor = root_node->first_child;
 
 	//Add whatever our conditional is into the starting block
-	cfg_result_package_t package = emit_expression(entry_block, cursor, TRUE, TRUE);
+	cfg_result_package_t package = emit_expression(entry_block, cursor, TRUE);
+
+	//TODO ADD IN HERE
 
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
@@ -5312,7 +5330,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		emit_jump(temp, current_entry_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
 		//So we've seen the else-if clause. Let's grab the expression first
-		package = emit_expression(current_entry_block, else_if_cursor, TRUE, TRUE);
+		package = emit_expression(current_entry_block, else_if_cursor, TRUE);
+
+		//TODO ADD IN HERE
 
 		//Advance it up -- we should now have a compound statement
 		else_if_cursor = else_if_cursor->next_sibling;
@@ -5616,7 +5636,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	basic_block_t* root_level_block = starting_block;
 
 	//We'll first need to emit the expression node
-	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE, TRUE);
+	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE);
+	
+	//TODO ADD IN HERE
 
 	//Check for ternary expansion
 	if(input_results.final_block != NULL && input_results.final_block != root_level_block){
@@ -5895,7 +5917,9 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	basic_block_t* root_level_block = starting_block;
 	
 	//Let's first emit the expression. This will at least give us an assignee to work with
-	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE, TRUE);
+	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE);
+
+	//TODO ADD IN HERE
 
 	//We could have had a ternary here, so we'll need to account for that possibility
 	if(input_results.final_block != NULL && root_level_block != input_results.final_block){
@@ -6281,7 +6305,9 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Otherwise, we have a conditional continue here
 				} else {
 					//Emit the expression code into the current statement
-					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE);
+
+					//TODO ADD IN HERE
 
 					//Store for later
 					three_addr_var_t* conditional_decider = package.assignee;
@@ -6355,7 +6381,9 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					basic_block_t* new_block = basic_block_alloc(1);
 
 					//First let's emit the conditional code
-					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE);
+
+					//TODO ADD IN HERE
 
 					//Store this for later
 					three_addr_var_t* conditional_decider = ret_package.assignee;
@@ -6457,7 +6485,9 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				cursor = cursor->next_sibling;
 
 				//We'll need to emit the conditional in the current block
-				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
+				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
+
+				//TODO ADD IN HERE
 
 				//We'll now update the current block accordingly
 				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
@@ -6587,7 +6617,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 				
 				//Also emit the simplified machine code
-				emit_expression(current_block, ast_cursor, FALSE, FALSE);
+				emit_expression(current_block, ast_cursor, FALSE);
 				
 				break;
 		}
@@ -6848,7 +6878,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Otherwise, we have a conditional continue here
 				} else {
 					//Emit the expression code into the current statement
-					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+					cfg_result_package_t package = emit_expression(current_block, ast_cursor->first_child, TRUE);
+
+					//TODO ADD IN HERE
 
 					//Store for later
 					three_addr_var_t* conditional_decider = package.assignee;
@@ -6922,7 +6954,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					basic_block_t* new_block = basic_block_alloc(1);
 
 					//First let's emit the conditional code
-					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
+					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE);
+					
+					//TODO ADD IN HERE
 
 					//Store for later
 					three_addr_var_t* conditional_decider = ret_package.assignee;
@@ -7029,7 +7063,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				cursor = cursor->next_sibling;
 
 				//We'll need to emit the conditional in the current block
-				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
+				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE);
+
+				//TODO ADD IN HERE
 
 				//We'll now update the current block accordingly
 				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
@@ -7159,7 +7195,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 				
 				//Also emit the simplified machine code
-				emit_expression(current_block, ast_cursor, FALSE, FALSE);
+				emit_expression(current_block, ast_cursor, FALSE);
 				
 				break;
 		}
@@ -7573,7 +7609,7 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 		//By default we just decay into the expression root
 		default:
 			//Now emit whatever binary expression code that we have
-			intermediary_results = emit_expression(current_block, initializer_root, is_branch_ending, FALSE);
+			intermediary_results = emit_expression(current_block, initializer_root, is_branch_ending);
 
 			//The current block here is whatever the final block in the package is 
 			if(intermediary_results.final_block != NULL && intermediary_results.final_block != current_block){
