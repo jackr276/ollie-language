@@ -2650,8 +2650,11 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Just create a constant here with the enum
 		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), ident_node->variable->type_defined_as, is_branch_ending);
 	}
-	
-	//Is temp assignment required? This usually indicates that we're on the right hand side of some equation
+
+	/**
+	 * If we're on the right side of the equation and this is a stack variable, when we want to use 
+	 * the address we have to load
+	 */
 	if(ident_node->side == SIDE_TYPE_RIGHT && ident_node->variable->stack_variable == TRUE){
 		//Extract the symtab var
 		symtab_variable_record_t* symtab_variable = ident_node->variable;

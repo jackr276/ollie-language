@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <complex.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -2013,8 +2014,13 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				return_type = type_record->type;
 			}
 
-			//IMPORTANT - we need to flag this as a stack variable now
-			cast_expr->variable->stack_variable = TRUE;
+			//If this is not already a memory region, then we need to flag it as one
+			//for later so that the cfg constructor knows what we'll eventually need to
+			//load
+			if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE){
+				//IMPORTANT - we need to flag this as a stack variable now
+				cast_expr->variable->stack_variable = TRUE;
+			}
 
 			//This is not assignable
 			is_assignable = FALSE;

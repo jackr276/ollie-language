@@ -17,6 +17,22 @@
 
 
 /**
+ * Is this a stack memory region variable or not? Stack memory
+ * regions or memory chunks are: arrays, structs and unions
+ */
+u_int8_t is_memory_region(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Does this type represent a memory address?
  */
 u_int8_t is_memory_address_type(generic_type_t* type){
