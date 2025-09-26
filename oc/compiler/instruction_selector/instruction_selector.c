@@ -2642,7 +2642,7 @@ static void handle_test_instruction(instruction_t* instruction){
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
  */
-static void handle_load_instruction(instruction_t* instruction){
+static void handle_load_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -2671,8 +2671,21 @@ static void handle_load_instruction(instruction_t* instruction){
 	u_int32_t stack_offset = variable->stack_offset;
 
 	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_unsigned_int_constant_direct(stack_offset, u32);
+	three_addr_const_t* offset_constant = emit_long_constant_direct(stack_offset, u64);
 
+	//This is in offset only mode
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//And the offset itself is the offset constant
+	instruction->offset = offset_constant;
+
+	//And the first address calc register is just our stack pointer
+	instruction->address_calc_reg1 = stack_pointer;
+
+	//And our destination register is the temp reg
+	instruction->destination_register = instruction->assignee;
+
+	//And we're done
 }
 
 
@@ -3093,7 +3106,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
-			handle_load_instruction(instruction);
+			handle_load_instruction(cfg->stack_pointer, instruction);
 			break;
 		
 			
