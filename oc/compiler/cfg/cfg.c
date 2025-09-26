@@ -4023,28 +4023,54 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				add_statement(current_block, assignment);
 			}
 
-			//Finally we'll struct the whole thing
-			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+			/**
+			 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
+			 * variable that is on the stack, then a regular assignment just won't do. We'll need to
+			 * emit a store operation
+			 */
+			if(left_hand_var->linked_var == NULL || left_hand_var->linked_var->stack_variable == FALSE){
+				//Finally we'll struct the whole thing
+				instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
-			//If this is not a temp var, then we can flag it as being assigned
-			if(left_hand_var->is_temporary == FALSE){
-				add_assigned_variable(current_block, left_hand_var);
+				//If this is not a temp var, then we can flag it as being assigned
+				if(left_hand_var->is_temporary == FALSE){
+					add_assigned_variable(current_block, left_hand_var);
+				}
+
+				//This counts as a use
+				add_used_variable(current_block, final_op1);
+				
+				//Mark this with what was passed through
+				final_assignment->is_branch_ending = is_branch_ending;
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
+
+			/**
+			 * Otherwise, we'll need to emit a store operation here
+			 */
+			} else {
+				instruction_t* final_assignment = emit_store_ir_code(left_hand_var, final_op1);
+
+				//If this is not a temp var, then we can flag it as being assigned
+				if(left_hand_var->is_temporary == FALSE){
+					add_assigned_variable(current_block, left_hand_var);
+				}
+
+				//This counts as a use
+				add_used_variable(current_block, final_op1);
+				
+				//Mark this with what was passed through
+				final_assignment->is_branch_ending = is_branch_ending;
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
 			}
-
-			//This counts as a use
-			add_used_variable(current_block, final_op1);
-			
-			//Mark this with what was passed through
-			final_assignment->is_branch_ending = is_branch_ending;
-
-			//Now add thi statement in here
-			add_statement(current_block, final_assignment);
 
 			//Now pack the return value here
 			result_package.assignee = left_hand_var;
 			
 			break;
-		
 	
 		case AST_NODE_TYPE_BINARY_EXPR:
 			//Emit the binary expression node
