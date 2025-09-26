@@ -3229,46 +3229,86 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * x0 <- 0x8
 	 * 
 	 * This will also result in the deletion of the first statement
+	 *
+	 * This also works with store statements
 	 */
 
 	//If we see a constant assingment first and then we see a an assignment
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
-	 	&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-		
-		//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
-		//we deal with temp variables. At this point in the program, all non-temp variables have been
-		//deemed important, so we wouldn't want to remove their assignments
-		if(window->instruction1->assignee->is_temporary == TRUE &&
-			//Verify that this is not used more than once
-			window->instruction1->assignee->use_count <= 1 &&
-			variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-			//Grab this out for convenience
-			instruction_t* binary_operation = window->instruction2;
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//We see an assign statement
+		if(window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
+			//we deal with temp variables. At this point in the program, all non-temp variables have been
+			//deemed important, so we wouldn't want to remove their assignments
+			if(window->instruction1->assignee->is_temporary == TRUE &&
+				//Verify that this is not used more than once
+				window->instruction1->assignee->use_count <= 1 &&
+				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+				//Grab this out for convenience
+				instruction_t* assign_operation = window->instruction2;
 
-			//Now we'll modify this to be an assignment const statement
-			binary_operation->op1_const = window->instruction1->op1_const;
+				//Now we'll modify this to be an assignment const statement
+				assign_operation->op1_const = window->instruction1->op1_const;
 
-			//Modify the type of the assignment
-			binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				//Modify the type of the assignment
+				assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-			//The use count here now goes down by one
-			binary_operation->op1->use_count--;
+				//The use count here now goes down by one
+				assign_operation->op1->use_count--;
 
-			//Make sure that we now null out op1
-			binary_operation->op1 = NULL;
+				//Make sure that we now null out op1
+				assign_operation->op1 = NULL;
 
-			//Once we've done this, the first statement is entirely useless
-			delete_statement(window->instruction1);
+				//Once we've done this, the first statement is entirely useless
+				delete_statement(window->instruction1);
 
-			//Once we've deleted the statement, we'll need to completely rewire the block
-			//The binary operation is now the start
-			reconstruct_window(window, binary_operation);
-		
-			//Whatever happened here, we did change something
-			changed = TRUE;
+				//Once we've deleted the statement, we'll need to completely rewire the block
+				//The binary operation is now the start
+				reconstruct_window(window, assign_operation);
+			
+				//Whatever happened here, we did change something
+				changed = TRUE;
+			}
+
+		//We can apply the same optimization for store statements
+		} else if(window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
+			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
+			//we deal with temp variables. At this point in the program, all non-temp variables have been
+			//deemed important, so we wouldn't want to remove their assignments
+			if(window->instruction1->assignee->is_temporary == TRUE &&
+				//Verify that this is not used more than once
+				window->instruction1->assignee->use_count <= 1 &&
+				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+				//Grab this out for convenience
+				instruction_t* store_operation = window->instruction2;
+
+				//Now we'll modify this to be an assignment const statement
+				store_operation->op1_const = window->instruction1->op1_const;
+
+				//Modify the type of the assignment
+				store_operation->statement_type = THREE_ADDR_CODE_STORE_CONST_STATEMENT;
+
+				//The use count here now goes down by one
+				store_operation->op1->use_count--;
+
+				//Make sure that we now null out op1
+				store_operation->op1 = NULL;
+
+				//Once we've done this, the first statement is entirely useless
+				delete_statement(window->instruction1);
+
+				//Once we've deleted the statement, we'll need to completely rewire the block
+				//The binary operation is now the start
+				reconstruct_window(window, store_operation);
+			
+				//Whatever happened here, we did change something
+				changed = TRUE;
+			}
 		}
 	}
 
+
+	
 	//This is the same case as above, we'll just now check instructions 2 and 3
 	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
 	 	&& window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT){
@@ -3305,6 +3345,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			changed = TRUE;
 		}
 	}
+	
 
 
 	/**
