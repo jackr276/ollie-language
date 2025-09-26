@@ -7619,14 +7619,37 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 				current_block = intermediary_results.final_block;
 			}
 
-			//The actual statement is the assignment of right to left
-			instruction_t* assignment_statement = emit_assignment_instruction(assignee, intermediary_results.assignee);
+			/**
+			 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
+			 * variable that is on the stack, then a regular assignment just won't do. We'll need to
+			 * emit a store operation
+			 */
+			if(assignee->linked_var == NULL || assignee->linked_var->stack_variable == FALSE){
+				//The actual statement is the assignment of right to left
+				instruction_t* assignment_statement = emit_assignment_instruction(assignee, intermediary_results.assignee);
 
-			//If this is not temporary, then it counts as used
-			add_used_variable(current_block, intermediary_results.assignee);
+				//If this is not temporary, then it counts as used
+				add_used_variable(current_block, intermediary_results.assignee);
 
-			//Finally we'll add this into the overall block
-			add_statement(current_block, assignment_statement);
+				//Finally we'll add this into the overall block
+				add_statement(current_block, assignment_statement);
+			
+			/**
+			 * Otherwise, we'll need to emit a store operation here
+			 */
+			} else {
+				//Emit the store code
+				instruction_t* final_assignment = emit_store_ir_code(assignee, intermediary_results.assignee);
+
+				//This counts as a use
+				add_used_variable(current_block, intermediary_results.assignee);
+				
+				//Mark this with what was passed through
+				final_assignment->is_branch_ending = is_branch_ending;
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
+			}
 
 			//Store the package's assignee too
 			package.assignee = assignee;
