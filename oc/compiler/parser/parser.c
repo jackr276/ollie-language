@@ -1299,7 +1299,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			}
 
 			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, left_hand_unary->side);
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
 
 			//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
 			//don't want to mess with the actual type of the variable
@@ -1329,7 +1329,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//Otherwise we do have a pointer type
 		} else {
 			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, left_hand_unary->side);
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
 
 			//Let's first determine if they're compatible
 			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(right_hand_type), binary_op);

@@ -2650,63 +2650,31 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Just create a constant here with the enum
 		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), ident_node->variable->type_defined_as, is_branch_ending);
 	}
-
-	/*
+	
 	//Is temp assignment required? This usually indicates that we're on the right hand side of some equation
-	if(temp_assignment_required == TRUE){
-		printf("TEMP ASSIGNMENT IS NEEDED\n\n\n");
+	if(ident_node->side == SIDE_TYPE_RIGHT && ident_node->variable->stack_variable == TRUE){
 		//Extract the symtab var
 		symtab_variable_record_t* symtab_variable = ident_node->variable;
 
 		//The final assignee
 		three_addr_var_t* assignee;
 
-		//If this is not a stack variable, we can just do the basic steps
-		if(symtab_variable->stack_variable == FALSE){
-			//First we'll create the non-temp var here
-			three_addr_var_t* non_temp_var = emit_var(ident_node->variable);
+		//Emit the load instruction
+		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
+		load_instruction->is_branch_ending = is_branch_ending;
 
-			//Let's first create the assignment statement
-			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
+		//Add it to the block
+		add_statement(basic_block, load_instruction);
 
-			//Add this in as a used variable
-			add_used_variable(basic_block, non_temp_var);
+		//This counts as a use
+		add_used_variable(basic_block, load_instruction->op1);
 
-			//Carry this through
-			temp_assignment->is_branch_ending = is_branch_ending;
-
-			//Add the statement in
-			add_statement(basic_block, temp_assignment);
-
-			//For the rvalue
-			assignee = temp_assignment->assignee;
-
-		//Otherwise, we need to start emitting some load logic here
-		} else {
-			//Emit the load instruction
-			instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
-			load_instruction->is_branch_ending = is_branch_ending;
-
-			//Add it to the block
-			add_statement(basic_block, load_instruction);
-
-			//This counts as a use
-			add_used_variable(basic_block, load_instruction->op1);
-
-			//And the final assignee is this load
-			assignee = load_instruction->assignee;
-		}
+		//And the final assignee is this load
+		assignee = load_instruction->assignee;
 
 		//Just give back the temp var here
 		return assignee;
-
-	//Otherwise, the temporary assignment is not required. This usually means that we're on the left
-	//hand side of an equation
-	} else {
-
 	}
-	*/
-	
 
 	//Create our variable
 	three_addr_var_t* returned_variable = emit_var(ident_node->variable);
