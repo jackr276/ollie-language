@@ -3764,7 +3764,7 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 /**
  * Emit an int constant direct 
  */
-three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symtab){
+three_addr_const_t* emit_int_constant_direct(int int_const, generic_type_t* int32_type){
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
 	//Attach it for memory management
@@ -3776,8 +3776,8 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symta
 	//Store the int value
 	constant->constant_value.integer_constant = int_const;
 
-	//Lookup what we have in here(i32)
-	constant->type = lookup_type_name_only(symtab, "i32")->type;
+	//Store the type
+	constant->type =  int32_type;
 
 	//Set this flag if we need to
 	if(constant->constant_value.integer_constant == 0){
@@ -3792,7 +3792,7 @@ three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symta
 /**
  * Emit a char constant directly from a value
  */
-three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* symtab){
+three_addr_const_t* emit_char_constant_direct(char char_const, generic_type_t* char_type){
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
 	//Attach it for memory management
@@ -3805,7 +3805,7 @@ three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* sy
 	constant->constant_value.char_constant = char_const;
 
 	//Lookup what we have in here(char)
-	constant->type = lookup_type_name_only(symtab, "char")->type;
+	constant->type = char_type;
 
 	//Return out
 	return constant;
@@ -3815,7 +3815,7 @@ three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* sy
 /**
  * Emit an unsigned in constant directly. Used for address calculations
  */
-three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab_t* symtab){
+three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, generic_type_t* uint32_type){
 
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
@@ -3829,7 +3829,7 @@ three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab
 	constant->constant_value.integer_constant = int_const;
 
 	//Lookup what we have in here(u32)
-	constant->type = lookup_type_name_only(symtab, "u32")->type;
+	constant->type = uint32_type;
 
 	//Set this flag if we need to
 	if(constant->constant_value.integer_constant == 0){
@@ -3844,7 +3844,7 @@ three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab
 /**
  * Emit a long constant direct 
  */
-three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* symtab){
+three_addr_const_t* emit_long_constant_direct(long long_const, generic_type_t* int64_type){
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
 	//Attach it for memory management
@@ -3857,7 +3857,7 @@ three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* sy
 	constant->constant_value.long_constant = long_const;
 
 	//Lookup what we have in here(i32)
-	constant->type = lookup_type_name_only(symtab, "i64")->type;
+	constant->type = int64_type;
 
 	//Set this flag if we need to
 	if(long_const == 0){
@@ -3986,7 +3986,7 @@ instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, 
 	stmt->destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_int_constant_direct(offset, type_symtab);
+	stmt->source_immediate = emit_unsigned_int_constant_direct(offset, lookup_type_name_only(type_symtab, "u32")->type);
 
 	//Just give this back
 	return stmt;
@@ -4007,7 +4007,7 @@ instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer
 	stmt->destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_int_constant_direct(offset, type_symtab);
+	stmt->source_immediate = emit_unsigned_int_constant_direct(offset, lookup_type_name_only(type_symtab, "u32")->type);
 
 	//Just give this back
 	return stmt;

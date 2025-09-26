@@ -659,22 +659,22 @@ three_addr_const_t* emit_string_constant(symtab_function_record_t* function, gen
 /**
  * Emit an int constant in a very direct way
  */
-three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symtab);
+three_addr_const_t* emit_int_constant_direct(int int_const, generic_type_t* int32_type);
 
 /**
  * Emit a char constant directly from a value
  */
-three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* symtab);
+three_addr_const_t* emit_char_constant_direct(char char_const, generic_type_t* char_type);
 
 /**
  * Emit an unsigned int constant directly
  */
-three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab_t* symtab);
+three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, generic_type_t* uint32_type);
 
 /**
  * Emit a long constant direct from value
  */
-three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* symtab);
+three_addr_const_t* emit_long_constant_direct(long long_const, generic_type_t* int64_type);
 
 /**
  * Emit a push instruction. We only have one kind of pushing - quadwords - we don't

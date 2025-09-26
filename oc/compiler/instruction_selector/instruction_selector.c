@@ -2639,6 +2639,44 @@ static void handle_test_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a load instruction. A load instruction is always converted into
+ * a garden variety dereferencing move
+ */
+static void handle_load_instruction(instruction_t* instruction){
+	//Size is determined by the assignee
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case WORD:
+			instruction->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case BYTE:
+			instruction->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		default:
+			break;
+	}
+
+	//Extract the variable record from the op1
+	symtab_variable_record_t* variable = instruction->op1->linked_var;
+
+	//We need to grab this variable's stack offset
+	u_int32_t stack_offset = variable->stack_offset;
+
+	//Once we have that, we can emit our offset constant
+	three_addr_const_t* offset_constant = emit_unsigned_int_constant_direct(stack_offset, u32);
+
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -3048,12 +3086,16 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			//Let the helper do it
 			handle_not_instruction(instruction);
 			break;
-
 		//Handle the testing statement
 		case THREE_ADDR_CODE_TEST_STMT:
 			//Let the helper do it
 			handle_test_instruction(instruction);
 			break;
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			//Let the helper do it
+			handle_load_instruction(instruction);
+			break;
+		
 			
 		default:
 			break;
@@ -3188,7 +3230,7 @@ static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
 		if(instruction->op1_const != NULL){
 			instruction->op1_const->constant_value.integer_constant = assignee->stack_offset;
 		} else {
-			instruction->op1_const = emit_int_constant_direct(assignee->stack_offset, cfg->type_symtab);
+			instruction->op1_const = emit_int_constant_direct(assignee->stack_offset, i32);
 		}
 
 	//Otherwise it's just the RSP value
