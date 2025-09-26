@@ -1491,6 +1491,19 @@ static void mark(cfg_t* cfg){
 					break;
 
 				/**
+				 * All stores are considered useful because they modify areas
+				 * on the stack
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				/**
 				 * If we have an assignment statement that writes to a
 				 * memory address, we will mark that as important
 				 */
