@@ -2684,8 +2684,54 @@ static void handle_load_instruction(three_addr_var_t* stack_pointer, instruction
 
 	//And our destination register is the temp reg
 	instruction->destination_register = instruction->assignee;
+}
 
-	//And we're done
+
+/**
+ * Handle a store const instruction. This will be reorganized into a memory accessing move
+ */
+static void handle_store_const_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+	//Size is determined by the assignee
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case BYTE:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		default:
+			break;
+	}
+
+	//Extract the variable record from the assignee
+	symtab_variable_record_t* variable = instruction->assignee->linked_var;
+
+	//We need to grab this variable's stack offset
+	u_int32_t stack_offset = variable->stack_offset;
+
+	//Once we have that, we can emit our offset constant
+	three_addr_const_t* offset_constant = emit_long_constant_direct(stack_offset, u64);
+
+	//This is in offset only mode
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//And the offset itself is the offset constant
+	instruction->offset = offset_constant;
+
+	//And the first address calc register is just our stack pointer
+	instruction->address_calc_reg1 = stack_pointer;
+
+	//And for the source, we'll occupy the source immediate with our value
+	instruction->source_immediate = instruction->op1_const;
 }
 
 
@@ -3024,7 +3070,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 
 	//Switch on whatever we have currently
 	switch (instruction->statement_type) {
-		//These have a helper
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_simple_movement_instruction(instruction);
 			break;
@@ -3048,7 +3093,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			instruction->source_register = instruction->op1;
 			break;
 		case THREE_ADDR_CODE_JUMP_STMT:
-			//Let the helper do this and then leave
 			select_jump_instruction(instruction);
 			break;
 		//Special case here - we don't change anything
@@ -3071,15 +3115,12 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			instruction->destination_register = instruction->assignee;
 			break;
 			
-		//Let the helper deal with this
 		case THREE_ADDR_CODE_INC_STMT:
 			handle_inc_instruction(instruction);
 			break;
-		//Again use the helper
 		case THREE_ADDR_CODE_DEC_STMT:
 			handle_dec_instruction(instruction);
 			break;
-		//Let the helper handle this one
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 			handle_binary_operation_instruction(instruction);
@@ -3091,22 +3132,22 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_NEG_STATEMENT:
-			//Let the helper do it
 			handle_neg_instruction(instruction);
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
-			//Let the helper do it
 			handle_not_instruction(instruction);
 			break;
 		//Handle the testing statement
 		case THREE_ADDR_CODE_TEST_STMT:
-			//Let the helper do it
 			handle_test_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
 			handle_load_instruction(cfg->stack_pointer, instruction);
+			break;
+		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
+			handle_store_const_instruction(cfg->stack_pointer, instruction);
 			break;
 		
 			
