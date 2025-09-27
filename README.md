@@ -10,15 +10,6 @@
 [![Stack Data Area Test](https://github.com/jackr276/ollie-language/actions/workflows/stack_data_area_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/stack_data_area_test.yml)
 [![Interference Graph Test](https://github.com/jackr276/ollie-language/actions/workflows/interference_graph_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/interference_graph_test.yml)
 
-## Ollie Language Front-End
+## Ollie Compiler(OC) Overall Flow
 
-Conceptual Roadmap:
-The Ollie Compiler takes a normal 3-phase approach for compilation
-
-Phase 1: "Front-End"
-The Front-End of the compiler is concerned with translating the source-code into an optimization-ready intermediate representation, called Ollie Intermediate Representation(OIR). The OIR will be given in SSA form, such that dataflow analysis is simplified. The general
-flow is given below in the diagram
-
-### Ollie Compiler Front-End
-
-![Ollie Compiler Front End drawio(1)](https://github.com/user-attachments/assets/83e07b13-429a-47ef-ae84-7a831496d903)
+<img width="821" height="1921" alt="Ollie Compiler Front End drawio(2)" src="https://github.com/user-attachments/assets/7f748dbc-8466-4b64-837b-24a175b0feb3" />
