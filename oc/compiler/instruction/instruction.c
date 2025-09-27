@@ -1377,6 +1377,20 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
+			//This one comes first
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+			//Then the arrow
+			fprintf(fl, " <- Memory address of ");
+
+			//Now we'll do op1, token, op2
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+			//We need a newline here
+			fprintf(fl, "\n");
+			break;
+
 		case THREE_ADDR_CODE_ASSN_STMT:
 			//We'll print out the left and right ones here
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);

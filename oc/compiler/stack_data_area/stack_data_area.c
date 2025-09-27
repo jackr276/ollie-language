@@ -183,6 +183,12 @@ static void realign_data_area(stack_data_area_t* area){
 
 		//This one's stack offset is the original total size plus whatever padding we need
 		variable->stack_offset = area->total_size + needed_padding;
+
+		//If the variable also has a three address variable associated with it - we will
+		//update that variable's stack address
+		if(variable->linked_var != NULL){
+			variable->linked_var->stack_offset = variable->stack_offset;
+		}
 		
 		//Update the total size of the stack too. The new size is the original size
 		//with the needed padding and the new type's size added onto it

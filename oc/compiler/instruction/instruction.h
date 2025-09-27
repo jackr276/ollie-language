@@ -343,6 +343,8 @@ typedef enum{
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A memory access statement
 	THREE_ADDR_CODE_MEM_ACCESS_STMT,
+	//A memory address statement
+	THREE_ADDR_CODE_MEM_ADDRESS_STMT
 } instruction_stmt_type_t;
 
 
