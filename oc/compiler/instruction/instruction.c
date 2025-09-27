@@ -3176,24 +3176,12 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	switch(constant->const_type){
 		case CHAR_CONST:
 			constant->constant_value.char_constant = const_node->constant_value.char_value;
-			//Set the 0 flag if true
-			if(const_node->constant_value.char_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 		case INT_CONST:
 			constant->constant_value.integer_constant = const_node->constant_value.signed_int_value;
-			//Set the 0 flag if true
-			if(const_node->constant_value.signed_int_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 		case INT_CONST_FORCE_U:
 			constant->constant_value.integer_constant = const_node->constant_value.unsigned_int_value;
-			//Set the 0 flag if true
-			if(const_node->constant_value.signed_int_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 		case FLOAT_CONST:
 			constant->constant_value.float_constant = const_node->constant_value.float_value;
@@ -3206,17 +3194,9 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 			exit(0);
 		case LONG_CONST:
 			constant->constant_value.long_constant = const_node->constant_value.signed_long_value;
-			//Set the 0 flag if 
-			if(const_node->constant_value.signed_long_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 		case LONG_CONST_FORCE_U:
 			constant->constant_value.long_constant = const_node->constant_value.unsigned_long_value;
-			//Set the 0 flag if 
-			if(const_node->constant_value.signed_long_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 
 			
@@ -3779,11 +3759,6 @@ three_addr_const_t* emit_int_constant_direct(int int_const, generic_type_t* int3
 	//Store the type
 	constant->type =  int32_type;
 
-	//Set this flag if we need to
-	if(constant->constant_value.integer_constant == 0){
-		constant->is_value_0 = TRUE;
-	}
-
 	//Return out
 	return constant;
 }
@@ -3831,11 +3806,6 @@ three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, generic_typ
 	//Lookup what we have in here(u32)
 	constant->type = uint32_type;
 
-	//Set this flag if we need to
-	if(constant->constant_value.integer_constant == 0){
-		constant->is_value_0 = TRUE;
-	}
-
 	//Return out
 	return constant;
 }
@@ -3858,11 +3828,6 @@ three_addr_const_t* emit_long_constant_direct(long long_const, generic_type_t* i
 
 	//Lookup what we have in here(i32)
 	constant->type = int64_type;
-
-	//Set this flag if we need to
-	if(long_const == 0){
-		constant->is_value_0 = TRUE;
-	}
 
 	//Return out
 	return constant;

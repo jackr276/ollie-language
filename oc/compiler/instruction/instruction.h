@@ -445,8 +445,6 @@ struct three_addr_const_t{
 	} constant_value;
 	//What kind of constant is it
 	Token const_type;
-	//Is the value of this constant 0?
-	u_int8_t is_value_0;
 };
 
 
