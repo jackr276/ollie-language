@@ -7417,6 +7417,10 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 	//to store the address
 	add_variable_to_stack(&(current_function->data_area), base_addr);
 
+	//TODO
+	//TODO we should probably also make this a memory address statement
+	//TODO
+
 	//We'll now emit the actual address calculation using the offset
 	emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, i32), FALSE);
 

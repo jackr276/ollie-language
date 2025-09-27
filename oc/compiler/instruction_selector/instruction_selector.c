@@ -2784,6 +2784,36 @@ static void handle_store_instruction(three_addr_var_t* stack_pointer, instructio
 
 
 /**
+ * Translate the memory address instruction into stack form
+ */
+static void handle_memory_address_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+	//These will always be LEA's
+	instruction->instruction_type = LEAQ;
+
+	//Destination is always the assignee
+	instruction->destination_register = instruction->assignee;
+
+	//Extract the variable record from the assignee
+	symtab_variable_record_t* variable = instruction->op1->linked_var;
+
+	//We need to grab this variable's stack offset
+	u_int32_t stack_offset = variable->stack_offset;
+
+	//Once we have that, we can emit our offset constant
+	three_addr_const_t* offset_constant = emit_long_constant_direct(stack_offset, u64);
+
+	//The offset is the offset constant
+	instruction->offset = offset_constant;
+
+	//Stack pointer is the calc reg 1
+	instruction->address_calc_reg1 = stack_pointer;
+
+	//We've only got the offset here
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -3199,6 +3229,9 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			handle_store_instruction(cfg->stack_pointer, instruction);
+			break;
+		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
+			handle_memory_address_instruction(cfg->stack_pointer, instruction);
 			break;
 			
 		default:
@@ -4226,10 +4259,25 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	/**
+	 * If we have an instruction that is a memory address, and said memory address
+	 * is 0, we can optimize that into just being an assignment of the stack pointer
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
+		//We can reorgnaize this into an assignment instruction
+		if(window->instruction1->op1->stack_offset == 0){
+			//Reset the type
+			window->instruction1->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+			//The op1 is now the stack pointer
+			window->instruction1->op1 = cfg->stack_pointer;
+		}
+	}
+
+	/**
 	 * Final check - in the previous optimization module, there is a chance that we've deleted
 	 * items in the stack that have caused our old stack addresses to be out of sync. We'll hitch
 	 * a ride on this instruction crawl to remediate anything stack addresses
 	 */
+	//TODO determine if this is even needed
 	if(window->instruction1->op1 != NULL && window->instruction1->op1->is_stack_pointer == TRUE){
 		//Remediate the stack address
 		remediate_stack_address(cfg, window->instruction1);
