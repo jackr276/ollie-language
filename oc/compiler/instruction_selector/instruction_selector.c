@@ -2736,6 +2736,54 @@ static void handle_store_const_instruction(three_addr_var_t* stack_pointer, inst
 
 
 /**
+ * Handle a store instruction. This will be reorganized into a memory accessing move
+ */
+static void handle_store_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+	//Size is determined by the assignee
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case BYTE:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		default:
+			break;
+	}
+
+	//Extract the variable record from the assignee
+	symtab_variable_record_t* variable = instruction->assignee->linked_var;
+
+	//We need to grab this variable's stack offset
+	u_int32_t stack_offset = variable->stack_offset;
+
+	//Once we have that, we can emit our offset constant
+	three_addr_const_t* offset_constant = emit_long_constant_direct(stack_offset, u64);
+
+	//This is in offset only mode
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//And the offset itself is the offset constant
+	instruction->offset = offset_constant;
+
+	//And the first address calc register is just our stack pointer
+	instruction->address_calc_reg1 = stack_pointer;
+
+	//The source register is just our op1
+	instruction->source_register = instruction->op1;
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -3149,7 +3197,9 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
 			handle_store_const_instruction(cfg->stack_pointer, instruction);
 			break;
-		
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			handle_store_instruction(cfg->stack_pointer, instruction);
+			break;
 			
 		default:
 			break;
