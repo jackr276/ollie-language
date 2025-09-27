@@ -3627,11 +3627,18 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				add_variable_to_stack(&(current_function->data_area), emit_var(variable));
 			}
 
-			//We'll now emit the actual address calculation using the offset
-			three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(unary_expression_parent->inferred_type), stack_pointer_var, PLUS, emit_int_constant_direct(variable->stack_offset, i32), FALSE);
+			//Add the memory address statement in
+			instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(variable));
+			memory_address_statement->is_branch_ending = is_branch_ending;
+
+			//This counts add as a use
+			add_used_variable(current_block, memory_address_statement->op1);
+
+			//Now add the statement in
+			add_statement(current_block, memory_address_statement);
 
 			//And package the value up as what we want here
-			unary_package.assignee = address;
+			unary_package.assignee = memory_address_statement->assignee;
 			unary_package.final_block = current_block;
 
 			//Give back the unary package

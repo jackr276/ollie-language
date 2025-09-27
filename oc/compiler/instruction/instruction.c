@@ -3048,6 +3048,24 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 
 /**
+ * Emit a memory address assignment statement
+ */
+instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->statement_type = THREE_ADDR_CODE_MEM_ADDRESS_STMT; 
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll just leave our now
+	return stmt;
+}
+
+
+/**
  * Emit a decrement instruction
  */
 instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){

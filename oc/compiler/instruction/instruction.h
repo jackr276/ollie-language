@@ -774,6 +774,10 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const);
 
 /**
+ * Emit a memory address statement
+ */
+
+/**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
  */
 instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant);
@@ -803,6 +807,11 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee);
  * Emit an increment instruction
  */
 instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
+
+/**
+ * Emit a memory address assignment statement
+ */
+instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a decrement instruction
