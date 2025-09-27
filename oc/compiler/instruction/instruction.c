@@ -3537,7 +3537,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_long_constant_direct(offset, symtab);
+	stmt->offset = emit_long_constant_direct(offset, lookup_type_name_only(symtab, "u64")->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -3580,7 +3580,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_long_constant_direct(offset, symtab);
+	stmt->offset = emit_long_constant_direct(offset, lookup_type_name_only(symtab, "u64")->type);
 
 	//And we're done, we can return it
 	return stmt;
