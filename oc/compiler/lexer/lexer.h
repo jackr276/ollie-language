@@ -27,6 +27,7 @@ typedef enum {
 	START, /* start token */
 	LET,
 	DECLARE,
+	BOOL,
 	ALIAS,
 	WHEN,
 	IDLE,
@@ -180,6 +181,17 @@ void push_back_token(lexitem_t l);
  * Developer utility for token printing
  */
 void print_token(lexitem_t* l);
+
+/**
+ * Initialize the lexer by dynamically allocating the lexstack
+ * and any other needed data structures
+ */
+void initialize_lexer();
+
+/**
+ * Deinitialize the entire lexer
+ */
+void deinitialize_lexer();
 
 /**
  * A utility function for error printing that converts an operator to a string
