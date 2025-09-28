@@ -3549,7 +3549,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_long_constant_direct(offset, lookup_type_name_only(symtab, "u64")->type);
+	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -3592,7 +3592,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_long_constant_direct(offset, lookup_type_name_only(symtab, "u64")->type);
+	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -3826,99 +3826,6 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 
 
 /**
- * Emit an int constant direct 
- */
-three_addr_const_t* emit_int_constant_direct(int int_const, generic_type_t* int32_type){
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
-
-	//Store the class
-	constant->const_type = INT_CONST;
-	//Store the int value
-	constant->constant_value.integer_constant = int_const;
-
-	//Store the type
-	constant->type =  int32_type;
-
-	//Return out
-	return constant;
-}
-
-
-/**
- * Emit a char constant directly from a value
- */
-three_addr_const_t* emit_char_constant_direct(char char_const, generic_type_t* char_type){
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
-
-	//Store the class
-	constant->const_type = CHAR_CONST;
-	//Store the char value
-	constant->constant_value.char_constant = char_const;
-
-	//Lookup what we have in here(char)
-	constant->type = char_type;
-
-	//Return out
-	return constant;
-}
-
-
-/**
- * Emit an unsigned in constant directly. Used for address calculations
- */
-three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, generic_type_t* uint32_type){
-
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
-
-	//Store the class
-	constant->const_type = INT_CONST;
-	//Store the int value
-	constant->constant_value.integer_constant = int_const;
-
-	//Lookup what we have in here(u32)
-	constant->type = uint32_type;
-
-	//Return out
-	return constant;
-}
-
-
-/**
- * Emit a long constant direct 
- */
-three_addr_const_t* emit_long_constant_direct(long long_const, generic_type_t* int64_type){
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
-
-	//Store the class
-	constant->const_type = LONG_CONST;
-	//Store the int value
-	constant->constant_value.long_constant = long_const;
-
-	//Lookup what we have in here(i32)
-	constant->type = int64_type;
-
-	//Return out
-	return constant;
-}
-
-
-/**
  * Emit a negation statement
  */
 instruction_t* emit_neg_instruction(three_addr_var_t* assignee, three_addr_var_t* negatee){
@@ -4035,7 +3942,7 @@ instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, 
 	stmt->destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_unsigned_int_constant_direct(offset, lookup_type_name_only(type_symtab, "u32")->type);
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u32")->type);
 
 	//Just give this back
 	return stmt;
@@ -4056,7 +3963,7 @@ instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer
 	stmt->destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_unsigned_int_constant_direct(offset, lookup_type_name_only(type_symtab, "u32")->type);
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u32")->type);
 
 	//Just give this back
 	return stmt;
