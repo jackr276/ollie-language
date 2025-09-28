@@ -25,7 +25,7 @@
 #define FALSE 0
 
 //Total number of keywords
-#define KEYWORD_COUNT 50
+#define KEYWORD_COUNT 51
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {

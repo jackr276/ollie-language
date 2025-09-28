@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include "../utils/dynamic_string/dynamic_string.h"
+#include "../utils/token.h"
 
 //The maximum token length is 500 
 #define MAX_TOKEN_LENGTH 500
@@ -20,129 +21,6 @@ typedef enum {
 	NOT_SEARCHING_FOR_CONSTANT
 } const_search_t;
 
-//All tokens that we can possible see
-//This list may grow as we go forward
-typedef enum {
-	BLANK = 0,
-	START, /* start token */
-	LET,
-	DECLARE,
-	BOOL,
-	ALIAS,
-	WHEN,
-	IDLE,
-	MUT,
-	DEFER,
-	ASM,
-	ASM_STATEMENT,
-	IF,
-	REPLACE,
-	//For preprocessor sections
-	DEPENDENCIES,
-	ELSE,
-	DO,
-	WHILE,
-	UNION,
-	FOR,
-	AT,
-	CASE,
-	BREAK,
-	CONTINUE,
-	DEFAULT,
-	SWITCH,
-	FN,
-	REGISTER,
-	WITH,
-	CONSTANT,
-	TYPESIZE,
-	SIZEOF,
-	REQUIRE,
-	RETURN,
-	JUMP,
-	STATIC,
-	EXTERNAL,
-	DOUBLE_AND,
-	DOUBLE_OR,
-	SINGLE_AND, /* & */
-	SINGLE_OR,
-	COLONEQ, /* := */
-	PLUSEQ, // +=
-	MINUSEQ, // -=
-	STAREQ, // *=
-	SLASHEQ, // /=
-	MODEQ, // %=
-	OREQ, // |=
-	ANDEQ, // &=
-	XOREQ, // ^=
-	LSHIFTEQ, // <<=
-	RSHIFTEQ, // >>=
-	DOT,
-	PLUS,
-	LIB,
-	PLUSPLUS,
-	DEFINE,
-	AS,
-	ENUM,
-	STRUCT,
-	MINUS,
-	MINUSMINUS,
-	STAR,
-	F_SLASH,
-	MOD,
-	L_NOT,
-	B_NOT,
-	IDENT,
-	POUND, /* # */
-	FUNC_CONST,
-	INT_CONST,
-	//Forced to unsigned
-	INT_CONST_FORCE_U,
-	LONG_CONST_FORCE_U,
-	LONG_CONST,
-	FLOAT_CONST,
-	DOUBLE_CONST,
-	STR_CONST,
-	CHAR_CONST,
-	HEX_CONST,
-	L_PAREN,
-	R_PAREN,
-	L_CURLY,
-	R_CURLY,
-	L_BRACKET,
-	R_BRACKET,
-	L_SHIFT,
-	R_SHIFT,
-	EQUALS,
-	CARROT,
-	QUESTION, /* ? */
-	DOUBLE_EQUALS, /* == */
-	NOT_EQUALS,
-	G_THAN,
-	L_THAN,
-	G_THAN_OR_EQ,
-	L_THAN_OR_EQ,
-	COLON,
-	COMMA,
-	SEMICOLON,
-	DOLLAR, /* $ */
-	ARROW, /* -> */
-	FAT_ARROW, /* => */
-	ERROR,
-	DONE,
-	VOID,
-	U8,
-	I8,
-	U16,
-	I16,
-	U32,
-	I32,
-	U64,
-	I64,
-	F32,
-	F64,
-	CHAR,
-	PUB,
-} Token;
 
 //The lexitem_t struct
 typedef struct lexitem_t lexitem_t;
