@@ -14,7 +14,7 @@
 #include "../symtab/symtab.h"
 #include "../lexer/lexer.h"
 #include "../ast/ast.h"
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include <stdint.h>
 #include <sys/types.h>
 

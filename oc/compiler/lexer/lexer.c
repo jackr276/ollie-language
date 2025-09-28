@@ -14,7 +14,6 @@
 */
 
 #include "lexer.h"
-#include "../dynamic_string/dynamic_string.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>

@@ -9,7 +9,7 @@
 #define TYPE_SYSTEM_H
 
 #include "../lexer/lexer.h"
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include <sys/types.h>
 
 #define MAX_FUNCTION_TYPE_PARAMS 6

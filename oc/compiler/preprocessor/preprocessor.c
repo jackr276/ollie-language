@@ -14,7 +14,7 @@
 //For tokenizing/lexical analyzing purposes
 #include "../lexer/lexer.h"
 //We'll make use of this too
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>

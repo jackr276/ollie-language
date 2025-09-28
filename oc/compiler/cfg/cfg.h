@@ -9,7 +9,7 @@
 #include "../parser/parser.h"
 #include "../stack/heapstack.h"
 #include "../instruction/instruction.h"
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
 
 //The overall structure holder

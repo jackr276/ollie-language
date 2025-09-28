@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #include "../cfg/cfg.h"
 #include "../jump_table/jump_table.h"
-#include "../dynamic_string/dynamic_string.h"
+#include "../utils/dynamic_string/dynamic_string.h"
 
 //For standardization and convenience
 #define TRUE 1

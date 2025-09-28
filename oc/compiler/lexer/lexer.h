@@ -8,7 +8,7 @@
 
 #include <stdio.h>
 #include <sys/types.h>
-#include "../dynamic_string/dynamic_string.h"
+#include "../utils/dynamic_string/dynamic_string.h"
 
 //The maximum token length is 500 
 #define MAX_TOKEN_LENGTH 500
