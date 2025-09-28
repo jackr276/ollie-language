@@ -2654,10 +2654,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	//Handle an enumerated type right here
 	if(ident_node->variable->membership == ENUM_MEMBER) {
 		//Just create a constant here with the enum
-		//
-		//TODO CHECK THIS
-		//
-		return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(ident_node->variable->enum_member_value, i32), ident_node->variable->type_defined_as, is_branch_ending);
+		return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(ident_node->variable->enum_member_value, ident_node->variable->type_defined_as), ident_node->variable->type_defined_as, is_branch_ending);
 	}
 
 	/**
