@@ -7414,12 +7414,11 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 	//to store the address
 	add_variable_to_stack(&(current_function->data_area), base_addr);
 
-	//TODO
-	//TODO we should probably also make this a memory address statement
-	//TODO
-
-	//We'll now emit the actual address calculation using the offset
-	emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_direct_integer_or_char_constant(base_addr->stack_offset, u64), FALSE);
+	//Emit the statement here to get the base address
+	instruction_t* mem_addr = emit_memory_address_assignment(base_addr, emit_var(node->variable));
+	
+	//Add it into the block
+	add_statement(emitted_block, mem_addr);
 
 	//Declare the result package
 	cfg_result_package_t result_package = {emitted_block, emitted_block, NULL, BLANK};
@@ -7707,10 +7706,11 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			//to store the address
 			add_variable_to_stack(&(current_function->data_area), assignee);
 
-			//TODO EXPERIMENT WITH MEMORY ADDRESS OF STATEMENTS HERE
-	
-			//We'll now emit the actual address calculation using the offset
-			emit_binary_operation_with_constant(current_block, assignee, stack_pointer_var, PLUS, emit_direct_integer_or_char_constant(assignee->stack_offset, u64), FALSE);
+			//Emit the statement here to get the base address
+			instruction_t* mem_addr = emit_memory_address_assignment(assignee, emit_var(node->variable));
+			
+			//Add it into the block
+			add_statement(current_block, mem_addr);
 
 			break;
 			
