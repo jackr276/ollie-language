@@ -14,7 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include "../queue/heap_queue.h"
+#include "../utils/queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
 
 //For magic number removal

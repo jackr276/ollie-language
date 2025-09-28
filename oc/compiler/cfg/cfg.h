@@ -7,7 +7,7 @@
 #include <sys/types.h>
 #include "../ast/ast.h"
 #include "../parser/parser.h"
-#include "../stack/heapstack.h"
+#include "../utils/stack/heapstack.h"
 #include "../instruction/instruction.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"

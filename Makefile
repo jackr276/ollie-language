@@ -4,7 +4,7 @@ CFLAGS = -Wall -Wextra -c -Wimplicit-fallthrough=0
 CFLAGSLINK = -Wall -Wextra
 TEST_SUITE_PATH = ./oc/compiler/test_suites
 LEX_PATH = ./oc/compiler/lexer
-STACK_PATH = ./oc/compiler/stack
+STACK_PATH = ./oc/compiler/utils/stack
 STACK_DATA_AREA_PATH = ./oc/compiler/stack_data_area
 FILE_BUILDER_PATH = ./oc/compiler/file_builder
 SYMTAB_PATH = ./oc/compiler/symtab
@@ -24,7 +24,7 @@ INSTRUCTION_SCHEDULER_PATH = ./oc/compiler/instruction_scheduler
 REGISTER_ALLOCATOR_PATH = ./oc/compiler/register_allocator
 INTERFERENCE_GRAPH_PATH = ./oc/compiler/interference_graph
 JUMP_TABLE_PATH = ./oc/compiler/jump_table
-QUEUE_PATH = ./oc/compiler/queue
+QUEUE_PATH = ./oc/compiler/utils/queue
 TEST_FILE_DIR = ./oc/test_files/
 OUTPUTTED_ASSEMBLY_DIR = ./oc/generated_assembly/
 OUT_LOCAL = ./oc/out

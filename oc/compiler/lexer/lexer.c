@@ -18,7 +18,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
-#include "../stack/lexstack.h"
+#include "../utils/stack/lexstack.h"
 
 //For standardization across all modules
 #define TRUE 1

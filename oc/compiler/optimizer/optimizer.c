@@ -5,7 +5,7 @@
  * it is implemented as one monolothic block
 */
 #include "optimizer.h"
-#include "../queue/heap_queue.h"
+#include "../utils/queue/heap_queue.h"
 #include <stdio.h>
 #include <sys/select.h>
 #include <sys/types.h>

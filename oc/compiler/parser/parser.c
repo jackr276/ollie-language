@@ -18,10 +18,10 @@
 #include <string.h>
 #include <sys/types.h>
 #include "parser.h"
-#include "../stack/lexstack.h"
-#include "../stack/nesting_stack.h"
-#include "../queue/heap_queue.h"
-#include "../stack/lightstack.h"
+#include "../utils/stack/lexstack.h"
+#include "../utils/stack/nesting_stack.h"
+#include "../utils/queue/heap_queue.h"
+#include "../utils/stack/lightstack.h"
 
 //For code clarity
 #define SUCCESS 1

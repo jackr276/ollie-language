@@ -9,7 +9,7 @@
 */
 
 #include "instruction_selector.h"
-#include "../queue/heap_queue.h"
+#include "../utils/queue/heap_queue.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
