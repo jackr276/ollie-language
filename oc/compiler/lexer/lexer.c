@@ -47,20 +47,20 @@ u_int16_t line_num = 0;
 static lex_stack_t* pushed_back_tokens = NULL;
 
 //Token array, we will index using their enum values
-const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
-					STATIC, EXTERNAL, U8, I8, U16, I16,
-					U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
+					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL};
+					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
+				    STATIC, EXTERNAL};
 
 //Direct one to one mapping
-const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
-						 "require", "replace", "static", "external", "u8", "i8", "u16",
+static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
+						 "require", "replace", "u8", "i8", "u16",
 						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub", "union", "bool"};
+						  "with", "lib", "idle", "pub", "union", "bool", "static", "external"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
