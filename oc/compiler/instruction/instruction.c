@@ -3774,6 +3774,58 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 
 
 /**
+ * Emit a constant directly based on whatever the type given is
+ */
+three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type){
+	//First allocate it
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Attach it for memory management
+	constant->next_created = emitted_consts;
+	emitted_consts = constant;
+
+	//Store the type here
+	constant->type = type;
+
+	//If the type is not a basic type, we leave
+	if(type->type_class != TYPE_CLASS_BASIC){
+		fprintf(stderr, "Please use a basic type for integer constant emittal\n");
+		exit(1);
+	}
+
+	//Extract this
+	Token basic_type_token = type->basic_type_token;
+	
+	switch(basic_type_token){
+		case I64:
+		case U64:
+			constant->const_type = LONG_CONST;
+			constant->constant_value.long_constant = value;
+			break;
+		case I32:
+		case U32:
+		case I16:
+		case U16:
+		case I8:
+		case U8:
+			constant->const_type = INT_CONST;
+			constant->constant_value.integer_constant = value;
+			break;
+		case CHAR:
+			constant->const_type = CHAR_CONST;
+			constant->constant_value.char_constant = value;
+			break;
+		default:
+			fprintf(stderr, "Please use an integer or char type for constant emittal");
+			exit(1);
+	}
+
+	//Give back the constant
+	return constant;
+}
+
+
+/**
  * Emit an int constant direct 
  */
 three_addr_const_t* emit_int_constant_direct(int int_const, generic_type_t* int32_type){

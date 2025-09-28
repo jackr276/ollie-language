@@ -657,6 +657,11 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 three_addr_const_t* emit_string_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
 
 /**
+ * Emit a constant directly based on whatever the type given is
+ */
+three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type);
+
+/**
  * Emit an int constant in a very direct way
  */
 three_addr_const_t* emit_int_constant_direct(int int_const, generic_type_t* int32_type);

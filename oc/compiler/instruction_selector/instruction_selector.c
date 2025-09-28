@@ -3351,6 +3351,11 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 /**
  * Remediate the stack address issues that may have been caused by the previous optimization
  * step
+ *
+ *
+ * TODO - if we change to "memory address of" use cases, this becomes entirely useless
+ *
+ * we should *remove* this once that is done, it is a waste of time
  */
 static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
 	//Grab this value out. We'll need it's stack offset
