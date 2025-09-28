@@ -1215,13 +1215,6 @@ static void sweep(cfg_t* cfg){
 					block->jump_table = NULL;
 				}
 
-				//If we have a stack pointer, this came from an allocation. We'll 
-				//need to update the stack accordingly if we're deleting this
-				if(temp->op1 != NULL && temp->op1->is_stack_pointer == TRUE){
-					//Delete the assignee from the stack pointer
-					remove_variable_from_stack(&(temp->function->data_area), temp->assignee);
-				}
-
 				//Advance the statement
 				stmt = stmt->next_statement;
 				//Delete the statement, now that we know it is not a jump
