@@ -2803,7 +2803,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
-		//The return type is always the left child's type
+		//The return type is always a u8
 		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
 		//If this fails, that means that we have an invalid operation
@@ -4952,6 +4952,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		case I64:
 		case F64:
 		case CHAR:
+		case BOOL:
 			//We will now grab this record from the symtable to make our life easier
 			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
 

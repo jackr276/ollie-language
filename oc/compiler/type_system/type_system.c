@@ -586,11 +586,12 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generic_type_t* type){
 	//Switch based on what we have
 	switch(type->basic_type_token){
-			//Char is already unsigned
+		//Char is already unsigned
 		case CHAR:
 			return lookup_type_name_only(symtab, "char")->type;
 		case U8:
 		case I8:
+		case BOOL:
 			return lookup_type_name_only(symtab, "u8")->type;
 		case U16:
 		case I16:
@@ -1328,6 +1329,7 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
 		case CHAR:
 		case I8:
 		case U8:
+		case BOOL:
 			//1 BYTE
 			type->type_size = 1;
 			break;
