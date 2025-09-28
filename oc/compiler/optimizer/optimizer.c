@@ -1786,7 +1786,7 @@ static void recompute_all_dominance_relations(cfg_t* cfg){
 	}
 
 	//Now that that's finished, we can go back and calculate all of the control relations again
-	calculate_all_control_relations(cfg, TRUE, TRUE);
+	calculate_all_control_relations(cfg, TRUE);
 }
 
 

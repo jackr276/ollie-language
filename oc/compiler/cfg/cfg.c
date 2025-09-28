@@ -1706,7 +1706,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 /**
  * Build the dominator tree for each function in the CFG
  */
-static void build_dominator_trees(cfg_t* cfg, u_int8_t build_fresh){
+static void build_dominator_trees(cfg_t* cfg){
 	//For each node in the CFG, we will use that node's immediate dominators to
 	//build a dominator tree
 	
@@ -2662,9 +2662,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 * the address we have to load
 	 */
 	if(ident_node->side == SIDE_TYPE_RIGHT && ident_node->variable->stack_variable == TRUE){
-		//Extract the symtab var
-		symtab_variable_record_t* symtab_variable = ident_node->variable;
-
 		//The final assignee
 		three_addr_var_t* assignee;
 
@@ -3834,7 +3831,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	
 	//Store the left and right hand types
 	generic_type_t* left_hand_type;
-	generic_type_t* right_hand_type;
 	//Temporary holders for our operands
 	three_addr_var_t* op1;
 	three_addr_var_t* op2;
@@ -3870,7 +3866,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Advance up here
 	cursor = cursor->next_sibling;
-	right_hand_type = cursor->inferred_type;
 
 	//Then grab the right hand temp
 	cfg_result_package_t right_side = emit_binary_expression(current_block, cursor, is_branch_ending);
@@ -3966,7 +3961,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_conditional){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
-	symtab_variable_record_t* assigned_var;
 	//Declare and initialize the results
 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
@@ -7434,9 +7428,6 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 	//What block are we emitting into?
 	basic_block_t* emitted_block = basic_block_alloc(1);
 
-	//Extract the type info out of here
-	generic_type_t* type = node->inferred_type;
-
 	//The base address. We may or may not need this
 	three_addr_var_t* base_addr = emit_var(node->variable);
 
@@ -7883,12 +7874,12 @@ void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
  *
  * For every block in the CFG
  */
-void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh, u_int8_t recalculate_rpo){
+void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo){
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
 	
 	//Now we'll build the dominator tree up
-	build_dominator_trees(cfg, build_fresh);
+	build_dominator_trees(cfg);
 
 	//We need to calculate the dominance frontier of every single block before
 	//we go any further
@@ -7986,7 +7977,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	}
 
 	//Let the helper deal with this
-	calculate_all_control_relations(cfg, FALSE, FALSE);
+	calculate_all_control_relations(cfg, FALSE);
 
 	//now we calculate the liveness sets
 	calculate_liveness_sets(cfg);

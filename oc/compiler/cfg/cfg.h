@@ -208,7 +208,7 @@ void cleanup_all_control_relations(cfg_t* cfg);
 /**
  * Calculate(or recalculate) all control relations in the CFG
  */
-void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh, u_int8_t recalculate_rpo);
+void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo);
 
 /**
  * Emit a jump statement directly into a block
