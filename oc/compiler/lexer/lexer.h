@@ -32,7 +32,7 @@ struct lexitem_t{
 	//The line number of the source that we found it on
 	u_int16_t line_num;
 	//The token associated with this item
-	Token tok;
+	ollie_token_t tok;
 };
 
 /**
@@ -74,6 +74,6 @@ void deinitialize_lexer();
 /**
  * A utility function for error printing that converts an operator to a string
  */
-char* operator_to_string(Token op);
+char* operator_to_string(ollie_token_t op);
 
 #endif /* LEXER_H */

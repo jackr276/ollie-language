@@ -47,7 +47,7 @@ u_int16_t line_num = 0;
 static lex_stack_t* pushed_back_tokens = NULL;
 
 //Token array, we will index using their enum values
-const Token tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
+const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
 					STATIC, EXTERNAL, U8, I8, U16, I16,
 					U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
@@ -921,7 +921,7 @@ void print_token(lexitem_t* l){
 /**
  * A utility function for error printing that converts an operator to a string
  */
-char* operator_to_string(Token op){
+char* operator_to_string(ollie_token_t op){
 	switch(op){
 		case PLUSPLUS:
 			return "++";

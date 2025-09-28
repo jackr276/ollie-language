@@ -76,7 +76,7 @@ typedef struct{
 	//What is the final assignee
 	three_addr_var_t* assignee;
 	//What operator was used, if any
-	Token operator;
+	ollie_token_t operator;
 } cfg_result_package_t;
 
 
@@ -110,7 +110,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
-static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
+static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t is_branch_ending);
@@ -2137,7 +2137,7 @@ static void rename_all_variables(cfg_t* cfg){
 /**
  * Emit a pointer arithmetic statement that can arise from either a ++ or -- on a pointer
  */
-static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, Token operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
+static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, ollie_token_t operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
 	//Emit the constant size
 	three_addr_const_t* constant = emit_direct_integer_or_char_constant(assignee->type->internal_types.points_to->type_size, u64);
 
@@ -2152,7 +2152,7 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, T
 	add_statement(basic_block, temp_assignment);
 
 	//Decide what the op is
-	Token op = operator == PLUSPLUS ? PLUS : MINUS;
+	ollie_token_t op = operator == PLUSPLUS ? PLUS : MINUS;
 
 	//We need to emit a temp assignment for the assignee
 	instruction_t* operation = emit_binary_operation_with_const_instruction(emit_temp_var(assignee->type), temp_assignment->assignee, op, constant);
@@ -2836,7 +2836,7 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
 /**
  * Emit a binary operation statement with a constant built in
  */
-static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant, u_int8_t is_branch_ending){
 	//Assigned variables need to be non-constant
 	if(assignee->is_temporary == FALSE){
 		add_assigned_variable(basic_block, assignee);
@@ -3902,7 +3902,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	op2 = right_side.assignee;
 
 	//Let's see what binary operator that we have
-	Token binary_operator = logical_or_expr->binary_operator;
+	ollie_token_t binary_operator = logical_or_expr->binary_operator;
 	//Store this binary operator
 	package.operator = binary_operator;
 

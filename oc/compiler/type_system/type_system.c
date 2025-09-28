@@ -204,7 +204,7 @@ static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
  */
 u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 	//The basic type token for later
-	Token basic_type;
+	ollie_token_t basic_type;
 
 	//Arrays and pointers are fine
 	switch(type->type_class){
@@ -244,7 +244,7 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type){
 	type = dealias_type(type);
 
 	//The basic type token
-	Token basic_type_token;
+	ollie_token_t basic_type_token;
 
 	//Switch based on the type to determine
 	switch(type->type_class){
@@ -364,8 +364,8 @@ static u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t*
  */
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type){
 	//Predeclare these for now
-	Token source_basic_type;
-	Token dest_basic_type;
+	ollie_token_t source_basic_type;
+	ollie_token_t dest_basic_type;
 
 	switch(destination_type->type_class){
 		//This is a simpler case - constructs can only be assigned
@@ -691,7 +691,7 @@ static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a)
  * CASES:
  * 	1.) Construct Types: Construct types are compatible if they are both the exact same type
  */
-generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, Token op){
+generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op){
 	//For convenience
 	symtab = (type_symtab_t*)symtab;
 
@@ -1021,7 +1021,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 /**
  * Is the given unary operation valid for the type that was specificed?
  */
-u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op){
+u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t unary_op){
 	//Just to be safe, we'll dealias is
 	type = dealias_type(type);
 
@@ -1111,7 +1111,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 			}
 
 			//Now that we know what it is, we'll see if it's a float or void
-			Token type_tok = type->basic_type_token;
+			ollie_token_t type_tok = type->basic_type_token;
 			
 			//If it's float or void, we're done
 			if(type_tok == F32 || type_tok == F64 || type_tok == VOID){
@@ -1131,12 +1131,12 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 /**
  * Is the given operation valid for the type that was specificed?
  */
-u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op, side_type_t side){
+u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t binary_op, side_type_t side){
 	//Just to be safe, we'll always make sure here
 	type = dealias_type(type);
 
 	//Deconstructed basic type(since we'll be using it so much)
-	Token basic_type;
+	ollie_token_t basic_type;
 
 	//Let's first check if we have any in a
 	//series of types that never make sense for any unary operation
@@ -1299,7 +1299,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 /**
  * Create a basic type dynamically
 */
-generic_type_t* create_basic_type(char* type_name, Token basic_type){
+generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
 	//Dynamically allocate
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 	//Store the type class
@@ -1806,7 +1806,7 @@ u_int8_t is_type_signed(generic_type_t* type){
 	}
 
 	//If we get here there's a chance it could be signed
-	Token basic_type_token = type->basic_type_token;
+	ollie_token_t basic_type_token = type->basic_type_token;
 
 	switch(basic_type_token){
 		case I8:

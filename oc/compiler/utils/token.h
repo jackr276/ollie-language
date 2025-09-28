@@ -127,5 +127,5 @@ typedef enum {
 	F64,
 	CHAR,
 	PUB,
-} Token;
+} ollie_token_t;
 
