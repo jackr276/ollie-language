@@ -4,7 +4,7 @@
 */
 
 //Link to module being tested
-#include "../dynamic_string/dynamic_string.h"
+#include "../utils/dynamic_string/dynamic_string.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>

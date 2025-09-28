@@ -9,7 +9,7 @@
 //We'll also need three address vars
 #include "../instruction/instruction.h"
 #include "../parser/parser.h"
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
