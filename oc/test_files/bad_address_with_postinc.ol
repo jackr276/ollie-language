@@ -4,11 +4,11 @@
 */
 
 
-define union my_union {
+define struct my_struct {
 	mut x:i64;
 	mut y:i32;
 	mut c:char;
-} as custom_union;
+} as custom_struct;
 
 
 fn mutate_int(mut x:i32*) -> void {
@@ -17,9 +17,10 @@ fn mutate_int(mut x:i32*) -> void {
 
 
 pub fn main() -> i32 {
-	declare mut union_type:custom_union;
+	declare mut construct:custom_struct;
 
-	@mutate_int(&(union_type.y));
+	//Should fail
+	@mutate_int(&(construct:y++));
 
 	ret 0;
 }

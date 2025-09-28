@@ -191,6 +191,31 @@ static Token compressed_assignment_to_binary_op(Token op){
 
 
 /**
+ * Is a given postfix expression tree address eligible or not
+ */
+static u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_node_t* parent){
+	//Grab the second child to overcome the primary expression
+	generic_ast_node_t* cursor = parent->first_child->next_sibling;
+
+	switch (cursor->ast_node_type) {
+		case AST_NODE_TYPE_ARRAY_ACCESSOR:
+		case AST_NODE_TYPE_STRUCT_ACCESSOR:
+		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
+		case AST_NODE_TYPE_UNION_ACCESSOR:
+		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
+			break;
+		default:
+			print_parse_message(PARSE_ERROR, "Invalid return value for address operation &", parser_line_num);
+			return FAILURE;
+	}
+
+	//Return true if we made it here
+	return TRUE;
+}
+
+
+
+/**
  * Determine the minimum bit width for an unsigned integer field that is needed based on a value that is passed
  * in
  *
@@ -1976,30 +2001,23 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//This is assignable
 			is_assignable = TRUE;
-
 			break;
 
 		//Address operator case
 		case SINGLE_AND:
 			switch(cast_expr->ast_node_type){
+				//We can take an identifiers address
 				case AST_NODE_TYPE_IDENTIFIER:
-					printf("Address of identifier. Variable is: %s\n", cast_expr->variable->var_name.string);
 					break;
-				case AST_NODE_TYPE_ARRAY_ACCESSOR:
-					printf("Address of array_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
+				//And we can handle a postfix expression
+				case AST_NODE_TYPE_POSTFIX_EXPR:
+					//If this fails then we leave
+					if(is_postfix_expression_tree_address_eligible(cast_expr) == FALSE){
+						return print_and_return_error("Invalid address operation attempt", parser_line_num);
+					}
 					break;
-				case AST_NODE_TYPE_STRUCT_ACCESSOR:
-					printf("Address of struct_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
-					break;
-				case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
-					printf("Address of struct_pointer_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
-					break;
-				case AST_NODE_TYPE_UNION_ACCESSOR:
-					printf("Address of union_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
-					break;
-				case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-					printf("Address of union_pointer_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
-					break;
+				
+				//Otherwise it doesn't work
 				default:
 					return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 			}

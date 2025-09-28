@@ -3610,6 +3610,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Grab this out
 			second_child = first_child->next_sibling;
 
+			//TODO WE NEED TO HANDLE THIS BASED ON WHETHER OR NOT WE HAVE A COMPLEX ACCESS TYPE OR NOT
+
 			//And finally extract this
 			symtab_variable_record_t* variable = second_child->variable;
 

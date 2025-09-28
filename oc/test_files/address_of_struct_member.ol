@@ -19,7 +19,7 @@ fn mutate_int(mut x:i32*) -> void {
 pub fn main() -> i32 {
 	declare mut construct:custom_struct;
 
-	@mutate_int(&(construct:x));
+	@mutate_int(&(construct:y));
 
 	ret 0;
 }
