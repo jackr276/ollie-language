@@ -1981,12 +1981,27 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 		//Address operator case
 		case SINGLE_AND:
-			/**
-			 * We can only take the address of an identifier. Anything else would not make sense for
-			 * us. As such - if this is not an identifier, we fail out
-			 */
-			if(cast_expr->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-				return print_and_return_error("Invalid value for address operator &", parser_line_num);
+			switch(cast_expr->ast_node_type){
+				case AST_NODE_TYPE_IDENTIFIER:
+					printf("Address of identifier. Variable is: %s\n", cast_expr->variable->var_name.string);
+					break;
+				case AST_NODE_TYPE_ARRAY_ACCESSOR:
+					printf("Address of array_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
+					break;
+				case AST_NODE_TYPE_STRUCT_ACCESSOR:
+					printf("Address of struct_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
+					break;
+				case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
+					printf("Address of struct_pointer_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
+					break;
+				case AST_NODE_TYPE_UNION_ACCESSOR:
+					printf("Address of union_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
+					break;
+				case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
+					printf("Address of union_pointer_accessor. Variable is: %s\n", cast_expr->variable->var_name.string);
+					break;
+				default:
+					return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 			}
 
 			//Check to see if it's valid
