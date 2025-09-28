@@ -7336,6 +7336,39 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//Store this in the entry block
 	function_starting_block->function_defined_in = func_record;
 
+	/**
+	 * If we have function parameters that are *also* stack variables(meaning the user will
+	 * at some point want to take the memory address of them), then we need to load
+	 * these variables into the stack preemptively
+	 */
+	for(u_int16_t i = 0; i < func_record->number_of_params; i++){
+		//Extract the parameter
+		symtab_variable_record_t* parameter = func_record->func_params[i];
+
+		//If it's not a stack variable we don't care
+		if(parameter->stack_variable == FALSE){
+			continue;
+		}
+
+		//However if it is a stack variable, we need to add it to the stack and emit an initial store of it
+		if(does_stack_contain_symtab_variable(&(current_function->data_area), parameter) == FALSE){
+			//Add this variable onto the stack now, since we know it is not already on it
+			add_variable_to_stack(&(current_function->data_area), emit_var(parameter));
+		}	
+
+		//A special case here - if this variable is a function parameter, it will not naturally
+		//be in the stack when it comes in. To remedy this, we will have to do an initial load
+		//to get it into the stack
+		instruction_t* store_code = emit_store_ir_code(emit_var(parameter), emit_var(parameter));
+
+		//Bookkeeping here
+		add_used_variable(function_starting_block, store_code->op1);
+		add_assigned_variable(function_starting_block, store_code->assignee);
+
+		//Add it into the starting block
+		add_statement(function_starting_block, store_code);
+	}
+
 	//We don't care about anything until we reach the compound statement
 	generic_ast_node_t* func_cursor = function_node->first_child;
 
