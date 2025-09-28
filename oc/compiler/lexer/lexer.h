@@ -13,7 +13,7 @@
 
 //The maximum token length is 500 
 #define MAX_TOKEN_LENGTH 500
-#define MAX_IDENT_LENGTH 100
+#define MAX_IDENT_LENGTH 200
 
 //Are we hunting for a constant?
 typedef enum {
