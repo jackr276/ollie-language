@@ -3349,41 +3349,6 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 
 
 /**
- * Remediate the stack address issues that may have been caused by the previous optimization
- * step
- *
- *
- * TODO - if we change to "memory address of" use cases, this becomes entirely useless
- *
- * we should *remove* this once that is done, it is a waste of time
- */
-static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
-	//Grab this value out. We'll need it's stack offset
-	three_addr_var_t* assignee = instruction->assignee;
-
-	//This means that there is a stack offset
-	if(assignee->stack_offset != 0){
-		//We'll need to ensure that this is an addition statement
-		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-		instruction->op = PLUS;
-
-		//Now we'll need to either make a three address constant or update
-		//the existing one
-		if(instruction->op1_const != NULL){
-			instruction->op1_const->constant_value.integer_constant = assignee->stack_offset;
-		} else {
-			instruction->op1_const = emit_direct_integer_or_char_constant(assignee->stack_offset, i32);
-		}
-
-	//Otherwise it's just the RSP value
-	} else {
-		//This is just an assignment statement then
-		instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-	}
-}
-
-
-/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -4275,17 +4240,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//The op1 is now the stack pointer
 			window->instruction1->op1 = cfg->stack_pointer;
 		}
-	}
-
-	/**
-	 * Final check - in the previous optimization module, there is a chance that we've deleted
-	 * items in the stack that have caused our old stack addresses to be out of sync. We'll hitch
-	 * a ride on this instruction crawl to remediate anything stack addresses
-	 */
-	//TODO determine if this is even needed
-	if(window->instruction1->op1 != NULL && window->instruction1->op1->is_stack_pointer == TRUE){
-		//Remediate the stack address
-		remediate_stack_address(cfg, window->instruction1);
 	}
 
 	//Return whether or not we changed the block return changed;
