@@ -9601,6 +9601,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Initialize our results package here
 	front_end_results_package_t* results = calloc(1, sizeof(front_end_results_package_t));
 
+	//Initialize the lexer first
+	initialize_lexer();
+
 	//Set the number of errors here
 	num_errors = 0;
 	num_warnings = 0;
@@ -9685,6 +9688,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Close the file out
 	fclose(fl);
+
+	//Once we're done, deinitialize the lexer
+	deinitialize_lexer();
 
 	return results;
 }
