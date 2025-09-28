@@ -45,6 +45,27 @@ static u_int8_t does_stack_contain_variable(stack_data_area_t* area, three_addr_
 
 
 /**
+ * Does the stack already contain this variable? This is important for types like
+ * constructs and arrays
+ */
+u_int8_t does_stack_contain_symtab_variable(stack_data_area_t* area, void* symtab_variable){
+	//Run through and try to find this
+	for(u_int16_t i = 0; i < area->variables->current_index; i++){
+		//Grab it out
+		three_addr_var_t* ir_variable = dynamic_array_get_at(area->variables, i);
+
+		//This is our success case
+		if(ir_variable->linked_var != NULL && ir_variable->linked_var == symtab_variable){
+			return TRUE;
+		}
+	}
+
+	//Return false if we get here
+	return FALSE;
+}
+
+
+/**
  * Align the stack data area size to be 16-byte aligned
  */
 void align_stack_data_area(stack_data_area_t* area){
@@ -116,6 +137,11 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 	//with the needed padding and the new type's size added onto it
 	area->total_size = area->total_size + needed_padding + var->type->type_size;
 
+	//Copy this over to the variable itself if it's there
+	if(var->linked_var != NULL){
+		var->linked_var->stack_offset = var->stack_offset;
+	}
+
 	//Finally add this to the array
 	dynamic_array_add(area->variables, var);
 }
@@ -157,6 +183,12 @@ static void realign_data_area(stack_data_area_t* area){
 
 		//This one's stack offset is the original total size plus whatever padding we need
 		variable->stack_offset = area->total_size + needed_padding;
+
+		//If the variable also has a three address variable associated with it - we will
+		//update that variable's stack address
+		if(variable->linked_var != NULL){
+			variable->linked_var->stack_offset = variable->stack_offset;
+		}
 		
 		//Update the total size of the stack too. The new size is the original size
 		//with the needed padding and the new type's size added onto it

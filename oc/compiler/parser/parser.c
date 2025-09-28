@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <complex.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -1299,7 +1300,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			}
 
 			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, left_hand_unary->side);
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
 
 			//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
 			//don't want to mess with the actual type of the variable
@@ -1329,7 +1330,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//Otherwise we do have a pointer type
 		} else {
 			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, left_hand_unary->side);
+			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
 
 			//Let's first determine if they're compatible
 			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(right_hand_type), binary_op);
@@ -1980,9 +1981,12 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 		//Address operator case
 		case SINGLE_AND:
-			//Is there an attempt to take the address of a constant
-			if(cast_expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				return print_and_return_error("The address of a constant cannot be taken", parser_line_num);
+			/**
+			 * We can only take the address of an identifier. Anything else would not make sense for
+			 * us. As such - if this is not an identifier, we fail out
+			 */
+			if(cast_expr->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+				return print_and_return_error("Invalid value for address operator &", parser_line_num);
 			}
 
 			//Check to see if it's valid
@@ -2008,6 +2012,14 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			//Otherwise it does exist so we'll just grab whatever we got
 			} else {
 				return_type = type_record->type;
+			}
+
+			//If this is not already a memory region, then we need to flag it as one
+			//for later so that the cfg constructor knows what we'll eventually need to
+			//load
+			if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE){
+				//IMPORTANT - we need to flag this as a stack variable now
+				cast_expr->variable->stack_variable = TRUE;
 			}
 
 			//This is not assignable

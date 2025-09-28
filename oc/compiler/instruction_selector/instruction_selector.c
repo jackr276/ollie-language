@@ -2311,32 +2311,6 @@ static void handle_simple_movement_instruction(instruction_t* instruction){
 
 
 /**
- * Handle a memory address assignment instruction. This instruction will take
- * the form of a lea statement, where the stack pointer is the first operand
- */
-static void handle_address_assignment_instruction(instruction_t* instruction, type_symtab_t* symtab, three_addr_var_t* stack_pointer){
-	//Always a leaq, we are dealing with addresses
-	instruction->instruction_type = LEAQ;
-
-	//The destination is the assignee
-	instruction->destination_register = instruction->assignee;
-
-	//The first address calculation register is the stack pointer
-	instruction->address_calc_reg1 = stack_pointer;
-
-	//Copy the source register over to op1
-	instruction->source_register = instruction->op1;
-
-	//This is just a placeholder for now - it will be occupied later on
-	three_addr_const_t* constant = emit_long_constant_direct(-1, symtab);
-	instruction->offset = constant;
-
-	//This will print out with the offset only
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-}
-
-
-/**
  * Handle a lea statement(in the three address code statement form)
  *
  * Lea statements(by the time we get here..) have the following in them:
@@ -2661,6 +2635,181 @@ static void handle_test_instruction(instruction_t* instruction){
 	//It does have 2 source registers however
 	instruction->source_register = instruction->op1;
 	instruction->source_register2 = instruction->op2;
+}
+
+
+/**
+ * Handle a load instruction. A load instruction is always converted into
+ * a garden variety dereferencing move
+ */
+static void handle_load_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+	//Size is determined by the assignee
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case WORD:
+			instruction->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case BYTE:
+			instruction->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		default:
+			break;
+	}
+
+	//Extract the variable record from the op1
+	symtab_variable_record_t* variable = instruction->op1->linked_var;
+
+	//We need to grab this variable's stack offset
+	u_int32_t stack_offset = variable->stack_offset;
+
+	//Once we have that, we can emit our offset constant
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+	//This is in offset only mode
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//And the offset itself is the offset constant
+	instruction->offset = offset_constant;
+
+	//And the first address calc register is just our stack pointer
+	instruction->address_calc_reg1 = stack_pointer;
+
+	//And our destination register is the temp reg
+	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
+ * Handle a store const instruction. This will be reorganized into a memory accessing move
+ */
+static void handle_store_const_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+	//Size is determined by the assignee
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case BYTE:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		default:
+			break;
+	}
+
+	//Extract the variable record from the assignee
+	symtab_variable_record_t* variable = instruction->assignee->linked_var;
+
+	//We need to grab this variable's stack offset
+	u_int32_t stack_offset = variable->stack_offset;
+
+	//Once we have that, we can emit our offset constant
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+	//This is in offset only mode
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//And the offset itself is the offset constant
+	instruction->offset = offset_constant;
+
+	//And the first address calc register is just our stack pointer
+	instruction->address_calc_reg1 = stack_pointer;
+
+	//And for the source, we'll occupy the source immediate with our value
+	instruction->source_immediate = instruction->op1_const;
+}
+
+
+/**
+ * Handle a store instruction. This will be reorganized into a memory accessing move
+ */
+static void handle_store_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+	//Size is determined by the assignee
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case BYTE:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		default:
+			break;
+	}
+
+	//Extract the variable record from the assignee
+	symtab_variable_record_t* variable = instruction->assignee->linked_var;
+
+	//We need to grab this variable's stack offset
+	u_int32_t stack_offset = variable->stack_offset;
+
+	//Once we have that, we can emit our offset constant
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+	//This is in offset only mode
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//And the offset itself is the offset constant
+	instruction->offset = offset_constant;
+
+	//And the first address calc register is just our stack pointer
+	instruction->address_calc_reg1 = stack_pointer;
+
+	//The source register is just our op1
+	instruction->source_register = instruction->op1;
+}
+
+
+/**
+ * Translate the memory address instruction into stack form
+ */
+static void handle_memory_address_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+	//These will always be LEA's
+	instruction->instruction_type = LEAQ;
+
+	//Destination is always the assignee
+	instruction->destination_register = instruction->assignee;
+
+	//Extract the variable record from the assignee
+	symtab_variable_record_t* variable = instruction->op1->linked_var;
+
+	//We need to grab this variable's stack offset
+	u_int32_t stack_offset = variable->stack_offset;
+
+	//Once we have that, we can emit our offset constant
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+	//The offset is the offset constant
+	instruction->offset = offset_constant;
+
+	//Stack pointer is the calc reg 1
+	instruction->address_calc_reg1 = stack_pointer;
+
+	//We've only got the offset here
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 }
 
 
@@ -2999,7 +3148,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 
 	//Switch on whatever we have currently
 	switch (instruction->statement_type) {
-		//These have a helper
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_simple_movement_instruction(instruction);
 			break;
@@ -3008,9 +3156,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_ASSN_CONST_STMT:
 			handle_constant_to_register_move_instruction(instruction);
-			break;
-		case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
-			handle_address_assignment_instruction(instruction, cfg->type_symtab, cfg->stack_pointer);
 			break;
 		case THREE_ADDR_CODE_LEA_STMT:
 			handle_lea_statement(instruction);
@@ -3026,7 +3171,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			instruction->source_register = instruction->op1;
 			break;
 		case THREE_ADDR_CODE_JUMP_STMT:
-			//Let the helper do this and then leave
 			select_jump_instruction(instruction);
 			break;
 		//Special case here - we don't change anything
@@ -3049,15 +3193,12 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			instruction->destination_register = instruction->assignee;
 			break;
 			
-		//Let the helper deal with this
 		case THREE_ADDR_CODE_INC_STMT:
 			handle_inc_instruction(instruction);
 			break;
-		//Again use the helper
 		case THREE_ADDR_CODE_DEC_STMT:
 			handle_dec_instruction(instruction);
 			break;
-		//Let the helper handle this one
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 			handle_binary_operation_instruction(instruction);
@@ -3069,19 +3210,28 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_NEG_STATEMENT:
-			//Let the helper do it
 			handle_neg_instruction(instruction);
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
-			//Let the helper do it
 			handle_not_instruction(instruction);
 			break;
-
 		//Handle the testing statement
 		case THREE_ADDR_CODE_TEST_STMT:
-			//Let the helper do it
 			handle_test_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			//Let the helper do it
+			handle_load_instruction(cfg->stack_pointer, instruction);
+			break;
+		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
+			handle_store_const_instruction(cfg->stack_pointer, instruction);
+			break;
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			handle_store_instruction(cfg->stack_pointer, instruction);
+			break;
+		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
+			handle_memory_address_instruction(cfg->stack_pointer, instruction);
 			break;
 			
 		default:
@@ -3199,36 +3349,6 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 
 
 /**
- * Remediate the stack address issues that may have been caused by the previous optimization
- * step
- */
-static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
-	//Grab this value out. We'll need it's stack offset
-	three_addr_var_t* assignee = instruction->assignee;
-
-	//This means that there is a stack offset
-	if(assignee->stack_offset != 0){
-		//We'll need to ensure that this is an addition statement
-		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-		instruction->op = PLUS;
-
-		//Now we'll need to either make a three address constant or update
-		//the existing one
-		if(instruction->op1_const != NULL){
-			instruction->op1_const->constant_value.integer_constant = assignee->stack_offset;
-		} else {
-			instruction->op1_const = emit_int_constant_direct(assignee->stack_offset, cfg->type_symtab);
-		}
-
-	//Otherwise it's just the RSP value
-	} else {
-		//This is just an assignment statement then
-		instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-	}
-}
-
-
-/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -3258,83 +3378,83 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * x0 <- 0x8
 	 * 
 	 * This will also result in the deletion of the first statement
+	 *
+	 * This also works with store statements
 	 */
 
 	//If we see a constant assingment first and then we see a an assignment
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
-	 	&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-		
-		//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
-		//we deal with temp variables. At this point in the program, all non-temp variables have been
-		//deemed important, so we wouldn't want to remove their assignments
-		if(window->instruction1->assignee->is_temporary == TRUE &&
-			//Verify that this is not used more than once
-			window->instruction1->assignee->use_count <= 1 &&
-			variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-			//Grab this out for convenience
-			instruction_t* binary_operation = window->instruction2;
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//We see an assign statement
+		if(window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
+			//we deal with temp variables. At this point in the program, all non-temp variables have been
+			//deemed important, so we wouldn't want to remove their assignments
+			if(window->instruction1->assignee->is_temporary == TRUE &&
+				//Verify that this is not used more than once
+				window->instruction1->assignee->use_count <= 1 &&
+				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+				//Grab this out for convenience
+				instruction_t* assign_operation = window->instruction2;
 
-			//Now we'll modify this to be an assignment const statement
-			binary_operation->op1_const = window->instruction1->op1_const;
+				//Now we'll modify this to be an assignment const statement
+				assign_operation->op1_const = window->instruction1->op1_const;
 
-			//Modify the type of the assignment
-			binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				//Modify the type of the assignment
+				assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-			//The use count here now goes down by one
-			binary_operation->op1->use_count--;
+				//The use count here now goes down by one
+				assign_operation->op1->use_count--;
 
-			//Make sure that we now null out op1
-			binary_operation->op1 = NULL;
+				//Make sure that we now null out op1
+				assign_operation->op1 = NULL;
 
-			//Once we've done this, the first statement is entirely useless
-			delete_statement(window->instruction1);
+				//Once we've done this, the first statement is entirely useless
+				delete_statement(window->instruction1);
 
-			//Once we've deleted the statement, we'll need to completely rewire the block
-			//The binary operation is now the start
-			reconstruct_window(window, binary_operation);
-		
-			//Whatever happened here, we did change something
-			changed = TRUE;
-		}
-	}
-
-	//This is the same case as above, we'll just now check instructions 2 and 3
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
-	 	&& window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-
-		//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
-		//we deal with temp variables. At this point in the program, all non-temp variables have been
-		//deemed important, so we wouldn't want to remove their assignments
-		if(window->instruction2->assignee->is_temporary == TRUE &&
-			//Verify that this is not used more than once
-			window->instruction2->assignee->use_count <= 1 &&
-			variables_equal(window->instruction2->assignee, window->instruction3->op1, FALSE) == TRUE){
-			//Grab this out for convenience
-			instruction_t* binary_operation = window->instruction3;
-
-			//Now we'll modify this to be an assignment const statement
-			binary_operation->op1_const = window->instruction2->op1_const;
-
-			//The use count for op1 now goes down by 1
-			binary_operation->op1->use_count--;
-
-			//Make sure that we now NULL out the first non-const operand for the future
-			binary_operation->op1 = NULL;
+				//Once we've deleted the statement, we'll need to completely rewire the block
+				//The binary operation is now the start
+				reconstruct_window(window, assign_operation);
 			
-			//Modify the type of the assignment
-			binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				//Whatever happened here, we did change something
+				changed = TRUE;
+			}
 
-			//Once we've done this, the first statement is entirely useless
-			delete_statement(window->instruction2);
+		//We can apply the same optimization for store statements
+		} else if(window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
+			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
+			//we deal with temp variables. At this point in the program, all non-temp variables have been
+			//deemed important, so we wouldn't want to remove their assignments
+			if(window->instruction1->assignee->is_temporary == TRUE &&
+				//Verify that this is not used more than once
+				window->instruction1->assignee->use_count <= 1 &&
+				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+				//Grab this out for convenience
+				instruction_t* store_operation = window->instruction2;
 
-			//We'll need to reconstruct the window. Instruction 1 is still the start
-			reconstruct_window(window, window->instruction3);
+				//Now we'll modify this to be an assignment const statement
+				store_operation->op1_const = window->instruction1->op1_const;
 
-			//Whatever happened here, we did change something
-			changed = TRUE;
+				//Modify the type of the assignment
+				store_operation->statement_type = THREE_ADDR_CODE_STORE_CONST_STATEMENT;
+
+				//The use count here now goes down by one
+				store_operation->op1->use_count--;
+
+				//Make sure that we now null out op1
+				store_operation->op1 = NULL;
+
+				//Once we've done this, the first statement is entirely useless
+				delete_statement(window->instruction1);
+
+				//Once we've deleted the statement, we'll need to completely rewire the block
+				//The binary operation is now the start
+				reconstruct_window(window, store_operation);
+			
+				//Whatever happened here, we did change something
+				changed = TRUE;
+			}
 		}
 	}
-
 
 	/**
 	 * ================= Handling redundant multiplications ========================
@@ -4109,13 +4229,17 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	/**
-	 * Final check - in the previous optimization module, there is a chance that we've deleted
-	 * items in the stack that have caused our old stack addresses to be out of sync. We'll hitch
-	 * a ride on this instruction crawl to remediate anything stack addresses
+	 * If we have an instruction that is a memory address, and said memory address
+	 * is 0, we can optimize that into just being an assignment of the stack pointer
 	 */
-	if(window->instruction1->op1 != NULL && window->instruction1->op1->is_stack_pointer == TRUE){
-		//Remediate the stack address
-		remediate_stack_address(cfg, window->instruction1);
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
+		//We can reorgnaize this into an assignment instruction
+		if(window->instruction1->op1->stack_offset == 0){
+			//Reset the type
+			window->instruction1->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+			//The op1 is now the stack pointer
+			window->instruction1->op1 = cfg->stack_pointer;
+		}
 	}
 
 	//Return whether or not we changed the block return changed;

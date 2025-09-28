@@ -325,6 +325,12 @@ typedef enum{
 	THREE_ADDR_CODE_IDLE_STMT,
 	//A negation statement
 	THREE_ADDR_CODE_NEG_STATEMENT,
+	//A load statement
+	THREE_ADDR_CODE_LOAD_STATEMENT,
+	//A store statement, but explicitly with a constant
+	THREE_ADDR_CODE_STORE_CONST_STATEMENT,
+	//And a store statement
+	THREE_ADDR_CODE_STORE_STATEMENT,
 	//SPECIAL CASE - assembly inline statement
 	THREE_ADDR_CODE_ASM_INLINE_STMT,
 	//A "Load effective address(lea)" instruction
@@ -337,8 +343,8 @@ typedef enum{
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A memory access statement
 	THREE_ADDR_CODE_MEM_ACCESS_STMT,
-	//An address assignment instruction for memory address
-	THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT
+	//A memory address statement
+	THREE_ADDR_CODE_MEM_ADDRESS_STMT
 } instruction_stmt_type_t;
 
 
@@ -367,8 +373,6 @@ struct live_range_t{
 	u_int8_t carries_function_param;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
-	//Does this live range need to be spilled?
-	u_int8_t must_be_spilled;
 	//What register is this live range in?
 	register_holder_t reg; 
 	//The size of the variable in the live range
@@ -443,8 +447,6 @@ struct three_addr_const_t{
 	} constant_value;
 	//What kind of constant is it
 	Token const_type;
-	//Is the value of this constant 0?
-	u_int8_t is_value_0;
 };
 
 
@@ -655,24 +657,9 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 three_addr_const_t* emit_string_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
 
 /**
- * Emit an int constant in a very direct way
+ * Emit a constant directly based on whatever the type given is
  */
-three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symtab);
-
-/**
- * Emit a char constant directly from a value
- */
-three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* symtab);
-
-/**
- * Emit an unsigned int constant directly
- */
-three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab_t* symtab);
-
-/**
- * Emit a long constant direct from value
- */
-three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* symtab);
+three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type);
 
 /**
  * Emit a push instruction. We only have one kind of pushing - quadwords - we don't
@@ -754,9 +741,26 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
 instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
- * Emit a memory address assignment statement
+ * Emit a store statement. This is like an assignment instruction, but we're explicitly
+ * using stack memory here
  */
-instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
+
+/**
+ * Emit a load statement. This is like an assignment instruction, but we're explicitly
+ * using stack memory here
+ */
+instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
+
+/**
+ * Emit a store statement. This is like an assignment instruction, but we're explicitly
+ * using stack memory here
+ */
+instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const);
+
+/**
+ * Emit a memory address statement
+ */
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
@@ -788,6 +792,11 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee);
  * Emit an increment instruction
  */
 instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
+
+/**
+ * Emit a memory address assignment statement
+ */
+instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a decrement instruction

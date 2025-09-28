@@ -16,5 +16,5 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 	x = 32;
 	x /= argc;
 
-	ret *y;
+	ret *y; //This in theory is a use of x because we're dereferencing it in memory
 }

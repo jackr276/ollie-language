@@ -1215,13 +1215,6 @@ static void sweep(cfg_t* cfg){
 					block->jump_table = NULL;
 				}
 
-				//If we have a stack pointer, this came from an allocation. We'll 
-				//need to update the stack accordingly if we're deleting this
-				if(temp->op1 != NULL && temp->op1->is_stack_pointer == TRUE){
-					//Delete the assignee from the stack pointer
-					remove_variable_from_stack(&(temp->function->data_area), temp->assignee);
-				}
-
 				//Advance the statement
 				stmt = stmt->next_statement;
 				//Delete the statement, now that we know it is not a jump
@@ -1240,6 +1233,8 @@ static void sweep(cfg_t* cfg){
  * 	t1 <- memory address of x_2
  *
  * 	So we know that we need to keep track of all assignments to x that have an SSA generation *greater than or equal to 2*
+ * 	
+ * 	TODO probably deprecated now
  */
 static void mark_and_add_greater_ssa_defintions(cfg_t* cfg, symtab_variable_record_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist, u_int32_t ssa_generation){
 	//Run through everything here
@@ -1489,6 +1484,19 @@ static void mark(cfg_t* cfg){
 					break;
 
 				/**
+				 * All stores are considered useful because they modify areas
+				 * on the stack
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				/**
 				 * If we have an assignment statement that writes to a
 				 * memory address, we will mark that as important
 				 */
@@ -1567,12 +1575,6 @@ static void mark(cfg_t* cfg){
 					mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
 				}
 
-				break;
-
-			//Use a specialized function to mark all SSA generations of a given variable that are
-			//greater than or equal to the generation that we care about here
-			case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
-				mark_and_add_greater_ssa_defintions(cfg, stmt->op1->linked_var, stmt->function, worklist, stmt->op1->ssa_generation);
 				break;
 
 			//In all other cases, we'll just mark and add the two operands 

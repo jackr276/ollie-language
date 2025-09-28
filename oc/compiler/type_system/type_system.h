@@ -149,6 +149,12 @@ struct function_type_t{
 
 
 /**
+ * Does this type represent a memory region and not
+ * a single variable?
+ */
+u_int8_t is_memory_region(generic_type_t* type);
+
+/**
  * Does this type represent a memory address?
  */
 u_int8_t is_memory_address_type(generic_type_t* type);

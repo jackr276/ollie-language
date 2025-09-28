@@ -45,7 +45,13 @@ three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 variable_symtab_t* variable_symtab;
 //Store this for usage
-static generic_type_t* u64 = NULL;
+generic_type_t* i32 = NULL;
+//Store this for usage
+generic_type_t* u32 = NULL;
+//Store this for usage
+generic_type_t* u64 = NULL;
+//Store this for usage
+generic_type_t* i64 = NULL;
 //The break and continue stack will
 //hold values that we can break & continue
 //to. This is done here to avoid the need
@@ -107,7 +113,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, 
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* constant, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending);
-static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending);
+static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
 static cfg_result_package_t emit_initialization(basic_block_t* current_block, three_addr_var_t* assignee, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending);
 static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
@@ -147,6 +153,34 @@ static u_int8_t is_power_of_2(int64_t value){
 		return FALSE;
 	}
 }
+
+
+/**
+ * For certain variables in conditionals, we want to emit a temp assignment of said variable for optimization
+ * reasons. This function will take a variable in and:
+ *   If it's a temp, just give it back
+ *   If it's not a temp, emit a temp assignment, add that to the block, then give the temp var back
+ */
+static three_addr_var_t* handle_conditional_identifier_copy_if_needed(basic_block_t* block, three_addr_var_t* variable, u_int8_t is_branch_ending){
+	//Nothing more to see here
+	if(variable->is_temporary == TRUE){
+		return variable;
+	}
+
+	//Otherwise we must copy
+	instruction_t* copy = emit_assignment_instruction(emit_temp_var(variable->type), variable);
+	copy->is_branch_ending = is_branch_ending;
+
+	//Add it into the block
+	add_statement(block, copy);
+
+	//Add it in as used
+	add_used_variable(block, variable);
+
+	//Give back the copy var
+	return copy->assignee;
+}
+
 
 
 /**
@@ -2105,7 +2139,7 @@ static void rename_all_variables(cfg_t* cfg){
  */
 static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, Token operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
 	//Emit the constant size
-	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->internal_types.points_to->type_size, type_symtab);
+	three_addr_const_t* constant = emit_direct_integer_or_char_constant(assignee->type->internal_types.points_to->type_size, u64);
 
 	//We need this temp assignment for bookkeeping reasons
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
@@ -2221,7 +2255,7 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 	}
 
 	//We'll need the size to multiply by
-	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(member_type->type_size, type_symtab);
+	three_addr_const_t* type_size = emit_direct_integer_or_char_constant(member_type->type_size, u64);
 
 	//We'll need a temp assignment if this isn't temporary
 	if(offset->is_temporary == FALSE){
@@ -2286,7 +2320,7 @@ static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t*
 	u_int32_t total_offset = offset * base_type->type_size;
 
 	//Once we have the total offset, we add it to the base address
-	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), true_base_address, PLUS, emit_int_constant_direct(total_offset, type_symtab));
+	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), true_base_address, PLUS, emit_direct_integer_or_char_constant(total_offset, u64));
 	
 	//if the base address is not temporary, it also counts as used
 	add_used_variable(basic_block, true_base_address);
@@ -2616,42 +2650,46 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
  */
-static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node, u_int8_t is_branch_ending){
 	//Handle an enumerated type right here
 	if(ident_node->variable->membership == ENUM_MEMBER) {
 		//Just create a constant here with the enum
-		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, type_symtab), ident_node->variable->type_defined_as, is_branch_ending);
+		return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(ident_node->variable->enum_member_value, ident_node->variable->type_defined_as), ident_node->variable->type_defined_as, is_branch_ending);
 	}
 
-	//Is temp assignment required? This usually indicates that we're on the right hand side of some equation
-	if(temp_assignment_required == TRUE){
-		//First we'll create the non-temp var here
-		three_addr_var_t* non_temp_var = emit_var(ident_node->variable);
+	/**
+	 * If we're on the right side of the equation and this is a stack variable, when we want to use 
+	 * the address we have to load
+	 */
+	if(ident_node->side == SIDE_TYPE_RIGHT && ident_node->variable->stack_variable == TRUE){
+		//Extract the symtab var
+		symtab_variable_record_t* symtab_variable = ident_node->variable;
 
-		//Let's first create the assignment statement
-		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(ident_node->inferred_type), non_temp_var);
+		//The final assignee
+		three_addr_var_t* assignee;
 
-		//Add this in as a used variable
-		add_used_variable(basic_block, non_temp_var);
+		//Emit the load instruction
+		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
+		load_instruction->is_branch_ending = is_branch_ending;
 
-		//Carry this through
-		temp_assignment->is_branch_ending = is_branch_ending;
+		//Add it to the block
+		add_statement(basic_block, load_instruction);
 
-		//Add the statement in
-		add_statement(basic_block, temp_assignment);
+		//This counts as a use
+		add_used_variable(basic_block, load_instruction->op1);
+
+		//And the final assignee is this load
+		assignee = load_instruction->assignee;
 
 		//Just give back the temp var here
-		return temp_assignment->assignee;
-
-	//Otherwise, the temporary assignment is not required. This usually means that we're on the left
-	//hand side of an equation
-	} else {
-		//Create our variable
-		three_addr_var_t* returned_variable = emit_var(ident_node->variable);
-
-		//Give our variable back
-		return returned_variable;
+		return assignee;
 	}
+
+	//Create our variable
+	three_addr_var_t* returned_variable = emit_var(ident_node->variable);
+
+	//Give our variable back
+	return returned_variable;
 }
 
 
@@ -2883,7 +2921,7 @@ static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, 
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
  */
-static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent, u_int8_t is_branch_ending){
 	//Initialize these results at first
 	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
 
@@ -2891,7 +2929,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 	switch(primary_parent->ast_node_type){
 		//In this case we'll only worry about the assignee
 		case AST_NODE_TYPE_IDENTIFIER:
-		 	result_package.assignee = emit_identifier(basic_block, primary_parent, temp_assignment_required, is_branch_ending);
+		 	result_package.assignee = emit_identifier(basic_block, primary_parent, is_branch_ending);
 			return result_package;
 
 		//Same in this case - just an assignee in basic block
@@ -3024,7 +3062,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	symtab_variable_record_t* struct_record = get_struct_member(struct_type, struct_variable->var_name.string);
 
 	//The constant that represents the offset
-	three_addr_const_t* struct_offset = emit_int_constant_direct(struct_record->struct_offset, type_symtab);
+	three_addr_const_t* struct_offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
 
 	//Now we'll emit the address using the helper
 	three_addr_var_t* struct_address = emit_struct_address_calculation(block, struct_type, base_address, struct_offset, is_branch_ending);
@@ -3063,7 +3101,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	symtab_variable_record_t* struct_record = get_struct_member(raw_struct_type, struct_variable->var_name.string);
 
 	//The constant that represents the offset
-	three_addr_const_t* struct_offset = emit_int_constant_direct(struct_record->struct_offset, type_symtab);
+	three_addr_const_t* struct_offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
 
 	//Now we'll emit the address using the helper
 	three_addr_var_t* struct_address = emit_struct_address_calculation(block, raw_struct_type, assignment->assignee, struct_offset, is_branch_ending);
@@ -3089,10 +3127,10 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  * the parent node's type in our decision making. We *will* use it at the very end to determine if any kind
  * of converting move is required for us to make
  */
-static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Acts as a base case/stopper. We'll just go right through in this case
 	if(node->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
-		return emit_primary_expr_code(basic_block, node, temp_assignment_required, is_branch_ending);
+		return emit_primary_expr_code(basic_block, node, is_branch_ending);
 	}
 
 	//Keep track of the current block here
@@ -3109,7 +3147,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_type_t* original_memory_access_type = operator_node->inferred_type;
 
 	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
-	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, temp_assignment_required, is_branch_ending);
+	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, is_branch_ending);
 
 	//Reassign the current block if need be
 	if(first_child_results.final_block != NULL && first_child_results.final_block != current_block){
@@ -3231,7 +3269,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
  *
  * It is up to use in the CFG to appropriately clone/reconstruct the way that this works
  */
-static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Store the current block
 	basic_block_t* current_block = basic_block;
 
@@ -3239,7 +3277,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	generic_ast_node_t* postfix_node = node->first_child;
 
 	//We will first emit the postfix expression code that comes from this
-	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, temp_assignment_required, is_branch_ending);
+	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, is_branch_ending);
 
 	//If this is now different, which it could be, we'll change what current is
 	if(postfix_expression_results.final_block != NULL && postfix_expression_results.final_block != current_block){
@@ -3307,7 +3345,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
 
 		//Now we emit the copied package
-		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, temp_assignment_required, is_branch_ending);
+		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, is_branch_ending);
 
 		//If this is now different, which it could be, we'll change what current is
 		if(copied_package.final_block != NULL && copied_package.final_block != current_block){
@@ -3332,7 +3370,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 /**
  * Handle a unary operator, in whatever form it may be
  */
-static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent, u_int8_t is_branch_ending){
 	//Top level declarations to avoid using them in the switch statement
 	three_addr_var_t* dereferenced;
 	instruction_t* assignment;
@@ -3345,6 +3383,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 	//Extract the first child from the unary expression parent node
 	generic_ast_node_t* first_child = unary_expression_parent->first_child;
+	// For use later on
+	generic_ast_node_t* second_child;
 
 	//Now that we've emitted the assignee, we can handle the specific unary operators
 	switch(first_child->unary_operator){
@@ -3361,7 +3401,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case PLUSPLUS:
 		case MINUSMINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 
 			//If this is now different, which it could be, we'll change what current is
 			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
@@ -3424,7 +3464,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				generic_ast_node_t* copy = duplicate_subtree(first_child->next_sibling, SIDE_TYPE_LEFT);
 
 				//Now we emit the copied package
-				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, temp_assignment_required, is_branch_ending);
+				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, is_branch_ending);
 
 				//If this is now different, which it could be, we'll change what current is
 				if(unary_package.final_block != NULL && unary_package.final_block != current_block){
@@ -3450,7 +3490,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Handle a dereference
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3495,7 +3535,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Bitwise not operator
 		case B_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3513,7 +3553,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Logical not operator
 		case L_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3539,7 +3579,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 */
 		case MINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, temp_assignment_required, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3564,38 +3604,39 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//And give back the final value
 			return unary_package;
 
-		//Handle the case of the address operator
+		//Handle the case of the address operator - this is a very unique case, we will not call the unary expression
+		//helper here, because we know that this must always be an identifier node
 		case SINGLE_AND:
-			/**
-			 * An important distinction here between this and the rest - we'll need to emit
-			 * this unary expression as if it is on the left hand side. We cannot have temporary
-			 * variables in this assignee
-			 */
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, FALSE, is_branch_ending);
-			//The assignee comes from the package
-			assignee = unary_package.assignee;
+			//Grab this out
+			second_child = first_child->next_sibling;
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
+			//And finally extract this
+			symtab_variable_record_t* variable = second_child->variable;
+
+			/**
+			 * KEY DETAIL HERE: the variable may already be in the stack. If we're requesting
+			 * the address of a struct for example, we don't need to add said struct to the
+			 * stack - it is already there. We need to account for these nuances when
+			 * we do this
+			 */
+			if(does_stack_contain_symtab_variable(&(current_function->data_area), variable) == FALSE){
+				//Add this variable onto the stack now, since we know it is not already on it
+				add_variable_to_stack(&(current_function->data_area), emit_var(variable));
 			}
 
-			//We'll need to assign to a temp here, these are
-			//only ever on the RHS
-			assignment = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), assignee);
-			assignment->is_branch_ending = is_branch_ending;
+			//Add the memory address statement in
+			instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(variable));
+			memory_address_statement->is_branch_ending = is_branch_ending;
 
-			//We will count the assignee here as a used variable
-			add_used_variable(current_block, assignee);
+			//This counts add as a use
+			add_used_variable(current_block, memory_address_statement->op1);
 
-			//We now need to flag that the assignee here absolutely must be spilled by the register allocator
-			assignee->linked_var->must_be_spilled = TRUE;
+			//Now add the statement in
+			add_statement(current_block, memory_address_statement);
 
-			//Add this into the block
-			add_statement(current_block, assignment);
-
-			//This assignee comes from the last assignment
-			unary_package.assignee = assignment->assignee;
+			//And package the value up as what we want here
+			unary_package.assignee = memory_address_statement->assignee;
+			unary_package.final_block = current_block;
 
 			//Give back the unary package
 			return unary_package;
@@ -3613,18 +3654,18 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
  * 	
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
-static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t temp_assignment_required, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t is_branch_ending){
 	//Switch based on what class this node actually is
 	switch(unary_expression->ast_node_type){
 		//If it's actually a unary expression, we can do some processing
 		//If we see the actual node here, we know that we are actually doing a unary operation
 		case AST_NODE_TYPE_UNARY_EXPR:	
-			return emit_unary_operation(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
+			return emit_unary_operation(basic_block, unary_expression, is_branch_ending);
 		case AST_NODE_TYPE_POSTOPERATION:
-			return emit_postoperation_code(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
+			return emit_postoperation_code(basic_block, unary_expression, is_branch_ending);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
-			return emit_postfix_expression(basic_block, unary_expression, temp_assignment_required, is_branch_ending);
+			return emit_postfix_expression(basic_block, unary_expression, is_branch_ending);
 	}
 }
 
@@ -3803,7 +3844,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Have we hit the so-called "root level" here? If we have, then we're just going to pass this
 	//down to another rule
 	if(logical_or_expr->ast_node_type != AST_NODE_TYPE_BINARY_EXPR){
-		return emit_unary_expression(current_block, logical_or_expr, FALSE, is_branch_ending);
+		return emit_unary_expression(current_block, logical_or_expr, is_branch_ending);
 	}
 
 	//Otherwise, when we get here, we know that we have a binary expression of some kind
@@ -3922,7 +3963,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
-static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition){
+static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_conditional){
 	//A cursor for tree traversal
 	generic_ast_node_t* cursor;
 	symtab_variable_record_t* assigned_var;
@@ -3942,7 +3983,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			cursor = expr_node->first_child;
 
 			//Emit the left hand unary expression
-			cfg_result_package_t unary_package = emit_unary_expression(current_block, cursor, FALSE, is_branch_ending);
+			cfg_result_package_t unary_package = emit_unary_expression(current_block, cursor, is_branch_ending);
 
 			//If this is different(which it could be), we'll reassign current
 			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
@@ -3995,57 +4036,89 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				add_statement(current_block, assignment);
 			}
 
-			//Finally we'll struct the whole thing
-			instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+			/**
+			 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
+			 * variable that is on the stack, then a regular assignment just won't do. We'll need to
+			 * emit a store operation
+			 */
+			if(left_hand_var->linked_var == NULL || left_hand_var->linked_var->stack_variable == FALSE){
+				//Finally we'll struct the whole thing
+				instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
-			//If this is not a temp var, then we can flag it as being assigned
-			if(left_hand_var->is_temporary == FALSE){
-				add_assigned_variable(current_block, left_hand_var);
+				//If this is not a temp var, then we can flag it as being assigned
+				if(left_hand_var->is_temporary == FALSE){
+					add_assigned_variable(current_block, left_hand_var);
+				}
+
+				//This counts as a use
+				add_used_variable(current_block, final_op1);
+				
+				//Mark this with what was passed through
+				final_assignment->is_branch_ending = is_branch_ending;
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
+
+			/**
+			 * Otherwise, we'll need to emit a store operation here
+			 */
+			} else {
+				instruction_t* final_assignment = emit_store_ir_code(left_hand_var, final_op1);
+
+				//If this is not a temp var, then we can flag it as being assigned
+				if(left_hand_var->is_temporary == FALSE){
+					add_assigned_variable(current_block, left_hand_var);
+				}
+
+				//This counts as a use
+				add_used_variable(current_block, final_op1);
+				
+				//Mark this with what was passed through
+				final_assignment->is_branch_ending = is_branch_ending;
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
 			}
-
-			//This counts as a use
-			add_used_variable(current_block, final_op1);
-			
-			//Mark this with what was passed through
-			final_assignment->is_branch_ending = is_branch_ending;
-
-			//Now add thi statement in here
-			add_statement(current_block, final_assignment);
 
 			//Now pack the return value here
 			result_package.assignee = left_hand_var;
 			
-			//Return what we had
-			return result_package;
+			break;
 	
 		case AST_NODE_TYPE_BINARY_EXPR:
 			//Emit the binary expression node
-			return emit_binary_expression(current_block, expr_node, is_branch_ending);
+			result_package = emit_binary_expression(current_block, expr_node, is_branch_ending);
+			break;
 
 		case AST_NODE_TYPE_FUNCTION_CALL:
 			//Emit the function call statement
-			return emit_function_call(current_block, expr_node, is_branch_ending);
+			result_package = emit_function_call(current_block, expr_node, is_branch_ending);
+			break;
 
 		//Hanlde an indirect function call
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 			//Let the helper rule deal with it
-			return emit_indirect_function_call(current_block, expr_node, is_branch_ending);
+			result_package = emit_indirect_function_call(current_block, expr_node, is_branch_ending);
+			break;
 
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
 			//Emit the ternary expression
-			 return emit_ternary_expression(basic_block, expr_node, is_branch_ending);
-
+			result_package = emit_ternary_expression(basic_block, expr_node, is_branch_ending);
+			break;
+			 
 		//Default is a unary expression
 		default:
-			/**
-			 * The "is_condition" variable will be set to true when this expresssion is part of the condition in
-			 * an if/for/while/do-while/switch etc. If this is true, then we will be passing in true to the
-			 * "is_temp_needed" variable which will force a temp assignment to happen at a root level rule. This
-			 * ensures that we have a conditional to read even if a user puts something like if(x)
-			*/
 			//Let this rule handle it
-			return emit_unary_expression(basic_block, expr_node, is_condition, is_branch_ending);
+			result_package = emit_unary_expression(basic_block, expr_node, is_branch_ending);
+			break;
 	}
+
+	//If this is a conditional, we can let the helper handle it
+	if(is_conditional == TRUE){
+		result_package.assignee = handle_conditional_identifier_copy_if_needed(result_package.final_block, result_package.assignee, is_branch_ending);
+	}
+
+	return result_package;
 }
 
 
@@ -4075,7 +4148,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		assignee = emit_temp_var(signature->return_type);
 	} else {
 		//We'll have a dummy one here
-		assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
+		assignee = emit_temp_var(u64);
 	}
 
 	//We first need to emit the function pointer variable
@@ -4196,7 +4269,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		assignee = emit_temp_var(signature->return_type);
 	} else {
 		//We'll have a dummy one here
-		assignee = emit_temp_var(lookup_type_name_only(type_symtab, "u64")->type);
+		assignee = emit_temp_var(u64);
 	}
 
 	//Emit the final call here
@@ -5772,8 +5845,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_int_constant_direct(root_node->lower_bound, type_symtab);
-	three_addr_const_t* upper_bound = emit_int_constant_direct(root_node->upper_bound, type_symtab);
+	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
+	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
 
 	/**
 	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
@@ -5816,7 +5889,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -5965,8 +6038,8 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_int_constant_direct(root_node->lower_bound, type_symtab);
-	three_addr_const_t* upper_bound = emit_int_constant_direct(root_node->upper_bound, type_symtab);
+	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
+	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
 
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
@@ -6012,7 +6085,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_int_constant_direct(offset, type_symtab), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -7263,6 +7336,39 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//Store this in the entry block
 	function_starting_block->function_defined_in = func_record;
 
+	/**
+	 * If we have function parameters that are *also* stack variables(meaning the user will
+	 * at some point want to take the memory address of them), then we need to load
+	 * these variables into the stack preemptively
+	 */
+	for(u_int16_t i = 0; i < func_record->number_of_params; i++){
+		//Extract the parameter
+		symtab_variable_record_t* parameter = func_record->func_params[i];
+
+		//If it's not a stack variable we don't care
+		if(parameter->stack_variable == FALSE){
+			continue;
+		}
+
+		//However if it is a stack variable, we need to add it to the stack and emit an initial store of it
+		if(does_stack_contain_symtab_variable(&(current_function->data_area), parameter) == FALSE){
+			//Add this variable onto the stack now, since we know it is not already on it
+			add_variable_to_stack(&(current_function->data_area), emit_var(parameter));
+		}	
+
+		//A special case here - if this variable is a function parameter, it will not naturally
+		//be in the stack when it comes in. To remedy this, we will have to do an initial load
+		//to get it into the stack
+		instruction_t* store_code = emit_store_ir_code(emit_var(parameter), emit_var(parameter));
+
+		//Bookkeeping here
+		add_used_variable(function_starting_block, store_code->op1);
+		add_assigned_variable(function_starting_block, store_code->assignee);
+
+		//Add it into the starting block
+		add_statement(function_starting_block, store_code);
+	}
+
 	//We don't care about anything until we reach the compound statement
 	generic_ast_node_t* func_cursor = function_node->first_child;
 
@@ -7341,8 +7447,11 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 	//to store the address
 	add_variable_to_stack(&(current_function->data_area), base_addr);
 
-	//We'll now emit the actual address calculation using the offset
-	emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, type_symtab), FALSE);
+	//Emit the statement here to get the base address
+	instruction_t* mem_addr = emit_memory_address_assignment(base_addr, emit_var(node->variable));
+	
+	//Add it into the block
+	add_statement(emitted_block, mem_addr);
 
 	//Declare the result package
 	cfg_result_package_t result_package = {emitted_block, emitted_block, NULL, BLANK};
@@ -7432,7 +7541,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		char char_value = string_initializer->string_value.string[current_offset];
 
 		//We'll first emit the calculation for the address
-		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_int_constant_direct(current_offset, type_symtab), is_branch_ending);
+		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(current_offset, u64), is_branch_ending);
 
 		//Once we've emitted the binary operation, we'll have the address available for use. We now need to emit the load operation to add it in
 		three_addr_var_t* dereferenced = emit_pointer_indirection(current_block, address, char_type);
@@ -7441,7 +7550,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		dereferenced->access_type = MEMORY_ACCESS_WRITE;
 
 		//We'll now emit a constant assignment statement to load the char value in
-		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_char_constant_direct(char_value, type_symtab));
+		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_direct_integer_or_char_constant(char_value, lookup_type_name_only(type_symtab, "char")->type));
 
 		//Now we'll add this into the block
 		add_statement(current_block, const_assignment);
@@ -7482,7 +7591,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		u_int32_t offset = member_variable->struct_offset;
 
 		//We'll need to emit the proper address offset calculation for each one
-		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_long_constant_direct(offset, type_symtab), is_branch_ending);
+		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(offset, u64), is_branch_ending);
 
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->ast_node_type){
@@ -7559,14 +7668,37 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 				current_block = intermediary_results.final_block;
 			}
 
-			//The actual statement is the assignment of right to left
-			instruction_t* assignment_statement = emit_assignment_instruction(assignee, intermediary_results.assignee);
+			/**
+			 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
+			 * variable that is on the stack, then a regular assignment just won't do. We'll need to
+			 * emit a store operation
+			 */
+			if(assignee->linked_var == NULL || assignee->linked_var->stack_variable == FALSE){
+				//The actual statement is the assignment of right to left
+				instruction_t* assignment_statement = emit_assignment_instruction(assignee, intermediary_results.assignee);
 
-			//If this is not temporary, then it counts as used
-			add_used_variable(current_block, intermediary_results.assignee);
+				//If this is not temporary, then it counts as used
+				add_used_variable(current_block, intermediary_results.assignee);
 
-			//Finally we'll add this into the overall block
-			add_statement(current_block, assignment_statement);
+				//Finally we'll add this into the overall block
+				add_statement(current_block, assignment_statement);
+			
+			/**
+			 * Otherwise, we'll need to emit a store operation here
+			 */
+			} else {
+				//Emit the store code
+				instruction_t* final_assignment = emit_store_ir_code(assignee, intermediary_results.assignee);
+
+				//This counts as a use
+				add_used_variable(current_block, intermediary_results.assignee);
+				
+				//Mark this with what was passed through
+				final_assignment->is_branch_ending = is_branch_ending;
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
+			}
 
 			//Store the package's assignee too
 			package.assignee = assignee;
@@ -7606,9 +7738,12 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			//Add this variable into the current function's stack. This is what we'll use
 			//to store the address
 			add_variable_to_stack(&(current_function->data_area), assignee);
-	
-			//We'll now emit the actual address calculation using the offset
-			emit_binary_operation_with_constant(current_block, assignee, stack_pointer_var, PLUS, emit_int_constant_direct(assignee->stack_offset, type_symtab), FALSE);
+
+			//Emit the statement here to get the base address
+			instruction_t* mem_addr = emit_memory_address_assignment(assignee, emit_var(node->variable));
+			
+			//Add it into the block
+			add_statement(current_block, mem_addr);
 
 			break;
 			
@@ -7806,6 +7941,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 
 	//Keep this on hand
 	u64 = lookup_type_name_only(type_symtab, "u64")->type;
+	i64 = lookup_type_name_only(type_symtab, "i64")->type;
+	u32 = lookup_type_name_only(type_symtab, "u32")->type;
+	i32 = lookup_type_name_only(type_symtab, "i32")->type;
+
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));

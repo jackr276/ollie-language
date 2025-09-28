@@ -533,6 +533,9 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//And store the symtab record
 	emitted_var->linked_var = var;
 
+	//Copy the offsets over
+	emitted_var->stack_offset = var->stack_offset;
+
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);
 
@@ -1374,6 +1377,20 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
+			//This one comes first
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+			//Then the arrow
+			fprintf(fl, " <- Memory address of ");
+
+			//Now we'll do op1, token, op2
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+			//We need a newline here
+			fprintf(fl, "\n");
+			break;
+
 		case THREE_ADDR_CODE_ASSN_STMT:
 			//We'll print out the left and right ones here
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
@@ -1400,14 +1417,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Print the constant out
 			print_three_addr_constant(fl, stmt->op1_const);
 			//Newline needed
-			fprintf(fl, "\n");
-			break;
-
-		case THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT:
-			//We'll print out the left and right ones here
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- Memory Address of ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -1521,6 +1530,33 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_NEG_STATEMENT:
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- neg ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		//A load statement takes a variable out of memory and stores
+		//it into a temp
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- load ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		//A load statement takes a variable out of memory and stores
+		//it into a temp
+		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- store ");
+			print_three_addr_constant(fl, stmt->op1_const);
+			fprintf(fl, "\n");
+			break;
+
+		//A store statement takes a value and stores it into a variable's
+		//memory location on the stack
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- store ");
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
@@ -3012,6 +3048,24 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 
 /**
+ * Emit a memory address assignment statement
+ */
+instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->statement_type = THREE_ADDR_CODE_MEM_ADDRESS_STMT; 
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll just leave our now
+	return stmt;
+}
+
+
+/**
  * Emit a decrement instruction
  */
 instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
@@ -3154,24 +3208,12 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	switch(constant->const_type){
 		case CHAR_CONST:
 			constant->constant_value.char_constant = const_node->constant_value.char_value;
-			//Set the 0 flag if true
-			if(const_node->constant_value.char_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 		case INT_CONST:
 			constant->constant_value.integer_constant = const_node->constant_value.signed_int_value;
-			//Set the 0 flag if true
-			if(const_node->constant_value.signed_int_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 		case INT_CONST_FORCE_U:
 			constant->constant_value.integer_constant = const_node->constant_value.unsigned_int_value;
-			//Set the 0 flag if true
-			if(const_node->constant_value.signed_int_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 		case FLOAT_CONST:
 			constant->constant_value.float_constant = const_node->constant_value.float_value;
@@ -3184,17 +3226,9 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 			exit(0);
 		case LONG_CONST:
 			constant->constant_value.long_constant = const_node->constant_value.signed_long_value;
-			//Set the 0 flag if 
-			if(const_node->constant_value.signed_long_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 		case LONG_CONST_FORCE_U:
 			constant->constant_value.long_constant = const_node->constant_value.unsigned_long_value;
-			//Set the 0 flag if 
-			if(const_node->constant_value.signed_long_value == 0){
-				constant->is_value_0 = TRUE;
-			}
 			break;
 
 			
@@ -3465,24 +3499,6 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
 
 
 /**
- * Emit a memory address assignment statement
- */
-instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Let's now populate it with values
-	stmt->statement_type = THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT;
-	stmt->assignee = assignee;
-	stmt->op1 = op1;
-	//What function are we in
-	stmt->function = current_function;
-	//And that's it, we'll just leave our now
-	return stmt;
-}
-
-
-/**
  * Emit a memory access statement
  */
 instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, memory_access_type_t access_type){
@@ -3533,7 +3549,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_long_constant_direct(offset, symtab);
+	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -3576,7 +3592,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_long_constant_direct(offset, symtab);
+	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -3594,6 +3610,63 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 	stmt->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 	stmt->assignee = assignee;
 	stmt->op1_const = constant;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll now just give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a store statement. This is like an assignment instruction, but we're explicitly
+ * using stack memory here
+ */
+instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll now just give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a load statement. This is like an assignment instruction, but we're explicitly
+ * using stack memory here
+ */
+instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	//What function are we in
+	stmt->function = current_function;
+	//And that's it, we'll now just give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a store statement. This is like an assignment instruction, but we're explicitly
+ * using stack memory here
+ */
+instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->statement_type = THREE_ADDR_CODE_STORE_CONST_STATEMENT;
+	stmt->assignee = assignee;
+	stmt->op1_const = op1_const;
 	//What function are we in
 	stmt->function = current_function;
 	//And that's it, we'll now just give it back
@@ -3701,109 +3774,53 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 
 
 /**
- * Emit an int constant direct 
+ * Emit a constant directly based on whatever the type given is
  */
-three_addr_const_t* emit_int_constant_direct(int int_const, type_symtab_t* symtab){
+three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type){
+	//First allocate it
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
 	//Attach it for memory management
 	constant->next_created = emitted_consts;
 	emitted_consts = constant;
 
-	//Store the class
-	constant->const_type = INT_CONST;
-	//Store the int value
-	constant->constant_value.integer_constant = int_const;
+	//Store the type here
+	constant->type = type;
 
-	//Lookup what we have in here(i32)
-	constant->type = lookup_type_name_only(symtab, "i32")->type;
-
-	//Set this flag if we need to
-	if(constant->constant_value.integer_constant == 0){
-		constant->is_value_0 = TRUE;
+	//If the type is not a basic type, we leave
+	if(type->type_class != TYPE_CLASS_BASIC){
+		fprintf(stderr, "Please use a basic type for integer constant emittal\n");
+		exit(1);
 	}
 
-	//Return out
-	return constant;
-}
-
-
-/**
- * Emit a char constant directly from a value
- */
-three_addr_const_t* emit_char_constant_direct(char char_const, type_symtab_t* symtab){
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
-
-	//Store the class
-	constant->const_type = CHAR_CONST;
-	//Store the char value
-	constant->constant_value.char_constant = char_const;
-
-	//Lookup what we have in here(char)
-	constant->type = lookup_type_name_only(symtab, "char")->type;
-
-	//Return out
-	return constant;
-}
-
-
-/**
- * Emit an unsigned in constant directly. Used for address calculations
- */
-three_addr_const_t* emit_unsigned_int_constant_direct(int int_const, type_symtab_t* symtab){
-
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
-
-	//Store the class
-	constant->const_type = INT_CONST;
-	//Store the int value
-	constant->constant_value.integer_constant = int_const;
-
-	//Lookup what we have in here(u32)
-	constant->type = lookup_type_name_only(symtab, "u32")->type;
-
-	//Set this flag if we need to
-	if(constant->constant_value.integer_constant == 0){
-		constant->is_value_0 = TRUE;
+	//Extract this
+	Token basic_type_token = type->basic_type_token;
+	
+	switch(basic_type_token){
+		case I64:
+		case U64:
+			constant->const_type = LONG_CONST;
+			constant->constant_value.long_constant = value;
+			break;
+		case I32:
+		case U32:
+		case I16:
+		case U16:
+		case I8:
+		case U8:
+			constant->const_type = INT_CONST;
+			constant->constant_value.integer_constant = value;
+			break;
+		case CHAR:
+			constant->const_type = CHAR_CONST;
+			constant->constant_value.char_constant = value;
+			break;
+		default:
+			fprintf(stderr, "Please use an integer or char type for constant emittal");
+			exit(1);
 	}
 
-	//Return out
-	return constant;
-}
-
-
-/**
- * Emit a long constant direct 
- */
-three_addr_const_t* emit_long_constant_direct(long long_const, type_symtab_t* symtab){
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
-
-	//Store the class
-	constant->const_type = LONG_CONST;
-	//Store the int value
-	constant->constant_value.long_constant = long_const;
-
-	//Lookup what we have in here(i32)
-	constant->type = lookup_type_name_only(symtab, "i64")->type;
-
-	//Set this flag if we need to
-	if(long_const == 0){
-		constant->is_value_0 = TRUE;
-	}
-
-	//Return out
+	//Give back the constant
 	return constant;
 }
 
@@ -3925,7 +3942,7 @@ instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, 
 	stmt->destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_int_constant_direct(offset, type_symtab);
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u32")->type);
 
 	//Just give this back
 	return stmt;
@@ -3946,7 +3963,7 @@ instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer
 	stmt->destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_int_constant_direct(offset, type_symtab);
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u32")->type);
 
 	//Just give this back
 	return stmt;

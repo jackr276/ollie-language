@@ -451,11 +451,6 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 		return;
 	}
 
-	//If this needs to be spilled, then the whole live range needs to be spilled
-	if(variable->linked_var != NULL && variable->linked_var->must_be_spilled == TRUE){
-		live_range->must_be_spilled = TRUE;
-	}
-
 	//Otherwise we'll add this in here
 	dynamic_array_add(live_range->variables, variable);
 
@@ -1491,30 +1486,6 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 		//Crawl through every block
 		while(current != NULL){
-			//We'll skip all of these - we don't need them
-			if(current->statement_type == THREE_ADDR_CODE_MEM_ADDR_ASSIGNMENT 
-				&& current->source_register->associated_live_range == spill_range){
-
-				/**
-				 * What if the offset is 0? Well if so, we can simply change this to
-				 * be a simple assignment operation
-				 */
-				if(spill_range->stack_offset == 0){
-					//This is now zero, so we need to turn this into a move instruction
-					current->instruction_type = MOVQ;
-					current->source_register = current->address_calc_reg1;
-
-				//Otherwise it's not 0, so our lea here is correct
-				} else {
-					//We'll need to change the offset to now be the appropriate value here
-					current->offset->constant_value.long_constant = spill_range->stack_offset;
-				}
-
-				//And we can move along, nothing else to do for this one
-				current = current->next_statement;
-				continue;
-			}
-
 			//We'll also need a use spill here
 			if(is_destination_also_operand(current) == TRUE
 				&& current->destination_register->associated_live_range == spill_range){
@@ -1604,28 +1575,6 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 	}
 	
 	//Once we're done spilling, this live range is now completely useless to us
-}
-
-
-/**
- * Pre-spill any live ranges that must be spilled
- */
-static void pre_spill(cfg_t* cfg, dynamic_array_t* live_ranges) {
-	u_int16_t max_index = live_ranges->current_index;
-
-	//Run through and see what must be spilled
-	for(u_int16_t i = 0; i < max_index; i++){
-		//Do we need to spill this one
-		live_range_t* range = dynamic_array_get_at(live_ranges, i);
-
-		//Does this need to be spilled?
-		if(range->must_be_spilled == TRUE){
-			spill(cfg, live_ranges, range);
-
-			//Set it to false now so we don't respill it
-			range->must_be_spilled = FALSE;
-		}
-	}
 }
 
 
@@ -2115,9 +2064,6 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		//Print whatever live ranges we did find
 		print_all_live_ranges(live_ranges);
 	}
-
-	//Pre-spill if we need to
-	pre_spill(cfg, live_ranges);
 
 	//We now need to compute all of the LIVE OUT values
 	calculate_liveness_sets(cfg);
