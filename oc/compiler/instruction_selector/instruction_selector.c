@@ -2671,7 +2671,7 @@ static void handle_load_instruction(three_addr_var_t* stack_pointer, instruction
 	u_int32_t stack_offset = variable->stack_offset;
 
 	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_long_constant_direct(stack_offset, u64);
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
 	//This is in offset only mode
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -2719,7 +2719,7 @@ static void handle_store_const_instruction(three_addr_var_t* stack_pointer, inst
 	u_int32_t stack_offset = variable->stack_offset;
 
 	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_long_constant_direct(stack_offset, u64);
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
 	//This is in offset only mode
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -2767,7 +2767,7 @@ static void handle_store_instruction(three_addr_var_t* stack_pointer, instructio
 	u_int32_t stack_offset = variable->stack_offset;
 
 	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_long_constant_direct(stack_offset, u64);
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
 	//This is in offset only mode
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -2800,7 +2800,7 @@ static void handle_memory_address_instruction(three_addr_var_t* stack_pointer, i
 	u_int32_t stack_offset = variable->stack_offset;
 
 	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_long_constant_direct(stack_offset, u64);
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
 	//The offset is the offset constant
 	instruction->offset = offset_constant;
@@ -3372,7 +3372,7 @@ static void remediate_stack_address(cfg_t* cfg, instruction_t* instruction){
 		if(instruction->op1_const != NULL){
 			instruction->op1_const->constant_value.integer_constant = assignee->stack_offset;
 		} else {
-			instruction->op1_const = emit_int_constant_direct(assignee->stack_offset, i32);
+			instruction->op1_const = emit_direct_integer_or_char_constant(assignee->stack_offset, i32);
 		}
 
 	//Otherwise it's just the RSP value

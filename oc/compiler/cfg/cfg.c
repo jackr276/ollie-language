@@ -2139,7 +2139,7 @@ static void rename_all_variables(cfg_t* cfg){
  */
 static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, Token operator, three_addr_var_t* assignee, u_int8_t is_branch_ending){
 	//Emit the constant size
-	three_addr_const_t* constant = emit_long_constant_direct(assignee->type->internal_types.points_to->type_size, i64);
+	three_addr_const_t* constant = emit_direct_integer_or_char_constant(assignee->type->internal_types.points_to->type_size, u64);
 
 	//We need this temp assignment for bookkeeping reasons
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
@@ -2255,7 +2255,7 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 	}
 
 	//We'll need the size to multiply by
-	three_addr_const_t* type_size = emit_unsigned_int_constant_direct(member_type->type_size, u32);
+	three_addr_const_t* type_size = emit_direct_integer_or_char_constant(member_type->type_size, u64);
 
 	//We'll need a temp assignment if this isn't temporary
 	if(offset->is_temporary == FALSE){
@@ -2320,7 +2320,7 @@ static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t*
 	u_int32_t total_offset = offset * base_type->type_size;
 
 	//Once we have the total offset, we add it to the base address
-	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), true_base_address, PLUS, emit_int_constant_direct(total_offset, i32));
+	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), true_base_address, PLUS, emit_direct_integer_or_char_constant(total_offset, u64));
 	
 	//if the base address is not temporary, it also counts as used
 	add_used_variable(basic_block, true_base_address);
@@ -2657,7 +2657,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//
 		//TODO CHECK THIS
 		//
-		return emit_direct_constant_assignment(basic_block, emit_int_constant_direct(ident_node->variable->enum_member_value, i32), ident_node->variable->type_defined_as, is_branch_ending);
+		return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(ident_node->variable->enum_member_value, i32), ident_node->variable->type_defined_as, is_branch_ending);
 	}
 
 	/**
@@ -3065,7 +3065,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	symtab_variable_record_t* struct_record = get_struct_member(struct_type, struct_variable->var_name.string);
 
 	//The constant that represents the offset
-	three_addr_const_t* struct_offset = emit_int_constant_direct(struct_record->struct_offset, i32);
+	three_addr_const_t* struct_offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
 
 	//Now we'll emit the address using the helper
 	three_addr_var_t* struct_address = emit_struct_address_calculation(block, struct_type, base_address, struct_offset, is_branch_ending);
@@ -3104,7 +3104,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	symtab_variable_record_t* struct_record = get_struct_member(raw_struct_type, struct_variable->var_name.string);
 
 	//The constant that represents the offset
-	three_addr_const_t* struct_offset = emit_int_constant_direct(struct_record->struct_offset, i32);
+	three_addr_const_t* struct_offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
 
 	//Now we'll emit the address using the helper
 	three_addr_var_t* struct_address = emit_struct_address_calculation(block, raw_struct_type, assignment->assignee, struct_offset, is_branch_ending);
@@ -5848,8 +5848,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_int_constant_direct(root_node->lower_bound, i32);
-	three_addr_const_t* upper_bound = emit_int_constant_direct(root_node->upper_bound, i32);
+	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
+	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
 
 	/**
 	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
@@ -5892,7 +5892,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_int_constant_direct(offset, i32), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -6041,8 +6041,8 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//Now that everything has been situated, we can start emitting the values in the initial node
 
 	//We'll need both of these as constants for our computation
-	three_addr_const_t* lower_bound = emit_int_constant_direct(root_node->lower_bound, i32);
-	three_addr_const_t* upper_bound = emit_int_constant_direct(root_node->upper_bound, i32);
+	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
+	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
 
 	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
 	//range or above the upper range. If it is, we jump to the very end
@@ -6088,7 +6088,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_int_constant_direct(offset, i32), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -7422,7 +7422,7 @@ static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node
 	//TODO
 
 	//We'll now emit the actual address calculation using the offset
-	emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_int_constant_direct(base_addr->stack_offset, i32), FALSE);
+	emit_binary_operation_with_constant(emitted_block, base_addr, stack_pointer_var, PLUS, emit_direct_integer_or_char_constant(base_addr->stack_offset, u64), FALSE);
 
 	//Declare the result package
 	cfg_result_package_t result_package = {emitted_block, emitted_block, NULL, BLANK};
@@ -7512,7 +7512,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		char char_value = string_initializer->string_value.string[current_offset];
 
 		//We'll first emit the calculation for the address
-		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_int_constant_direct(current_offset, i32), is_branch_ending);
+		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(current_offset, u64), is_branch_ending);
 
 		//Once we've emitted the binary operation, we'll have the address available for use. We now need to emit the load operation to add it in
 		three_addr_var_t* dereferenced = emit_pointer_indirection(current_block, address, char_type);
@@ -7521,7 +7521,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		dereferenced->access_type = MEMORY_ACCESS_WRITE;
 
 		//We'll now emit a constant assignment statement to load the char value in
-		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_char_constant_direct(char_value, lookup_type_name_only(type_symtab, "char")->type));
+		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_direct_integer_or_char_constant(char_value, lookup_type_name_only(type_symtab, "char")->type));
 
 		//Now we'll add this into the block
 		add_statement(current_block, const_assignment);
@@ -7562,7 +7562,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		u_int32_t offset = member_variable->struct_offset;
 
 		//We'll need to emit the proper address offset calculation for each one
-		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_long_constant_direct(offset, i64), is_branch_ending);
+		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(offset, u64), is_branch_ending);
 
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->ast_node_type){
@@ -7709,9 +7709,11 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			//Add this variable into the current function's stack. This is what we'll use
 			//to store the address
 			add_variable_to_stack(&(current_function->data_area), assignee);
+
+			//TODO EXPERIMENT WITH MEMORY ADDRESS OF STATEMENTS HERE
 	
 			//We'll now emit the actual address calculation using the offset
-			emit_binary_operation_with_constant(current_block, assignee, stack_pointer_var, PLUS, emit_int_constant_direct(assignee->stack_offset, i32), FALSE);
+			emit_binary_operation_with_constant(current_block, assignee, stack_pointer_var, PLUS, emit_direct_integer_or_char_constant(assignee->stack_offset, u64), FALSE);
 
 			break;
 			
