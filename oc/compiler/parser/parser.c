@@ -1837,7 +1837,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 				//Copy this over
 				parent->variable = primary_expression_node->variable;
 				//Flag the parent as final - you can't go on past this
-				parent->is_final = TRUE;
+				parent->dereference_needed = TRUE;
 
 				//We let this rule handle everything
 				return postoperation(current_type, parent, lookahead.tok, side);
@@ -1850,7 +1850,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 				parent->variable = primary_expression_node->variable;
 
 				//Mark as final
-				parent->is_final = TRUE;
+				parent->dereference_needed = TRUE;
 				//And give it back
 				return parent;
 		}
@@ -2008,6 +2008,14 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			switch(cast_expr->ast_node_type){
 				//We can take an identifiers address
 				case AST_NODE_TYPE_IDENTIFIER:
+					//If this is not already a memory region, then we need to flag it as one
+					//for later so that the cfg constructor knows what we'll eventually need to
+					//load
+					if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE){
+						//IMPORTANT - we need to flag this as a stack variable now
+						cast_expr->variable->stack_variable = TRUE;
+					}
+
 					break;
 				//And we can handle a postfix expression
 				case AST_NODE_TYPE_POSTFIX_EXPR:
@@ -2042,17 +2050,10 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				insert_type(type_symtab, create_type_record(pointer));
 				//Set the return type to be a pointer
 				return_type = pointer;
+
 			//Otherwise it does exist so we'll just grab whatever we got
 			} else {
 				return_type = type_record->type;
-			}
-
-			//If this is not already a memory region, then we need to flag it as one
-			//for later so that the cfg constructor knows what we'll eventually need to
-			//load
-			if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE){
-				//IMPORTANT - we need to flag this as a stack variable now
-				cast_expr->variable->stack_variable = TRUE;
 			}
 
 			//This is not assignable
