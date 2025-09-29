@@ -2662,9 +2662,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 * the address we have to load
 	 */
 	if(ident_node->side == SIDE_TYPE_RIGHT && ident_node->variable->stack_variable == TRUE){
-		//Extract the symtab var
-		symtab_variable_record_t* symtab_variable = ident_node->variable;
-
 		//The final assignee
 		three_addr_var_t* assignee;
 
@@ -3193,14 +3190,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			exit(0);
 	}
 
-	//There is a special flag that stores whether or not this is the final postfix expression or not
-	u_int8_t dereference_needed = node->is_final;
-
 	//By default, the final assignee is just the results that we got
 	three_addr_var_t* final_assignee = postfix_expression_results.assignee;
 
 	//We'll package up the final results and leave here
-	if(dereference_needed == TRUE){
+	if(node->dereference_needed == TRUE){
 		/**
 		 * An important note: we *always* use the original memory access type to determine what our variable's
 		 * type is. This ensures that we are insulated from the type inference that the parser performs
@@ -3610,32 +3604,58 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Grab this out
 			second_child = first_child->next_sibling;
 
-			//And finally extract this
-			symtab_variable_record_t* variable = second_child->variable;
+			//Go based on the type here
+			switch(second_child->ast_node_type){
+				case AST_NODE_TYPE_IDENTIFIER:
+					/**
+					 * KEY DETAIL HERE: the variable may already be in the stack. If we're requesting
+					 * the address of a struct for example, we don't need to add said struct to the
+					 * stack - it is already there. We need to account for these nuances when
+					 * we do this
+					 */
+					if(does_stack_contain_symtab_variable(&(current_function->data_area), second_child->variable) == FALSE){
+						//Add this variable onto the stack now, since we know it is not already on it
+						add_variable_to_stack(&(current_function->data_area), emit_var(second_child->variable));
+					}
 
-			/**
-			 * KEY DETAIL HERE: the variable may already be in the stack. If we're requesting
-			 * the address of a struct for example, we don't need to add said struct to the
-			 * stack - it is already there. We need to account for these nuances when
-			 * we do this
-			 */
-			if(does_stack_contain_symtab_variable(&(current_function->data_area), variable) == FALSE){
-				//Add this variable onto the stack now, since we know it is not already on it
-				add_variable_to_stack(&(current_function->data_area), emit_var(variable));
+					//Add the memory address statement in
+					instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(second_child->variable));
+					memory_address_statement->is_branch_ending = is_branch_ending;
+
+					//This counts add as a use
+					add_used_variable(current_block, memory_address_statement->op1);
+
+					//Now add the statement in
+					add_statement(current_block, memory_address_statement);
+
+					//And package the value up as what we want here
+					unary_package.assignee = memory_address_statement->assignee;
+
+					break;
+
+				//The other case here
+				case AST_NODE_TYPE_POSTFIX_EXPR:
+					//Set the deref flag to false so we don't deref
+					second_child->dereference_needed = FALSE;
+					//Emit the whole thing
+					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, second_child, is_branch_ending);
+
+					//Set if need be
+					if(postfix_results.final_block != current_block){
+						current_block = postfix_results.final_block;
+					}
+
+					//And package the value up as what we want here
+					unary_package.assignee = postfix_results.assignee;
+					break;
+
+				//This should never occur
+				default:
+					print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Unrecognized node type for address operation", second_child->line_number);
+					exit(0);
 			}
 
-			//Add the memory address statement in
-			instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(variable));
-			memory_address_statement->is_branch_ending = is_branch_ending;
-
-			//This counts add as a use
-			add_used_variable(current_block, memory_address_statement->op1);
-
-			//Now add the statement in
-			add_statement(current_block, memory_address_statement);
-
-			//And package the value up as what we want here
-			unary_package.assignee = memory_address_statement->assignee;
+			//Set the final block here
 			unary_package.final_block = current_block;
 
 			//Give back the unary package
@@ -7433,9 +7453,6 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node){
 	//What block are we emitting into?
 	basic_block_t* emitted_block = basic_block_alloc(1);
-
-	//Extract the type info out of here
-	generic_type_t* type = node->inferred_type;
 
 	//The base address. We may or may not need this
 	three_addr_var_t* base_addr = emit_var(node->variable);
