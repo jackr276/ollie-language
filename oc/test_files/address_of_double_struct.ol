@@ -1,0 +1,31 @@
+/**
+* Author: Jack Robbins
+* Test the address operator on more complex memory structures
+*/
+
+define struct internal_struct {
+	mut x:i64;
+	mut c:i32;
+} as internal_struct_type;
+
+
+define struct my_struct {
+	mut x:i64;
+	//Gigantic array
+	mut y:internal_struct_type[323];
+	mut c:char;
+} as custom_struct;
+
+
+fn mutate_int(mut x:i32*) -> void {
+	*x = 2;
+}
+
+
+pub fn main() -> i32 {
+	declare mut construct:custom_struct;
+
+	@mutate_int(&(construct:y[233]:c));
+
+	ret 0;
+}
