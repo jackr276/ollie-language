@@ -460,14 +460,9 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						return NULL;
 					}
 
+				//Check if they're assignable
 				case TYPE_CLASS_ARRAY:
-					//If these are the exact same types, then we're set
-					if(types_equivalent(destination_type->internal_types.points_to, source_type->internal_types.member_type) == TRUE){
-						return destination_type;
-					//Otherwise this won't work at all
-					} else{
-						return NULL;
-					}
+					return types_assignable(destination_type->internal_types.points_to, source_type->internal_types.member_type);
 		
 				//Likely the most common case
 				case TYPE_CLASS_POINTER:
@@ -479,12 +474,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						return destination_type;
 					//Let's see if what they point to is the exact same
 					} else {
-						//They need to be the exact same
-						if(types_equivalent(source_type->internal_types.points_to, destination_type->internal_types.points_to) == TRUE){
-							return destination_type;
-						} else {
-							return NULL;
-						}
+						//Let the rule handle it
+						return types_assignable(destination_type->internal_types.points_to, source_type->internal_types.points_to);
 					}
 
 				//Otherwise it's bad here

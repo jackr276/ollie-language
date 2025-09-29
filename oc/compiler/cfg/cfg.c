@@ -3650,8 +3650,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 					//And package the value up as what we want here
 					unary_package.assignee = postfix_results.assignee;
-
-					printf("GOT POSTFIX\n\n");
 					break;
 
 				//This should never occur
