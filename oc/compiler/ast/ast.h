@@ -132,8 +132,8 @@ struct generic_ast_node_t{
 	ollie_token_t unary_operator;
 	//Is this assignable
 	u_int8_t is_assignable;
-	//Is this final or not?
-	u_int8_t is_final;
+	//Is a dereference needed at the end of this value?
+	u_int8_t dereference_needed;
 	//What side is this node on
 	side_type_t side;
 	//What kind of node is it?

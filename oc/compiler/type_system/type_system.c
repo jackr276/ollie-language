@@ -169,37 +169,6 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
 
 
 /**
- * Are two types equivalent(as in, the exact same)
- */
-static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
-	//Make sure that both of these types are raw
-	typeA = dealias_type(typeA);
-	typeB = dealias_type(typeB);
-
-	//If they are not in the same type class, then they are not equivalent
-	if(typeA->type_class != typeB->type_class){
-		return FALSE;
-	}
-
-	//If these are both arrays
-	if(typeA->type_class == TYPE_CLASS_ARRAY
-		&& typeA->internal_values.num_members != typeB->internal_values.num_members){
-		//We can disqualify quickly if this happens
-		return FALSE;
-	}
-
-	//Now that we know they are in the same class, we need to check if they're the exact same
-	//If they are the exact same, return 1. Otherwise, return 0
-	if(strcmp(typeA->type_name.string, typeB->type_name.string) == 0){
-		return TRUE;
-	}
-
-	//Otherwise they aren't the exact same, so
-	return FALSE;
-}
-
-
-/**
  * Is the given type memory movement appropriate
  */
 u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
@@ -377,6 +346,14 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			return NULL;
 
+		//This will only work if they're the exact same
+		case TYPE_CLASS_UNION:
+			if(destination_type == source_type){
+				return destination_type;
+			}
+			
+			return NULL;
+
 		/**
 		 * A function signature type is a very special casein terms of assignability
 		 */
@@ -460,14 +437,14 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						return NULL;
 					}
 
+				//Check if they're assignable
 				case TYPE_CLASS_ARRAY:
-					//If these are the exact same types, then we're set
-					if(types_equivalent(destination_type->internal_types.points_to, source_type->internal_types.member_type) == TRUE){
+					//If this works, return the destination type
+					if(types_assignable(destination_type->internal_types.points_to, source_type->internal_types.member_type) != NULL){
 						return destination_type;
-					//Otherwise this won't work at all
-					} else{
-						return NULL;
 					}
+					
+					return NULL;
 		
 				//Likely the most common case
 				case TYPE_CLASS_POINTER:
@@ -479,12 +456,12 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						return destination_type;
 					//Let's see if what they point to is the exact same
 					} else {
-						//They need to be the exact same
-						if(types_equivalent(source_type->internal_types.points_to, destination_type->internal_types.points_to) == TRUE){
+						//If this works, return the destination type
+						if(types_assignable(destination_type->internal_types.points_to, source_type->internal_types.points_to) != NULL){
 							return destination_type;
-						} else {
-							return NULL;
 						}
+
+						return NULL;
 					}
 
 				//Otherwise it's bad here
