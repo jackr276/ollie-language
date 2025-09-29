@@ -169,37 +169,6 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
 
 
 /**
- * Are two types equivalent(as in, the exact same)
- */
-static u_int8_t types_equivalent(generic_type_t* typeA, generic_type_t* typeB){
-	//Make sure that both of these types are raw
-	typeA = dealias_type(typeA);
-	typeB = dealias_type(typeB);
-
-	//If they are not in the same type class, then they are not equivalent
-	if(typeA->type_class != typeB->type_class){
-		return FALSE;
-	}
-
-	//If these are both arrays
-	if(typeA->type_class == TYPE_CLASS_ARRAY
-		&& typeA->internal_values.num_members != typeB->internal_values.num_members){
-		//We can disqualify quickly if this happens
-		return FALSE;
-	}
-
-	//Now that we know they are in the same class, we need to check if they're the exact same
-	//If they are the exact same, return 1. Otherwise, return 0
-	if(strcmp(typeA->type_name.string, typeB->type_name.string) == 0){
-		return TRUE;
-	}
-
-	//Otherwise they aren't the exact same, so
-	return FALSE;
-}
-
-
-/**
  * Is the given type memory movement appropriate
  */
 u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
