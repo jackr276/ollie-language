@@ -2662,9 +2662,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 * the address we have to load
 	 */
 	if(ident_node->side == SIDE_TYPE_RIGHT && ident_node->variable->stack_variable == TRUE){
-		//Extract the symtab var
-		symtab_variable_record_t* symtab_variable = ident_node->variable;
-
 		//The final assignee
 		three_addr_var_t* assignee;
 
@@ -7456,9 +7453,6 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node){
 	//What block are we emitting into?
 	basic_block_t* emitted_block = basic_block_alloc(1);
-
-	//Extract the type info out of here
-	generic_type_t* type = node->inferred_type;
 
 	//The base address. We may or may not need this
 	three_addr_var_t* base_addr = emit_var(node->variable);

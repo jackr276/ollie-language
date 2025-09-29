@@ -3852,11 +3852,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		
 		//This counts as a change
 		changed = TRUE;
-
-		//If we make it here we know that we have a case where this is doable
-		printf("FOUND OPPORTUNITY\n");
 	}
-
 
 
 	/**
