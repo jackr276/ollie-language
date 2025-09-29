@@ -377,6 +377,14 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			return NULL;
 
+		//This will only work if they're the exact same
+		case TYPE_CLASS_UNION:
+			if(destination_type == source_type){
+				return destination_type;
+			}
+			
+			return NULL;
+
 		/**
 		 * A function signature type is a very special casein terms of assignability
 		 */
