@@ -263,11 +263,13 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 		case TYPE_CLASS_BASIC:
 			//If it's void, then we can't have it. Otherwise
 			//it's fine
-			if(type->basic_type_token != VOID){
-				return TRUE;
-			} else {
-				return FALSE;
+			if(type->basic_type_token == VOID){
+				return FALSE;;
 			}
+
+			//Otherwise it's true
+			return TRUE;
+
 		default:
 			return FALSE;
 	}
@@ -902,10 +904,90 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			return *a;
 
 		/**
+		 * Very unique case - ternary operator
+		 */
+		case QUESTION:
+			//If a is a pointer type
+			if((*a)->type_class == TYPE_CLASS_POINTER){
+				//If b is a another pointer, then that's fine
+				if((*b)->type_class == TYPE_CLASS_POINTER){
+					//We'll return a final comparison type of u64
+					return lookup_type_name_only(symtab, "u64")->type;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*b)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*b = lookup_type_name_only(symtab, "u64")->type;
+
+				return *b;
+			}
+			
+			//If b is a pointer type. This is teh exact same scenario as a
+			if((*b)->type_class == TYPE_CLASS_POINTER){
+				//If b is a another pointer, then that's fine
+				if((*a)->type_class == TYPE_CLASS_POINTER){
+					//We'll return a final comparison type of bool 
+					return lookup_type_name_only(symtab, "u64")->type;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*a)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*a = lookup_type_name_only(symtab, "u64")->type;
+
+				//We'll return a final comparison type of bool 
+				return *a;
+			}
+
+			//At this point if these are not basic types, we're done
+			if((*a)->type_class != TYPE_CLASS_BASIC || (*b)->type_class != TYPE_CLASS_BASIC){
+				return NULL;
+			}
+
+			//If a is a floating point, we apply the float conversion to b
+			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
+				integer_to_floating_point(symtab, b);
+
+			//If b is a floating point, we apply the float conversion to b
+			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
+				integer_to_floating_point(symtab, a);
+			}
+		
+			//Perform any signedness correction that is needed
+			basic_type_signedness_coercion(symtab, a, b);
+
+			//We already know that we only have basic types here. We can apply
+			//the standard widening conversion
+			basic_type_widening_type_coercion(a, b);
+
+			//We'll return a final comparison type of bool 
+			return *a;
+
+		/**
 		 * Relational operators will apply normal conversion rules. If we have
 		 * a pointer, we will coerce the other integer to a u64
 		 */
-		case QUESTION:
 		case G_THAN:
 		case G_THAN_OR_EQ:
 		case L_THAN:
@@ -917,7 +999,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If b is a another pointer, then that's fine
 				if((*b)->type_class == TYPE_CLASS_POINTER){
 					//We'll return a final comparison type of u64
-					return lookup_type_name_only(symtab, "u64")->type;
+					return lookup_type_name_only(symtab, "bool")->type;
 				}
 
 				//If this is not a basic type, all other conversion is bad
@@ -1815,6 +1897,7 @@ variable_size_t get_type_size(generic_type_t* type){
 				case U8:
 				case I8:
 				case CHAR:
+				case BOOL:
 					size = BYTE;
 					break;
 
@@ -1913,6 +1996,8 @@ static char* basic_type_to_string(generic_type_t* type){
 			return "f32";
 		case F64:
 			return "f64";
+		case BOOL:
+			return "bool";
 		default:
 			return type->type_name.string;
 	}
