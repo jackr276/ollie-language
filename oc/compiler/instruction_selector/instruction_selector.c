@@ -1618,7 +1618,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
  */
 static void handle_cmp_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(instruction->op1->type);
 
 	//Select this instruction
 	instruction->instruction_type = select_cmp_instruction(size);
