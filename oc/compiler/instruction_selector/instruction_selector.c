@@ -3145,7 +3145,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_simple_movement_instruction(instruction);
 			break;
-			//TODO LOOK AT
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 			handle_logical_not_instruction(cfg, window);
 			break;
