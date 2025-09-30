@@ -1017,6 +1017,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
 				*b = lookup_type_name_only(symtab, "u64")->type;
 
+				//This will always return a boolean
 				return lookup_type_name_only(symtab, "bool")->type;
 			}
 			
@@ -1068,8 +1069,19 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			//the standard widening conversion
 			basic_type_widening_type_coercion(a, b);
 
+			//We need to use either a bool or an i8 if they're signed. Internally,
+			//these are treated the same
+			generic_type_t* return_type;
+
+			//Is it signed? If so use the i8
+			if(is_type_signed(*a) == TRUE){
+				return_type = lookup_type_name_only(symtab, "i8")->type;
+			} else {
+				return_type = lookup_type_name_only(symtab, "bool")->type;
+			}
+
 			//We'll return a final comparison type of bool 
-			return lookup_type_name_only(symtab, "bool")->type;
+			return return_type;
 
 		default:
 			return NULL;
