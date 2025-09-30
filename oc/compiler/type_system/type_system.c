@@ -803,7 +803,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				*b = lookup_type_name_only(symtab, "u64")->type;
 
 				//Give back the u64 type as the result
-				return *b;
+				return lookup_type_name_only(symtab, "bool")->type;
 			}
 			
 			//If b is a pointer type. This is teh exact same scenario as a
@@ -830,7 +830,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				*a = lookup_type_name_only(symtab, "u64")->type;
 
 				//Give back the u64 type as the result
-				return *a;
+				return lookup_type_name_only(symtab, "bool")->type;
 			}
 
 			//At this point if these are not basic types, we're done
@@ -848,7 +848,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			basic_type_widening_type_coercion(a, b);
 
 			//Give back a
-			return *a;
+			return lookup_type_name_only(symtab, "bool")->type;
 
 		/**
 		 * Modulus types only have integers to worry about. As always, we will
@@ -935,16 +935,15 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
 				*b = lookup_type_name_only(symtab, "u64")->type;
 
-				//Give back the u64 type as the result
-				return *b;
+				return lookup_type_name_only(symtab, "bool")->type;
 			}
 			
 			//If b is a pointer type. This is teh exact same scenario as a
 			if((*b)->type_class == TYPE_CLASS_POINTER){
 				//If b is a another pointer, then that's fine
 				if((*a)->type_class == TYPE_CLASS_POINTER){
-					//We'll return a final comparison type of u64
-					return lookup_type_name_only(symtab, "u64")->type;
+					//We'll return a final comparison type of bool 
+					return lookup_type_name_only(symtab, "bool")->type;
 				}
 
 				//If this is not a basic type, all other conversion is bad
@@ -962,8 +961,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
 				*a = lookup_type_name_only(symtab, "u64")->type;
 
-				//Give back the u64 type as the result
-				return *a;
+				//We'll return a final comparison type of bool 
+				return lookup_type_name_only(symtab, "bool")->type;
 			}
 
 			//At this point if these are not basic types, we're done
@@ -987,8 +986,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			//the standard widening conversion
 			basic_type_widening_type_coercion(a, b);
 
-			//We'll give back *a once we're finished
-			return *a;
+			//We'll return a final comparison type of bool 
+			return lookup_type_name_only(symtab, "bool")->type;
 
 		default:
 			return NULL;
