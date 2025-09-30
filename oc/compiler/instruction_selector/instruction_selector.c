@@ -2865,8 +2865,12 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Handle the comparison operation here
 		handle_cmp_instruction(comparison);
 
+		//We will determine the type signedness *based* on how the op1 is. We don't want to use the assignee, because the assignee for a comparison will nearly
+		//always be unsigned
+		u_int8_t type_signed = is_type_signed(assignment->op1->type);
+
 		//We'll now need to insert inbetween here
-		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(lookup_type_name_only(cfg->type_symtab, "u8")->type), is_type_signed(assignment->assignee->type));
+		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(lookup_type_name_only(cfg->type_symtab, "u8")->type), type_signed);
 
 		//We now also need to modify the move instruction
 		//It will always be movzx
