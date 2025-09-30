@@ -2387,30 +2387,18 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	//Let's grab the value out for convenience
 	instruction_t* logical_not = window->instruction1;
 
-	//Ensure that this one's size has been selected
-	logical_not->assignee->variable_size = get_type_size(logical_not->assignee->type);
-
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
-	instruction_t* test_inst = emit_direct_test_instruction(logical_not->assignee, logical_not->assignee); 
+	instruction_t* test_inst = emit_direct_test_instruction(logical_not->op1, logical_not->op1); 
 	//Ensure that we set all these flags too
 	test_inst->block_contained_in = logical_not->block_contained_in;
 	test_inst->is_branch_ending = logical_not->is_branch_ending;
 
-	//We'll need this type for our setne's
-	generic_type_t* unsigned_int8_type = lookup_type_name_only(cfg->type_symtab, "u8")->type;
-
 	//Now we'll set the AL register to 1 if we're equal here
-	instruction_t* sete_inst = emit_sete_instruction(emit_temp_var(unsigned_int8_type));
+	instruction_t* sete_inst = emit_sete_instruction(logical_not->assignee);
 	//Ensure that we set all these flags too
 	sete_inst->block_contained_in = logical_not->block_contained_in;
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
-
-	//Finally we'll move the contents into t9
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_not->assignee, sete_inst->destination_register);
-	//Ensure that we set all these flags too
-	movzx_instruction->block_contained_in = logical_not->block_contained_in;
-	movzx_instruction->is_branch_ending = logical_not->is_branch_ending;
 
 	//Preserve this before we lose it
 	instruction_t* after_logical_not = logical_not->next_statement;
@@ -2424,11 +2412,8 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	//Then insert the sete instruction
 	insert_instruction_before_given(sete_inst, after_logical_not);
 
-	//Finally we insert the movzx
-	insert_instruction_before_given(movzx_instruction, after_logical_not);
-
 	//This is the new window
-	reconstruct_window(window, movzx_instruction);
+	reconstruct_window(window, sete_inst);
 }
 
 

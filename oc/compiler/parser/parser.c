@@ -6064,6 +6064,8 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//Add in the line number
 	return_stmt->line_number = parser_line_num;
+
+	//This is *always* the function's return type
 	return_stmt->inferred_type = final_type;
 	
 	//If we have deferred statements

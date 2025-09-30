@@ -45,6 +45,8 @@ three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 variable_symtab_t* variable_symtab;
 //Store this for usage
+generic_type_t* u8 = NULL;
+//Store this for usage
 generic_type_t* i32 = NULL;
 //Store this for usage
 generic_type_t* u32 = NULL;
@@ -2466,7 +2468,10 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 			return_package.final_block = current;
 		}
 
-		//Emit the temp assignment
+		/**
+		 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
+		 * the function is returning the type as promised, and not what is done through type coercion
+		 */
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), expression_package.assignee);
 
 		//Add this in as a used variable
@@ -2885,22 +2890,15 @@ static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_ad
 
 /**
  * Emit a logical negation statement
+ *
+ * It is important to note that logical note statements always return a type of u8 in the end
  */
 static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, u_int8_t is_branch_ending){
-	//We need to emit a temp assignment for the negation
-	instruction_t* temp_assingnment = emit_assignment_instruction(emit_temp_var(negated->type), negated);
-
-	//If negated isn't temp, it also counts as a read
-	add_used_variable(basic_block, negated);
-
-	//Add this into the block
-	add_statement(basic_block, temp_assingnment);
-
 	//This will always overwrite the other value
-	instruction_t* stmt = emit_logical_not_instruction(temp_assingnment->assignee, temp_assingnment->assignee);
+	instruction_t* stmt = emit_logical_not_instruction(emit_temp_var(u8), negated);
 
-	//This counts as used
-	add_used_variable(basic_block, temp_assingnment->assignee);
+	//This counts as a use
+	add_used_variable(basic_block, negated);
 
 	//Mark this with its branch ending status
 	stmt->is_branch_ending = is_branch_ending;
@@ -7953,12 +7951,12 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	break_stack = heap_stack_alloc();
 	continue_stack = heap_stack_alloc(); 
 
-	//Keep this on hand
+	//Keep these on hand
 	u64 = lookup_type_name_only(type_symtab, "u64")->type;
 	i64 = lookup_type_name_only(type_symtab, "i64")->type;
 	u32 = lookup_type_name_only(type_symtab, "u32")->type;
 	i32 = lookup_type_name_only(type_symtab, "i32")->type;
-
+	u8 = lookup_type_name_only(type_symtab, "u8")->type;
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
