@@ -1622,12 +1622,17 @@ static void handle_cmp_instruction(instruction_t* instruction){
 
 	//Select this instruction
 	instruction->instruction_type = select_cmp_instruction(size);
+
+	//Extract these for convenience
+	generic_type_t* left_hand_type = instruction->op1->type;
+	//For the right hand type, we only care if op2 isn't NULL. Constants won't affect us here
+	generic_type_t* right_hand_type = instruction->op2 != NULL ? instruction->op2->type : left_hand_type;
 	
 	//Since we have a comparison instruction, we don't actually have a destination
 	//register as the registers remain unmodified in this event
-	if(is_expanding_move_required(instruction->assignee->type, instruction->op1->type) == TRUE){
+	if(is_expanding_move_required(right_hand_type, instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		instruction->source_register = handle_expanding_move_operation(instruction, instruction->op1, instruction->assignee->type);
+		instruction->source_register = handle_expanding_move_operation(instruction, instruction->op1, right_hand_type);
 	} else {
 		//Otherwise we assign directly
 		instruction->source_register = instruction->op1;
@@ -1635,9 +1640,9 @@ static void handle_cmp_instruction(instruction_t* instruction){
 
 	//If we have op2, we'll use source_register2
 	if(instruction->op2 != NULL){
-		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		if(is_expanding_move_required(left_hand_type, instruction->op2->type) == TRUE){
 			//Let the helper deal with it
-			instruction->source_register2 = handle_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
+			instruction->source_register2 = handle_expanding_move_operation(instruction, instruction->op2, left_hand_type);
 		} else {
 			//Otherwise we assign directly
 			instruction->source_register2 = instruction->op2;
@@ -3151,6 +3156,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		case THREE_ADDR_CODE_ASSN_STMT:
 			handle_simple_movement_instruction(instruction);
 			break;
+			//TODO LOOK AT
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 			handle_logical_not_instruction(cfg, window);
 			break;
