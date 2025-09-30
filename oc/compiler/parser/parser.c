@@ -2072,8 +2072,8 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//The return type is what this normally is
-			return_type = cast_expr->inferred_type;
+			//The return type of a logical not is a boolean
+			return_type = lookup_type_name_only(type_symtab, "bool")->type;
 			
 			//This is not assignable
 			is_assignable = FALSE;

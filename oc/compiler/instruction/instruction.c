@@ -461,7 +461,8 @@ u_int8_t is_modulus_instruction(instruction_t* instruction){
  */
 u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 	switch(instruction->instruction_type){
-		//These are our three candidates
+		//These are our four candidates
+		case MOVB:
 		case MOVL:
 		case MOVW:
 		case MOVQ:
