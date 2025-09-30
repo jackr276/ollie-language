@@ -7,7 +7,7 @@
 #ifndef INSTRUCTION_SELECTOR_H
 #define INSTRUCTION_SELECTOR_H
 
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include "../cfg/cfg.h"
 
 /**

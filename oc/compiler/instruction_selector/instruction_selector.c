@@ -9,7 +9,7 @@
 */
 
 #include "instruction_selector.h"
-#include "../queue/heap_queue.h"
+#include "../utils/queue/heap_queue.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1618,16 +1618,21 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
  */
 static void handle_cmp_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(instruction->op1->type);
 
 	//Select this instruction
 	instruction->instruction_type = select_cmp_instruction(size);
+
+	//Extract these for convenience
+	generic_type_t* left_hand_type = instruction->op1->type;
+	//For the right hand type, we only care if op2 isn't NULL. Constants won't affect us here
+	generic_type_t* right_hand_type = instruction->op2 != NULL ? instruction->op2->type : left_hand_type;
 	
 	//Since we have a comparison instruction, we don't actually have a destination
 	//register as the registers remain unmodified in this event
-	if(is_expanding_move_required(instruction->assignee->type, instruction->op1->type) == TRUE){
+	if(is_expanding_move_required(right_hand_type, instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		instruction->source_register = handle_expanding_move_operation(instruction, instruction->op1, instruction->assignee->type);
+		instruction->source_register = handle_expanding_move_operation(instruction, instruction->op1, right_hand_type);
 	} else {
 		//Otherwise we assign directly
 		instruction->source_register = instruction->op1;
@@ -1635,9 +1640,9 @@ static void handle_cmp_instruction(instruction_t* instruction){
 
 	//If we have op2, we'll use source_register2
 	if(instruction->op2 != NULL){
-		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		if(is_expanding_move_required(left_hand_type, instruction->op2->type) == TRUE){
 			//Let the helper deal with it
-			instruction->source_register2 = handle_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
+			instruction->source_register2 = handle_expanding_move_operation(instruction, instruction->op2, left_hand_type);
 		} else {
 			//Otherwise we assign directly
 			instruction->source_register2 = instruction->op2;
@@ -2382,30 +2387,18 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	//Let's grab the value out for convenience
 	instruction_t* logical_not = window->instruction1;
 
-	//Ensure that this one's size has been selected
-	logical_not->assignee->variable_size = get_type_size(logical_not->assignee->type);
-
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
-	instruction_t* test_inst = emit_direct_test_instruction(logical_not->assignee, logical_not->assignee); 
+	instruction_t* test_inst = emit_direct_test_instruction(logical_not->op1, logical_not->op1); 
 	//Ensure that we set all these flags too
 	test_inst->block_contained_in = logical_not->block_contained_in;
 	test_inst->is_branch_ending = logical_not->is_branch_ending;
 
-	//We'll need this type for our setne's
-	generic_type_t* unsigned_int8_type = lookup_type_name_only(cfg->type_symtab, "u8")->type;
-
 	//Now we'll set the AL register to 1 if we're equal here
-	instruction_t* sete_inst = emit_sete_instruction(emit_temp_var(unsigned_int8_type));
+	instruction_t* sete_inst = emit_sete_instruction(logical_not->assignee);
 	//Ensure that we set all these flags too
 	sete_inst->block_contained_in = logical_not->block_contained_in;
 	sete_inst->is_branch_ending = logical_not->is_branch_ending;
-
-	//Finally we'll move the contents into t9
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_not->assignee, sete_inst->destination_register);
-	//Ensure that we set all these flags too
-	movzx_instruction->block_contained_in = logical_not->block_contained_in;
-	movzx_instruction->is_branch_ending = logical_not->is_branch_ending;
 
 	//Preserve this before we lose it
 	instruction_t* after_logical_not = logical_not->next_statement;
@@ -2419,11 +2412,8 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 	//Then insert the sete instruction
 	insert_instruction_before_given(sete_inst, after_logical_not);
 
-	//Finally we insert the movzx
-	insert_instruction_before_given(movzx_instruction, after_logical_not);
-
 	//This is the new window
-	reconstruct_window(window, movzx_instruction);
+	reconstruct_window(window, sete_inst);
 }
 
 
@@ -2875,8 +2865,12 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Handle the comparison operation here
 		handle_cmp_instruction(comparison);
 
+		//We will determine the type signedness *based* on how the op1 is. We don't want to use the assignee, because the assignee for a comparison will nearly
+		//always be unsigned
+		u_int8_t type_signed = is_type_signed(assignment->op1->type);
+
 		//We'll now need to insert inbetween here
-		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(lookup_type_name_only(cfg->type_symtab, "u8")->type), is_type_signed(assignment->assignee->type));
+		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(lookup_type_name_only(cfg->type_symtab, "u8")->type), type_signed);
 
 		//We now also need to modify the move instruction
 		//It will always be movzx

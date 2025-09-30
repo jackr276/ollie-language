@@ -11,7 +11,7 @@
 #define LEX_STACK_H
 
 #include <sys/types.h>
-#include "../lexer/lexer.h"
+#include "../../lexer/lexer.h"
 
 //Allows us to use lex_node_t as a type
 typedef struct lex_node_t lex_node_t;

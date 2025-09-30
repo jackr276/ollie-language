@@ -13,8 +13,8 @@
 #include <string.h>
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
-#include "../stack/lightstack.h"
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/stack/lightstack.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 

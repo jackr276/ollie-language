@@ -5,7 +5,7 @@
 */
 
 //Link to dynamic array
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>

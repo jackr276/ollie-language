@@ -12,6 +12,9 @@ int main(int argc, char** argv){
 		fprintf(stderr, "A filename must be provided\n");
 	}
 
+	//Initialize the lexer
+	initialize_lexer();
+
 	FILE* fl;
 	lexitem_t l;
 	u_int16_t parser_line_num;
@@ -34,6 +37,9 @@ int main(int argc, char** argv){
 		//Close the file when done
 		fclose(fl);
 	}
+
+	//Deinitialize the lexer
+	deinitialize_lexer();
 
 	return 0;
 }

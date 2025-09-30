@@ -14,19 +14,18 @@
 */
 
 #include "lexer.h"
-#include "../dynamic_string/dynamic_string.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
-#include "../stack/lexstack.h"
+#include "../utils/stack/lexstack.h"
 
 //For standardization across all modules
 #define TRUE 1
 #define FALSE 0
 
 //Total number of keywords
-#define KEYWORD_COUNT 50
+#define KEYWORD_COUNT 51
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -48,20 +47,20 @@ u_int16_t line_num = 0;
 static lex_stack_t* pushed_back_tokens = NULL;
 
 //Token array, we will index using their enum values
-const Token tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
-					STATIC, EXTERNAL, U8, I8, U16, I16,
-					U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
+					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION};
+					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
+				    STATIC, EXTERNAL};
 
 //Direct one to one mapping
-const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
-						 "require", "replace", "static", "external", "u8", "i8", "u16",
+static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
+						 "require", "replace", "u8", "i8", "u16",
 						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub", "union"};
+						  "with", "lib", "idle", "pub", "union", "bool", "static", "external"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -191,11 +190,6 @@ lexitem_t get_next_assembly_statement(FILE* fl){
  * Constantly iterate through the file and grab the next token that we have
 */
 lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search){
-	//If this is NULL, we need to make it
-	if(pushed_back_tokens == NULL){
-		pushed_back_tokens = lex_stack_alloc();
-	}
-
 	//IF we have pushed back tokens, we need to return them first
 	if(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
 		//Just pop this and leave
@@ -895,8 +889,6 @@ lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t co
 	if(ch == EOF){
 		lex_item.tok = DONE;
 		lex_item.line_num = *parser_line_num;
-		//Destroy the stack
-		lex_stack_dealloc(&pushed_back_tokens);
 	}
 
 	return lex_item;
@@ -929,7 +921,7 @@ void print_token(lexitem_t* l){
 /**
  * A utility function for error printing that converts an operator to a string
  */
-char* operator_to_string(Token op){
+char* operator_to_string(ollie_token_t op){
 	switch(op){
 		case PLUSPLUS:
 			return "++";
@@ -1003,6 +995,25 @@ char* operator_to_string(Token op){
 		default:
 			return NULL;
 	}
+}
+
+
+/**
+ * Initialize the lexer by dynamically allocating the lexstack
+ * and any other needed data structures
+ */
+void initialize_lexer(){
+	//Allocate this
+	pushed_back_tokens = lex_stack_alloc();
+}
+
+
+/**
+ * Deinitialize the entire lexer
+ */
+void deinitialize_lexer(){
+	//Deallocate the lexstack
+	lex_stack_dealloc(&pushed_back_tokens);
 }
 
 

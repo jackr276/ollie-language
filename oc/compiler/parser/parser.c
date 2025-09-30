@@ -18,10 +18,10 @@
 #include <string.h>
 #include <sys/types.h>
 #include "parser.h"
-#include "../stack/lexstack.h"
-#include "../stack/nesting_stack.h"
-#include "../queue/heap_queue.h"
-#include "../stack/lightstack.h"
+#include "../utils/stack/lexstack.h"
+#include "../utils/stack/nesting_stack.h"
+#include "../utils/queue/heap_queue.h"
+#include "../utils/stack/lightstack.h"
 
 //For code clarity
 #define SUCCESS 1
@@ -137,7 +137,7 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 /**
  * Determine whether or not something is an assignment operator
  */
-static u_int8_t is_assignment_operator(Token op){
+static u_int8_t is_assignment_operator(ollie_token_t op){
 	switch(op){
 		case EQUALS:
 		case LSHIFTEQ:
@@ -161,7 +161,7 @@ static u_int8_t is_assignment_operator(Token op){
  * Convert a compressed assignment operator into the equivalent binary 
  * operation
  */
-static Token compressed_assignment_to_binary_op(Token op){
+static ollie_token_t compressed_assignment_to_binary_op(ollie_token_t op){
 	switch(op){
 		case LSHIFTEQ:
 			return L_SHIFT;
@@ -297,7 +297,7 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t
  * Example:
  * int* + 1 -> int* + 4(an int is 4 bytes), and so on...
  */
-static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, Token op, generic_ast_node_t* operand, side_type_t side){
+static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, ollie_token_t op, generic_ast_node_t* operand, side_type_t side){
 	//Grab the pointer type out
 	generic_type_t* pointer_type = pointer->inferred_type;
 
@@ -1145,7 +1145,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	lexitem_t lookahead;
 
 	//This will hold onto the assignment operator for us
-	Token assignment_operator = BLANK;
+	ollie_token_t assignment_operator = BLANK;
 
 	//Probably way too much, just to be safe
 	lex_stack_t* stack = lex_stack_alloc();
@@ -1289,7 +1289,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Otherwise, we'll need to perform any needed type coercion
 	} else {
 		//Convert this into the assignment operator
-		Token binary_op = compressed_assignment_to_binary_op(assignment_operator);
+		ollie_token_t binary_op = compressed_assignment_to_binary_op(assignment_operator);
 
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
@@ -1719,7 +1719,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 /**
  * Operates on a value before usage. This could be postincrement or postdecrement
  */
-static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_ast_node_t* parent_node, Token operator, side_type_t side){
+static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
 	//Let's first check and see if this is valid. If it's not we fail out
 	if(is_unary_operation_valid_for_type(current_type, operator) == FALSE){
 		sprintf(info, "Type %s is invalid for operator %s", current_type->type_name.string, operator_to_string(operator));
@@ -1887,7 +1887,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 /**
  * Is a given token a unary operator
  */
-static u_int8_t is_unary_operator(Token tok){
+static u_int8_t is_unary_operator(ollie_token_t tok){
 	//Switch on tok
 	switch (tok) {
 		case SINGLE_AND:
@@ -1940,7 +1940,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	//Save this for searching
-	Token unary_op_tok = lookahead.tok;
+	ollie_token_t unary_op_tok = lookahead.tok;
 
 	//If this is not a unary operator, we don't need to go any more
 	if(is_unary_operator(unary_op_tok) == FALSE){
@@ -2072,8 +2072,8 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//The return type is what this normally is
-			return_type = cast_expr->inferred_type;
+			//The return type of a logical not is a boolean
+			return_type = lookup_type_name_only(type_symtab, "bool")->type;
 			
 			//This is not assignable
 			is_assignable = FALSE;
@@ -2837,7 +2837,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
-		//The return type is always the left child's type
+		//The return type is always a u8
 		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
 		//If this fails, that means that we have an invalid operation
@@ -4986,6 +4986,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		case I64:
 		case F64:
 		case CHAR:
+		case BOOL:
 			//We will now grab this record from the symtable to make our life easier
 			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
 
@@ -6063,6 +6064,8 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//Add in the line number
 	return_stmt->line_number = parser_line_num;
+
+	//This is *always* the function's return type
 	return_stmt->inferred_type = final_type;
 	
 	//If we have deferred statements
@@ -6148,7 +6151,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Otherwise, it essentially needs to be an int or a char. Nothing else here is "switchable"	
 	} else {
 		//Grab the basic type
-		Token basic_type = type->basic_type_token;
+		ollie_token_t basic_type = type->basic_type_token;
 
 		//It needs to be an int or char
 		if(basic_type == VOID || basic_type == F32 || basic_type == F64){
@@ -9635,6 +9638,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Initialize our results package here
 	front_end_results_package_t* results = calloc(1, sizeof(front_end_results_package_t));
 
+	//Initialize the lexer first
+	initialize_lexer();
+
 	//Set the number of errors here
 	num_errors = 0;
 	num_warnings = 0;
@@ -9719,6 +9725,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Close the file out
 	fclose(fl);
+
+	//Once we're done, deinitialize the lexer
+	deinitialize_lexer();
 
 	return results;
 }

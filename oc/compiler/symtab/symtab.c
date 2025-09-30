@@ -543,6 +543,10 @@ void add_all_basic_types(type_symtab_t* symtab){
 	type = create_basic_type("u8", U8);
 	insert_type(symtab,  create_type_record(type));
 
+	//Bool type
+	type = create_basic_type("bool", BOOL);
+	insert_type(symtab,  create_type_record(type));
+
 	//char type
 	type = create_basic_type("char", CHAR);
 	insert_type(symtab,  create_type_record(type));

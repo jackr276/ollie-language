@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #include "../cfg/cfg.h"
 #include "../jump_table/jump_table.h"
-#include "../dynamic_string/dynamic_string.h"
+#include "../utils/dynamic_string/dynamic_string.h"
 
 //For standardization and convenience
 #define TRUE 1
@@ -193,7 +193,7 @@ u_int8_t is_jump_type_signed(jump_type_t type){
 /**
  * A simple helper function to determine if an operator is a comparison operator
  */
-u_int8_t is_operator_relational_operator(Token op){
+u_int8_t is_operator_relational_operator(ollie_token_t op){
 	switch(op){
 		case G_THAN:
 		case L_THAN:
@@ -461,7 +461,8 @@ u_int8_t is_modulus_instruction(instruction_t* instruction){
  */
 u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 	switch(instruction->instruction_type){
-		//These are our three candidates
+		//These are our four candidates
+		case MOVB:
 		case MOVL:
 		case MOVW:
 		case MOVQ:
@@ -861,7 +862,7 @@ instruction_t* emit_idle_instruction(){
 /**
  * Emit a setX instruction
  */
-instruction_t* emit_setX_instruction(Token op, three_addr_var_t* destination_register, u_int8_t is_signed){
+instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, u_int8_t is_signed){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1250,7 +1251,7 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 /**
  * Turn an operand into a string
  */
-static char* op_to_string(Token op){
+static char* op_to_string(ollie_token_t op){
 	//Whatever we have here
 	switch (op) {
 		case PLUS:
@@ -3304,7 +3305,7 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee){
  * Emit a binary operator three address code statement. Once we're here, we expect that the caller has created and 
  * supplied the appropriate variables
  */
-instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2){
+instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_var_t* op2){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -3330,7 +3331,7 @@ instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, thr
 /**
  * Emit a binary operation with a constant three address code statement
  */
-instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2){
+instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* op2){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -3370,7 +3371,7 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 /**
  * Emit a conditional assignment instruction
  */
-instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token prior_operator, u_int8_t is_signed, u_int8_t inverse_assignment){
+instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t prior_operator, u_int8_t is_signed, u_int8_t inverse_assignment){
 	//First we'll allocate the instruction
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -3794,7 +3795,7 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 	}
 
 	//Extract this
-	Token basic_type_token = type->basic_type_token;
+	ollie_token_t basic_type_token = type->basic_type_token;
 	
 	switch(basic_type_token){
 		case I64:
@@ -4058,7 +4059,7 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
  * Select the appropriate jump type to use. We can either use
  * inverse jumps or direct jumps
  */
-jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, u_int8_t is_signed){
+jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_type, u_int8_t is_signed){
 	//Let's see what we have here
 	switch(op){
 		case G_THAN:
@@ -4161,7 +4162,7 @@ jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, u_
 /**
  * Select the appropriate set type given the circumstances, including the operand and the signedness
  */
-instruction_type_t select_appropriate_set_stmt(Token op, u_int8_t is_signed){
+instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed){
 	if(is_signed == TRUE){
 		switch(op){
 			case G_THAN:

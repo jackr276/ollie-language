@@ -173,7 +173,7 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
  */
 u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 	//The basic type token for later
-	Token basic_type;
+	ollie_token_t basic_type;
 
 	//Arrays and pointers are fine
 	switch(type->type_class){
@@ -213,7 +213,7 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type){
 	type = dealias_type(type);
 
 	//The basic type token
-	Token basic_type_token;
+	ollie_token_t basic_type_token;
 
 	//Switch based on the type to determine
 	switch(type->type_class){
@@ -263,11 +263,13 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 		case TYPE_CLASS_BASIC:
 			//If it's void, then we can't have it. Otherwise
 			//it's fine
-			if(type->basic_type_token != VOID){
-				return TRUE;
-			} else {
-				return FALSE;
+			if(type->basic_type_token == VOID){
+				return FALSE;;
 			}
+
+			//Otherwise it's true
+			return TRUE;
+
 		default:
 			return FALSE;
 	}
@@ -333,8 +335,8 @@ static u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t*
  */
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type){
 	//Predeclare these for now
-	Token source_basic_type;
-	Token dest_basic_type;
+	ollie_token_t source_basic_type;
+	ollie_token_t dest_basic_type;
 
 	switch(destination_type->type_class){
 		//This is a simpler case - constructs can only be assigned
@@ -563,11 +565,12 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generic_type_t* type){
 	//Switch based on what we have
 	switch(type->basic_type_token){
-			//Char is already unsigned
+		//Char is already unsigned
 		case CHAR:
 			return lookup_type_name_only(symtab, "char")->type;
 		case U8:
 		case I8:
+		case BOOL:
 			return lookup_type_name_only(symtab, "u8")->type;
 		case U16:
 		case I16:
@@ -668,7 +671,7 @@ static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a)
  * CASES:
  * 	1.) Construct Types: Construct types are compatible if they are both the exact same type
  */
-generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, Token op){
+generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op){
 	//For convenience
 	symtab = (type_symtab_t*)symtab;
 
@@ -802,7 +805,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				*b = lookup_type_name_only(symtab, "u64")->type;
 
 				//Give back the u64 type as the result
-				return *b;
+				return lookup_type_name_only(symtab, "bool")->type;
 			}
 			
 			//If b is a pointer type. This is teh exact same scenario as a
@@ -829,7 +832,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				*a = lookup_type_name_only(symtab, "u64")->type;
 
 				//Give back the u64 type as the result
-				return *a;
+				return lookup_type_name_only(symtab, "bool")->type;
 			}
 
 			//At this point if these are not basic types, we're done
@@ -847,7 +850,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			basic_type_widening_type_coercion(a, b);
 
 			//Give back a
-			return *a;
+			return lookup_type_name_only(symtab, "bool")->type;
 
 		/**
 		 * Modulus types only have integers to worry about. As always, we will
@@ -901,16 +904,9 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			return *a;
 
 		/**
-		 * Relational operators will apply normal conversion rules. If we have
-		 * a pointer, we will coerce the other integer to a u64
+		 * Very unique case - ternary operator
 		 */
 		case QUESTION:
-		case G_THAN:
-		case G_THAN_OR_EQ:
-		case L_THAN:
-		case L_THAN_OR_EQ:
-		case DOUBLE_EQUALS:
-		case NOT_EQUALS:
 			//If a is a pointer type
 			if((*a)->type_class == TYPE_CLASS_POINTER){
 				//If b is a another pointer, then that's fine
@@ -934,7 +930,6 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
 				*b = lookup_type_name_only(symtab, "u64")->type;
 
-				//Give back the u64 type as the result
 				return *b;
 			}
 			
@@ -942,7 +937,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			if((*b)->type_class == TYPE_CLASS_POINTER){
 				//If b is a another pointer, then that's fine
 				if((*a)->type_class == TYPE_CLASS_POINTER){
-					//We'll return a final comparison type of u64
+					//We'll return a final comparison type of bool 
 					return lookup_type_name_only(symtab, "u64")->type;
 				}
 
@@ -961,7 +956,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
 				*a = lookup_type_name_only(symtab, "u64")->type;
 
-				//Give back the u64 type as the result
+				//We'll return a final comparison type of bool 
 				return *a;
 			}
 
@@ -986,8 +981,107 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			//the standard widening conversion
 			basic_type_widening_type_coercion(a, b);
 
-			//We'll give back *a once we're finished
+			//We'll return a final comparison type of bool 
 			return *a;
+
+		/**
+		 * Relational operators will apply normal conversion rules. If we have
+		 * a pointer, we will coerce the other integer to a u64
+		 */
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+			//If a is a pointer type
+			if((*a)->type_class == TYPE_CLASS_POINTER){
+				//If b is a another pointer, then that's fine
+				if((*b)->type_class == TYPE_CLASS_POINTER){
+					//We'll return a final comparison type of u64
+					return lookup_type_name_only(symtab, "bool")->type;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*b)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*b = lookup_type_name_only(symtab, "u64")->type;
+
+				//This will always return a boolean
+				return lookup_type_name_only(symtab, "bool")->type;
+			}
+			
+			//If b is a pointer type. This is teh exact same scenario as a
+			if((*b)->type_class == TYPE_CLASS_POINTER){
+				//If b is a another pointer, then that's fine
+				if((*a)->type_class == TYPE_CLASS_POINTER){
+					//We'll return a final comparison type of bool 
+					return lookup_type_name_only(symtab, "bool")->type;
+				}
+
+				//If this is not a basic type, all other conversion is bad
+				if((*a)->type_class != TYPE_CLASS_BASIC){
+					return NULL;
+				}
+
+				//Now once we get here, we know that we have a basic type
+
+				//Pointers are not compatible with floats in a comparison sense
+				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
+					return NULL;
+				}
+
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*a = lookup_type_name_only(symtab, "u64")->type;
+
+				//We'll return a final comparison type of bool 
+				return lookup_type_name_only(symtab, "bool")->type;
+			}
+
+			//At this point if these are not basic types, we're done
+			if((*a)->type_class != TYPE_CLASS_BASIC || (*b)->type_class != TYPE_CLASS_BASIC){
+				return NULL;
+			}
+
+			//If a is a floating point, we apply the float conversion to b
+			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
+				integer_to_floating_point(symtab, b);
+
+			//If b is a floating point, we apply the float conversion to b
+			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
+				integer_to_floating_point(symtab, a);
+			}
+		
+			//Perform any signedness correction that is needed
+			basic_type_signedness_coercion(symtab, a, b);
+
+			//We already know that we only have basic types here. We can apply
+			//the standard widening conversion
+			basic_type_widening_type_coercion(a, b);
+
+			//We need to use either a bool or an i8 if they're signed. Internally,
+			//these are treated the same
+			generic_type_t* return_type;
+
+			//Is it signed? If so use the i8
+			if(is_type_signed(*a) == TRUE){
+				return_type = lookup_type_name_only(symtab, "i8")->type;
+			} else {
+				return_type = lookup_type_name_only(symtab, "bool")->type;
+			}
+
+			//We'll return a final comparison type of bool 
+			return return_type;
 
 		default:
 			return NULL;
@@ -998,7 +1092,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 /**
  * Is the given unary operation valid for the type that was specificed?
  */
-u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op){
+u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t unary_op){
 	//Just to be safe, we'll dealias is
 	type = dealias_type(type);
 
@@ -1088,7 +1182,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 			}
 
 			//Now that we know what it is, we'll see if it's a float or void
-			Token type_tok = type->basic_type_token;
+			ollie_token_t type_tok = type->basic_type_token;
 			
 			//If it's float or void, we're done
 			if(type_tok == F32 || type_tok == F64 || type_tok == VOID){
@@ -1108,12 +1202,12 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op)
 /**
  * Is the given operation valid for the type that was specificed?
  */
-u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op, side_type_t side){
+u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t binary_op, side_type_t side){
 	//Just to be safe, we'll always make sure here
 	type = dealias_type(type);
 
 	//Deconstructed basic type(since we'll be using it so much)
-	Token basic_type;
+	ollie_token_t basic_type;
 
 	//Let's first check if we have any in a
 	//series of types that never make sense for any unary operation
@@ -1276,7 +1370,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_o
 /**
  * Create a basic type dynamically
 */
-generic_type_t* create_basic_type(char* type_name, Token basic_type){
+generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
 	//Dynamically allocate
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 	//Store the type class
@@ -1305,6 +1399,7 @@ generic_type_t* create_basic_type(char* type_name, Token basic_type){
 		case CHAR:
 		case I8:
 		case U8:
+		case BOOL:
 			//1 BYTE
 			type->type_size = 1;
 			break;
@@ -1783,7 +1878,7 @@ u_int8_t is_type_signed(generic_type_t* type){
 	}
 
 	//If we get here there's a chance it could be signed
-	Token basic_type_token = type->basic_type_token;
+	ollie_token_t basic_type_token = type->basic_type_token;
 
 	switch(basic_type_token){
 		case I8:
@@ -1814,6 +1909,7 @@ variable_size_t get_type_size(generic_type_t* type){
 				case U8:
 				case I8:
 				case CHAR:
+				case BOOL:
 					size = BYTE;
 					break;
 
@@ -1912,6 +2008,8 @@ static char* basic_type_to_string(generic_type_t* type){
 			return "f32";
 		case F64:
 			return "f64";
+		case BOOL:
+			return "bool";
 		default:
 			return type->type_name.string;
 	}

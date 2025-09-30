@@ -14,7 +14,7 @@
 #include "../symtab/symtab.h"
 #include "../lexer/lexer.h"
 #include "../ast/ast.h"
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -446,7 +446,7 @@ struct three_addr_const_t{
 		char char_constant;
 	} constant_value;
 	//What kind of constant is it
-	Token const_type;
+	ollie_token_t const_type;
 };
 
 
@@ -502,7 +502,7 @@ struct instruction_t{
 	//What is the x86-64 instruction
 	instruction_type_t instruction_type;
 	//The actual operator, stored as a token for size requirements
-	Token op;
+	ollie_token_t op;
 	//Is this a jump table? -- for use in switch statements
 	u_int8_t is_jump_table;
 	//Is this operation critical?
@@ -564,7 +564,7 @@ u_int8_t is_jump_type_signed(jump_type_t type);
 /**
  * Helper function to determine if an operator is a relational operator
  */
-u_int8_t is_operator_relational_operator(Token op);
+u_int8_t is_operator_relational_operator(ollie_token_t op);
 
 /**
  * Helper function to determine if an instruction is a binary operation
@@ -723,17 +723,17 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
  * Emit a statement using three vars and a binary operator
  * ALL statements are of the form: assignee <- op1 operator op2
 */
-instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_var_t* op2); 
+instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_var_t* op2); 
 
 /**
  * Emit a statement using two vars and a constant
  */
-instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token op, three_addr_const_t* op2); 
+instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* op2); 
 
 /**
  * Emit a conditional assignment statement
  */
-instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, Token prior_operator, u_int8_t is_signed, u_int8_t inverse_assignment);
+instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t prior_operator, u_int8_t is_signed, u_int8_t inverse_assignment);
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2
@@ -884,7 +884,7 @@ instruction_t* emit_idle_instruction();
 /**
  * Emit a setX instruction
  */
-instruction_t* emit_setX_instruction(Token op, three_addr_var_t* destination_register, u_int8_t is_signed);
+instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, u_int8_t is_signed);
 
 /**
  * Emit a stack allocation statement
@@ -922,12 +922,12 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 /**
  * Select the appropriate jump type given the circumstances, including the operand and the signedness
  */
-jump_type_t select_appropriate_jump_stmt(Token op, jump_category_t jump_type, u_int8_t is_signed);
+jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_type, u_int8_t is_signed);
 
 /**
  * Select the appropriate set type given the circumstances, including the operand and the signedness
  */
-instruction_type_t select_appropriate_set_stmt(Token op, u_int8_t is_signed);
+instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed);
 
 /**
  * Is the given register caller saved?

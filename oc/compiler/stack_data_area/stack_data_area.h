@@ -14,7 +14,7 @@
 #define STACK_DATA_AREA_H
 
 #include <sys/types.h>
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 
 //An overall structure that holds our stack data area
 typedef struct stack_data_area_t stack_data_area_t;

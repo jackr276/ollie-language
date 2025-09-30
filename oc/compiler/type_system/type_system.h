@@ -9,7 +9,7 @@
 #define TYPE_SYSTEM_H
 
 #include "../lexer/lexer.h"
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include <sys/types.h>
 
 #define MAX_FUNCTION_TYPE_PARAMS 6
@@ -113,7 +113,7 @@ struct generic_type_t{
 	//All generic types have a size
 	u_int32_t type_size;
 	//Basic types don't need anything crazy - just a token that stores what they are
-	Token basic_type_token;
+	ollie_token_t basic_type_token;
 	//What class of type is it
 	type_class_t type_class;
 };
@@ -210,7 +210,7 @@ u_int8_t is_void_type(generic_type_t* type);
  * Determine the compatibility of two types and coerce appropraitely. The double pointer
  * reference exists so that this method may transform types as appropriate
  */
-generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_type_t** a, generic_type_t** b, Token op);
+generic_type_t* determine_compatibility_and_coerce(void* type_symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op);
 
 /**
  * Are we able to assign something of "source_type" to something on "destination_type"? Returns
@@ -221,7 +221,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 /**
  * Dynamically allocate and create a basic type
 */
-generic_type_t* create_basic_type(char* type_name, Token basic_type);
+generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type);
 
 /**
  * Strip any aliasing away from a type that we have
@@ -251,17 +251,17 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 /**
  * Is the given binary operation valid for the type that was specificed?
  */
-u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, Token binary_op, side_type_t side);
+u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t binary_op, side_type_t side);
 
 /**
  * Is the given unary operation valid for the type that was specificed?
  */
-u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op);
+u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t unary_op);
 
 /**
  * Is the given unary operation valid for the type that was specificed?
  */
-u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, Token unary_op);
+u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t unary_op);
 
 /**
  * Add a value into a construct's table

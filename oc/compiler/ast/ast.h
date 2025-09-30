@@ -120,16 +120,16 @@ struct generic_ast_node_t{
 		char char_value;
 	} constant_value;
 	//Holds the token for what kind of constant it is
-	Token constant_type;
+	ollie_token_t constant_type;
 	//The upper and lower bound for switch statements
 	int32_t lower_bound;
 	int32_t upper_bound;
 	//What line number is this from
 	u_int16_t line_number;
 	//Store a binary operator(if one exists)
-	Token binary_operator;
+	ollie_token_t binary_operator;
 	//Store a unary operator(if one exists)
-	Token unary_operator;
+	ollie_token_t unary_operator;
 	//Is this assignable
 	u_int8_t is_assignable;
 	//Is a dereference needed at the end of this value?

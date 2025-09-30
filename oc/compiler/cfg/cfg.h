@@ -7,9 +7,9 @@
 #include <sys/types.h>
 #include "../ast/ast.h"
 #include "../parser/parser.h"
-#include "../stack/heapstack.h"
+#include "../utils/stack/heapstack.h"
 #include "../instruction/instruction.h"
-#include "../dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
 
 //The overall structure holder
@@ -208,7 +208,7 @@ void cleanup_all_control_relations(cfg_t* cfg);
 /**
  * Calculate(or recalculate) all control relations in the CFG
  */
-void calculate_all_control_relations(cfg_t* cfg, u_int8_t build_fresh, u_int8_t recalculate_rpo);
+void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo);
 
 /**
  * Emit a jump statement directly into a block

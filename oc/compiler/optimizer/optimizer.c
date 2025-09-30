@@ -5,7 +5,7 @@
  * it is implemented as one monolothic block
 */
 #include "optimizer.h"
-#include "../queue/heap_queue.h"
+#include "../utils/queue/heap_queue.h"
 #include <stdio.h>
 #include <sys/select.h>
 #include <sys/types.h>
@@ -1786,7 +1786,7 @@ static void recompute_all_dominance_relations(cfg_t* cfg){
 	}
 
 	//Now that that's finished, we can go back and calculate all of the control relations again
-	calculate_all_control_relations(cfg, TRUE, TRUE);
+	calculate_all_control_relations(cfg, TRUE);
 }
 
 
