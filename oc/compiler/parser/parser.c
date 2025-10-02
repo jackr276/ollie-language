@@ -3706,8 +3706,8 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 
 	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
 	//the user from adding a field the mut a:char[] that is unknown at compile time
-	if(type_spec->type_size == 0){
-		sprintf(info, "The size of type %s is not known. Struct members must have a size known at compile time", type_spec->type_name.string);
+	if(type_spec->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as a member. Struct members must have a size known at compile time", type_spec->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FAILURE;
 	}
@@ -4118,7 +4118,8 @@ static u_int8_t struct_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Once we're done with this, the mem list itself has no use so we'll destroy it
+	//Once we get here, the struct type's size is known and as such it is complete
+	struct_type->type_complete = TRUE;
 	
 	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
 	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
@@ -4312,8 +4313,8 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 
 	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
 	//the user from adding a field the mut a:char[] that is unknown at compile time
-	if(type->type_size == 0){
-		sprintf(info, "The size of type %s is not known. Union members must have a size known at compile time", type->type_name.string);
+	if(type->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as a member. Union members must have a size known at compile time", type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FAILURE;
 	}
@@ -4461,6 +4462,9 @@ static u_int8_t union_definer(FILE* fl){
 	if(status == FAILURE){
 		return FAILURE;
 	}
+
+	//Once we've gotten here, the union type is officially considered complete
+	union_type->type_complete = TRUE;
 
 	//Now let's see what we have at the end. We could either see a semicolon
 	//or an immediate alias statement

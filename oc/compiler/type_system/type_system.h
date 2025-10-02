@@ -112,6 +112,9 @@ struct generic_type_t{
 	int32_t line_number;
 	//All generic types have a size
 	u_int32_t type_size;
+	//Has this type been fully defined or not? This will be used to avoid 
+	//struct/union member recursive definitions with incomplete types
+	u_int8_t type_complete;
 	//Basic types don't need anything crazy - just a token that stores what they are
 	ollie_token_t basic_type_token;
 	//What class of type is it

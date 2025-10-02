@@ -1424,6 +1424,9 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
 			break;
 	}
 
+	//This is always compelete at definition
+	type->type_complete = TRUE;
+
 	//Give back the pointer, it will need to be freed eventually
 	return type;
 }
@@ -1459,6 +1462,9 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 
 	//Store what it points to
 	type->internal_types.points_to = points_to;
+
+	//This is always compelete at definition
+	type->type_complete = TRUE;
 
 	//A pointer is always 8 bytes(Ollie lang is for x86-64 only)
 	type->type_size = 8;
@@ -1497,6 +1503,11 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Store this in here
 	type->type_size = points_to->type_size * num_members;
 
+	//If it's not empty, then we consider it complete
+	if(type->type_size != 0){
+		type->type_complete = TRUE;
+	}
+
 	return type;
 }
 
@@ -1519,6 +1530,9 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 
 	//Reserve space for the enum table
 	type->internal_types.enumeration_table = dynamic_array_alloc();
+
+	//This is always compelete at definition
+	type->type_complete = TRUE;
 
 	return type;
 }
