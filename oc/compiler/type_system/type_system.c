@@ -1503,10 +1503,8 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Store this in here
 	type->type_size = points_to->type_size * num_members;
 
-	//If it's not empty, then we consider it complete
-	if(type->type_size != 0){
-		type->type_complete = TRUE;
-	}
+	//Array types are always complete
+	type->type_complete = TRUE;
 
 	return type;
 }
@@ -1851,6 +1849,9 @@ generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_
 
 	//These are always 8 bytes
 	type->type_size = 8;
+
+	//These are always complete by default
+	type->type_complete = TRUE;
 
 	//And give the type back
 	return type;

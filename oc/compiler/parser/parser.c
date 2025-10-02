@@ -5309,6 +5309,15 @@ static generic_type_t* type_specifier(FILE* fl){
 		//Grab the number of bounds out
 		u_int32_t num_bounds = lightstack_pop(&lightstack);
 
+		//If we're trying to create an array out of a type that is not yet fully
+		//defined, we also need to fail out
+		if(current_type_record->type->type_complete == FALSE){
+			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
 		//If we get here though, we know that this one is good
 		//Lets create the array type
 		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds);
