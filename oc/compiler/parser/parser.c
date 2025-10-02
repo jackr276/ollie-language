@@ -4310,6 +4310,14 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 		return FAILURE;
 	}
 
+	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
+	//the user from adding a field the mut a:char[] that is unknown at compile time
+	if(type->type_size == 0){
+		sprintf(info, "The size of type %s is not known. Union members must have a size known at compile time", type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		return FAILURE;
+	}
+
 	//Now that we have the type as well, we can finally see the semicolon to close it off
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
