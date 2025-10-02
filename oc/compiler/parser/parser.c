@@ -4104,6 +4104,9 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
 	generic_type_t* struct_type = create_struct_type(type_name, current_line);
+	
+	//Now we'll insert the struct type into the symtab
+	insert_type(type_symtab, create_type_record(struct_type));
 
 	//We are now required to see a valid construct member list
 	u_int8_t success = struct_member_list(fl, struct_type);
@@ -4114,9 +4117,6 @@ static u_int8_t struct_definer(FILE* fl){
 		//Fail out
 		return FAILURE;
 	}
-	
-	//Once we're here, the struct type is fully defined. We can now add it into the symbol table
-	insert_type(type_symtab, create_type_record(struct_type));
 
 	//Once we're done with this, the mem list itself has no use so we'll destroy it
 	
@@ -4442,6 +4442,9 @@ static u_int8_t union_definer(FILE* fl){
 	//Create the union type now that we have enough information
 	generic_type_t* union_type = create_union_type(union_name, parser_line_num);
 
+	//Insert into symtab
+	insert_type(type_symtab, create_type_record(union_type));
+
 	//Once we've created it, we can begin parsing the internals. We'll call the union member list 
 	//and let it handle everything else
 	u_int8_t status = union_member_list(fl, union_type);
@@ -4450,12 +4453,6 @@ static u_int8_t union_definer(FILE* fl){
 	if(status == FAILURE){
 		return FAILURE;
 	}
-
-	//Otherwise we're set, so we can now create the union type record
-	symtab_type_record_t* type_record = create_type_record(union_type);
-
-	//Add it into the type symtab
-	insert_type(type_symtab, type_record);
 
 	//Now let's see what we have at the end. We could either see a semicolon
 	//or an immediate alias statement
