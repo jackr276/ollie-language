@@ -1503,8 +1503,8 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Store this in here
 	type->type_size = points_to->type_size * num_members;
 
-	//Array types are always complete unless they have no size defined
-	if(num_members != 0){
+	//This type is considered complete *unless* it's size is 0
+	if(type->type_size != 0){
 		type->type_complete = TRUE;
 	}
 
