@@ -3706,8 +3706,8 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 
 	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
 	//the user from adding a field the mut a:char[] that is unknown at compile time
-	if(type_spec->type_size == 0){
-		sprintf(info, "The size of type %s is not known. Struct members must have a size known at compile time", type_spec->type_name.string);
+	if(type_spec->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", type_spec->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FAILURE;
 	}
@@ -4104,6 +4104,9 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
 	generic_type_t* struct_type = create_struct_type(type_name, current_line);
+	
+	//Now we'll insert the struct type into the symtab
+	insert_type(type_symtab, create_type_record(struct_type));
 
 	//We are now required to see a valid construct member list
 	u_int8_t success = struct_member_list(fl, struct_type);
@@ -4114,11 +4117,9 @@ static u_int8_t struct_definer(FILE* fl){
 		//Fail out
 		return FAILURE;
 	}
-	
-	//Once we're here, the struct type is fully defined. We can now add it into the symbol table
-	insert_type(type_symtab, create_type_record(struct_type));
 
-	//Once we're done with this, the mem list itself has no use so we'll destroy it
+	//Once we get here, the struct type's size is known and as such it is complete
+	struct_type->type_complete = TRUE;
 	
 	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
 	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
@@ -4310,6 +4311,14 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 		return FAILURE;
 	}
 
+	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
+	//the user from adding a field the mut a:char[] that is unknown at compile time
+	if(type->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		return FAILURE;
+	}
+
 	//Now that we have the type as well, we can finally see the semicolon to close it off
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -4442,6 +4451,9 @@ static u_int8_t union_definer(FILE* fl){
 	//Create the union type now that we have enough information
 	generic_type_t* union_type = create_union_type(union_name, parser_line_num);
 
+	//Insert into symtab
+	insert_type(type_symtab, create_type_record(union_type));
+
 	//Once we've created it, we can begin parsing the internals. We'll call the union member list 
 	//and let it handle everything else
 	u_int8_t status = union_member_list(fl, union_type);
@@ -4451,11 +4463,8 @@ static u_int8_t union_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Otherwise we're set, so we can now create the union type record
-	symtab_type_record_t* type_record = create_type_record(union_type);
-
-	//Add it into the type symtab
-	insert_type(type_symtab, type_record);
+	//Once we've gotten here, the union type is officially considered complete
+	union_type->type_complete = TRUE;
 
 	//Now let's see what we have at the end. We could either see a semicolon
 	//or an immediate alias statement
@@ -5299,6 +5308,16 @@ static generic_type_t* type_specifier(FILE* fl){
 	while(lightstack_is_empty(&lightstack) == FALSE){
 		//Grab the number of bounds out
 		u_int32_t num_bounds = lightstack_pop(&lightstack);
+
+		//If we're trying to create an array out of a type that is not yet fully
+		//defined, we also need to fail out. There exists a special exception here for array types, because we can
+		//initially define them as blank if and only if we're using an initializer
+		if(current_type_record->type->type_class != TYPE_CLASS_ARRAY && current_type_record->type->type_complete == FALSE){
+			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return NULL;
+		}
 
 		//If we get here though, we know that this one is good
 		//Lets create the array type
@@ -7606,6 +7625,12 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		return print_and_return_error("Invalid type specifier given in declaration", parser_line_num);
 	}
 
+	//If the type is incomplete, we do not allow it
+	if(type_spec->type_complete == FALSE){
+		sprintf(info, "Type %s is incomplete and may not be used as a declared variable's type", type_spec->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
 	//One thing here, we aren't allowed to see void
 	if(strcmp(type_spec->type_name.string, "void") == 0){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
@@ -7723,6 +7748,9 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 
 		//Reup the acutal size here
 		array_type->type_size = initializer_list_members * array_type->internal_types.member_type->type_size;
+
+		//Flag that this is now a complete type
+		array_type->type_complete = TRUE;
 	}
 
 	//If we make it here, then we can set the type of the initializer list to match the array
@@ -8548,6 +8576,15 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 	//If the node fails, we'll just send the error up the chain
 	if(type == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
+		num_errors++;
+		//It's already an error, just propogate it up
+		return NULL;
+	}
+
+	//If this is an incomplete type, then we also fail
+	if(type->type_complete == FALSE){
+		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		num_errors++;
 		//It's already an error, just propogate it up
 		return NULL;
