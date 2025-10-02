@@ -5311,7 +5311,7 @@ static generic_type_t* type_specifier(FILE* fl){
 
 		//If we're trying to create an array out of a type that is not yet fully
 		//defined, we also need to fail out
-		if(current_type_record->type->type_complete == FALSE){
+		if(current_type_record->type->type_class != TYPE_CLASS_ARRAY && current_type_record->type->type_complete == FALSE){
 			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
