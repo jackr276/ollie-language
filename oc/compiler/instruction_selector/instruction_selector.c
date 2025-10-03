@@ -3550,8 +3550,15 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				//We also can't combine these
 				&& !(second->op1->indirection_level > 0 && first->op1->indirection_level > 0)){
 
-				//Copy this over so we don't lose it
-				first->op1->indirection_level += second->op1->indirection_level;
+				//If this is more than 0, we'll need to emit a copy of the first variable
+				//so that modifying it does not mess with any other instances of said variable
+				if(second->op1->indirection_level > 0){
+					//Emit an exact copy
+					first->op1 = emit_var_copy(first->op1);
+
+					//Copy over the indirection levels
+					first->op1->indirection_level = second->op1->indirection_level;
+				}
 
 				//Manage our use state here
 				replace_variable(second->op1, first->op1);
