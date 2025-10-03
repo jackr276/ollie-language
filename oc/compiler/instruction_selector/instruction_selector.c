@@ -3942,6 +3942,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * t2 <- t4 * 0 can just become t2 <- 0 
 	 * t2 <- t4 / 0 will stay the same, but we will produce an error
 	 * 
+	 * Logical operators(somewhat different)
+	 * t2 <- t4 || 0 === test t4,t4 and setne t2(if t4 isn't 0)
+	 * t2 <- t4 || (non-zero) === set t2 to be 1
+	 * 
+	 * t2 <- t4 && 0 === set t2 to be 0
+	 * t2 <- t4 || (non-zero) === test t4,t4 and setne t2 if t4 isn't 0
+
 	 *
 	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
 	 */
@@ -4008,6 +4015,14 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 						changed = TRUE;
 
 						break;
+
+					case DOUBLE_AND:
+						break;
+
+					case DOUBLE_OR:
+						break;
+
+					//TODO add for logical and, or and not
 
 					//Just do nothing here
 					default:
@@ -4122,6 +4137,20 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					update_constant_with_log2_value(current_instruction->op1_const);
 					//We changed something
 					changed = TRUE;
+				}
+
+			//We need to add one final catch-all bucket here for logical and and logical or statements
+			} else {
+				switch(current_instruction->op){
+					case DOUBLE_AND:
+						break;
+
+					case DOUBLE_OR:
+						break;
+
+					//The most common case - just do nothing
+					default:
+						break;
 				}
 			}
 		}
