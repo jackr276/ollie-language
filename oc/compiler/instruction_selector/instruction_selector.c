@@ -4001,12 +4001,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 * t27 <- 1
 	 */
-	/*
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
-		&& window->instruction1->assignee->is_temporary == TRUE
 		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
 
 		//We will handle the constants accordingly
@@ -4037,7 +4035,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//This counts as a change
 		changed = TRUE;
 	}
-	*/
 
 
 	/**
