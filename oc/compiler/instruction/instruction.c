@@ -37,6 +37,22 @@ int32_t increment_and_get_temp_id(){
 
 
 /**
+ * A helper function that will create a global variable for us
+ */
+global_variable_t* create_global_variable(three_addr_var_t* variable, three_addr_const_t* value){
+	//Allocate it
+	global_variable_t* var = calloc(1, sizeof(global_variable_t));
+
+	//Copy these over
+	var->variable = variable;
+	var->value = value;
+
+	//Give the var back
+	return var;
+}
+
+
+/**
  * Let's determine if a value is a positive power of 2.
  * Here's how this will work. In binary, powers of 2 look like:
  * 0010

@@ -32,6 +32,21 @@ typedef struct live_range_t live_range_t;
 //The definition of a global variable container
 typedef struct global_variable_t global_variable_t;
 
+
+/**
+ * A global variable stores the variable itself
+ * and it stores the value, if it has one
+ */
+struct global_variable_t{
+	//The variable itself - stores the name
+	three_addr_var_t* variable;
+	//The value - if given - of the variable
+	three_addr_const_t* value;
+	//What is this variable's reference count?
+	u_int16_t reference_count;
+};
+
+
 /**
  * What kind of jump do we want to select
  */
@@ -334,6 +349,11 @@ struct instruction_t{
  * A helper function for our atomically increasing temp id
  */
 int32_t increment_and_get_temp_id();
+
+/**
+ * A helper function that will create a global variable for us
+ */
+global_variable_t* create_global_variable(three_addr_var_t* variable, three_addr_const_t* value);
 
 /**
  * Insert an instruction in a block before the given instruction
