@@ -293,6 +293,8 @@ typedef enum {
 typedef enum{
 	//Binary op with all vars
 	THREE_ADDR_CODE_BIN_OP_STMT,
+	//A setne statement
+	THREE_ADDR_CODE_SETNE_STMT,
 	//An increment statement
 	THREE_ADDR_CODE_INC_STMT,
 	//A decrement statement
@@ -565,6 +567,11 @@ u_int8_t is_jump_type_signed(jump_type_t type);
  * Helper function to determine if an operator is a relational operator
  */
 u_int8_t is_operator_relational_operator(ollie_token_t op);
+
+/**
+ * Helper function to determine if an operator is can be constant folded
+ */
+u_int8_t is_operator_valid_for_constant_folding(ollie_token_t op);
 
 /**
  * Helper function to determine if an instruction is a binary operation
@@ -885,6 +892,11 @@ instruction_t* emit_idle_instruction();
  * Emit a setX instruction
  */
 instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, u_int8_t is_signed);
+
+/**
+ * Emit a setne three address code statement
+ */
+instruction_t* emit_setne_code(three_addr_var_t* assignee);
 
 /**
  * Emit a stack allocation statement

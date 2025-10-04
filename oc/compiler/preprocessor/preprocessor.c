@@ -243,7 +243,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 dependency_package_t preprocess(char* fname){
 	//The return token. Remember that OC uses an "errors-as-values" approach, 
 	//so this return token will be what we use to communicate errors as well
-	dependency_package_t dep_package;
+	dependency_package_t dep_package = {NULL, PREPROC_SUCCESS};
 
 	//Both 0 to start with
 	num_errors = 0;

@@ -71,10 +71,6 @@ static void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
  */
 static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instruction, three_addr_const_t* constant){
 	switch(instruction->op){
-		case DOUBLE_AND:
-		case DOUBLE_OR:
-			return FALSE;
-
 		//Division will work for one and a power of 2
 		case F_SLASH:
 			//If it's 1, then yes we can do this
@@ -207,6 +203,56 @@ static void multiply_constants(three_addr_const_t* constant1, three_addr_const_t
 
 
 /**
+ * Logical or two constants. The result is always stored in constant1
+ */
+static void logical_or_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Determine if they are 0 or not
+	u_int8_t const_1_0 = is_constant_value_zero(constant1);
+	u_int8_t const_2_0 = is_constant_value_zero(constant2);
+
+	//Go through the 4 cases in the truth table
+	if(const_1_0 == TRUE){
+		/* 0 || (non-zero) = 1 */
+		if(const_2_0 == FALSE){
+			constant1->constant_value.long_constant = 1;
+		/* 0 || 0 = 0 */
+		} else {
+			constant1->constant_value.long_constant = 0;
+		}
+
+	//This is non-zero, the other one is irrelevant
+	} else {
+		constant1->constant_value.long_constant = 1;
+	}
+}
+
+
+/**
+ * Logical and two constants. The result is always stored in constant1
+ */
+static void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Determine if they are 0 or not
+	u_int8_t const_1_0 = is_constant_value_zero(constant1);
+	u_int8_t const_2_0 = is_constant_value_zero(constant2);
+
+	//If this one is 0, the other one's result is irrelevant
+	if(const_1_0 == TRUE){
+		constant1->constant_value.long_constant = 0;
+
+	//Nonzero
+	} else {
+		/* (non-zero) && (non-zero) = 1 */
+		if(const_2_0 == FALSE){
+			constant1->constant_value.long_constant = 1;
+		/* (non-zero) && 0 = 0 */
+		} else {
+			constant1->constant_value.long_constant = 0;
+		}
+	}
+}
+
+
+/**
  * Emit a converting move instruction directly, with no need to do instruction selection afterwards
  */
 static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* destination, three_addr_var_t* source){
@@ -236,9 +282,6 @@ static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* 
 static three_addr_var_t* handle_expanding_move_operation(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* desired_type){
 	//A generic holder for our assignee
 	three_addr_var_t* assignee;
-
-	//Extract the source type
-	generic_type_t* source_type = source->type;
 
 	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
 	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
@@ -961,9 +1004,6 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 static void handle_three_instruction_address_calc_to_memory_move(instruction_t* offset_calc, instruction_t* lea_statement, instruction_t* memory_access){
 	//Select the variable size
 	variable_size_t size;
-
-	//Grab out what block we're in
-	basic_block_t* block = offset_calc->block_contained_in;
 
 	//Select the size based on what we're moving in
 	if(memory_access->op1 != NULL){
@@ -2383,7 +2423,7 @@ static void handle_lea_statement(instruction_t* instruction){
  * NOTE: We know that instruction1 is the one that is a logical not instruction if we
  * get here
  */
-static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* window){
+static void handle_logical_not_instruction(instruction_window_t* window){
 	//Let's grab the value out for convenience
 	instruction_t* logical_not = window->instruction1;
 
@@ -2414,6 +2454,16 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 
 	//This is the new window
 	reconstruct_window(window, sete_inst);
+}
+
+
+/**
+ * A setne is a very simple one-to-one mapping
+ */
+static void handle_setne_instruction(instruction_t* instruction){
+	//Just set the type and register
+	instruction->instruction_type = SETNE;
+	instruction->destination_register = instruction->assignee;
 }
 
 
@@ -2602,7 +2652,7 @@ static void handle_not_instruction(instruction_t* instruction){
  */
 static void handle_test_instruction(instruction_t* instruction){
 	//Find out what size we have
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(instruction->op1->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -3146,7 +3196,10 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			handle_simple_movement_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
-			handle_logical_not_instruction(cfg, window);
+			handle_logical_not_instruction(window);
+			break;
+		case THREE_ADDR_CODE_SETNE_STMT:
+			handle_setne_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_ASSN_CONST_STMT:
 			handle_constant_to_register_move_instruction(instruction);
@@ -3614,7 +3667,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			delete_statement(window->instruction1);
 
 			//Reconstruct the window with instruction2 as the start
-			reconstruct_window(window, window->instruction2);
+			reconstruct_window(window, window->instruction1);
+
+			//printf("HERE with:\n");
+			//print_instruction_window_three_address_code(window);
 
 			//This does count as a change
 			changed = TRUE;
@@ -3653,6 +3709,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Reconstruct the window with instruction2 as the seed
 			reconstruct_window(window, window->instruction2);
 
+			//printf("HERE with:\n");
+			//print_instruction_window_three_address_code(window);
 			//This does count as a change
 			changed = TRUE;
 		}
@@ -3673,7 +3731,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
 	if(is_instruction_binary_operation(window->instruction2) == TRUE
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& is_operator_relational_operator(window->instruction2->op) == TRUE){
+		&& is_operator_valid_for_constant_folding(window->instruction2->op) == TRUE){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE 
@@ -3877,7 +3935,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//For convenience/memory ease
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
-		instruction_t* third = window->instruction3;
 
 		//If we have a temporary start variable, a non temp end variable, and the variables
 		//match in the corresponding spots, we have our opportunity
@@ -3928,6 +3985,168 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * ==================== On-the-fly logical and/or ========================
+	 * t27 <- 5
+	 * t27 <- t27 && 68
+	 *
+	 * t27 <- 1
+	 *
+	 * Or
+	 * t27 <- 5
+	 * t27 <- t27 || 68
+	 *
+	 * t27 <- 1
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
+		&& window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
+		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
+
+		//We will handle the constants accordingly
+		if(window->instruction2->op == DOUBLE_OR) {
+			logical_or_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+		} else {
+			logical_and_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+		}
+
+		//Instruction 2 is now simply an assign const statement
+		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+		//Op1 is now used one less time
+		window->instruction2->op1->use_count--;
+
+		//Null out where the old value was
+		window->instruction2->op1 = NULL;
+
+		//Instruction 1 is now completely useless *if* that was the only time that
+		//his assignee was used. Otherwise, we need to keep it in
+		if(window->instruction1->assignee->use_count == 0){
+			delete_statement(window->instruction1);
+		}
+
+		//Reconstruct the window with instruction 2 as the start
+		reconstruct_window(window, window->instruction2);
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
+
+	/**
+	 * ======================= Logical And operation simplifying ==========================
+	 * t2 <- t4 && 0 === set t2 to be 0
+	 * t2 <- t4 && (non-zero) === test t4,t4 and setne t2 if t4 isn't 0
+	 *
+	 * It is safe to assume that a logical and binary operation with constant is always
+	 * simplifiable
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == DOUBLE_AND){
+		//For convenience extract this
+		instruction_t* current_instruction = window->instruction1;
+
+		//First option - the value is 0
+		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
+			//It's now just an assign statement
+			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+			//Wipe out op1
+			if(current_instruction->op1 != NULL){
+				current_instruction->op1->use_count--;
+				current_instruction->op1 = NULL;
+			}
+
+		//Otherwise, the value is not 0
+		} else {
+			//First we add a test instruction
+			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+						
+			//The result of this will be used for our set instruction
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
+			//Subtly hook this in, even though it's not needed
+			setne_instruction->op1 = test_instruction->assignee;
+
+			//Assign the two over
+			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
+
+			//Insert these both in beforehand
+			insert_instruction_before_given(test_instruction, current_instruction);
+			insert_instruction_before_given(setne_instruction, current_instruction);
+			insert_instruction_before_given(assignment, current_instruction);
+
+			//And then remove this now useless current instruction
+			delete_statement(current_instruction);
+
+			//Reconstruct the window based on the set instruction
+			reconstruct_window(window, assignment);
+		}
+
+		//We changed something
+		changed = TRUE;
+	}
+
+
+	/**
+	 * ======================= Logical OR operation simplifying ==========================
+	 * t2 <- t4 || 0 === test t4, t4 and setne t2 if t4 isn't 0
+	 * t2 <- t4 || (non-zero) === t2 <- 1
+	 *
+	 * It is safe to assume that a logical and binary operation with constant is always
+	 * simplifiable
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == DOUBLE_OR){
+		//For convenience extract this
+		instruction_t* current_instruction = window->instruction1;
+
+		//First option - the value is 0. If it is, then anything else is irrelevant
+		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
+			//First we add a test instruction
+			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+						
+			//The result of this will be used for our set instruction
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
+			//Subtly hook this in, even though it's not needed
+			setne_instruction->op1 = test_instruction->assignee;
+
+			//Assign the two over
+			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
+
+			//Insert these both in beforehand
+			insert_instruction_before_given(test_instruction, current_instruction);
+			insert_instruction_before_given(setne_instruction, current_instruction);
+			insert_instruction_before_given(assignment, current_instruction);
+
+			//And then remove this now useless current instruction
+			delete_statement(current_instruction);
+
+			//Reconstruct the window based on the set instruction
+			reconstruct_window(window, assignment);
+
+		//Otherwise, the value is not 0
+		} else {
+			//It's now just an assign statement
+			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+			//Wipe out op1
+			if(current_instruction->op1 != NULL){
+				current_instruction->op1->use_count--;
+				current_instruction->op1 = NULL;
+			}
+
+			//Set the constant's value to 1
+			current_instruction->op1_const->constant_value.long_constant = 1;
+		}
+
+		//We changed something
+		changed = TRUE;
+	}
+
+
+
 	/**
 	 * ================== Arithmetic Operation Simplifying ==========================
 	 * After we do all of this folding, we can stand to ask the question of if we 
@@ -3941,6 +4160,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * t2 <- t4 - 0 can just become t2 <- t4
 	 * t2 <- t4 * 0 can just become t2 <- 0 
 	 * t2 <- t4 / 0 will stay the same, but we will produce an error
+	 * 
+	 * Logical operators(somewhat different)
+	 * t2 <- t4 || 0 === test t4,t4 and setne t2(if t4 isn't 0)
+	 * t2 <- t4 || (non-zero) === set t2 to be 1
 	 * 
 	 *
 	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
@@ -3968,6 +4191,21 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		 * if we're able to simplify some instructions
 		 */
 		if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+			//If it isn't in the list here, we won't be considering it and as such shouldn't waste time
+			//processing
+			switch(current_instruction->op){
+				case PLUS:
+				case R_SHIFT:
+				case L_SHIFT:
+				case MINUS:
+				case STAR:
+				case F_SLASH:
+				case MOD:
+					break;
+				default:
+					continue;
+			}
+
 			//Grab this out for convenience
 			three_addr_const_t* constant = current_instruction->op1_const;
 
