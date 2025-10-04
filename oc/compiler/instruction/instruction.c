@@ -1879,8 +1879,8 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 * Global var address calculation
 		 */
 		case ADDRESS_CALCULATION_MODE_GLOBAL_VAR:
-			//The global variable name itself
-			print_variable(fl, instruction->address_calc_reg2, mode);
+			//Print the actual string name of the variable - no SSA and no registers
+			fprintf(fl, "%s", instruction->op2->linked_var->var_name.string);
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
