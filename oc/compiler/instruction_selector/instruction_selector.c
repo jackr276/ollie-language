@@ -228,6 +228,31 @@ static void logical_or_constants(three_addr_const_t* constant1, three_addr_const
 
 
 /**
+ * Logical and two constants. The result is always stored in constant1
+ */
+static void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Determine if they are 0 or not
+	u_int8_t const_1_0 = is_constant_value_zero(constant1);
+	u_int8_t const_2_0 = is_constant_value_zero(constant2);
+
+	//If this one is 0, the other one's result is irrelevant
+	if(const_1_0 == TRUE){
+		constant1->constant_value.long_constant = 0;
+
+	//Nonzero
+	} else {
+		/* (non-zero) && (non-zero) = 1 */
+		if(const_2_0 == FALSE){
+			constant1->constant_value.long_constant = 1;
+		/* (non-zero) && 0 = 0 */
+		} else {
+			constant1->constant_value.long_constant = 0;
+		}
+	}
+}
+
+
+/**
  * Emit a converting move instruction directly, with no need to do instruction selection afterwards
  */
 static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* destination, three_addr_var_t* source){
@@ -3547,7 +3572,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(window->instruction2->op == DOUBLE_OR) {
 			logical_or_constants(window->instruction2->op1_const, window->instruction1->op1_const);
 		} else {
-
+			logical_and_constants(window->instruction2->op1_const, window->instruction1->op1_const);
 		}
 
 		//Instruction 2 is now simply an assign const statement
