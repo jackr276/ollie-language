@@ -71,10 +71,6 @@ static void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
  */
 static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instruction, three_addr_const_t* constant){
 	switch(instruction->op){
-		case DOUBLE_AND:
-		case DOUBLE_OR:
-			return TRUE;
-
 		//Division will work for one and a power of 2
 		case F_SLASH:
 			//If it's 1, then yes we can do this
@@ -3997,6 +3993,67 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//We changed something
 		changed = TRUE;
 	}
+
+
+	/**
+	 * ======================= Logical OR operation simplifying ==========================
+	 * t2 <- t4 || 0 === test t4, t4 and setne t2 if t4 isn't 0
+	 * t2 <- t4 || (non-zero) === t2 <- 1
+	 *
+	 * It is safe to assume that a logical and binary operation with constant is always
+	 * simplifiable
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == DOUBLE_OR){
+		//For convenience extract this
+		instruction_t* current_instruction = window->instruction1;
+
+		//First option - the value is 0. If it is, then anything else is irrelevant
+		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
+			//First we add a test instruction
+			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+						
+			//The result of this will be used for our set instruction
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
+			//Subtly hook this in, even though it's not needed
+			setne_instruction->op1 = test_instruction->assignee;
+
+			//Assign the two over
+			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
+
+			//Insert these both in beforehand
+			insert_instruction_before_given(test_instruction, current_instruction);
+			insert_instruction_before_given(setne_instruction, current_instruction);
+			insert_instruction_before_given(assignment, current_instruction);
+
+			//And then remove this now useless current instruction
+			delete_statement(current_instruction);
+
+			//Reconstruct the window based on the set instruction
+			reconstruct_window(window, assignment);
+
+		//Otherwise, the value is not 0
+		} else {
+			//It's now just an assign statement
+			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+			//Wipe out op1
+			if(current_instruction->op1 != NULL){
+				current_instruction->op1->use_count--;
+
+				printf("Op1 use count is %d\n", current_instruction->op1->use_count);
+
+				current_instruction->op1 = NULL;
+			}
+
+			//Set the constant's value to 1
+			current_instruction->op1_const->constant_value.long_constant = 1;
+		}
+
+		//We changed something
+		changed = TRUE;
+	}
+
 
 
 	/**
