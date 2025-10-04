@@ -39,7 +39,7 @@ int32_t increment_and_get_temp_id(){
 /**
  * A helper function that will create a global variable for us
  */
-global_variable_t* create_global_variable(three_addr_var_t* variable, three_addr_const_t* value){
+global_variable_t* create_global_variable(symtab_variable_record_t* variable, three_addr_const_t* value){
 	//Allocate it
 	global_variable_t* var = calloc(1, sizeof(global_variable_t));
 
@@ -1274,19 +1274,19 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		global_variable_t* variable = dynamic_array_get_at(global_variables, i);
 
 		//Extract the name
-		char* name = variable->variable->linked_var->var_name.string;
+		char* name = variable->variable->var_name.string;
 
 		//Mark that this is global(globl)
 		fprintf(fl, "\t.globl %s\n", name);
 
 		//Now print out the alignment
-		fprintf(fl, "\t.align %d\n", get_base_alignment_type(variable->variable->type)->type_size);
+		fprintf(fl, "\t.align %d\n", get_base_alignment_type(variable->variable->type_defined_as)->type_size);
 		
 		//Now print out our type, it's always @Object
 		fprintf(fl, "\t.type %s, @object\n", name);
 
 		//Now emit the relevant type
-		fprintf(fl, "\t.size %s, %d\n", name, variable->variable->type->type_size);
+		fprintf(fl, "\t.size %s, %d\n", name, variable->variable->type_defined_as->type_size);
 
 		//Now fianlly we'll print the value out
 		fprintf(fl, "%s:\n", name);
@@ -1295,7 +1295,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		 * If the value is NULL, we will initialize to be all zero
 		 */
 		if(variable->value == NULL){
-			fprintf(fl, "\t.zero %d\n", variable->variable->type->type_size);
+			fprintf(fl, "\t.zero %d\n", variable->variable->type_defined_as->type_size);
 		}
 	}
 }

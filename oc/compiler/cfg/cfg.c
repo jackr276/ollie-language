@@ -2124,6 +2124,13 @@ static void rename_all_variables(cfg_t* cfg){
 	//Before we do this - let's reset the entire CFG
 	reset_visited_status(cfg, FALSE);
 
+	//All global variables have themselves been assigned. As such, we'll
+	//need to mark that by giving them a left hand rename
+	for(u_int16_t i = 0; i < cfg->global_variables->current_index; i++){
+		global_variable_t* variable = dynamic_array_get_at(cfg->global_variables, i);
+		lhs_new_name_direct(variable->variable);
+	}
+
 	//We will call the rename block function on the first block
 	//for each of our functions. The rename block function is 
 	//recursive, so that should in theory take care of everything for us
@@ -2666,7 +2673,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 * If we're on the right side of the equation and this is a stack variable, when we want to use 
 	 * the address we have to load
 	 */
-	if(ident_node->side == SIDE_TYPE_RIGHT && ident_node->variable->stack_variable == TRUE){
+	if(ident_node->side == SIDE_TYPE_RIGHT && 
+		(ident_node->variable->stack_variable == TRUE || ident_node->variable->membership == GLOBAL_VARIABLE)){
 		//The final assignee
 		three_addr_var_t* assignee;
 
@@ -4056,7 +4064,8 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			 * variable that is on the stack, then a regular assignment just won't do. We'll need to
 			 * emit a store operation
 			 */
-			if(left_hand_var->linked_var == NULL || left_hand_var->linked_var->stack_variable == FALSE){
+			if(left_hand_var->linked_var == NULL 
+				|| (left_hand_var->linked_var->stack_variable == FALSE && left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
 				//Finally we'll struct the whole thing
 				instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
@@ -7737,11 +7746,8 @@ static void visit_global_let_statement(generic_ast_node_t* node){
  * Visit a global variable declaration statement
  */
 static void visit_global_declare_statement(generic_ast_node_t* node){
-	//Emit the global variable here
-	three_addr_var_t* variable = emit_var(node->variable);
-
 	//We'll store it inside of the global variable struct
-	global_variable_t* global_variable = create_global_variable(variable, NULL);
+	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
 
 	//And add it into the CFG
 	dynamic_array_add(cfg_ref->global_variables, global_variable);

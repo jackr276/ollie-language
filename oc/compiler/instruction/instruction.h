@@ -39,7 +39,7 @@ typedef struct global_variable_t global_variable_t;
  */
 struct global_variable_t{
 	//The variable itself - stores the name
-	three_addr_var_t* variable;
+	symtab_variable_record_t* variable;
 	//The value - if given - of the variable
 	three_addr_const_t* value;
 	//What is this variable's reference count?
@@ -353,7 +353,7 @@ int32_t increment_and_get_temp_id();
 /**
  * A helper function that will create a global variable for us
  */
-global_variable_t* create_global_variable(three_addr_var_t* variable, three_addr_const_t* value);
+global_variable_t* create_global_variable(symtab_variable_record_t* variable, three_addr_const_t* value);
 
 /**
  * Insert an instruction in a block before the given instruction
