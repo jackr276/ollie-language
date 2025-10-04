@@ -112,7 +112,6 @@ void initialize_variable_scope(variable_symtab_t* symtab){
 
 	//Now we'll link back to the previous one level
 	current->previous_level = symtab->current;
-
 	
 	//Set this so it's up-to-date
 	symtab->current = current;

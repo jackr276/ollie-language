@@ -7834,21 +7834,21 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 				//All good to move along
 				break;
 
-			//========= WARNING - NOT YET SUPPORTED ========================
-			//We can also see a let statement
-			//TODO - should be a special global variable process for this
+			/**
+			 * We know that by nature of these variables being here that they
+			 * are global variables
+			 */
 			case AST_NODE_TYPE_LET_STMT:
 				//We'll visit the block here
-				visit_let_statement(ast_cursor, FALSE);
+				visit_global_let_statement(ast_cursor);
 				
 				//And we'll move along here
 				break;
 		
 			//Finally, we could see a declaration
-			//TODO - should be a special global variable process for this
 			case AST_NODE_TYPE_DECL_STMT:
 				//We'll visit the block here
-				visit_declaration_statement(ast_cursor);
+				visit_global_declare_statement(ast_cursor);
 				
 				//And we're done here
 				break;
