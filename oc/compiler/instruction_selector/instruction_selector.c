@@ -3548,56 +3548,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		changed = TRUE;
 	}
 
-	/**
-	 * ==================== On-the-fly logical and/or ========================
-	 * t27 <- 5
-	 * t27 <- t27 && 68
-	 *
-	 * t27 <- 1
-	 *
-	 * Or
-	 * t27 <- 5
-	 * t27 <- t27 || 68
-	 *
-	 * t27 <- 1
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
-		&& window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
-		&& window->instruction1->assignee->is_temporary == TRUE
-		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
-
-		//We will handle the constants accordingly
-		if(window->instruction2->op == DOUBLE_OR) {
-			logical_or_constants(window->instruction2->op1_const, window->instruction1->op1_const);
-		} else {
-			logical_and_constants(window->instruction2->op1_const, window->instruction1->op1_const);
-		}
-
-		//Instruction 2 is now simply an assign const statement
-		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-		//Op1 is now used one less time
-		window->instruction2->op1->use_count--;
-
-		//Null out where the old value was
-		window->instruction2->op1 = NULL;
-
-		//Instruction 1 is now completely useless *if* that was the only time that
-		//his assignee was used. Otherwise, we need to keep it in
-		if(window->instruction1->assignee->use_count == 0){
-			delete_statement(window->instruction1);
-		}
-
-		//Reconstruct the window with instruction 2 as the start
-		reconstruct_window(window, window->instruction2);
-
-		//This counts as a change
-		changed = TRUE;
-	}
-
-
 
 	/**
 	 * --------------------- Redundnant copying elimination ------------------------------------
@@ -4035,6 +3985,56 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//This counts as a change
 			changed = TRUE;
 		}
+	}
+
+
+	/**
+	 * ==================== On-the-fly logical and/or ========================
+	 * t27 <- 5
+	 * t27 <- t27 && 68
+	 *
+	 * t27 <- 1
+	 *
+	 * Or
+	 * t27 <- 5
+	 * t27 <- t27 || 68
+	 *
+	 * t27 <- 1
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
+		&& window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
+
+		//We will handle the constants accordingly
+		if(window->instruction2->op == DOUBLE_OR) {
+			logical_or_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+		} else {
+			logical_and_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+		}
+
+		//Instruction 2 is now simply an assign const statement
+		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+		//Op1 is now used one less time
+		window->instruction2->op1->use_count--;
+
+		//Null out where the old value was
+		window->instruction2->op1 = NULL;
+
+		//Instruction 1 is now completely useless *if* that was the only time that
+		//his assignee was used. Otherwise, we need to keep it in
+		if(window->instruction1->assignee->use_count == 0){
+			delete_statement(window->instruction1);
+		}
+
+		//Reconstruct the window with instruction 2 as the start
+		reconstruct_window(window, window->instruction2);
+
+		//This counts as a change
+		changed = TRUE;
 	}
 
 
