@@ -569,6 +569,11 @@ u_int8_t is_jump_type_signed(jump_type_t type);
 u_int8_t is_operator_relational_operator(ollie_token_t op);
 
 /**
+ * Helper function to determine if an operator is can be constant folded
+ */
+u_int8_t is_operator_valid_for_constant_folding(ollie_token_t op);
+
+/**
  * Helper function to determine if an instruction is a binary operation
  */
 u_int8_t is_instruction_binary_operation(instruction_t* instruction);

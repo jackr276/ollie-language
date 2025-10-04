@@ -3499,6 +3499,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 
+	//TODO HANDLE LOGICAL AND AND LOGICAL OR
+
+
+
+
 	/**
 	 * --------------------- Redundnant copying elimination ------------------------------------
 	 *  Let's now fold redundant copies. Here is an example of a redundant copy
@@ -3682,7 +3687,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
 	if(is_instruction_binary_operation(window->instruction2) == TRUE
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& is_operator_relational_operator(window->instruction2->op) == TRUE){
+		&& is_operator_valid_for_constant_folding(window->instruction2->op) == TRUE){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE 
