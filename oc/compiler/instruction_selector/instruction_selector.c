@@ -4706,7 +4706,7 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_ordered_blocks(basic_block_t* head_block, instruction_printing_mode_t mode){
+static void print_ordered_blocks(cfg_t* cfg, basic_block_t* head_block, instruction_printing_mode_t mode){
 	//Run through the direct successors so long as the block is not null
 	basic_block_t* current = head_block;
 
@@ -4717,6 +4717,9 @@ static void print_ordered_blocks(basic_block_t* head_block, instruction_printing
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
+
+	//Print all global variables after the blocks
+	print_all_global_variables(stdout, cfg->global_variables);
 }
 
 
@@ -4743,7 +4746,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//We'll first print before we simplify
 	if(print_irs == TRUE){
 		printf("============================== BEFORE SIMPLIFY ========================================\n");
-		print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
+		print_ordered_blocks(cfg, head_block, PRINT_THREE_ADDRESS_CODE);
 		printf("============================== AFTER SIMPLIFY ========================================\n");
 	}
 
@@ -4754,7 +4757,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 
 	//If we need to print IRS, we can do so here
 	if(print_irs == TRUE){
-		print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
+		print_ordered_blocks(cfg, head_block, PRINT_THREE_ADDRESS_CODE);
 		printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
 	}
 
@@ -4763,6 +4766,6 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 
 	//Final IR printing if requested by user
 	if(print_irs == TRUE){
-		print_ordered_blocks(head_block,PRINT_INSTRUCTION);
+		print_ordered_blocks(cfg, head_block, PRINT_INSTRUCTION);
 	}
 }

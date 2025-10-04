@@ -781,6 +781,11 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode_t mode);
 
 /**
+ * Print all given global variables who's use count is not 0
+ */
+void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables);
+
+/**
  * Print a live range out
  */
 void print_live_range(FILE* fl, live_range_t* live_range);

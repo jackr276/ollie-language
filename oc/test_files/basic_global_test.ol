@@ -6,11 +6,7 @@
 //Global variable declaration
 declare mut x:i32;
 
-//Global variable declaration & initialization
-let mut y:i64 = 32;
-
-
-pub fn add_vars(x:i32) -> i64 {
+pub fn add_vars(y:i32) -> i64 {
 	ret x + y;
 }
 

@@ -225,11 +225,6 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, three_addr
 void print_all_cfg_blocks(cfg_t* cfg);
 
 /**
- * Print all given global variables who's use count is not 0
- */
-void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables);
-
-/**
  * Reset the visited status of the CFG
  */
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor);

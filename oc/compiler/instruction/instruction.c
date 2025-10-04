@@ -1257,6 +1257,46 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 
 
 /**
+ * Print all given global variables who's use count is not 0
+ */
+void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
+	//Append to the .bss section
+	fprintf(fl, "\t.bss\n");
+
+	//Run through all of them
+	for(u_int16_t i = 0; i < global_variables->current_index; i++){
+		//Grab the variable out
+		global_variable_t* variable = dynamic_array_get_at(global_variables, i);
+
+		//Extract the name
+		char* name = variable->variable->linked_var->var_name.string;
+
+		//Mark that this is global(globl)
+		fprintf(fl, "\t.globl %s\n", name);
+
+		//Now print out the alignment
+		fprintf(fl, "\t.align %d\n", get_base_alignment_type(variable->variable->type)->type_size);
+		
+		//Now print out our type, it's always @Object
+		fprintf(fl, "\t.type %s, @object\n", name);
+
+		//Now emit the relevant type
+		fprintf(fl, "\t.size %s, %d\n", name, variable->variable->type->type_size);
+
+		//Now fianlly we'll print the value out
+		fprintf(fl, "%s:\n", name);
+		
+		/**
+		 * If the value is NULL, we will initialize to be all zero
+		 */
+		if(variable->value == NULL){
+			fprintf(fl, "\t.zero %d\n", variable->variable->type->type_size);
+		}
+	}
+}
+
+
+/**
  * Print a live range out
  */
 void print_live_range(FILE* fl, live_range_t* live_range){
