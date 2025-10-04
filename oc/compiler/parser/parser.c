@@ -8545,7 +8545,7 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
