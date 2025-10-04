@@ -244,7 +244,7 @@ static u_int16_t hash_type(generic_type_t* type){
 /**
  * Dynamically allocate a variable record
 */
-symtab_variable_record_t* create_variable_record(dynamic_string_t name, STORAGE_CLASS_T storage_class){
+symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 	//Allocate it
 	symtab_variable_record_t* record = (symtab_variable_record_t*)calloc(1, sizeof(symtab_variable_record_t));
 
@@ -254,8 +254,6 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name, STORAGE_
 	record->hash = hash(name.string);
 	//The current generation is always 1 at first
 	record->current_generation = 1;
-	//Store the storage class
-	record->storage_class = storage_class;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -284,7 +282,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
-	symtab_variable_record_t* record = create_variable_record(string, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* record = create_variable_record(string);
 	//Store the type here
 	record->type_defined_as = type;
 
@@ -606,7 +604,7 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 	//Set to be stack pointer
 	dynamic_string_set(&variable_name, "stack_pointer");
 
-	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name);
 	//Set this type as a label(address)
 	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;
 
@@ -626,7 +624,7 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 	//Set to be instruction pointer(rip)
 	dynamic_string_set(&variable_name, "rip");
 
-	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name);
 	//Set this type as a label(address)
 	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;
 

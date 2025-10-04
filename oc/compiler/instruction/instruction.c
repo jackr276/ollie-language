@@ -1260,6 +1260,11 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
  * Print all given global variables who's use count is not 0
  */
 void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
+	//Just bail out if this is the case
+	if(global_variables == NULL || global_variables->current_index == 0){
+		return;
+	}
+
 	//Append to the .bss section
 	fprintf(fl, "\t.bss\n");
 
