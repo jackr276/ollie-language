@@ -283,9 +283,6 @@ static three_addr_var_t* handle_expanding_move_operation(instruction_t* after_in
 	//A generic holder for our assignee
 	three_addr_var_t* assignee;
 
-	//Extract the source type
-	generic_type_t* source_type = source->type;
-
 	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
 	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
 	//zero pad when 32 bit moves happen
@@ -1007,9 +1004,6 @@ static void handle_two_instruction_address_calc_to_memory_move(instruction_t* ad
 static void handle_three_instruction_address_calc_to_memory_move(instruction_t* offset_calc, instruction_t* lea_statement, instruction_t* memory_access){
 	//Select the variable size
 	variable_size_t size;
-
-	//Grab out what block we're in
-	basic_block_t* block = offset_calc->block_contained_in;
 
 	//Select the size based on what we're moving in
 	if(memory_access->op1 != NULL){
@@ -2429,7 +2423,7 @@ static void handle_lea_statement(instruction_t* instruction){
  * NOTE: We know that instruction1 is the one that is a logical not instruction if we
  * get here
  */
-static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* window){
+static void handle_logical_not_instruction(instruction_window_t* window){
 	//Let's grab the value out for convenience
 	instruction_t* logical_not = window->instruction1;
 
@@ -3202,7 +3196,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			handle_simple_movement_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
-			handle_logical_not_instruction(cfg, window);
+			handle_logical_not_instruction(window);
 			break;
 		case THREE_ADDR_CODE_SETNE_STMT:
 			handle_setne_instruction(instruction);
@@ -3673,7 +3667,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			delete_statement(window->instruction1);
 
 			//Reconstruct the window with instruction2 as the start
-			reconstruct_window(window, window->instruction2);
+			reconstruct_window(window, window->instruction1);
+
+			//printf("HERE with:\n");
+			//print_instruction_window_three_address_code(window);
 
 			//This does count as a change
 			changed = TRUE;
@@ -3712,6 +3709,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Reconstruct the window with instruction2 as the seed
 			reconstruct_window(window, window->instruction2);
 
+			//printf("HERE with:\n");
+			//print_instruction_window_three_address_code(window);
 			//This does count as a change
 			changed = TRUE;
 		}
@@ -3936,7 +3935,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//For convenience/memory ease
 		instruction_t* first = window->instruction1;
 		instruction_t* second = window->instruction2;
-		instruction_t* third = window->instruction3;
 
 		//If we have a temporary start variable, a non temp end variable, and the variables
 		//match in the corresponding spots, we have our opportunity
