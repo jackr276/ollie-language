@@ -7723,6 +7723,26 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 
 
 /**
+ * Visit a global variable let statement(declaration + initialization)
+ */
+static void visit_global_let_statement(generic_ast_node_t* node){
+	printf("NOT IMPLEMENTED\n");
+	exit(0);
+
+}
+
+
+/**
+ * Visit a global variable declaration statement
+ */
+static void visit_global_declare_statement(generic_ast_node_t* node){
+	printf("NOT IMPLEMENTED\n");
+	exit(0);
+}
+
+
+
+/**
  * Visit a let statement
  */
 static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
@@ -7968,6 +7988,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	cfg->created_blocks = dynamic_array_alloc();
 	cfg->function_entry_blocks = dynamic_array_alloc();
 	cfg->function_exit_blocks = dynamic_array_alloc();
+	cfg->global_constants = dynamic_array_alloc();
 
 	//Hold the cfg
 	cfg_ref = cfg;

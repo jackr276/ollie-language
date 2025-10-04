@@ -7688,6 +7688,19 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 		//Otherwise just leave
 		default:
+			//If this is a global variable, then we also must ensure that a declaration exists
+			if(is_global == TRUE){
+				//Actually create the node now
+				declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
+
+				//Also store this record with the root node
+				declaration_node->variable = declared_var;
+				//Store the type as well
+				declaration_node->inferred_type = declared_var->type_defined_as;
+				//Store the line number
+				declaration_node->line_number = current_line;
+			}
+
 			break;
 	}
 
