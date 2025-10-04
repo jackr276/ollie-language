@@ -203,6 +203,31 @@ static void multiply_constants(three_addr_const_t* constant1, three_addr_const_t
 
 
 /**
+ * Logical or two constants. The result is always stored in constant1
+ */
+static void logical_or_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Determine if they are 0 or not
+	u_int8_t const_1_0 = is_constant_value_zero(constant1);
+	u_int8_t const_2_0 = is_constant_value_zero(constant2);
+
+	//Go through the 4 cases in the truth table
+	if(const_1_0 == TRUE){
+		/* 0 || (non-zero) = 1 */
+		if(const_2_0 == FALSE){
+			constant1->constant_value.long_constant = 1;
+		/* 0 || 0 = 0 */
+		} else {
+			constant1->constant_value.long_constant = 0;
+		}
+
+	//This is non-zero, the other one is irrelevant
+	} else {
+		constant1->constant_value.long_constant = 1;
+	}
+}
+
+
+/**
  * Emit a converting move instruction directly, with no need to do instruction selection afterwards
  */
 static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* destination, three_addr_var_t* source){
@@ -3498,9 +3523,54 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		changed = TRUE;
 	}
 
+	/**
+	 * ==================== On-the-fly logical and/or ========================
+	 * t27 <- 5
+	 * t27 <- t27 && 68
+	 *
+	 * t27 <- 1
+	 *
+	 * Or
+	 * t27 <- 5
+	 * t27 <- t27 || 68
+	 *
+	 * t27 <- 1
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
+		&& window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
 
-	//TODO HANDLE LOGICAL AND AND LOGICAL OR
+		//We will handle the constants accordingly
+		if(window->instruction2->op == DOUBLE_OR) {
+			logical_or_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+		} else {
 
+		}
+
+		//Instruction 2 is now simply an assign const statement
+		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+		//Op1 is now used one less time
+		window->instruction2->op1->use_count--;
+
+		//Null out where the old value was
+		window->instruction2->op1 = NULL;
+
+		//Instruction 1 is now completely useless *if* that was the only time that
+		//his assignee was used. Otherwise, we need to keep it in
+		if(window->instruction1->assignee->use_count == 0){
+			delete_statement(window->instruction1);
+		}
+
+		//Reconstruct the window with instruction 2 as the start
+		reconstruct_window(window, window->instruction2);
+
+		//This counts as a change
+		changed = TRUE;
+	}
 
 
 
@@ -3964,9 +4034,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Wipe out op1
 			if(current_instruction->op1 != NULL){
 				current_instruction->op1->use_count--;
-
-				printf("Op1 use count is %d\n", current_instruction->op1->use_count);
-
 				current_instruction->op1 = NULL;
 			}
 
@@ -4045,9 +4112,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Wipe out op1
 			if(current_instruction->op1 != NULL){
 				current_instruction->op1->use_count--;
-
-				printf("Op1 use count is %d\n", current_instruction->op1->use_count);
-
 				current_instruction->op1 = NULL;
 			}
 
