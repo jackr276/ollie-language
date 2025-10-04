@@ -3932,34 +3932,53 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	/**
 	 * ======================= Logical And operation simplifying ==========================
 	 * t2 <- t4 && 0 === set t2 to be 0
-	 * t2 <- t4 || (non-zero) === test t4,t4 and setne t2 if t4 isn't 0
+	 * t2 <- t4 && (non-zero) === test t4,t4 and setne t2 if t4 isn't 0
 	 *
+	 * It is safe to assume that a logical and binary operation with constant is always
+	 * simplifiable
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == DOUBLE_AND){
-			
 		//For convenience extract this
+		instruction_t* current_instruction = window->instruction1;
 
+		//First option - the value is 0
+		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
+			//It's now just an assign statement
+			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-	
+			//Wipe out op1
+			if(current_instruction->op1 != NULL){
+				current_instruction->op1->use_count--;
 
-					//It's now just an assign statement
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				printf("Op1 use count is %d\n", current_instruction->op1->use_count);
 
-						//Wipe out op1
-						if(current_instruction->op1 != NULL){
-							current_instruction->op1->use_count--;
+				current_instruction->op1 = NULL;
+			}
 
-							printf("Op1 use count is %d\n", current_instruction->op1->use_count);
+		//Otherwise, the value is not 0
+		} else {
+			//First we add a test instruction
+			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+						
+			//The result of this will be used for our set instruction
+			instruction_t* setne_instruction = emit_setne_instruction(current_instruction->assignee);
+			//Subtly hook this in, even though it's not needed
+			setne_instruction->op1 = test_instruction->assignee;
 
-							current_instruction->op1 = NULL;
-						}
+			//Insert these both in beforehand
+			insert_instruction_before_given(test_instruction, current_instruction);
+			insert_instruction_before_given(setne_instruction, current_instruction);
 
-						//We changed something
-						changed = TRUE;
+			//And then remove this now useless current instruction
+			delete_statement(current_instruction);
 
-						break;
+			//Reconstruct the window based on the set instruction
+			reconstruct_window(window, setne_instruction);
+		}
 
+		//We changed something
+		changed = TRUE;
 	}
 
 
@@ -4046,14 +4065,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 						//We changed something
 						changed = TRUE;
 
-						break;
-
-					/**
-					 * Logical and with 0 will always yield 0
-					 */
-					case DOUBLE_AND:
-	
-					case DOUBLE_OR:
 						break;
 
 					//Just do nothing here
@@ -4169,55 +4180,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					update_constant_with_log2_value(current_instruction->op1_const);
 					//We changed something
 					changed = TRUE;
-				}
-
-			//We need to add one final catch-all bucket here for logical and and logical or statements
-			} else {
-				//Predeclare
-				instruction_t* test_instruction;
-				instruction_t* setne_instruction;
-
-				//We could have options for logical and/logical or
-				switch(current_instruction->op){
-					/**
-					 * If we have a double and with a nonzero constant as the 
-					 * second argument, then we are able to turn this into:
-					 *
-					 * t3 <- t1 && (non-zero)
-					 *
-					 * test t1, t1
-					 * setne t3
-					 */
-					case DOUBLE_AND:
-						//First we add a test instruction
-						test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
-						
-						//The result of this will be used for our set instruction
-						setne_instruction = emit_setne_instruction(current_instruction->assignee);
-						//Subtly hook this in, even though it's not needed
-						setne_instruction->op1 = test_instruction->assignee;
-
-						//Insert these both in beforehand
-						insert_instruction_before_given(test_instruction, current_instruction);
-						insert_instruction_before_given(setne_instruction, current_instruction);
-
-						//And then remove this now useless current instruction
-						delete_statement(current_instruction);
-
-						//Reconstruct the window based on the set instruction
-						reconstruct_window(window, setne_instruction);
-
-						//This counts as a change
-						changed = TRUE;
-
-						break;
-
-					case DOUBLE_OR:
-						break;
-
-					//The most common case - just do nothing
-					default:
-						break;
 				}
 			}
 		}
