@@ -73,7 +73,7 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 	switch(instruction->op){
 		case DOUBLE_AND:
 		case DOUBLE_OR:
-			return FALSE;
+			return TRUE;
 
 		//Division will work for one and a power of 2
 		case F_SLASH:
@@ -4016,7 +4016,22 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 						break;
 
+					/**
+					 * Logical and with 0 will always yield 0
+					 */
 					case DOUBLE_AND:
+						//It's now just an assign statement
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+						//Wipe out op1
+						if(current_instruction->op1 != NULL){
+							current_instruction->op1->use_count--;
+							current_instruction->op1 = NULL;
+						}
+
+						//We changed something
+						changed = TRUE;
+
 						break;
 
 					case DOUBLE_OR:

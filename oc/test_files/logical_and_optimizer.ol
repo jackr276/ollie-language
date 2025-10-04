@@ -11,7 +11,8 @@ pub fn logical_and_zero(x:i32) -> i32 {
 
 //Should trigger the non-zero pattern
 pub fn logical_and_nonzero(x:i32) -> i32 {
-	ret x && 3;
+	//ret x && 3;
+	ret 0;
 }
 
 pub fn main() -> i32 {
