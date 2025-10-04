@@ -2846,26 +2846,47 @@ static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
 			break;
 	}
 
-	//Extract the variable record from the assignee
-	symtab_variable_record_t* variable = instruction->assignee->linked_var;
+	//Extract the variable that we're trying to store
+	three_addr_var_t* stored_variable = instruction->assignee;
 
-	//We need to grab this variable's stack offset
-	u_int32_t stack_offset = variable->stack_offset;
+	//If this is a stack variable, then we'll do the normal procedure
+	if(stored_variable->linked_var->stack_variable == TRUE){
+		//Extract the variable record from the assignee
+		symtab_variable_record_t* variable = stored_variable->linked_var;
 
-	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+		//We need to grab this variable's stack offset
+		u_int32_t stack_offset = variable->stack_offset;
 
-	//This is in offset only mode
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		//Once we have that, we can emit our offset constant
+		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-	//And the offset itself is the offset constant
-	instruction->offset = offset_constant;
+		//This is in offset only mode
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-	//And the first address calc register is just our stack pointer
-	instruction->address_calc_reg1 = cfg->stack_pointer;
+		//And the offset itself is the offset constant
+		instruction->offset = offset_constant;
 
-	//The source register is just our op1
-	instruction->source_register = instruction->op1;
+		//And the first address calc register is just our stack pointer
+		instruction->address_calc_reg1 = cfg->stack_pointer;
+
+		//The source register is just our op1
+		instruction->source_register = instruction->op1;
+
+	//Otherwise, we have a global variable that needs to be stored by an offset calculation
+	//from the instruction pointer(rip)	
+	} else {
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//We'll use the at this point ignored op2 slot to hold the value of the offset
+		instruction->op2 = stored_variable;
+
+		//Op1 is the source register
+		instruction->source_register = instruction->op1;
+	}
 }
 
 

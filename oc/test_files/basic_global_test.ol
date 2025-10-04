@@ -10,6 +10,10 @@ pub fn add_vars(y:i32) -> i64 {
 	ret x + y;
 }
 
+pub fn reassign_global(z:i32) -> void {
+	x = z;
+}
+
 
 /**
 * Basic case initializing the global variable
