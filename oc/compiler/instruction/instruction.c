@@ -878,6 +878,24 @@ instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destina
 
 
 /**
+ * Emit a setne three address code statement
+ */
+instruction_t* emit_setne_code(three_addr_var_t* assignee){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Save the assignee
+	stmt->assignee = assignee;
+
+	//We'll determine the actual instruction type using the helper
+	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
+
+	//Once that's done, we'll return
+	return stmt;
+}
+
+
+/**
  * Print an 8-bit register out. The names used for these are still
  * 64 bits because 8, 16, 32 and 64 bit uses can't occupy the same register at the 
  * same time
@@ -1357,6 +1375,15 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 
 			//And end it out here
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_SETNE_STMT:
+			fprintf(fl, "setne ");
+
+			//And then the var
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
 			fprintf(fl, "\n");
 			break;
 

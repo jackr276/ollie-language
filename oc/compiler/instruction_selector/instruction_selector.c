@@ -2418,6 +2418,16 @@ static void handle_logical_not_instruction(cfg_t* cfg, instruction_window_t* win
 
 
 /**
+ * A setne is a very simple one-to-one mapping
+ */
+static void handle_setne_instruction(instruction_t* instruction){
+	//Just set the type and register
+	instruction->instruction_type = SETNE;
+	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
  * Handle a logical OR instruction
  * 
  * t32 <- t32 || t19
@@ -2602,7 +2612,7 @@ static void handle_not_instruction(instruction_t* instruction){
  */
 static void handle_test_instruction(instruction_t* instruction){
 	//Find out what size we have
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	variable_size_t size = get_type_size(instruction->op1->type);
 
 	switch(size){
 		case QUAD_WORD:
@@ -3147,6 +3157,9 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 			handle_logical_not_instruction(cfg, window);
+			break;
+		case THREE_ADDR_CODE_SETNE_STMT:
+			handle_setne_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_ASSN_CONST_STMT:
 			handle_constant_to_register_move_instruction(instruction);
@@ -3962,19 +3975,23 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
 						
 			//The result of this will be used for our set instruction
-			instruction_t* setne_instruction = emit_setne_instruction(current_instruction->assignee);
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
 			//Subtly hook this in, even though it's not needed
 			setne_instruction->op1 = test_instruction->assignee;
+
+			//Assign the two over
+			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
 
 			//Insert these both in beforehand
 			insert_instruction_before_given(test_instruction, current_instruction);
 			insert_instruction_before_given(setne_instruction, current_instruction);
+			insert_instruction_before_given(assignment, current_instruction);
 
 			//And then remove this now useless current instruction
 			delete_statement(current_instruction);
 
 			//Reconstruct the window based on the set instruction
-			reconstruct_window(window, setne_instruction);
+			reconstruct_window(window, assignment);
 		}
 
 		//We changed something
@@ -4026,6 +4043,21 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		 * if we're able to simplify some instructions
 		 */
 		if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+			//If it isn't in the list here, we won't be considering it and as such shouldn't waste time
+			//processing
+			switch(current_instruction->op){
+				case PLUS:
+				case R_SHIFT:
+				case L_SHIFT:
+				case MINUS:
+				case STAR:
+				case F_SLASH:
+				case MOD:
+					break;
+				default:
+					continue;
+			}
+
 			//Grab this out for convenience
 			three_addr_const_t* constant = current_instruction->op1_const;
 
