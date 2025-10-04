@@ -15,6 +15,8 @@
 #include "../lexer/lexer.h"
 #include "../ast/ast.h"
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/ollie_intermediary_representation.h"
+#include "../utils/x86_assembly_instruction.h"
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -27,6 +29,8 @@ typedef struct three_addr_var_t three_addr_var_t;
 typedef struct three_addr_const_t three_addr_const_t;
 //A struct that stores all of our live ranges
 typedef struct live_range_t live_range_t;
+//The definition of a global variable container
+typedef struct global_variable_t global_variable_t;
 
 /**
  * What kind of jump do we want to select
@@ -35,155 +39,6 @@ typedef enum{
 	JUMP_CATEGORY_INVERSE,
 	JUMP_CATEGORY_NORMAL,
 } jump_category_t;
-
-
-/**
- * What type of instruction do we have? This saves us a lot of space
- * as opposed to storing strings. These are x86-64 assembly instructions
- */
-typedef enum{
-	NO_INSTRUCTION_SELECTED = 0, //The NONE instruction, this is our default and we'll get this when we calloc
-	PHI_FUNCTION, //Not really an instruction, but we still need to account for these
-	RET,
-	CALL,
-	INDIRECT_CALL, //For function pointers
-	MOVB,
-	MOVW, //Regular register-to-register or immediate to register
-	MOVL,
-	MOVQ,
-	MOVSX, //Move with sign extension from small to large register
-	MOVZX, //Move with zero extension from small to large register
-	REG_TO_MEM_MOVB,
-	REG_TO_MEM_MOVW,
-	REG_TO_MEM_MOVL,
-	REG_TO_MEM_MOVQ,
-	MEM_TO_REG_MOVB,
-	MEM_TO_REG_MOVW,
-	MEM_TO_REG_MOVL,
-	MEM_TO_REG_MOVQ,
-	LEAW,
-	LEAL,
-	LEAQ,
-	INDIRECT_JMP, //For our switch statements
-	CQTO, //convert quad-to-octa word
-	CLTD, //convert long-to-double-long(quad)
-	CWTL, //Convert word to long word
-	CBTW, //Convert byte to word
-	NOP,
-	JMP, //Unconditional jump
-	JNE, //Jump not equal
-	JE, //Jump if equal
-	JNZ, //Jump if not zero
-	JZ, //Jump if zero
-	JGE, //Jump GE(SIGNED)
-	JG, //Jump GT(SIGNED)
-	JLE, //Jump LE(SIGNED)
-	JL, //JUMP LT(SIGNED)
-	JA, //JUMP GT(UNSIGNED)
-	JAE, //JUMP GE(UNSIGNED)
-	JB, //JUMP LT(UNSIGNED)
-	JBE, //JUMP LE(UNSIGNED)
-	ADDB,
-	ADDW,
-	ADDL,
-	ADDQ,
-	MULB,
-	MULW,
-	MULL,
-	MULQ,
-	IMULB,
-	IMULW,
-	IMULL,
-	IMULQ,
-	DIVB,
-	DIVW,
-	DIVL,
-	DIVQ,
-	IDIVB,
-	IDIVW,
-	IDIVL,
-	IDIVQ,
-	IDIVB_FOR_MOD,
-	IDIVW_FOR_MOD,
-	IDIVL_FOR_MOD,
-	IDIVQ_FOR_MOD,
-	DIVB_FOR_MOD,
-	DIVW_FOR_MOD,
-	DIVL_FOR_MOD,
-	DIVQ_FOR_MOD,
-	SUBB,
-	SUBW,
-	SUBL,
-	SUBQ,
-	ASM_INLINE, //ASM inline statements aren't really instructions
-	SHRB,
-	SHRW,
-	SHRL,
-	SHRQ, 
-	SARB,
-	SARW,
-	SARL, //Signed shift
-	SARQ, //Signed shift
-	SALW,
-	SALB,
-	SALL, //Signed shift 
-	SALQ, //Signed shift
-	SHLB,
-	SHLW,
-	SHLL,
-	SHLQ,
-	INCB,
-	INCW,
-	INCL,
-	INCQ,
-	DECB,
-	DECW,
-	DECL,
-	DECQ,
-	NEGB,
-	NEGW,
-	NEGL,
-	NEGQ,
-	NOTB,
-	NOTW,
-	NOTL,
-	NOTQ,
-	XORB,
-	XORW,
-	XORL,
-	XORQ,
-	ORB,
-	ORW,
-	ORL,
-	ORQ,
-	ANDB,
-	ANDW,
-	ANDL,
-	ANDQ,
-	CMPB,
-	CMPW,
-	CMPL,
-	CMPQ,
-	TESTB,
-	TESTW,
-	TESTL,
-	TESTQ,
-	PUSH,
-	PUSH_DIRECT, //Bypass live_ranges entirely
-	POP,
-	POP_DIRECT, //Bypass live_ranges entirely
-	SETE, //Set if equal
-	SETNE, //Set if not equal
-	SETGE, //Set >= signed
-	SETLE, //Set <= signed
-	SETL, //Set < signed
-	SETG, //Set > signed
-	SETAE, //Set >= unsigned
-	SETA, //Set > unsigned
-	SETBE, //Set <= unsigned
-	SETB, //Set < unsigned
-} instruction_type_t;
-
 
 /**
  * Define the standard x86-64 register table
@@ -286,68 +141,6 @@ typedef enum {
 	MEMORY_ACCESS_WRITE,
 	MEMORY_ACCESS_READ,
 } memory_access_type_t;
-
-/**
- * What kind of three address code statement do we have?
- */
-typedef enum{
-	//Binary op with all vars
-	THREE_ADDR_CODE_BIN_OP_STMT,
-	//A setne statement
-	THREE_ADDR_CODE_SETNE_STMT,
-	//An increment statement
-	THREE_ADDR_CODE_INC_STMT,
-	//A decrement statement
-	THREE_ADDR_CODE_DEC_STMT,
-	//A bitwise not statement
-	THREE_ADDR_CODE_BITWISE_NOT_STMT,
-	//A logical not statement
-	THREE_ADDR_CODE_LOGICAL_NOT_STMT,
-	//An indirection statement
-	THREE_ADDR_CODE_DEREF_STMT,
-	//Binary op with const
-	THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT,
-	//Regular two address assignment
-	THREE_ADDR_CODE_ASSN_STMT,
-	//Assigning a constant to a variable
-	THREE_ADDR_CODE_ASSN_CONST_STMT,
-	//A return statement
-	THREE_ADDR_CODE_RET_STMT,
-	//A jump statement -- used for control flow
-	THREE_ADDR_CODE_JUMP_STMT,
-	//A three address code conditional movement statement
-	THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT,
-	//An indirect jump statement -- used for switch statement jump tables
-	THREE_ADDR_CODE_INDIRECT_JUMP_STMT,
-	//A function call statement 
-	THREE_ADDR_CODE_FUNC_CALL,
-	//And indirect function call statement
-	THREE_ADDR_CODE_INDIRECT_FUNC_CALL,
-	//An idle statement(nop)
-	THREE_ADDR_CODE_IDLE_STMT,
-	//A negation statement
-	THREE_ADDR_CODE_NEG_STATEMENT,
-	//A load statement
-	THREE_ADDR_CODE_LOAD_STATEMENT,
-	//A store statement, but explicitly with a constant
-	THREE_ADDR_CODE_STORE_CONST_STATEMENT,
-	//And a store statement
-	THREE_ADDR_CODE_STORE_STATEMENT,
-	//SPECIAL CASE - assembly inline statement
-	THREE_ADDR_CODE_ASM_INLINE_STMT,
-	//A "Load effective address(lea)" instruction
-	THREE_ADDR_CODE_LEA_STMT,
-	//A test instruction
-	THREE_ADDR_CODE_TEST_STMT,
-	//An indirect jump address calculation instruction, very similar to lea
-	THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT,
-	//A phi function - for SSA analysis only
-	THREE_ADDR_CODE_PHI_FUNC,
-	//A memory access statement
-	THREE_ADDR_CODE_MEM_ACCESS_STMT,
-	//A memory address statement
-	THREE_ADDR_CODE_MEM_ADDRESS_STMT
-} instruction_stmt_type_t;
 
 
 /**
