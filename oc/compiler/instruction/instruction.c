@@ -1876,6 +1876,19 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			break;
 
 		/**
+		 * Global var address calculation
+		 */
+		case ADDRESS_CALCULATION_MODE_GLOBAL_VAR:
+			//The global variable name itself
+			print_variable(fl, instruction->address_calc_reg2, mode);
+			fprintf(fl, "(");
+			//This will be the instruction pointer
+			print_variable(fl, instruction->address_calc_reg1, mode);
+			fprintf(fl, ")");
+
+		   	break;
+
+		/**
 		 * If we get here, that means we have this kind
 		 * of address mode
 		 *

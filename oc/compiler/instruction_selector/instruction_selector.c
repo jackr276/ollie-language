@@ -2682,7 +2682,7 @@ static void handle_test_instruction(instruction_t* instruction){
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
  */
-static void handle_load_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+static void handle_load_instruction(cfg_t* cfg, instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -2704,33 +2704,58 @@ static void handle_load_instruction(three_addr_var_t* stack_pointer, instruction
 			break;
 	}
 
-	//Extract the variable record from the op1
-	symtab_variable_record_t* variable = instruction->op1->linked_var;
+	//Extract the variable that we're trying to load
+	three_addr_var_t* loaded_variable = instruction->op1;
 
-	//We need to grab this variable's stack offset
-	u_int32_t stack_offset = variable->stack_offset;
+	//Most common case - this is a stack variable
+	if(loaded_variable->linked_var->stack_variable == TRUE){
+		//Extract the variable record from the op1
+		symtab_variable_record_t* variable = instruction->op1->linked_var;
 
-	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+		//We need to grab this variable's stack offset
+		u_int32_t stack_offset = variable->stack_offset;
 
-	//This is in offset only mode
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		//Once we have that, we can emit our offset constant
+		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-	//And the offset itself is the offset constant
-	instruction->offset = offset_constant;
+		//This is in offset only mode
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-	//And the first address calc register is just our stack pointer
-	instruction->address_calc_reg1 = stack_pointer;
+		//And the offset itself is the offset constant
+		instruction->offset = offset_constant;
 
-	//And our destination register is the temp reg
-	instruction->destination_register = instruction->assignee;
+		//And the first address calc register is just our stack pointer
+		instruction->address_calc_reg1 = cfg->stack_pointer;
+
+		//And our destination register is the temp reg
+		instruction->destination_register = instruction->assignee;
+
+	/**
+	 * Otherwise, we have a global variable here so we'll need to emit something like the following:
+	 *
+	 * leaq <var_name>(%rip), t3
+	 */
+	} else {
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//And the second register is the variable itself. The variable name doubles as an address in
+		//memory in the final partial program
+		instruction->address_calc_reg2 = loaded_variable;
+
+		//The destination is the assignee
+		instruction->destination_register = instruction->assignee;
+	}
 }
 
 
 /**
  * Handle a store const instruction. This will be reorganized into a memory accessing move
  */
-static void handle_store_const_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+static void handle_store_const_instruction(cfg_t* cfg, instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -2768,7 +2793,7 @@ static void handle_store_const_instruction(three_addr_var_t* stack_pointer, inst
 	instruction->offset = offset_constant;
 
 	//And the first address calc register is just our stack pointer
-	instruction->address_calc_reg1 = stack_pointer;
+	instruction->address_calc_reg1 = cfg->stack_pointer;
 
 	//And for the source, we'll occupy the source immediate with our value
 	instruction->source_immediate = instruction->op1_const;
@@ -2778,7 +2803,7 @@ static void handle_store_const_instruction(three_addr_var_t* stack_pointer, inst
 /**
  * Handle a store instruction. This will be reorganized into a memory accessing move
  */
-static void handle_store_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -2816,7 +2841,7 @@ static void handle_store_instruction(three_addr_var_t* stack_pointer, instructio
 	instruction->offset = offset_constant;
 
 	//And the first address calc register is just our stack pointer
-	instruction->address_calc_reg1 = stack_pointer;
+	instruction->address_calc_reg1 = cfg->stack_pointer;
 
 	//The source register is just our op1
 	instruction->source_register = instruction->op1;
@@ -3269,13 +3294,13 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
-			handle_load_instruction(cfg->stack_pointer, instruction);
+			handle_load_instruction(cfg, instruction);
 			break;
 		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
-			handle_store_const_instruction(cfg->stack_pointer, instruction);
+			handle_store_const_instruction(cfg, instruction);
 			break;
 		case THREE_ADDR_CODE_STORE_STATEMENT:
-			handle_store_instruction(cfg->stack_pointer, instruction);
+			handle_store_instruction(cfg, instruction);
 			break;
 		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
 			handle_memory_address_instruction(cfg->stack_pointer, instruction);
