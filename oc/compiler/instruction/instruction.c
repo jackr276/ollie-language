@@ -3161,6 +3161,9 @@ instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t*
 	stmt->op1 = op1;
 	stmt->op2 = op2;
 
+	op1->use_count++;
+	op2->use_count++;
+
 	//Assign the function too
 	stmt->function = current_function;
 
