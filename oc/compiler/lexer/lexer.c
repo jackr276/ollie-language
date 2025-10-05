@@ -170,7 +170,7 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 
 	//So long as we don't see this move along, adding ch into 
 	//our lexeme
-	while(ch != '\\'){
+	while(ch != ';'){
 		//In this case we'll add the char to the back
 		dynamic_string_add_char_to_back(&asm_string, ch);
 
