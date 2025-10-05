@@ -10,7 +10,6 @@
 
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -2892,31 +2891,49 @@ static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
 
 /**
  * Translate the memory address instruction into stack form
+ *
+ * There are two options here - a stack address and a global variable. We will 
+ * handle both cases
  */
-static void handle_memory_address_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stack_pointer, instruction_t* instruction){
 	//These will always be LEA's
 	instruction->instruction_type = LEAQ;
 
 	//Destination is always the assignee
 	instruction->destination_register = instruction->assignee;
 
-	//Extract the variable record from the assignee
-	symtab_variable_record_t* variable = instruction->op1->linked_var;
+	//Extract for convenience
+	three_addr_var_t* address_variable = instruction->op1;
+	symtab_variable_record_t* variable = address_variable->linked_var;
 
-	//We need to grab this variable's stack offset
-	u_int32_t stack_offset = variable->stack_offset;
+	//Is this a stack variable(most common case)
+	if(variable->membership != GLOBAL_VARIABLE){
+		//We need to grab this variable's stack offset
+		u_int32_t stack_offset = variable->stack_offset;
 
-	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+		//Once we have that, we can emit our offset constant
+		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-	//The offset is the offset constant
-	instruction->offset = offset_constant;
+		//The offset is the offset constant
+		instruction->offset = offset_constant;
 
-	//Stack pointer is the calc reg 1
-	instruction->address_calc_reg1 = stack_pointer;
+		//Stack pointer is the calc reg 1
+		instruction->address_calc_reg1 = stack_pointer;
 
-	//We've only got the offset here
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		//We've only got the offset here
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//Otherwise we know that we have a global variable
+	} else {
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//We'll use the at this point ignored op2 slot to hold the value of the offset
+		instruction->op2 = address_variable;
+	}
 }
 
 
@@ -3345,9 +3362,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			handle_store_instruction(cfg, instruction);
 			break;
 		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
-			handle_memory_address_instruction(cfg->stack_pointer, instruction);
+			handle_memory_address_instruction(cfg, cfg->stack_pointer, instruction);
 			break;
-			
 		default:
 			break;
 	}
