@@ -3618,8 +3618,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * the address of a struct for example, we don't need to add said struct to the
 					 * stack - it is already there. We need to account for these nuances when
 					 * we do this
+					 *
+					 * We do not do this if it's a global variable, because global variables have their own unique storage
+					 * mechanism that is not stack related
 					 */
-					if(does_stack_contain_symtab_variable(&(current_function->data_area), second_child->variable) == FALSE){
+					if(second_child->variable->membership != GLOBAL_VARIABLE
+						&& does_stack_contain_symtab_variable(&(current_function->data_area), second_child->variable) == FALSE){
 						//Add this variable onto the stack now, since we know it is not already on it
 						add_variable_to_stack(&(current_function->data_area), emit_var(second_child->variable));
 					}

@@ -3752,9 +3752,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Reconstruct the window with instruction2 as the start
 			reconstruct_window(window, window->instruction1);
 
-			//printf("HERE with:\n");
-			//print_instruction_window_three_address_code(window);
-
 			//This does count as a change
 			changed = TRUE;
 		}
@@ -3792,9 +3789,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Reconstruct the window with instruction2 as the seed
 			reconstruct_window(window, window->instruction2);
 
-			//printf("HERE with:\n");
-			//print_instruction_window_three_address_code(window);
-			//This does count as a change
 			changed = TRUE;
 		}
 	}
@@ -4550,7 +4544,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * If we have an instruction that is a memory address, and said memory address
 	 * is 0, we can optimize that into just being an assignment of the stack pointer
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT
+		// Ignore global vars, they don't have stack addresses
+		&& window->instruction1->op1->linked_var->membership != GLOBAL_VARIABLE){
 		//We can reorgnaize this into an assignment instruction
 		if(window->instruction1->op1->stack_offset == 0){
 			//Reset the type

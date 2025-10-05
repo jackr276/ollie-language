@@ -2011,7 +2011,10 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 					//If this is not already a memory region, then we need to flag it as one
 					//for later so that the cfg constructor knows what we'll eventually need to
 					//load
-					if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE){
+					if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE
+						//AND it's not a global var
+						&& cast_expr->variable->membership != GLOBAL_VARIABLE){
+
 						//IMPORTANT - we need to flag this as a stack variable now
 						cast_expr->variable->stack_variable = TRUE;
 					}
