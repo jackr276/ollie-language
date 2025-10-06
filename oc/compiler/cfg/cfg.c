@@ -2667,7 +2667,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 * asking for the stack address of said variable. As such, the emit_identifier rule will intelligently
 	 * realize this and instead of just emitting the var itself, will emit a "memory address of" statement.
 	 */
-	if(is_memory_region(ident_node->variable->type_defined_as) == TRUE){
+	if(is_memory_region(ident_node->variable->type_defined_as) == TRUE && ident_node->variable->membership != FUNCTION_PARAMETER){
 		//Emit this
 		instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(ident_node->variable->type_defined_as), emit_var(ident_node->variable));
 
