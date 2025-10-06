@@ -131,7 +131,8 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr){
 	//Let's just double check here
 	if(ptr == NULL){
 		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
-		return;
+		//This is a severe enough fail case that we should leave immediately
+		exit(1);
 	}
 	
 	//Now we'll see if we need to reallocate this

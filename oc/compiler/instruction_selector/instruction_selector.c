@@ -4506,6 +4506,34 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		changed = TRUE;
 	}
 
+	/**
+	 * When we have a case like this for address calculations:
+	 * t32 <- stack_pointer
+	 * t35 <- t32 + 32
+	 *
+	 * We can simply make this:
+	 * t35 <- t32 + 32
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT 
+		&& window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& window->instruction1->op1 == cfg->stack_pointer){
+		
+		//Delete the first statement
+		delete_statement(window->instruction1);
+
+		//Set instruction2's op1 to be the stack pointer
+		window->instruction2->op1 = cfg->stack_pointer;
+
+		//Rebuild it
+		reconstruct_window(window, window->instruction1);
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
+
 	//Return whether or not we changed the block return changed;
 	return changed;
 }
