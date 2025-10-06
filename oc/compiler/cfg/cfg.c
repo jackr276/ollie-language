@@ -98,7 +98,7 @@ typedef enum{
 
 
 //We predeclare up here to avoid needing any rearrangements
-static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node);
+static void visit_declaration_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node);
@@ -2663,6 +2663,25 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	}
 
 	/**
+	 * If we're emitting a variable that represents a memory region(array, struct, union), then we're really
+	 * asking for the stack address of said variable. As such, the emit_identifier rule will intelligently
+	 * realize this and instead of just emitting the var itself, will emit a "memory address of" statement.
+	 */
+	if(is_memory_region(ident_node->variable->type_defined_as) == TRUE){
+		//Emit this
+		instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(ident_node->variable->type_defined_as), emit_var(ident_node->variable));
+
+		//This counts as a use
+		add_used_variable(basic_block, memory_address_of_stmt->op1);
+
+		//Add it to the block
+		add_statement(basic_block, memory_address_of_stmt);
+
+		//Give back the assignee
+		return memory_address_of_stmt->assignee;
+	}
+
+	/**
 	 * If we're on the right side of the equation and this is a stack variable, when we want to use 
 	 * the address we have to load
 	 */
@@ -2687,7 +2706,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		return assignee;
 	}
 
-	//Create our variable
+	//Create our variable - the most basic case
 	three_addr_var_t* returned_variable = emit_var(ident_node->variable);
 
 	//Give our variable back
@@ -6146,24 +6165,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
 			case AST_NODE_TYPE_DECL_STMT:
-				generic_results = visit_declaration_statement(ast_cursor);
-
-				//If we're adding onto something(common case), we'll go here
-				if(starting_block != NULL){
-					//Merge the two blocks together
-					current_block = merge_blocks(current_block, generic_results.starting_block); 
-
-					//If these are not equal, we can reassign the current block to be the final block
-					if(generic_results.starting_block != generic_results.final_block){
-						current_block = generic_results.final_block;
-					}
-
-				//Otherwise this is the very first thing
-				} else {
-					starting_block = generic_results.starting_block;
-					current_block = generic_results.final_block;
-				}
-
+				//Let the helper rule handle it
+				visit_declaration_statement(ast_cursor);
 				break;
 
 			case AST_NODE_TYPE_LET_STMT:
@@ -6713,24 +6716,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
 			case AST_NODE_TYPE_DECL_STMT:
-				generic_results = visit_declaration_statement(ast_cursor);
-
-				//If we're adding onto something(common case), we'll go here
-				if(starting_block != NULL){
-					//Merge the two blocks together
-					current_block = merge_blocks(current_block, generic_results.starting_block); 
-
-					//If these are not equal, we can reassign the current block to be the final block
-					if(generic_results.starting_block != generic_results.final_block){
-						current_block = generic_results.final_block;
-					}
-
-				//Otherwise this is the very first thing
-				} else {
-					starting_block = generic_results.starting_block;
-					current_block = generic_results.final_block;
-				}
-
+				//Let the helper rule handle it
+				visit_declaration_statement(ast_cursor);
 				break;
 
 			case AST_NODE_TYPE_LET_STMT:
@@ -7445,31 +7432,13 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
  * we know that this is either a struct, array or union - it's something that
  * has to be allocated and placed onto the stack
  */
-static cfg_result_package_t visit_declaration_statement(generic_ast_node_t* node){
-	//What block are we emitting into?
-	basic_block_t* emitted_block = basic_block_alloc(1);
-
+static void visit_declaration_statement(generic_ast_node_t* node){
 	//The base address. We may or may not need this
-	three_addr_var_t* base_addr = emit_var(node->variable);
-
-	//This var is an assigned variable
-	add_assigned_variable(emitted_block, base_addr);
+	three_addr_var_t* address = emit_var(node->variable);
 
 	//Add this variable into the current function's stack. This is what we'll use
 	//to store the address
-	add_variable_to_stack(&(current_function->data_area), base_addr);
-
-	//Emit the statement here to get the base address
-	instruction_t* mem_addr = emit_memory_address_assignment(base_addr, emit_var(node->variable));
-	
-	//Add it into the block
-	add_statement(emitted_block, mem_addr);
-
-	//Declare the result package
-	cfg_result_package_t result_package = {emitted_block, emitted_block, NULL, BLANK};
-
-	//Give the result package back
-	return result_package;
+	add_variable_to_stack(&(current_function->data_area), address);
 }
 
 

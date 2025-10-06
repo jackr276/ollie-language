@@ -2854,6 +2854,43 @@ static void handle_memory_address_instruction(three_addr_var_t* stack_pointer, i
 
 
 /**
+ * Remediate a memory address instruction. Note that this will not convert a statement to
+ * assembly, it will simply take the memory address instruction and put it into the
+ * a different OIR form
+ */
+static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* instruction){
+	//Grab this out
+	symtab_variable_record_t* var = instruction->op1->linked_var;
+
+	//Extract the stack offset for our use
+	u_int32_t stack_offset = var->stack_offset;
+
+	//If this offset is not 0, then we have an operation in the form of
+	//"stack_pointer" + stack offset
+	if(stack_offset != 0){
+		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+		//Addition statement
+		instruction->op = PLUS;
+
+		//Emit the offset value
+		instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+		//And we're offsetting from the stack pointer
+		instruction->op1 = cfg->stack_pointer;
+
+	//Otherwise if this is 0, then all we're doing is assigning the stack pointer
+	} else {
+		//This is an assign statement
+		instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+		//And the op1 is the stack pointer
+		instruction->op1 = cfg->stack_pointer;
+	}
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -3409,6 +3446,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//case
 	if(window->instruction1 == NULL || window->instruction2 == NULL){
 		return changed;
+	}
+
+	//Right off the bat, if we see any memory address instructions, now is our time to
+	//convert out of them
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
+		remediate_memory_address_instruction(cfg, window->instruction1);
 	}
 
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
@@ -4464,18 +4507,33 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	/**
-	 * If we have an instruction that is a memory address, and said memory address
-	 * is 0, we can optimize that into just being an assignment of the stack pointer
+	 * When we have a case like this for address calculations:
+	 * t32 <- stack_pointer
+	 * t35 <- t32 + 32
+	 *
+	 * We can simply make this:
+	 * t35 <- t32 + 32
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
-		//We can reorgnaize this into an assignment instruction
-		if(window->instruction1->op1->stack_offset == 0){
-			//Reset the type
-			window->instruction1->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-			//The op1 is now the stack pointer
-			window->instruction1->op1 = cfg->stack_pointer;
-		}
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT 
+		&& window->instruction2 != NULL
+		&& (window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT)
+		&& window->instruction1->assignee->is_temporary == TRUE //It has to be a temp var otherwise we shouldn't remove it
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& window->instruction1->op1 == cfg->stack_pointer){
+		
+		//Delete the first statement
+		delete_statement(window->instruction1);
+
+		//Set instruction2's op1 to be the stack pointer
+		window->instruction2->op1 = cfg->stack_pointer;
+
+		//Rebuild it
+		reconstruct_window(window, window->instruction1);
+
+		//This counts as a change
+		changed = TRUE;
 	}
+
 
 	//Return whether or not we changed the block return changed;
 	return changed;
