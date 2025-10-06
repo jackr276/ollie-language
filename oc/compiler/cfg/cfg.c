@@ -3222,16 +3222,12 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			case SIDE_TYPE_LEFT:
 				//Emit the indirection for this one
 				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
-				//It's a write
-				final_assignee->access_type = MEMORY_ACCESS_WRITE;
 				break;
 
 			//Right side, this is a read operations
 			case SIDE_TYPE_RIGHT:
 				//Still emit the memory code
 				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
-				//It's a read
-				final_assignee->access_type = MEMORY_ACCESS_READ;
 
 				//We will perform the deref here, as we can't do it in the lea 
 				instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(original_memory_access_type), final_assignee);
@@ -3515,9 +3511,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//If we're on the right hand side, we need to have a temp assignment
 			if(first_child->side == SIDE_TYPE_RIGHT){
-				//This counts as a read operation because we're on the right hand side
-				dereferenced->access_type = MEMORY_ACCESS_READ;
-
 				//Emit the temp assignment
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
@@ -3532,10 +3525,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//Otherwise just give back what we had
 			} else {
-				//Otherwise, this will count as a write transaction because
-				//we're writing to this one's address
-				dereferenced->access_type = MEMORY_ACCESS_WRITE;
-
 				//This one's assignee is just the dereferenced var
 				unary_package.assignee = dereferenced;
 			}
@@ -7473,9 +7462,6 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
 				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
-
-				//This is a write access type
-				address->access_type = MEMORY_ACCESS_WRITE;
 				break;
 		}
 
@@ -7526,9 +7512,6 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 
 		//Once we've emitted the binary operation, we'll have the address available for use. We now need to emit the load operation to add it in
 		three_addr_var_t* dereferenced = emit_pointer_indirection(current_block, address, char_type);
-
-		//This is a write access type
-		dereferenced->access_type = MEMORY_ACCESS_WRITE;
 
 		//We'll now emit a constant assignment statement to load the char value in
 		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_direct_integer_or_char_constant(char_value, lookup_type_name_only(type_symtab, "char")->type));
@@ -7584,9 +7567,6 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 			default:
 				//Once we have the address, we'll need to emit the memory code for it
 				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
-				
-				//This is a write access type
-				address->access_type = MEMORY_ACCESS_WRITE;
 				break;
 		}
 
