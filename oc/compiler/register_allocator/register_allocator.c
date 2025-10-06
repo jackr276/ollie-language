@@ -742,6 +742,8 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
  * Run through every instruction in a block and construct the live ranges
  */
 static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
+	printf("DOING BLOCK .L%d\n\n", basic_block->block_id);
+
 	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
 	//we'll allocate them fresh
 	if(basic_block->assigned_variables == NULL){
@@ -774,6 +776,8 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 	//Run through every instruction in the block
 	while(current != NULL){
+		printf("DOING CURRENT: ");
+		print_instruction(stdout, current, PRINTING_VAR_INLINE);
 		//Predeclare for switch
 		live_range_t* live_range;
 
