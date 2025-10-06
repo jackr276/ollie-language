@@ -2870,6 +2870,9 @@ static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* inst
 	if(stack_offset != 0){
 		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
+		//Addition statement
+		instruction->op = PLUS;
+
 		//Emit the offset value
 		instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
 
