@@ -4516,7 +4516,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT 
 		&& window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT)
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& window->instruction1->op1 == cfg->stack_pointer){
 		
