@@ -3712,9 +3712,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Reconstruct the window with instruction2 as the start
 			reconstruct_window(window, window->instruction1);
 
-			//printf("HERE with:\n");
-			//print_instruction_window_three_address_code(window);
-
 			//This does count as a change
 			changed = TRUE;
 		}
@@ -3937,6 +3934,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
 
+		/*
+		printf("HERE with:\n");
+		print_instruction_window_three_address_code(window);
+
 		//The third instruction's assignee is now going to be the first instruction's assignee
 		three_addr_var_t* old_assignee = window->instruction3->assignee;
 
@@ -3954,6 +3955,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		
 		//This counts as a change
 		changed = TRUE;
+		*/
 	}
 
 
