@@ -2297,47 +2297,6 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 
 
 /**
- * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
- */
-static three_addr_var_t* emit_address_constant_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, u_int32_t offset, generic_type_t* base_type, u_int8_t is_branch_ending){
-	//We assume this is the true base address
-	three_addr_var_t* true_base_address = base_addr;
-
-	//If the base address is being derefenced, we need to account for that here
-	if(base_addr->indirection_level > 0){
-		//Emit a temp assignment operation
-		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(base_addr->type), base_addr);
-		//Mark its branch ending status
-		temp_assignment->is_branch_ending = is_branch_ending;
-
-		//Add this into the block
-		add_statement(basic_block, temp_assignment);
-
-		//The old base address counts as used
-		add_used_variable(basic_block, base_addr);
-
-		//THe true base address is now this one's assignee
-		true_base_address = temp_assignment->assignee;
-	}
-
-	//We can directly compute here
-	u_int32_t total_offset = offset * base_type->type_size;
-
-	//Once we have the total offset, we add it to the base address
-	instruction_t* result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), true_base_address, PLUS, emit_direct_integer_or_char_constant(total_offset, u64));
-	
-	//if the base address is not temporary, it also counts as used
-	add_used_variable(basic_block, true_base_address);
-
-	//Add this into the block
-	add_statement(basic_block, result);
-
-	//Give back whatever we assigned
-	return result->assignee;
-}
-
-
-/**
  * Emit a struct access lea statement
  */
 static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* base_addr, three_addr_const_t* offset, u_int8_t is_branch_ending){
@@ -7757,7 +7716,7 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			add_variable_to_stack(&(current_function->data_area), assignee);
 
 			//Emit the statement here to get the base address
-			instruction_t* mem_addr = emit_memory_address_assignment(emit_temp_var(node->inferred_type), assignee);
+			instruction_t* mem_addr = emit_memory_address_assignment(emit_temp_var(assignee->type), assignee);
 
 			//For later reference, this is what we should be using
 			assignee = mem_addr->assignee;
