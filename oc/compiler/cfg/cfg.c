@@ -7757,7 +7757,10 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			add_variable_to_stack(&(current_function->data_area), assignee);
 
 			//Emit the statement here to get the base address
-			instruction_t* mem_addr = emit_memory_address_assignment(assignee, emit_var(node->variable));
+			instruction_t* mem_addr = emit_memory_address_assignment(emit_temp_var(node->inferred_type), assignee);
+
+			//For later reference, this is what we should be using
+			assignee = mem_addr->assignee;
 			
 			//Add it into the block
 			add_statement(current_block, mem_addr);
@@ -7768,11 +7771,11 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 		default:
 			//Emit it
 			assignee = emit_var(node->variable);
+
+			//This has been assigned to, no matter which path we took above
+			add_assigned_variable(current_block, assignee);
 			break;
 	}
-
-	//This has been assigned to, no matter which path we took above
-	add_assigned_variable(current_block, assignee);
 
 	//The left hand var is our assigned var
 	let_results.assignee = assignee;
