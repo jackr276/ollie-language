@@ -279,15 +279,6 @@ typedef enum{
 } variable_printing_mode_t;
 
 /**
- * For a given statement, are we writing to or reading from memory?
- */
-typedef enum {
-	MEMORY_ACCESS_NONE = 0,
-	MEMORY_ACCESS_WRITE,
-	MEMORY_ACCESS_READ,
-} memory_access_type_t;
-
-/**
  * What kind of three address code statement do we have?
  */
 typedef enum{
@@ -419,9 +410,6 @@ struct three_addr_var_t{
 	u_int8_t parameter_number;
 	//What is the size of this variable
 	variable_size_t variable_size;
-	//Store the type info for faster access
-	//Memory access type, if one exists
-	memory_access_type_t access_type;
 	//What register is this in?
 	register_holder_t variable_register;
 };
@@ -777,7 +765,7 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 /**
  * Emit a memory access statement
  */
-instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, memory_access_type_t access_type);
+instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a load statement directly. This should only be used during spilling in the register allocator

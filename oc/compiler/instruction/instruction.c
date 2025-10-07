@@ -3557,7 +3557,7 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
 /**
  * Emit a memory access statement
  */
-instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, memory_access_type_t access_type){
+instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1){
 	//First we allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 

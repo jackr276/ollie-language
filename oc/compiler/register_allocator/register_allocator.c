@@ -471,6 +471,11 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
  */
 static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//Stack pointer is exempt
+	//
+	//
+	//TODO explore completely removing this. It's baffling as to why it's even here
+	//in the first place...
+	//
 	if(variable->is_stack_pointer == TRUE){
 		//Just ensure that this does have the stack pointer LR
 		variable->associated_live_range = stack_pointer_lr;

@@ -3712,9 +3712,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Reconstruct the window with instruction2 as the start
 			reconstruct_window(window, window->instruction1);
 
-			//printf("HERE with:\n");
-			//print_instruction_window_three_address_code(window);
-
 			//This does count as a change
 			changed = TRUE;
 		}
@@ -3752,8 +3749,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Reconstruct the window with instruction2 as the seed
 			reconstruct_window(window, window->instruction2);
 
-			//printf("HERE with:\n");
-			//print_instruction_window_three_address_code(window);
 			//This does count as a change
 			changed = TRUE;
 		}
@@ -3916,44 +3911,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//This counts as a change 
 			changed = TRUE;
 		}
-	}
-	
-	/**
-	 * ============================== Redundant copy folding =======================
-	 * If we have some random temp assignment that's in the middle of everything, we can
-	 * fold it to get rid of it
-	 *
-	 * t12 <- arr_0 + 476 
-	 * t14 <- t12 <----------- assignment that's leftover from other simplifications
-	 * (t14) <- 2
-	 */
-	if(window->instruction1 != NULL && window->instruction2 != NULL && window->instruction3 != NULL
-	 	&& window->instruction1->assignee != NULL && window->instruction3->assignee != NULL
-		&& window->instruction2->op1 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& window->instruction2->cannot_be_combined == FALSE
-		&& window->instruction2->assignee->is_temporary == TRUE
-		&& window->instruction2->op1->is_temporary == TRUE
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
-		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
-
-		//The third instruction's assignee is now going to be the first instruction's assignee
-		three_addr_var_t* old_assignee = window->instruction3->assignee;
-
-		//Emit a copy of this one
-		window->instruction3->assignee = emit_var_copy(window->instruction1->assignee);
-
-		//Now we'll be sure to update the indirection level
-		window->instruction3->assignee->indirection_level = old_assignee->indirection_level;
-
-		//We can remove the second instruction
-		delete_statement(window->instruction2);
-
-		//Reconstruct this window. Instruction 1 is still the seed
-		reconstruct_window(window, window->instruction1);
-		
-		//This counts as a change
-		changed = TRUE;
 	}
 
 
@@ -4477,6 +4434,53 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Counts as a change
 		changed = TRUE;
 	}
+
+
+	/**
+	 * ============================== Redundant copy folding =======================
+	 * If we have some random temp assignment that's in the middle of everything, we can
+	 * fold it to get rid of it
+	 *
+	 * t14 <- t12 <----------- assignment that's leftover from other simplifications
+	 * (t14) <- 2
+	 *
+	 * This can become:
+	 * (t12) <- 2
+	 *
+	 * We do need to be careful to duplicate the type for the indirection when we do this
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction2 != NULL
+		&& is_instruction_assignment_operation(window->instruction2) == TRUE
+		&& window->instruction1->op1->is_temporary == TRUE
+		&& window->instruction1->op1->indirection_level == 0 	//Ensure that this really is a pure copy
+		&& window->instruction1->assignee->indirection_level == 0
+		&& window->instruction2->assignee->indirection_level == 1 // This one is an indirection
+		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
+
+		//Emit this as a copy
+		three_addr_var_t* new_assignee = emit_var_copy(window->instruction1->op1);
+
+		//Copy over the assignee's indirection level
+		new_assignee->indirection_level = window->instruction2->assignee->indirection_level;
+
+		//Copy over the value of the type - VERY IMPORTANT - the type may be different based on
+		//what the internal field is
+		new_assignee->type = window->instruction2->assignee->type;
+		
+		//Now instruction2's assignee is this
+		window->instruction2->assignee = new_assignee;
+
+		//Now we delete this
+		delete_statement(window->instruction1);
+
+		//And reconstruct the window based on instruction2
+		reconstruct_window(window, window->instruction2);
+
+		//Flag that we've changed
+		changed = TRUE;
+	}
+
 
 	/**
 	 * There is a chance that we could be left with statements that assign to themselves
