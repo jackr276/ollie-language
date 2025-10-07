@@ -4593,14 +4593,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		changed = TRUE;
 	}
 
-	/**
-	 * When we have a case like this for address calculations:
-	 * t32 <- stack_pointer
-	 * t35 <- t32 + 32
-	 *
-	 * We can simply make this:
-	 * t35 <- t32 + 32
-	 */
+
+	//TODO ADD DOCS
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT
 		// Ignore global vars, they don't have stack addresses
 		&& window->instruction1->op1->linked_var->membership != GLOBAL_VARIABLE){
@@ -4611,6 +4605,17 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//The op1 is now the stack pointer
 			window->instruction1->op1 = cfg->stack_pointer;
 		}
+	}
+
+	/**
+	 * When we have a case like this for address calculations:
+	 * t32 <- stack_pointer
+	 * t35 <- t32 + 32
+	 *
+	 * We can simply make this:
+	 * t35 <- t32 + 32
+	 */
+
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT 
 		&& window->instruction2 != NULL
 		&& (window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT)
