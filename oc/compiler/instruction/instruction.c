@@ -655,6 +655,9 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	//Transfer this status over
 	emitted_var->is_temporary = var->is_temporary;
 
+	//Is this a stack pointer?
+	emitted_var->is_stack_pointer = var->is_stack_pointer;
+
 	//Copy the generation level
 	emitted_var->ssa_generation = var->ssa_generation;
 
@@ -3628,7 +3631,7 @@ instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assigne
 /**
  * Emit a memory access statement
  */
-instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, memory_access_type_t access_type){
+instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_addr_var_t* op1){
 	//First we allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 

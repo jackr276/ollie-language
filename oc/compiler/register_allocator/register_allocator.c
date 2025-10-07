@@ -37,6 +37,8 @@ const register_holder_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 //Avoid need to rearrange
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges);
 
+//Just hold the stack pointer live range
+live_range_t* stack_pointer_lr;
 
 /**
  * Priority queue insert a live range in here
@@ -475,9 +477,19 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
  */
 static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//Stack pointer is exempt
+	//
+	//
+	//TODO explore completely removing this. It's baffling as to why it's even here
+	//in the first place...
+	//
 	if(variable->is_stack_pointer == TRUE){
-		//We'll already have the live range
-		dynamic_array_add(block->used_variables, variable->associated_live_range);
+		//Just ensure that this does have the stack pointer LR
+		variable->associated_live_range = stack_pointer_lr;
+
+		//We'll already have the live range 
+		dynamic_array_add(block->used_variables, stack_pointer_lr);
+
+		//And we're done
 		return;
 	}
 
@@ -493,7 +505,6 @@ static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_bl
 	if(live_range == NULL){
 		//This is a function parameter, we need to make it ourselves
 		if(variable->linked_var != NULL && variable->linked_var->membership == FUNCTION_PARAMETER){
-			print_variable(stdout, variable, PRINTING_VAR_INLINE);
 			//Create it. Since this is a function parameter, we start at line 0
 			live_range = live_range_alloc(block->function_defined_in, variable->variable_size);
 			//Add it in
@@ -1309,6 +1320,9 @@ static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_
 	
 	//Store this here as well
 	stack_pointer->associated_live_range = stack_pointer_live_range;
+
+	//Store it in the global var for convenience
+	stack_pointer_lr = stack_pointer_live_range;
 
 	//Give it back
 	return stack_pointer_live_range;

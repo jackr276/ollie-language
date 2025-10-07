@@ -2938,6 +2938,43 @@ static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stac
 
 
 /**
+ * Remediate a memory address instruction. Note that this will not convert a statement to
+ * assembly, it will simply take the memory address instruction and put it into the
+ * a different OIR form
+ */
+static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* instruction){
+	//Grab this out
+	symtab_variable_record_t* var = instruction->op1->linked_var;
+
+	//Extract the stack offset for our use
+	u_int32_t stack_offset = var->stack_offset;
+
+	//If this offset is not 0, then we have an operation in the form of
+	//"stack_pointer" + stack offset
+	if(stack_offset != 0){
+		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+		//Addition statement
+		instruction->op = PLUS;
+
+		//Emit the offset value
+		instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+		//And we're offsetting from the stack pointer
+		instruction->op1 = cfg->stack_pointer;
+
+	//Otherwise if this is 0, then all we're doing is assigning the stack pointer
+	} else {
+		//This is an assign statement
+		instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+		//And the op1 is the stack pointer
+		instruction->op1 = cfg->stack_pointer;
+	}
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -3494,6 +3531,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		return changed;
 	}
 
+	//Right off the bat, if we see any memory address instructions, now is our time to
+	//convert out of them
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
+		remediate_memory_address_instruction(cfg, window->instruction1);
+	}
+
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
 	//see, we perform one small optimization
 	
@@ -3789,6 +3832,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//Reconstruct the window with instruction2 as the seed
 			reconstruct_window(window, window->instruction2);
 
+			//This does count as a change
 			changed = TRUE;
 		}
 	}
@@ -3950,44 +3994,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//This counts as a change 
 			changed = TRUE;
 		}
-	}
-	
-	/**
-	 * ============================== Redundant copy folding =======================
-	 * If we have some random temp assignment that's in the middle of everything, we can
-	 * fold it to get rid of it
-	 *
-	 * t12 <- arr_0 + 476 
-	 * t14 <- t12 <----------- assignment that's leftover from other simplifications
-	 * (t14) <- 2
-	 */
-	if(window->instruction1 != NULL && window->instruction2 != NULL && window->instruction3 != NULL
-	 	&& window->instruction1->assignee != NULL && window->instruction3->assignee != NULL
-		&& window->instruction2->op1 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& window->instruction2->cannot_be_combined == FALSE
-		&& window->instruction2->assignee->is_temporary == TRUE
-		&& window->instruction2->op1->is_temporary == TRUE
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
-		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
-
-		//The third instruction's assignee is now going to be the first instruction's assignee
-		three_addr_var_t* old_assignee = window->instruction3->assignee;
-
-		//Emit a copy of this one
-		window->instruction3->assignee = emit_var_copy(window->instruction1->assignee);
-
-		//Now we'll be sure to update the indirection level
-		window->instruction3->assignee->indirection_level = old_assignee->indirection_level;
-
-		//We can remove the second instruction
-		delete_statement(window->instruction2);
-
-		//Reconstruct this window. Instruction 1 is still the seed
-		reconstruct_window(window, window->instruction1);
-		
-		//This counts as a change
-		changed = TRUE;
 	}
 
 
@@ -4512,6 +4518,53 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		changed = TRUE;
 	}
 
+
+	/**
+	 * ============================== Redundant copy folding =======================
+	 * If we have some random temp assignment that's in the middle of everything, we can
+	 * fold it to get rid of it
+	 *
+	 * t14 <- t12 <----------- assignment that's leftover from other simplifications
+	 * (t14) <- 2
+	 *
+	 * This can become:
+	 * (t12) <- 2
+	 *
+	 * We do need to be careful to duplicate the type for the indirection when we do this
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction2 != NULL
+		&& is_instruction_assignment_operation(window->instruction2) == TRUE
+		&& window->instruction1->op1->is_temporary == TRUE
+		&& window->instruction1->op1->indirection_level == 0 	//Ensure that this really is a pure copy
+		&& window->instruction1->assignee->indirection_level == 0
+		&& window->instruction2->assignee->indirection_level == 1 // This one is an indirection
+		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
+
+		//Emit this as a copy
+		three_addr_var_t* new_assignee = emit_var_copy(window->instruction1->op1);
+
+		//Copy over the assignee's indirection level
+		new_assignee->indirection_level = window->instruction2->assignee->indirection_level;
+
+		//Copy over the value of the type - VERY IMPORTANT - the type may be different based on
+		//what the internal field is
+		new_assignee->type = window->instruction2->assignee->type;
+		
+		//Now instruction2's assignee is this
+		window->instruction2->assignee = new_assignee;
+
+		//Now we delete this
+		delete_statement(window->instruction1);
+
+		//And reconstruct the window based on instruction2
+		reconstruct_window(window, window->instruction2);
+
+		//Flag that we've changed
+		changed = TRUE;
+	}
+
+
 	/**
 	 * There is a chance that we could be left with statements that assign to themselves
 	 * like this:
@@ -4541,8 +4594,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	/**
-	 * If we have an instruction that is a memory address, and said memory address
-	 * is 0, we can optimize that into just being an assignment of the stack pointer
+	 * When we have a case like this for address calculations:
+	 * t32 <- stack_pointer
+	 * t35 <- t32 + 32
+	 *
+	 * We can simply make this:
+	 * t35 <- t32 + 32
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT
 		// Ignore global vars, they don't have stack addresses
@@ -4554,7 +4611,26 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//The op1 is now the stack pointer
 			window->instruction1->op1 = cfg->stack_pointer;
 		}
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT 
+		&& window->instruction2 != NULL
+		&& (window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT)
+		&& window->instruction1->assignee->is_temporary == TRUE //It has to be a temp var otherwise we shouldn't remove it
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& window->instruction1->op1 == cfg->stack_pointer){
+		
+		//Delete the first statement
+		delete_statement(window->instruction1);
+
+		//Set instruction2's op1 to be the stack pointer
+		window->instruction2->op1 = cfg->stack_pointer;
+
+		//Rebuild it
+		reconstruct_window(window, window->instruction1);
+
+		//This counts as a change
+		changed = TRUE;
 	}
+
 
 	//Return whether or not we changed the block return changed;
 	return changed;
