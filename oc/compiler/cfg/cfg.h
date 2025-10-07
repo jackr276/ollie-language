@@ -60,7 +60,6 @@ typedef enum{
 } block_type_t;
 
 
-
 /**
  * We have a basic CFG structure that holds these references to making freeing
  */
@@ -81,6 +80,8 @@ struct cfg_t{
 	three_addr_var_t* instruction_pointer;
 	//We'll want the type symtab too
 	type_symtab_t* type_symtab;
+	//All global variables
+	dynamic_array_t* global_variables;
 };
 
 
