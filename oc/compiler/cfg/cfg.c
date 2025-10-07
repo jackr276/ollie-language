@@ -7546,6 +7546,9 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	//Keep track of the total offset here
 	u_int32_t member = 0;
 
+	//The initializer results
+	cfg_result_package_t initializer_results;
+
 	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
 	while(cursor != NULL){
 		//Grab it out
@@ -7561,17 +7564,21 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		switch(cursor->ast_node_type){
 			//We won't do any dereferencing if we have these
 			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+				initializer_results = emit_array_initializer(current_block, address, cursor, is_branch_ending);
+				break;
 			case AST_NODE_TYPE_STRING_INITIALIZER:
+				initializer_results = emit_string_initializer(current_block, address, cursor, is_branch_ending);
+				break;
 			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+				initializer_results = emit_struct_initializer(current_block, address, cursor, is_branch_ending);
 				break;
 			default:
+				//Just call the vanilla rule
+				initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
 				//Once we have the address, we'll need to emit the memory code for it
 				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
 				break;
 		}
-
-		//Now we'll invoke the helper rule to make the rest work
-		cfg_result_package_t initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
 
 		//Change the current block if there is a change. This is possible with ternary expressions
 		if(initializer_results.final_block != NULL && initializer_results.final_block != current_block){
@@ -7596,6 +7603,10 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 /**
  * Emit an initialization statement given only a variable and
  * the top level of what could be a larger initialization sequence
+ *
+ * For more complex initializers, we're able to bypass the emitting of extra instructions and simply emit the 
+ * offset that we need directly. We're able to do this because all array and struct initialization statements at
+ * the end of the day just calculate offsets.
  */
 static cfg_result_package_t emit_initialization(basic_block_t* current_block, three_addr_var_t* assignee, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending){
 	//Initialize the results here
