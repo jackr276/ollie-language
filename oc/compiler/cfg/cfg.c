@@ -7437,7 +7437,7 @@ static void visit_declaration_statement(generic_ast_node_t* node){
  * and let it do all of the heavy lifting in terms of assignment operations. This rule
  * will just compute the addresses that we need
  */
-static cfg_result_package_t emit_array_initializer(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* array_initializer, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_array_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t current_offset, generic_ast_node_t* array_initializer, u_int8_t is_branch_ending){
 	//Initialize the results package here to start
 	cfg_result_package_t results = {current_block, current_block, NULL, BLANK};
 
@@ -7445,21 +7445,48 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 	generic_ast_node_t* cursor = array_initializer->first_child;
 
 	//Keep track of the total offset here
-	u_int32_t offset = 0;
+	u_int32_t offset = current_offset;
+
+	//What is the current index of the initializer? We start at 0
+	u_int32_t current_array_index = 0;
+
+	//For when we eventually need it - the offset constant
+	three_addr_const_t* offset_constant;
+
+	//The address if we need it
+	three_addr_var_t* address;
+
+	//For storing all of our results
+	cfg_result_package_t initializer_results;
 
 	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
 	while(cursor != NULL){
-		//We'll need to emit the proper address offset calculation for each one
-		three_addr_var_t* address = emit_address_constant_offset_calculation(current_block, base_address, offset, cursor->inferred_type, is_branch_ending);
+		//This is the type of the value. We'll need it's size
+		generic_type_t* base_type = cursor->inferred_type;
+
+		//Increment the offset accordingly
+		offset += current_array_index * base_type->type_size;
 
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->ast_node_type){
 			//We won't do any dereferencing if we have these
 			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+				//Pass the new base offset along to this rule
+				initializer_results = emit_array_initializer(current_block, base_address, offset, cursor, is_branch_ending);
+				break;
+
 			case AST_NODE_TYPE_STRING_INITIALIZER:
 			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 				break;
+
+			//When we hit the default case, that means that we've stopped seeing initializer values
 			default:
+				//Emit the actual offset here
+				offset_constant = emit_direct_integer_or_char_constant(offset, u64);
+
+				//We'll need to emit the proper address offset calculation for each one
+				address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, offset_constant, is_branch_ending);
+
 				//Once we have the address, we'll need to emit the memory code for it
 				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
 				break;
@@ -7473,8 +7500,8 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 			current_block = initializer_results.final_block;
 		}
 
-		//Increment this by one
-		offset++;
+		//The current array index goes up by one
+		current_array_index++;
 
 		//Advance to the next one
 		cursor = cursor->next_sibling;
@@ -7562,9 +7589,9 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->ast_node_type){
-			//We won't do any dereferencing if we have these
+			//Handle an array initializer
 			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-				initializer_results = emit_array_initializer(current_block, address, cursor, is_branch_ending);
+				initializer_results = emit_array_initializer(current_block, address, 0, cursor, is_branch_ending);
 				break;
 			case AST_NODE_TYPE_STRING_INITIALIZER:
 				initializer_results = emit_string_initializer(current_block, address, cursor, is_branch_ending);
@@ -7624,11 +7651,14 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			return emit_struct_initializer(current_block, assignee, initializer_root, is_branch_ending);
 		
-		//Make a direct call to this one's rule as well
+		//Make a direct call to the array initializer. We'll "seed"
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			return emit_array_initializer(current_block, assignee, initializer_root, is_branch_ending);
+			return emit_array_initializer(current_block, assignee, 0, initializer_root, is_branch_ending);
 
-		//By default we just decay into the expression root
+		/**
+		 * This is our so-called "base-case" initialization path where we end up if we have a regular =
+		 * or we have reached the end of a string/struct/array initializer chain
+		 */
 		default:
 			//Now emit whatever binary expression code that we have
 			intermediary_results = emit_expression(current_block, initializer_root, is_branch_ending, FALSE);
@@ -7683,7 +7713,7 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 
 
 /**
- * Visit a let statement
+ * Visit a let statement and handle all relative initializations
  */
 static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Create the return package here
