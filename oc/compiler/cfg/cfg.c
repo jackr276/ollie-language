@@ -7612,7 +7612,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 
 			default:
 				//We'll need to emit the proper address offset calculation for each one
-				address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(offset, u64), is_branch_ending);
+				address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(current_offset, u64), is_branch_ending);
 
 				//Once we have the address, we'll need to emit the memory code for it
 				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
