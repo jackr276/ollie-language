@@ -29,7 +29,7 @@
 #define LOAD_AND_STORE_COST 2
 
 //The atomically increasing live range id
-u_int16_t live_range_id = 0;
+u_int32_t live_range_id = 0;
 
 //The array that holds all of our parameter passing
 const register_holder_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
@@ -39,6 +39,9 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 
 //Just hold the stack pointer live range
 live_range_t* stack_pointer_lr;
+//Holds the instruction pointer LR
+live_range_t* instruction_pointer_lr;
+
 
 /**
  * Priority queue insert a live range in here
@@ -83,8 +86,6 @@ static void dynamic_array_priority_insert_live_range(dynamic_array_t* array, liv
 
 	//Bump this up by 1
 	array->current_index++;
-
-	//And we're all set
 }
 
 
@@ -112,7 +113,7 @@ static void print_live_range_array(dynamic_array_t* live_ranges){
 /**
  * Increment and return the live range ID
  */
-static u_int16_t increment_and_get_live_range_id(){
+static u_int32_t increment_and_get_live_range_id(){
 	return live_range_id++;
 }
 
@@ -1321,7 +1322,7 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 /**
  * Create the stack pointer live range
  */
-static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
+static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* stack_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the stack pointer. Special case here - stack pointer has no block
 	live_range_t* stack_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
@@ -1342,6 +1343,9 @@ static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_
 	//Store it in the global var for convenience
 	stack_pointer_lr = stack_pointer_live_range;
 
+	//Add it into the list of all live ranges
+	dynamic_array_add(live_ranges, stack_pointer_live_range);
+
 	//Give it back
 	return stack_pointer_live_range;
 }
@@ -1350,7 +1354,7 @@ static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_
 /**
  * Create the instruction pointer live range
  */
-static live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* instruction_pointer){
+static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* instruction_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the instruction pointer.
 	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
@@ -1364,9 +1368,15 @@ static live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* 
 
 	//Add the stack pointer to the dynamic array
 	dynamic_array_add(instruction_pointer_live_range->variables, instruction_pointer);
+
+	//Save this to the global variable
+	instruction_pointer_lr = instruction_pointer_live_range;
 	
 	//Store this here as well
 	instruction_pointer->associated_live_range = instruction_pointer_live_range;
+
+	//Add the instruction pointer LR in
+	dynamic_array_add(live_ranges, instruction_pointer_lr);
 
 	//Give it back
 	return instruction_pointer_live_range;
@@ -1393,10 +1403,11 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 	//First create the set of live ranges
 	dynamic_array_t* live_ranges = dynamic_array_alloc();
 
-	//Add it into the dynamic array
-	dynamic_array_add(live_ranges, construct_stack_pointer_live_range(cfg->stack_pointer));
-	//Add it into the dynamic array
-	dynamic_array_add(live_ranges, construct_instruction_pointer_live_range(cfg->instruction_pointer));
+	//Construct and add the stack pointer's LR
+	construct_and_add_stack_pointer_live_range(live_ranges, cfg->stack_pointer);
+
+	//Construct and add the instruction pointer's LR
+	construct_and_add_instruction_pointer_live_range(live_ranges, cfg->instruction_pointer);
 
 	//Since the blocks are already ordered, this is very simple
 	basic_block_t* current = cfg->head_block;
