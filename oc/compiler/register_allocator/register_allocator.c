@@ -531,6 +531,282 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 }
 
 
+
+/**
+ * Create the stack pointer live range
+ */
+static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* stack_pointer){
+	//Before we go any further, we'll construct the live
+	//range for the stack pointer. Special case here - stack pointer has no block
+	live_range_t* stack_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
+	//This is guaranteed to be RSP - so it's already been allocated
+	stack_pointer_live_range->reg = RSP;
+	//And we absolutely *can not* spill it
+	stack_pointer_live_range->spill_cost = INT16_MAX;
+
+	//This is precolor
+	stack_pointer_live_range->is_precolored = TRUE;
+
+	//Add the stack pointer to the dynamic array
+	dynamic_array_add(stack_pointer_live_range->variables, stack_pointer);
+	
+	//Store this here as well
+	stack_pointer->associated_live_range = stack_pointer_live_range;
+
+	//Store it in the global var for convenience
+	stack_pointer_lr = stack_pointer_live_range;
+
+	//Add it into the list of all live ranges
+	dynamic_array_add(live_ranges, stack_pointer_live_range);
+
+	//Give it back
+	return stack_pointer_live_range;
+}
+
+
+/**
+ * Create the instruction pointer live range
+ */
+static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* instruction_pointer){
+	//Before we go any further, we'll construct the live
+	//range for the instruction pointer.
+	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
+	//This is guaranteed to be RSP - so it's already been allocated
+	instruction_pointer_live_range->reg = RIP;
+	//And we absolutely *can not* spill it
+	instruction_pointer_live_range->spill_cost = INT16_MAX;
+
+	//This is precolor
+	instruction_pointer_live_range->is_precolored = TRUE;
+
+	//Add the stack pointer to the dynamic array
+	dynamic_array_add(instruction_pointer_live_range->variables, instruction_pointer);
+
+	//Save this to the global variable
+	instruction_pointer_lr = instruction_pointer_live_range;
+	
+	//Store this here as well
+	instruction_pointer->associated_live_range = instruction_pointer_live_range;
+
+	//Add the instruction pointer LR in
+	dynamic_array_add(live_ranges, instruction_pointer_lr);
+
+	//Give it back
+	return instruction_pointer_live_range;
+}
+
+
+/**
+ * Run through every instruction in a block and construct the live ranges
+ */
+static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
+	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
+	//we'll allocate them fresh
+	if(basic_block->assigned_variables == NULL){
+		basic_block->assigned_variables = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(basic_block->assigned_variables);
+	}
+
+	//Do the same with the used variables
+	if(basic_block->used_variables == NULL){
+		basic_block->used_variables = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(basic_block->used_variables);
+	}
+
+	//Reset live in completely
+	if(basic_block->live_in != NULL){
+		dynamic_array_dealloc(basic_block->live_in);
+		basic_block->live_in = NULL;
+	}
+
+	//Reset live out completely
+	if(basic_block->live_out != NULL){
+		dynamic_array_dealloc(basic_block->live_out);
+		basic_block->live_out = NULL;
+	}
+
+	//Grab a pointer to the head
+	instruction_t* current = basic_block->leader_statement;
+
+	//Run through every instruction in the block
+	while(current != NULL){
+		//Predeclare for switch
+		live_range_t* live_range;
+
+		//Handle special cases
+		switch(current->instruction_type){
+			case PHI_FUNCTION:
+				//Let's see if we can find this
+				live_range = find_live_range_with_variable(live_ranges, current->assignee);
+
+				//If it's null we need to make one
+				if(live_range == NULL){
+					//Create it
+					live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
+
+					//Add it into the overall set
+					dynamic_array_add(live_ranges, live_range);
+				}
+
+				//Add this into the live range
+				add_variable_to_live_range(live_range, basic_block, current->assignee);
+
+				//And we're done - no need to go further
+				current = current->next_statement;
+				continue;
+
+			/**
+			 * For increment/decrement instructions - the only variable that we have just so happens to also
+			 * be the source. As such, we need to ensure that both of these end up in the same live range
+			 */
+			case INCB:
+			case INCL:
+			case INCQ:
+			case INCW:
+			case DECQ:
+			case DECL:
+			case DECW:
+			case DECB:
+				//If this is not a temp - the regular rule can handle it
+				if(current->assignee->is_temporary == FALSE){
+					break;
+				}
+
+				//Let's see if we can find this
+				live_range = find_live_range_with_variable(live_ranges, current->assignee);
+
+				//If it's null we need to make one
+				if(live_range == NULL){
+					//Create it
+					live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
+
+					//Add it into the overall set
+					dynamic_array_add(live_ranges, live_range);
+				}
+
+				//Add this into the live range
+				add_variable_to_live_range(live_range, basic_block, current->assignee);
+
+				//Assign the live range to op1 in here as well
+				add_variable_to_live_range(live_range, basic_block, current->op1);
+
+				//And we're done - no need to go further
+				current = current->next_statement;
+				continue;
+
+			//Just head out
+			default:
+				break;
+		}
+
+		/**
+		 * If we make it here, we know that we have a normal instruction that exists on
+		 * the target architecture. Here we can construct our live ranges and exploit any opportunities
+		 * for live range coalescing
+		 */
+
+		//If we actually have a destination register
+		if(current->destination_register != NULL){
+			//Let's see if we can find this
+			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->destination_register);
+
+			//If it's null we need to make one
+			if(live_range == NULL){
+				//Create it
+				live_range = live_range_alloc(basic_block->function_defined_in, current->destination_register->variable_size);
+
+				//Add it into the overall set
+				dynamic_array_add(live_ranges, live_range);
+			}
+
+			//Add this into the live range
+			add_variable_to_live_range(live_range, basic_block, current->destination_register);
+
+			//Link the variable into this as well
+			current->destination_register->associated_live_range = live_range;
+		}
+
+		//Let's also assign all the live ranges that we need to the given variables since we're already 
+		//iterating like this
+		if(current->source_register != NULL){
+			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->source_register);
+
+			//Add this as a used live range
+			add_used_live_range(live_range, basic_block);
+		}
+
+		if(current->source_register2 != NULL){
+			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->source_register2);
+
+			//Add this as a used live range
+			add_used_live_range(live_range, basic_block);
+		}
+
+		if(current->address_calc_reg1 != NULL){
+			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg1);
+			
+			//Add this as a used live range
+			add_used_live_range(live_range, basic_block);
+		}
+
+		if(current->address_calc_reg2 != NULL){
+			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2);
+
+			//Add this as a used live range
+			add_used_live_range(live_range, basic_block);
+		}
+
+		//Advance it down
+		current = current->next_statement;
+	}
+}
+
+
+/**
+ * Construct the live ranges for all variables that we'll need to concern ourselves with
+ *
+ * Conveniently, all code in OIR is translated into SSA form by the front end. In doing this, we're able
+ * to find live ranges in one pass of the code
+ *
+ * We will run through the entirety of the straight-line code. We will use the disjoint-set union-find algorithm
+ * to do this.
+ *
+ * For each instruction with an assignee:
+ * 	If assignee is not in a live range set:
+ * 		make a new live range set and add the variable to it
+ * 	else:
+ * 		add the variable to the corresponding live range set
+ * 		mark said variable 
+ */
+static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
+	//First create the set of live ranges
+	dynamic_array_t* live_ranges = dynamic_array_alloc();
+
+	//Construct and add the stack pointer's LR
+	construct_and_add_stack_pointer_live_range(live_ranges, cfg->stack_pointer);
+
+	//Construct and add the instruction pointer's LR
+	construct_and_add_instruction_pointer_live_range(live_ranges, cfg->instruction_pointer);
+
+	//Since the blocks are already ordered, this is very simple
+	basic_block_t* current = cfg->head_block;
+
+	//Run through every single block
+	while(current != NULL){
+		//Let the helper do this
+		construct_live_ranges_in_block(live_ranges, current);
+
+		//Advance to the next
+		current = current->direct_successor;
+	}
+
+	//Placehold
+	return live_ranges;
+}
+
+
 /**
  * Calculate the "live_in" and "live_out" sets for each basic block
  *
@@ -745,174 +1021,6 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 		}
 		//Advance to the direct successor
 		current = current->direct_successor;
-	}
-}
-
-
-/**
- * Run through every instruction in a block and construct the live ranges
- */
-static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
-	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
-	//we'll allocate them fresh
-	if(basic_block->assigned_variables == NULL){
-		basic_block->assigned_variables = dynamic_array_alloc();
-	} else {
-		reset_dynamic_array(basic_block->assigned_variables);
-	}
-
-	//Do the same with the used variables
-	if(basic_block->used_variables == NULL){
-		basic_block->used_variables = dynamic_array_alloc();
-	} else {
-		reset_dynamic_array(basic_block->used_variables);
-	}
-
-	//Reset live in completely
-	if(basic_block->live_in != NULL){
-		dynamic_array_dealloc(basic_block->live_in);
-		basic_block->live_in = NULL;
-	}
-
-	//Reset live out completely
-	if(basic_block->live_out != NULL){
-		dynamic_array_dealloc(basic_block->live_out);
-		basic_block->live_out = NULL;
-	}
-
-	//Grab a pointer to the head
-	instruction_t* current = basic_block->leader_statement;
-
-	//Run through every instruction in the block
-	while(current != NULL){
-		//Predeclare for switch
-		live_range_t* live_range;
-
-		//Handle special cases
-		switch(current->instruction_type){
-			case PHI_FUNCTION:
-				//Let's see if we can find this
-				live_range = find_live_range_with_variable(live_ranges, current->assignee);
-
-				//If it's null we need to make one
-				if(live_range == NULL){
-					//Create it
-					live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
-
-					//Add it into the overall set
-					dynamic_array_add(live_ranges, live_range);
-				}
-
-				//Add this into the live range
-				add_variable_to_live_range(live_range, basic_block, current->assignee);
-
-				//And we're done - no need to go further
-				current = current->next_statement;
-				continue;
-
-			/**
-			 * For increment/decrement instructions - the only variable that we have just so happens to also
-			 * be the source. As such, we need to ensure that both of these end up in the same live range
-			 */
-			case INCB:
-			case INCL:
-			case INCQ:
-			case INCW:
-			case DECQ:
-			case DECL:
-			case DECW:
-			case DECB:
-				//If this is not a temp - the regular rule can handle it
-				if(current->assignee->is_temporary == FALSE){
-					break;
-				}
-
-				//Let's see if we can find this
-				live_range = find_live_range_with_variable(live_ranges, current->assignee);
-
-				//If it's null we need to make one
-				if(live_range == NULL){
-					//Create it
-					live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
-
-					//Add it into the overall set
-					dynamic_array_add(live_ranges, live_range);
-				}
-
-				//Add this into the live range
-				add_variable_to_live_range(live_range, basic_block, current->assignee);
-
-				//Assign the live range to op1 in here as well
-				add_variable_to_live_range(live_range, basic_block, current->op1);
-
-				//And we're done - no need to go further
-				current = current->next_statement;
-				continue;
-
-			//Just head out
-			default:
-				break;
-		}
-
-		/**
-		 * If we make it here, we know that we have a normal instruction that exists on
-		 * the target architecture. Here we can construct our live ranges and exploit any opportunities
-		 * for live range coalescing
-		 */
-
-		//If we actually have a destination register
-		if(current->destination_register != NULL){
-			//Let's see if we can find this
-			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->destination_register);
-
-			//If it's null we need to make one
-			if(live_range == NULL){
-				//Create it
-				live_range = live_range_alloc(basic_block->function_defined_in, current->destination_register->variable_size);
-
-				//Add it into the overall set
-				dynamic_array_add(live_ranges, live_range);
-			}
-
-			//Add this into the live range
-			add_variable_to_live_range(live_range, basic_block, current->destination_register);
-
-			//Link the variable into this as well
-			current->destination_register->associated_live_range = live_range;
-		}
-
-		//Let's also assign all the live ranges that we need to the given variables since we're already 
-		//iterating like this
-		if(current->source_register != NULL){
-			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->source_register);
-
-			//Add this as a used live range
-			add_used_live_range(live_range, basic_block);
-		}
-
-		if(current->source_register2 != NULL){
-			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->source_register2);
-
-			//Add this as a used live range
-			add_used_live_range(live_range, basic_block);
-		}
-
-		if(current->address_calc_reg1 != NULL){
-			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg1);
-			
-			//Add this as a used live range
-			add_used_live_range(live_range, basic_block);
-		}
-
-		if(current->address_calc_reg2 != NULL){
-			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2);
-
-			//Add this as a used live range
-			add_used_live_range(live_range, basic_block);
-		}
-
-		//Advance it down
-		current = current->next_statement;
 	}
 }
 
@@ -1319,111 +1427,6 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 }
 
 
-/**
- * Create the stack pointer live range
- */
-static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* stack_pointer){
-	//Before we go any further, we'll construct the live
-	//range for the stack pointer. Special case here - stack pointer has no block
-	live_range_t* stack_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
-	//This is guaranteed to be RSP - so it's already been allocated
-	stack_pointer_live_range->reg = RSP;
-	//And we absolutely *can not* spill it
-	stack_pointer_live_range->spill_cost = INT16_MAX;
-
-	//This is precolor
-	stack_pointer_live_range->is_precolored = TRUE;
-
-	//Add the stack pointer to the dynamic array
-	dynamic_array_add(stack_pointer_live_range->variables, stack_pointer);
-	
-	//Store this here as well
-	stack_pointer->associated_live_range = stack_pointer_live_range;
-
-	//Store it in the global var for convenience
-	stack_pointer_lr = stack_pointer_live_range;
-
-	//Add it into the list of all live ranges
-	dynamic_array_add(live_ranges, stack_pointer_live_range);
-
-	//Give it back
-	return stack_pointer_live_range;
-}
-
-
-/**
- * Create the instruction pointer live range
- */
-static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* instruction_pointer){
-	//Before we go any further, we'll construct the live
-	//range for the instruction pointer.
-	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
-	//This is guaranteed to be RSP - so it's already been allocated
-	instruction_pointer_live_range->reg = RIP;
-	//And we absolutely *can not* spill it
-	instruction_pointer_live_range->spill_cost = INT16_MAX;
-
-	//This is precolor
-	instruction_pointer_live_range->is_precolored = TRUE;
-
-	//Add the stack pointer to the dynamic array
-	dynamic_array_add(instruction_pointer_live_range->variables, instruction_pointer);
-
-	//Save this to the global variable
-	instruction_pointer_lr = instruction_pointer_live_range;
-	
-	//Store this here as well
-	instruction_pointer->associated_live_range = instruction_pointer_live_range;
-
-	//Add the instruction pointer LR in
-	dynamic_array_add(live_ranges, instruction_pointer_lr);
-
-	//Give it back
-	return instruction_pointer_live_range;
-}
-
-
-/**
- * Construct the live ranges for all variables that we'll need to concern ourselves with
- *
- * Conveniently, all code in OIR is translated into SSA form by the front end. In doing this, we're able
- * to find live ranges in one pass of the code
- *
- * We will run through the entirety of the straight-line code. We will use the disjoint-set union-find algorithm
- * to do this.
- *
- * For each instruction with an assignee:
- * 	If assignee is not in a live range set:
- * 		make a new live range set and add the variable to it
- * 	else:
- * 		add the variable to the corresponding live range set
- * 		mark said variable 
- */
-static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
-	//First create the set of live ranges
-	dynamic_array_t* live_ranges = dynamic_array_alloc();
-
-	//Construct and add the stack pointer's LR
-	construct_and_add_stack_pointer_live_range(live_ranges, cfg->stack_pointer);
-
-	//Construct and add the instruction pointer's LR
-	construct_and_add_instruction_pointer_live_range(live_ranges, cfg->instruction_pointer);
-
-	//Since the blocks are already ordered, this is very simple
-	basic_block_t* current = cfg->head_block;
-
-	//Run through every single block
-	while(current != NULL){
-		//Let the helper do this
-		construct_live_ranges_in_block(live_ranges, current);
-
-		//Advance to the next
-		current = current->direct_successor;
-	}
-
-	//Placehold
-	return live_ranges;
-}
 
 
 /**
