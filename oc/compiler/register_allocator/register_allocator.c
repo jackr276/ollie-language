@@ -472,9 +472,11 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 
 
 /**
- * Figure out which live range a given variable was associated with
+ * Figure out which live range a given variable was associated with. 
+ *
+ * NOTE: We *only* get here if we have used variables. This means that assigned variables do not count
  */
-static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
+static void assign_live_range_to_used_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//If this is the case it already has one
 	if(variable->associated_live_range != NULL){
 		return;
@@ -831,7 +833,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				//Add this into the live range
 				add_variable_to_live_range(live_range, basic_block, current->assignee);
 
-				//IMPORTANT - we also add the source to this
+				//Assign the live range to op1 in here as well
 				add_variable_to_live_range(live_range, basic_block, current->op1);
 
 				//And we're done - no need to go further
@@ -873,19 +875,19 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 		//Let's also assign all the live ranges that we need to the given variables since we're already 
 		//iterating like this
 		if(current->source_register != NULL){
-			assign_live_range_to_variable(live_ranges, basic_block, current->source_register);
+			assign_live_range_to_used_variable(live_ranges, basic_block, current->source_register);
 		}
 
 		if(current->source_register2 != NULL){
-			assign_live_range_to_variable(live_ranges, basic_block, current->source_register2);
+			assign_live_range_to_used_variable(live_ranges, basic_block, current->source_register2);
 		}
 
 		if(current->address_calc_reg1 != NULL){
-			assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg1);
+			assign_live_range_to_used_variable(live_ranges, basic_block, current->address_calc_reg1);
 		}
 
 		if(current->address_calc_reg2 != NULL){
-			assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2);
+			assign_live_range_to_used_variable(live_ranges, basic_block, current->address_calc_reg2);
 		}
 
 		//Advance it down
