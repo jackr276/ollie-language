@@ -1280,6 +1280,20 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				dynamic_array_add(live_now, operation->address_calc_reg2->associated_live_range);
 			}
 
+			//We also need to account for the function parameters an operation may have if it is a function call
+			dynamic_array_t* operation_function_parameters = operation->function_parameters;
+
+			//Let's go through all of these and add them to LIVE_NOW
+			for(u_int16_t i = 0; operation_function_parameters != NULL && i < operation_function_parameters->current_index; i++){
+				//Extract the variable
+				three_addr_var_t* variable = dynamic_array_get_at(operation_function_parameters, i);
+
+				//If it's not already in the LIVE_NOW area, add it
+				if(dynamic_array_contains(live_now, variable->associated_live_range) == NOT_FOUND){
+					dynamic_array_add(live_now, variable->associated_live_range);
+				}
+			}
+
 			//Crawl back up by 1
 			operation = operation->previous_statement;
 		}
