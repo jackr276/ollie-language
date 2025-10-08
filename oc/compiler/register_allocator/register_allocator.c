@@ -425,6 +425,11 @@ static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges,
  * Update the estimate on spilling this variable
  */
 static void update_spill_cost(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
+	//Don't bother updating, we'd get an unsigned overflow
+	if(variable->is_stack_pointer == TRUE){
+		return;
+	}
+
 	if(variable->is_temporary == TRUE){
 		if(live_range->spill_cost == 0){
 			live_range->spill_cost = 1;
@@ -470,23 +475,6 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
  * Figure out which live range a given variable was associated with
  */
 static void assign_live_range_to_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
-	//Stack pointer is exempt
-	//
-	//
-	//TODO explore completely removing this. It's baffling as to why it's even here
-	//in the first place...
-	//
-	if(variable->is_stack_pointer == TRUE){
-		//Just ensure that this does have the stack pointer LR
-		variable->associated_live_range = stack_pointer_lr;
-
-		//We'll already have the live range 
-		dynamic_array_add(block->used_variables, stack_pointer_lr);
-
-		//And we're done
-		return;
-	}
-
 	//If this is the case it already has one
 	if(variable->associated_live_range != NULL){
 		return;
@@ -1254,7 +1242,7 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 					dynamic_array_add(live_now, operation->destination_register->associated_live_range);
 				}
 
-			//Otherwise we can delete
+			//Otherwise we can delete. Getting here means that nothing before it can possibly rely on this live range
 			} else {
 				dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
 			}
