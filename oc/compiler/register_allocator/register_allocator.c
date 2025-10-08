@@ -445,6 +445,16 @@ static void update_spill_cost(live_range_t* live_range, basic_block_t* block, th
 }
 
 
+/**
+ * Add a used live range to a block
+ */
+static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
+	//Assigning a live range to a variable means that this variable was *used* in the block
+	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
+		dynamic_array_add(block->used_variables, live_range);
+	}
+}
+
 
 /**
  * Add a variable to a live range, if it isn't already in there
@@ -515,10 +525,8 @@ static void assign_live_range_to_used_variable(dynamic_array_t* live_ranges, bas
 	//Update the spill cost
 	update_spill_cost(live_range, block, variable);
 
-	//Assigning a live range to a variable means that this variable was *used* in the block
-	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
-		dynamic_array_add(block->used_variables, live_range);
-	}
+	//Add this as a used live range
+	add_used_live_range(live_range, block);
 }
 
 
