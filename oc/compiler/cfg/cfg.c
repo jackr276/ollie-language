@@ -160,6 +160,39 @@ static u_int8_t is_power_of_2(int64_t value){
 
 
 /**
+ * Reset the used, live in, live out, and assigned arrays in a block
+ */
+void reset_block_variable_tracking(basic_block_t* block){
+	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
+	//we'll allocate them fresh
+	if(block->assigned_variables == NULL){
+		block->assigned_variables = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(block->assigned_variables);
+	}
+
+	//Do the same with the used variables
+	if(block->used_variables == NULL){
+		block->used_variables = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(block->used_variables);
+	}
+
+	//Reset live in completely
+	if(block->live_in != NULL){
+		dynamic_array_dealloc(block->live_in);
+		block->live_in = NULL;
+	}
+
+	//Reset live out completely
+	if(block->live_out != NULL){
+		dynamic_array_dealloc(block->live_out);
+		block->live_out = NULL;
+	}
+}
+
+
+/**
  * For certain variables in conditionals, we want to emit a temp assignment of said variable for optimization
  * reasons. This function will take a variable in and:
  *   If it's a temp, just give it back

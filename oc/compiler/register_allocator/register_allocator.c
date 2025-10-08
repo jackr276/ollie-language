@@ -447,6 +447,19 @@ static void update_spill_cost(live_range_t* live_range, basic_block_t* block, th
 
 
 /**
+ * Add an assigned live range to a block
+ */
+static void add_assigned_live_range(live_range_t* live_range, basic_block_t* block){
+	//Assigning a live range to a variable means that this variable was *assigned* in the block
+	//Do note that it may very well have also been used, but we do not handle that here
+	if(dynamic_array_contains(block->assigned_variables, live_range) == NOT_FOUND){
+		dynamic_array_add(block->assigned_variables, live_range);
+	}
+}
+
+
+
+/**
  * Add a used live range to a block
  */
 static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
@@ -475,10 +488,8 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 	//Update the cost
 	update_spill_cost(live_range, block, variable);
 
-	//Adding a variable to a live range means that this live range is assigned to in this block
-	if(dynamic_array_contains(block->assigned_variables, live_range) == NOT_FOUND){
-		dynamic_array_add(block->assigned_variables, live_range);
-	}
+	//TODO MOVEME
+	add_assigned_live_range(live_range, block);
 }
 
 
@@ -600,32 +611,8 @@ static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_ar
  * Run through every instruction in a block and construct the live ranges
  */
 static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
-	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
-	//we'll allocate them fresh
-	if(basic_block->assigned_variables == NULL){
-		basic_block->assigned_variables = dynamic_array_alloc();
-	} else {
-		reset_dynamic_array(basic_block->assigned_variables);
-	}
-
-	//Do the same with the used variables
-	if(basic_block->used_variables == NULL){
-		basic_block->used_variables = dynamic_array_alloc();
-	} else {
-		reset_dynamic_array(basic_block->used_variables);
-	}
-
-	//Reset live in completely
-	if(basic_block->live_in != NULL){
-		dynamic_array_dealloc(basic_block->live_in);
-		basic_block->live_in = NULL;
-	}
-
-	//Reset live out completely
-	if(basic_block->live_out != NULL){
-		dynamic_array_dealloc(basic_block->live_out);
-		basic_block->live_out = NULL;
-	}
+	//Call the helper API to wipe out any old variable tracking in here
+	reset_block_variable_tracking(basic_block);
 
 	//Grab a pointer to the head
 	instruction_t* current = basic_block->leader_statement;
@@ -637,6 +624,11 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 		//Handle special cases
 		switch(current->instruction_type){
+			/**
+			 * For phi functions, we will simply mark that the variable has been assigned and create
+			 * the appropriate live range. We do not
+			 * need to mark anything else here
+			 */
 			case PHI_FUNCTION:
 				//Let's see if we can find this
 				live_range = find_live_range_with_variable(live_ranges, current->assignee);
