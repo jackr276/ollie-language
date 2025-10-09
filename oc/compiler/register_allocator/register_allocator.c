@@ -738,15 +738,15 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			case DECW:
 			case DECB:
 				//If this is not a temp - the regular rule can handle it
-				if(current->assignee->is_temporary == FALSE){
+				if(current->destination_register->is_temporary == FALSE){
 					break;
 				}
 
 				//Let's see if we can find this
-				live_range = find_or_create_live_range(live_ranges, basic_block, current->assignee);
+				live_range = find_or_create_live_range(live_ranges, basic_block, current->destination_register);
 
 				//Add this into the live range
-				add_variable_to_live_range(live_range, basic_block, current->assignee);
+				add_variable_to_live_range(live_range, basic_block, current->destination_register);
 
 				//This does count as an assigned live range
 				add_assigned_live_range(live_range, basic_block);
