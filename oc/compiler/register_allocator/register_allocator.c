@@ -90,6 +90,31 @@ static void dynamic_array_priority_insert_live_range(dynamic_array_t* array, liv
 
 
 /**
+ * Does a live range for a given variable already exist? If so, we'll need to 
+ * coalesce the two live ranges in a union
+ *
+ * Returns NULL if we found nothing
+ */
+static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
+	//Run through all of the live ranges that we currently have
+	for(u_int16_t _ = 0; _ < live_ranges->current_index; _++){
+		//Grab the given live range out
+		live_range_t* current = dynamic_array_get_at(live_ranges, _);
+
+		//If the variables are equal(ignoring SSA and dereferencing) then we have a match
+		for(u_int16_t i = 0 ; i < current->variables->current_index; i++){
+			if(variables_equal_no_ssa(variable, dynamic_array_get_at(current->variables, i), TRUE) == TRUE){
+				return current;
+			}
+		}
+	}
+
+	//If we get here we didn't find anything
+	return NULL;
+}
+
+
+/**
  * Developer utility function to validate the priority queue implementation
  */
 static void print_live_range_array(dynamic_array_t* live_ranges){
@@ -142,6 +167,33 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
 	live_range->size = size;
 
 	//Finally we'll return it
+	return live_range;
+}
+
+
+/**
+ * Either find a live range with the given variable or create
+ * one if it does not exist
+ *
+ * NOTE that this function does *not* add anything to the live range
+ */
+static live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
+	//Lookup the live range that is associated with this
+	live_range_t* live_range = find_live_range_with_variable(live_ranges, variable);
+
+	//If this is not null, then it means that we found it, so we can
+	//leave
+	if(live_range != NULL){
+		return live_range;
+	}
+
+	//Otherwise if we get here, we'll need to make it ourselves
+	live_range = live_range_alloc(block->function_defined_in, variable->type->type_size);
+
+	//Add it into the live range
+	dynamic_array_add(live_ranges, live_range);
+
+	//Give it back
 	return live_range;
 }
 
@@ -398,31 +450,6 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 
 
 /**
- * Does a live range for a given variable already exist? If so, we'll need to 
- * coalesce the two live ranges in a union
- *
- * Returns NULL if we found nothing
- */
-static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
-	//Run through all of the live ranges that we currently have
-	for(u_int16_t _ = 0; _ < live_ranges->current_index; _++){
-		//Grab the given live range out
-		live_range_t* current = dynamic_array_get_at(live_ranges, _);
-
-		//If the variables are equal(ignoring SSA and dereferencing) then we have a match
-		for(u_int16_t i = 0 ; i < current->variables->current_index; i++){
-			if(variables_equal_no_ssa(variable, dynamic_array_get_at(current->variables, i), TRUE) == TRUE){
-				return current;
-			}
-		}
-	}
-
-	//If we get here we didn't find anything
-	return NULL;
-}
-
-
-/**
  * Update the estimate on spilling this variable
  */
 static void update_spill_cost(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
@@ -456,7 +483,6 @@ static void add_assigned_live_range(live_range_t* live_range, basic_block_t* blo
 		dynamic_array_add(block->assigned_variables, live_range);
 	}
 }
-
 
 
 /**
@@ -630,16 +656,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			 */
 			case PHI_FUNCTION:
 				//Let's see if we can find this
-				live_range = find_live_range_with_variable(live_ranges, current->assignee);
-
-				//If it's null we need to make one
-				if(live_range == NULL){
-					//Create it
-					live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
-
-					//Add it into the overall set
-					dynamic_array_add(live_ranges, live_range);
-				}
+				live_range = find_or_create_live_range(live_ranges, basic_block, current->assignee);
 
 				//Add this into the live range
 				add_variable_to_live_range(live_range, basic_block, current->assignee);
@@ -669,16 +686,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				}
 
 				//Let's see if we can find this
-				live_range = find_live_range_with_variable(live_ranges, current->assignee);
-
-				//If it's null we need to make one
-				if(live_range == NULL){
-					//Create it
-					live_range = live_range_alloc(basic_block->function_defined_in, current->assignee->variable_size);
-
-					//Add it into the overall set
-					dynamic_array_add(live_ranges, live_range);
-				}
+				live_range = find_or_create_live_range(live_ranges, basic_block, current->assignee);
 
 				//Add this into the live range
 				add_variable_to_live_range(live_range, basic_block, current->assignee);
@@ -735,16 +743,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 		//If we actually have a destination register
 		if(current->destination_register != NULL){
 			//Let's see if we can find this
-			live_range_t* live_range = find_live_range_with_variable(live_ranges, current->destination_register);
-
-			//If it's null we need to make one
-			if(live_range == NULL){
-				//Create it
-				live_range = live_range_alloc(basic_block->function_defined_in, current->destination_register->variable_size);
-
-				//Add it into the overall set
-				dynamic_array_add(live_ranges, live_range);
-			}
+			live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, current->destination_register);
 
 			//Add this into the live range
 			add_variable_to_live_range(live_range, basic_block, current->destination_register);
