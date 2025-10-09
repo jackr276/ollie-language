@@ -1377,15 +1377,6 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
  * we find the instruction where it was a destination. Once we find the instruction where the value was written
  * to, we can safely remove it from LIVE_NOW because everything before that cannot possibly rely on the register
  * because it hadn't been written to yet.
- *
- *
- *
- *
- *
- * 
- * TODO We should also ignore any interference with the stack pointer/instruction pointer LRs because these will
- * not compete with the others for register space
- *
  */
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges){
 	//First thing that we'll do is reset all live ranges
@@ -2256,7 +2247,14 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	*/
 	calculate_liveness_sets(cfg);
 
-	//Now let's determine the interference graph
+	/**
+	 * STEP 3: Construct the interference graph
+	 *
+	 * Now that we have the LIVE_IN and LIVE_OUT sets constructed, we're able
+	 * to determine the interference that exists between Live Ranges. This is
+	 * a necessary step in being able to allocate registers in any way at all
+	 * The algorithm is detailed more in the function
+	*/
 	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
 
 	//Again if we want to print, now is the time
@@ -2277,8 +2275,6 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		print_blocks_with_live_ranges(cfg->head_block);
 		printf("================= After Coalescing =======================\n");
 	}
-
-	//exit(0);
 	
 	//Let the allocator method take care of everything
 	allocate_registers(cfg, live_ranges, graph);
