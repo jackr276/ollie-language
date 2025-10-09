@@ -932,6 +932,15 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	//A cursor for the current block
 	basic_block_t* current;
 
+	/**
+	 * We will go through all of the function blocks separately first. Since
+	 * the functions are distinct, we do not need to do them all together.
+	 * We can focus on a single function at a time. This way, if certain functions
+	 * are "hot spots" and require multiple iterations, they will not drag the rest of the 
+	 * blocks with them for said recalculation
+	 */
+
+
 	do {
 		//We'll assume we didn't find a difference each iteration
 		difference_found = FALSE;

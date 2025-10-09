@@ -1658,7 +1658,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		//Extract it
 		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-		//True because we want this in reverse mode
+		//Calculate the reverse-post-order traversal so that we can make this converge quicker
 		function_entry->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(function_entry, TRUE);
 
 		//Run the algorithm until we have no difference found
