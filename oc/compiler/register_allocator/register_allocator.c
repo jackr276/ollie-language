@@ -707,21 +707,41 @@ static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basi
  * same live range as the destination. We ensure that that happens within this rule
  */
 static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
-	//Let's see if we can find this
-	live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, instruction->destination_register);
+	//If this is not temporary, we can handle it like any other statement
+	if(instruction->destination_register->is_temporary == FALSE){
+		//Handle the destination variable
+		assign_live_range_to_destination_variable(live_ranges, basic_block, instruction);
 
-	//Add this into the live range
-	add_variable_to_live_range(live_range, basic_block, instruction->destination_register);
+		//Assign all of the source variable live ranges
+		assign_live_range_to_source_variable(live_ranges, basic_block, instruction->source_register);
 
-	//This does count as an assigned live range
-	add_assigned_live_range(live_range, basic_block);
+	//Otherwise, we'll need to take a more specialized approach
+	} else {
+		//Let's see if we can find this
+		live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, instruction->destination_register);
 
-	//Assign the live range to op1 in here as well
-	add_variable_to_live_range(live_range, basic_block, instruction->source_register);
+		//Add this into the live range
+		add_variable_to_live_range(live_range, basic_block, instruction->destination_register);
 
-	//Since we rely on this value being live for the instruction, this also counts
-	//as a use
-	add_used_live_range(live_range, basic_block);
+		//This does count as an assigned live range
+		add_assigned_live_range(live_range, basic_block);
+
+		//Assign the live range to op1 in here as well
+		add_variable_to_live_range(live_range, basic_block, instruction->source_register);
+
+		//Since we rely on this value being live for the instruction, this also counts
+		//as a use
+		add_used_live_range(live_range, basic_block);
+	}
+}
+
+
+/**
+ * A function call statement keeps track of the parameters that it uses. In doing this,
+ * it is using those parameters. We need to keep track of this by recording it as a use
+ */
+static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+
 }
 
 
@@ -769,11 +789,6 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			case DECL:
 			case DECW:
 			case DECB:
-				//If this is not a temp - the regular rule can handle it
-				if(current->destination_register->is_temporary == FALSE){
-					break;
-				}
-
 				//Let the helper rule do the actual construction
 				construct_inc_dec_live_range(live_ranges, basic_block, current);
 			
