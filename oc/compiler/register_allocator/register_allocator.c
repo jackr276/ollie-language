@@ -714,7 +714,9 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				//Assign the live range to op1 in here as well
 				add_variable_to_live_range(live_range, basic_block, current->op1);
 
-				//TODO investigate use here
+				//Since we rely on this value being live for the instruction, this also counts
+				//as a use
+				add_used_live_range(live_range, basic_block);
 
 				//And we're done - no need to go further
 				current = current->next_statement;
