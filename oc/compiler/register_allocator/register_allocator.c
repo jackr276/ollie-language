@@ -772,6 +772,9 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
 
 /**
  * Run through every instruction in a block and construct the live ranges
+ *
+ * We invoke special processing functions to handle exception cases like phi functions, inc/dec instructions,
+ * and function calls
  */
 static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
 	//Call the helper API to wipe out any old variable tracking in here
@@ -890,7 +893,7 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 		current = current->direct_successor;
 	}
 
-	//Placehold
+	//Give back the array
 	return live_ranges;
 }
 
@@ -2209,8 +2212,13 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
 
-	//The first thing that we'll do is reconstruct everything in terms of live ranges
-	//This should be simplified by our values already being in SSA form
+	/**
+	 * STEP 1: Build all live ranges from variables:
+	 * 	
+	 * 	Invoke the helper rule to crawl the entire CFG, constructing all live
+	 * 	ranges *and* doing the needed bookkeeping for used & assigned variables
+	 * 	that will be needed for step 2
+	*/
 	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
 
 	//If we want to print, we'll show all live ranges
