@@ -703,6 +703,29 @@ static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basi
 
 
 /**
+ * An increment/decrement live range is a special case because the invisible "source" needs to be part of the
+ * same live range as the destination. We ensure that that happens within this rule
+ */
+static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+	//Let's see if we can find this
+	live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, instruction->destination_register);
+
+	//Add this into the live range
+	add_variable_to_live_range(live_range, basic_block, instruction->destination_register);
+
+	//This does count as an assigned live range
+	add_assigned_live_range(live_range, basic_block);
+
+	//Assign the live range to op1 in here as well
+	add_variable_to_live_range(live_range, basic_block, instruction->source_register);
+
+	//Since we rely on this value being live for the instruction, this also counts
+	//as a use
+	add_used_live_range(live_range, basic_block);
+}
+
+
+/**
  * Run through every instruction in a block and construct the live ranges
  */
 static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
@@ -751,22 +774,9 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 					break;
 				}
 
-				//Let's see if we can find this
-				live_range = find_or_create_live_range(live_ranges, basic_block, current->destination_register);
-
-				//Add this into the live range
-				add_variable_to_live_range(live_range, basic_block, current->destination_register);
-
-				//This does count as an assigned live range
-				add_assigned_live_range(live_range, basic_block);
-
-				//Assign the live range to op1 in here as well
-				add_variable_to_live_range(live_range, basic_block, current->op1);
-
-				//Since we rely on this value being live for the instruction, this also counts
-				//as a use
-				add_used_live_range(live_range, basic_block);
-
+				//Let the helper rule do the actual construction
+				construct_inc_dec_live_range(live_ranges, basic_block, current);
+			
 				//And we're done - no need to go further
 				current = current->next_statement;
 				continue;

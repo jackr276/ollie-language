@@ -2234,6 +2234,8 @@ static void handle_inc_instruction(instruction_t* instruction){
 			break;
 	}
 
+	instruction->source_register = instruction->op1;
+
 	//Set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
 }
@@ -2265,6 +2267,8 @@ static void handle_dec_instruction(instruction_t* instruction){
 			instruction->instruction_type = DECQ;
 			break;
 	}
+
+	instruction->source_register = instruction->op1;
 
 	//Set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
