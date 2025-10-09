@@ -939,25 +939,24 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	 * are "hot spots" and require multiple iterations, they will not drag the rest of the 
 	 * blocks with them for said recalculation
 	 */
+	//Run through all functions
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Grab the entry block
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
+		//We'll reset the used_registers array here because we have not used any registers at this
+		//point
+		memset(function_entry->function_defined_in->used_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
-	do {
-		//We'll assume we didn't find a difference each iteration
-		difference_found = FALSE;
-
-		//Go through all of the function blocks
-		for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-			//Grab the block out
-			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
-
-			//We'll reset the used_registers array here because we have not used any registers at this
-			//point
-			memset(func_entry->function_defined_in->used_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+		//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
+		do{
+			//Assume that we have not found a difference by default
+			difference_found = FALSE;
 
 			//Now we can go through the entire RPO set
-			for(u_int16_t _ = 0; _ < func_entry->reverse_post_order_reverse_cfg->current_index; _++){
+			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg->current_index; _++){
 				//The current block is whichever we grab
-				current = dynamic_array_get_at(func_entry->reverse_post_order_reverse_cfg, _);
+				current = dynamic_array_get_at(function_entry->reverse_post_order_reverse_cfg, _);
 
 				//Transfer the pointers over
 				in_prime = current->live_in;
@@ -979,7 +978,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
 					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
 					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND //Ensure not assigned
-						//And not LIVE_IN
+						//And not also already in LIVE_IN
 						&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
 						//If this is true we can add
 						dynamic_array_add(current->live_in, live_out_var);
@@ -1028,10 +1027,10 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				dynamic_array_dealloc(in_prime);
 				dynamic_array_dealloc(out_prime);
 			}
-		}
 
-	//So long as we continue finding differences
-	} while(difference_found == TRUE);
+		//So long as there is a difference
+		} while(difference_found == TRUE);
+	}
 }
 
 
@@ -1044,6 +1043,10 @@ static void calculate_liveness_sets(cfg_t* cfg){
  * is involved because moving into those exact registers is very important. Since we cannot guarantee
  * that we're going to move into those exact registers long in advance, we need to keep the movements
  * for precoloring around
+ *
+ *
+ * TODO in reality, having the source register as RSP is not interference. We'd be able to
+ * coalesce those live ranges. This would be ideal because RSP is *never* spilled
  */
 static u_int8_t does_precoloring_interference_exist(live_range_t* a, live_range_t* b){
 	/**
