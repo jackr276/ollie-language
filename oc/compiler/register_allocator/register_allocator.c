@@ -631,6 +631,23 @@ static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_ar
 
 
 /**
+ * Handle the live range that comes from the source of an instruction
+ */
+static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
+	//Just leave if it's NULL
+	if(source_variable == NULL){
+		return;
+	}
+
+	//Let the helper deal with this
+	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, source_variable);
+
+	//Add this as a used live range
+	add_used_live_range(live_range, block);
+}
+
+
+/**
  * Run through every instruction in a block and construct the live ranges
  */
 static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
@@ -768,35 +785,11 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			}
 		}
 
-		//Let's also assign all the live ranges that we need to the given variables since we're already 
-		//iterating like this
-		if(current->source_register != NULL){
-			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->source_register);
-
-			//Add this as a used live range
-			add_used_live_range(live_range, basic_block);
-		}
-
-		if(current->source_register2 != NULL){
-			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->source_register2);
-
-			//Add this as a used live range
-			add_used_live_range(live_range, basic_block);
-		}
-
-		if(current->address_calc_reg1 != NULL){
-			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg1);
-			
-			//Add this as a used live range
-			add_used_live_range(live_range, basic_block);
-		}
-
-		if(current->address_calc_reg2 != NULL){
-			live_range = assign_live_range_to_variable(live_ranges, basic_block, current->address_calc_reg2);
-
-			//Add this as a used live range
-			add_used_live_range(live_range, basic_block);
-		}
+		//Assign all of the source variable live ranges
+		assign_live_range_to_source_variable(live_ranges, basic_block, current->source_register);
+		assign_live_range_to_source_variable(live_ranges, basic_block, current->source_register2);
+		assign_live_range_to_source_variable(live_ranges, basic_block, current->address_calc_reg1);
+		assign_live_range_to_source_variable(live_ranges, basic_block, current->address_calc_reg2);
 
 		//Advance it down
 		current = current->next_statement;
