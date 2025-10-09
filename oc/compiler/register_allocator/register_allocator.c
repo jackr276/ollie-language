@@ -688,6 +688,21 @@ static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, b
 
 
 /**
+ * Construct the live ranges appropriate for a phi function
+ */
+static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+	//Let's see if we can find this
+	live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, instruction->assignee);
+
+	//Add this into the live range
+	add_variable_to_live_range(live_range, basic_block, instruction->assignee);
+
+	//This does count as an assignment
+	add_assigned_live_range(live_range, basic_block);
+}
+
+
+/**
  * Run through every instruction in a block and construct the live ranges
  */
 static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
@@ -712,15 +727,9 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			 * need to mark anything else here
 			 */
 			case PHI_FUNCTION:
-				//Let's see if we can find this
-				live_range = find_or_create_live_range(live_ranges, basic_block, current->assignee);
-
-				//Add this into the live range
-				add_variable_to_live_range(live_range, basic_block, current->assignee);
-
-				//This does count as an assignment
-				add_assigned_live_range(live_range, basic_block);
-
+				//Invoke the helper rule for this
+				construct_phi_function_live_range(live_ranges, basic_block, current);
+			
 				//And we're done - no need to go further
 				current = current->next_statement;
 				continue;
@@ -777,13 +786,9 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				for(u_int16_t i = 0; i < function_parameters->current_index; i++){
 					//Extract it
 					three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
-					
-					//Give it a live range
-					live_range = assign_live_range_to_variable(live_ranges, basic_block, parameter);
 
-					//TODO FIGURE OUT WHY THIS LOOPS INFINITELY
-					//And now the important part - this counts as a use of the variable
-					//add_used_live_range(live_range, basic_block);
+					//Assign this to the source var LR
+					//assign_live_range_to_source_variable(live_ranges, basic_block, parameter);
 				}
 
 				break;
@@ -2197,6 +2202,8 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		print_blocks_with_live_ranges(cfg->head_block);
 		printf("================= After Coalescing =======================\n");
 	}
+
+	//exit(0);
 	
 	//Let the allocator method take care of everything
 	allocate_registers(cfg, live_ranges, graph);
