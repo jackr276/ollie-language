@@ -618,6 +618,8 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 	while(current != NULL){
 		//Predeclare for switch
 		live_range_t* live_range;
+		//For function parameters
+		dynamic_array_t* function_parameters;
 
 		//Handle special cases
 		switch(current->instruction_type){
@@ -687,9 +689,37 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				//Assign the live range to op1 in here as well
 				add_variable_to_live_range(live_range, basic_block, current->op1);
 
+				//TODO investigate use here
+
 				//And we're done - no need to go further
 				current = current->next_statement;
 				continue;
+
+			//Call and indirect call have hidden parameters that need to be accounted for
+			case CALL:
+			case INDIRECT_CALL:
+				//Extract for us
+				function_parameters = current->function_parameters;
+
+				//If these are NULL then we just continue with regular processing
+				if(function_parameters == NULL){
+					break;
+				}
+				
+				//Otherwise we'll run through them all
+				for(u_int16_t i = 0; i < function_parameters->current_index; i++){
+					//Extract it
+					three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
+					
+					//Give it a live range
+					live_range = assign_live_range_to_variable(live_ranges, basic_block, parameter);
+
+					//TODO FIGURE OUT WHY THIS LOOPS INFINITELY
+					//And now the important part - this counts as a use of the variable
+					//add_used_live_range(live_range, basic_block);
+				}
+
+				break;
 
 			//Just head out
 			default:
@@ -725,6 +755,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			//There are a few things that could happen here in terms of a variable use:
 			//If this is the case, then we need to set this new LR as both used and assigned
 			if(is_destination_also_operand(current) == TRUE){
+				//Counts as both
 				add_assigned_live_range(live_range, basic_block);
 				add_used_live_range(live_range, basic_block);
 
