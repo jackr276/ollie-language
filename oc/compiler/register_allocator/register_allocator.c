@@ -631,6 +631,46 @@ static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_ar
 
 
 /**
+ * Handle a live range being assigned to a destination variable,
+ * and all of the bookkeeping that comes with it
+ */
+static void assign_live_range_to_destination_variable(dynamic_array_t* live_ranges, basic_block_t* block, instruction_t* instruction){
+	//Bail out if this happens
+	if(instruction->destination_register == NULL){
+		return;
+	}
+
+	//Extract for convenience
+	three_addr_var_t* destination_register = instruction->destination_register;
+
+	//Let's see if we can find this
+	live_range_t* live_range = find_or_create_live_range(live_ranges, block, destination_register);
+
+	//Add this into the live range
+	add_variable_to_live_range(live_range, block, destination_register);
+
+	//Link the variable into this as well
+	destination_register->associated_live_range = live_range;
+
+	//There are a few things that could happen here in terms of a variable use:
+	//If this is the case, then we need to set this new LR as both used and assigned
+	if(is_destination_also_operand(instruction) == TRUE){
+		//Counts as both
+		add_assigned_live_range(live_range, block);
+		add_used_live_range(live_range, block);
+
+	//If this is being derefenced, then it's not a true assignment, just a use
+	} else if(destination_register->indirection_level > 0){
+		add_used_live_range(live_range, block);
+
+	//If we get all the way to here, then it was truly assigned
+	} else {
+		add_assigned_live_range(live_range, block);
+	}
+}
+
+
+/**
  * Handle the live range that comes from the source of an instruction
  */
 static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
@@ -759,33 +799,8 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 		 * for live range coalescing
 		 */
 
-		//If we actually have a destination register
-		if(current->destination_register != NULL){
-			//Let's see if we can find this
-			live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, current->destination_register);
-
-			//Add this into the live range
-			add_variable_to_live_range(live_range, basic_block, current->destination_register);
-
-			//Link the variable into this as well
-			current->destination_register->associated_live_range = live_range;
-
-			//There are a few things that could happen here in terms of a variable use:
-			//If this is the case, then we need to set this new LR as both used and assigned
-			if(is_destination_also_operand(current) == TRUE){
-				//Counts as both
-				add_assigned_live_range(live_range, basic_block);
-				add_used_live_range(live_range, basic_block);
-
-			//If this is being derefenced, then it's not a true assignment, just a use
-			} else if(current->destination_register->indirection_level > 0){
-				add_used_live_range(live_range, basic_block);
-
-			//If we get all the way to here, then it was truly assigned
-			} else {
-				add_assigned_live_range(live_range, basic_block);
-			}
-		}
+		//Handle the destination variable
+		assign_live_range_to_destination_variable(live_ranges, basic_block, current);
 
 		//Assign all of the source variable live ranges
 		assign_live_range_to_source_variable(live_ranges, basic_block, current->source_register);
