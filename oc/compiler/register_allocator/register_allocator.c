@@ -899,7 +899,8 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 
 
 /**
- * Calculate the "live_in" and "live_out" sets for each basic block
+ * Calculate the "live_in" and "live_out" sets for each basic block. More broadly, we can do this for 
+ * every single function
  *
  * General algorithm
  *
@@ -935,12 +936,13 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		//We'll assume we didn't find a difference each iteration
 		difference_found = FALSE;
 
-		//Run through all of the blocks backwards
-		for(int16_t i = cfg->function_entry_blocks->current_index - 1; i >= 0; i--){
+		//Go through all of the function blocks
+		for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 			//Grab the block out
 			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-			//Reset the registers in here while we're at it
+			//We'll reset the used_registers array here because we have not used any registers at this
+			//point
 			memset(func_entry->function_defined_in->used_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
 			//Now we can go through the entire RPO set
@@ -952,7 +954,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				in_prime = current->live_in;
 				out_prime = current->live_out;
 
-				//The live in is a combination of the variables used
+				//The LIVE_IN is a combination of the variables used
 				//at current and the difference of the LIVE_OUT variables defined
 				//ones
 
@@ -967,7 +969,8 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
 					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
-					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND
+					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND //Ensure not assigned
+						//And not LIVE_IN
 						&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
 						//If this is true we can add
 						dynamic_array_add(current->live_in, live_out_var);
@@ -975,7 +978,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				}
 
 				//Now we'll turn our attention to live out. The live out set for any block is the union of the
-				//LIVE_IN set for all of it's successors
+				//LIVE_IN sets for all of it's successors
 				
 				//Set live out to be a new array
 				current->live_out = dynamic_array_alloc();
@@ -997,9 +1000,11 @@ static void calculate_liveness_sets(cfg_t* cfg){
 					}
 				}
 
-				//Now we'll go through and check if the new live in and live out sets are different. If they are different,
-				//we'll be doing this whole thing again
-
+				/**
+				 * Now for the final portion of the algorithm. We need to see if the LIVE_IN and LIVE_OUT
+				 * sets that we've computed on this iteration are equal. If they're not equal, then we have
+				 * not yet found the full solution, and we need to go again
+				 */
 				//For efficiency - if there was a difference in one block, it's already done - no use in comparing
 				if(difference_found == FALSE){
 					//So we haven't found a difference so far - let's see if we can find one now
@@ -2227,7 +2232,16 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		print_all_live_ranges(live_ranges);
 	}
 
-	//We now need to compute all of the LIVE OUT values
+
+	/**
+	 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
+	 *
+	 * Before we can properly determine interference, we need
+	 * to construct the LIVE_IN and LIVE_OUT sets in each block.
+	 * We cannot simply reuse these from before because they've been so heavily
+	 * modified by this point in the compilation process that starting over
+	 * is easier
+	*/
 	calculate_liveness_sets(cfg);
 
 	//Now let's determine the interference graph
