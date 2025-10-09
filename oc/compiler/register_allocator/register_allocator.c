@@ -487,9 +487,6 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 
 	//Update the cost
 	update_spill_cost(live_range, block, variable);
-
-	//TODO MOVEME
-	add_assigned_live_range(live_range, block);
 }
 
 
@@ -645,6 +642,9 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				//Add this into the live range
 				add_variable_to_live_range(live_range, basic_block, current->assignee);
 
+				//This does count as an assignment
+				add_assigned_live_range(live_range, basic_block);
+
 				//And we're done - no need to go further
 				current = current->next_statement;
 				continue;
@@ -680,6 +680,9 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 				//Add this into the live range
 				add_variable_to_live_range(live_range, basic_block, current->assignee);
+
+				//This does count as an assigned live range
+				add_assigned_live_range(live_range, basic_block);
 
 				//Assign the live range to op1 in here as well
 				add_variable_to_live_range(live_range, basic_block, current->op1);
@@ -718,6 +721,21 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 			//Link the variable into this as well
 			current->destination_register->associated_live_range = live_range;
+
+			//There are a few things that could happen here in terms of a variable use:
+			//If this is the case, then we need to set this new LR as both used and assigned
+			if(is_destination_also_operand(current) == TRUE){
+				add_assigned_live_range(live_range, basic_block);
+				add_used_live_range(live_range, basic_block);
+
+			//If this is being derefenced, then it's not a true assignment, just a use
+			} else if(current->destination_register->indirection_level > 0){
+				add_used_live_range(live_range, basic_block);
+
+			//If we get all the way to here, then it was truly assigned
+			} else {
+				add_assigned_live_range(live_range, basic_block);
+			}
 		}
 
 		//Let's also assign all the live ranges that we need to the given variables since we're already 
@@ -1433,6 +1451,9 @@ static void handle_assignment_spill(cfg_t* cfg, three_addr_var_t* var, live_rang
 	//Grab the block out too
 	basic_block_t* block = instruction->block_contained_in;
 
+	//This counts as a use
+	add_used_live_range(spill_range, block);
+
 	//Link this in too
 	store->block_contained_in = block;
 
@@ -1464,6 +1485,9 @@ static three_addr_var_t* handle_use_spill(cfg_t* cfg, dynamic_array_t* live_rang
 
 	//Now we'll want to load from memory
 	instruction_t* load = emit_load_instruction(new_var, cfg->stack_pointer, cfg->type_symtab, spill_range->stack_offset);
+	
+	//Add this as a used variable
+	add_assigned_live_range(new_var->associated_live_range, instruction->block_contained_in);
 
 	//Link the load instruction with what block it's in
 	load->block_contained_in = block;
