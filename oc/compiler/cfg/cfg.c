@@ -1649,26 +1649,27 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	//A cursor for the current block
 	basic_block_t* current;
 
-	do {
-		//We'll assume we didn't find a difference each iteration
-		difference_found = FALSE;
+	/**
+	 * We will run the algorithm for every single function. Since *all* functions
+	 * are *separate*, we can run the do-while algorithm on each function independently. This
+	 * avoids us needing to recompute the entire CFG every time the disjoint-union-find does not work
+	 */
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract it
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-		//Run through all of the blocks backwards
-		for(int16_t i = cfg->function_entry_blocks->current_index - 1; i >= 0; i--){
-			//Grab the block out
-			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		//True because we want this in reverse mode
+		function_entry->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(function_entry, TRUE);
 
-			//Calculate the reverse post order in reverse mode for this block, if it doesn't
-			//already exist
-			if(func_entry->reverse_post_order_reverse_cfg == NULL){
-				//True because we want this in reverse mode
-				func_entry->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(func_entry, TRUE);
-			}
+		//Run the algorithm until we have no difference found
+		do{
+			//We'll assume we didn't find a difference each iteration
+			difference_found = FALSE;
 
 			//Now we can go through the entire RPO set
-			for(u_int16_t _ = 0; _ < func_entry->reverse_post_order_reverse_cfg->current_index; _++){
+			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg->current_index; _++){
 				//The current block is whichever we grab
-				current = dynamic_array_get_at(func_entry->reverse_post_order_reverse_cfg, _);
+				current = dynamic_array_get_at(function_entry->reverse_post_order_reverse_cfg, _);
 
 				//Transfer the pointers over
 				in_prime = current->live_in;
@@ -1734,9 +1735,10 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				dynamic_array_dealloc(in_prime);
 				dynamic_array_dealloc(out_prime);
 			}
-		}
-	//So long as we continue finding differences
-	} while(difference_found == TRUE);
+		
+		//So long as this holds we repeat
+		} while(difference_found == TRUE);
+	}
 }
 
 
