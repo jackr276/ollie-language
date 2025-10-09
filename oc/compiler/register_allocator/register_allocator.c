@@ -741,7 +741,32 @@ static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_blo
  * it is using those parameters. We need to keep track of this by recording it as a use
  */
 static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+	//First let's handle the destination register
+	assign_live_range_to_destination_variable(live_ranges, basic_block, instruction);
 
+	/**
+	 * NOTE: For indirect function calls, the variable itself is actually stored in the source register.
+	 * We'll make this call to account for such a case here
+	 */
+	assign_live_range_to_source_variable(live_ranges, basic_block, instruction->source_register);
+
+	//Extract for us
+	dynamic_array_t* function_parameters = instruction->function_parameters;
+
+	//If these are NULL then there's nothing else for us here
+	if(function_parameters == NULL){
+		return;
+	}
+				
+	//Otherwise we'll run through them all
+	for(u_int16_t i = 0; i < function_parameters->current_index; i++){
+		//Extract it
+		three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
+
+		//TODO THIS IS BROKEN
+		//Assign this to the source var LR
+		//assign_live_range_to_source_variable(live_ranges, basic_block, parameter);
+	}
 }
 
 
@@ -757,11 +782,6 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 
 	//Run through every instruction in the block
 	while(current != NULL){
-		//Predeclare for switch
-		live_range_t* live_range;
-		//For function parameters
-		dynamic_array_t* function_parameters;
-
 		//Handle special cases
 		switch(current->instruction_type){
 			/**
@@ -799,24 +819,12 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			//Call and indirect call have hidden parameters that need to be accounted for
 			case CALL:
 			case INDIRECT_CALL:
-				//Extract for us
-				function_parameters = current->function_parameters;
+				//Let the helper rule handle it
+				construct_function_call_live_ranges(live_ranges, basic_block, current);
 
-				//If these are NULL then we just continue with regular processing
-				if(function_parameters == NULL){
-					break;
-				}
-				
-				//Otherwise we'll run through them all
-				for(u_int16_t i = 0; i < function_parameters->current_index; i++){
-					//Extract it
-					three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
-
-					//Assign this to the source var LR
-					//assign_live_range_to_source_variable(live_ranges, basic_block, parameter);
-				}
-
-				break;
+				//And we're done - no need to go further
+				current = current->next_statement;
+				continue;
 
 			//Just head out
 			default:
@@ -1349,6 +1357,14 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
  * we find the instruction where it was a destination. Once we find the instruction where the value was written
  * to, we can safely remove it from LIVE_NOW because everything before that cannot possibly rely on the register
  * because it hadn't been written to yet.
+ *
+ *
+ *
+ *
+ *
+ * 
+ * TODO We should also ignore any interference with the stack pointer/instruction pointer LRs because these will
+ * not compete with the others for register space
  *
  */
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges){
