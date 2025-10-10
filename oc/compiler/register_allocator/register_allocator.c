@@ -1517,7 +1517,8 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 		while(instruction != NULL){
 			//If we have a pure copy instruction(movX with no indirection), we can coalesce
 			if(is_instruction_pure_copy(instruction) == TRUE){
-				//If our live ranges interfere, we can perform the coalescing
+				//If our live ranges do not interfere, we can perform the coalescing
+				//TODO LOOK AT THIS CAUSES VALGRIND WARNINGS
 				if(do_live_ranges_interfere(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE
 					&& instruction->cannot_be_combined == FALSE //Ensure that we actually can combine this
 					//Also check for precoloring interference
@@ -2231,24 +2232,19 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 
 	//Keep track of the iterations that we've been through
 	u_int32_t iterations = 0;
+
+	/**
+	 * STEP 1: Build all live ranges from variables:
+	 * 	
+	 * 	Invoke the helper rule to crawl the entire CFG, constructing all live
+	 * 	ranges *and* doing the needed bookkeeping for used & assigned variables
+	 * 	that will be needed for step 2
+	 *
+	 * 	We only need to do this once for the allocation
+	*/
+	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
 	
 	do {
-		/**
-		 * STEP 1: Build all live ranges from variables:
-		 * 	
-		 * 	Invoke the helper rule to crawl the entire CFG, constructing all live
-		 * 	ranges *and* doing the needed bookkeeping for used & assigned variables
-		 * 	that will be needed for step 2
-		*/
-		dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
-
-		//If we want to print, we'll show all live ranges
-		if(print_irs == TRUE){
-			//Print whatever live ranges we did find
-			print_all_live_ranges(live_ranges);
-		}
-
-
 		/**
 		 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
 		 *
@@ -2257,8 +2253,23 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 * We cannot simply reuse these from before because they've been so heavily
 		 * modified by this point in the compilation process that starting over
 		 * is easier
+		 *
+		 * We will need to do this every single time we reallocate
 		*/
 		calculate_liveness_sets(cfg);
+
+		//Mark that we are retrying
+		if(print_irs == TRUE && iterations > 0){
+	 		printf("============= Retrying with ====================\n");
+		    //Show our live ranges once again
+			print_all_live_ranges(live_ranges);
+			print_blocks_with_live_ranges(cfg->head_block);
+
+		//Otherwise just the LRs
+		} else if(print_irs == TRUE && iterations == 0){
+			//Print whatever live ranges we did find
+			print_all_live_ranges(live_ranges);
+		}
 
 		/**
 		 * STEP 3: Construct the interference graph
@@ -2267,11 +2278,13 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 * to determine the interference that exists between Live Ranges. This is
 		 * a necessary step in being able to allocate registers in any way at all
 		 * The algorithm is detailed more in the function
+		 *
+		 * Again, this is required every single time we need to retry after a spill
 		*/
 		interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
 
 		//Again if we want to print, now is the time
-		if(print_irs == TRUE){
+		if(print_irs == TRUE && iterations == 0){
 			printf("============= After Live Range Determination ==============\n");
 			print_blocks_with_live_ranges(cfg->head_block);
 			printf("============= After Live Range Determination ==============\n");
@@ -2284,11 +2297,15 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 * on our given live ranges. We are able to coalesce live ranges if they do
 		 * not interfere and we have a pure copy like movq LR0, LR1. More detail
 		 * is given in the function
+		 *
+		 * Since spilling breaks up large live ranges, it has the opportunity to
+		 * allow for even more coalescence. We will use this to our advantage
+		 * by letting this rule run every time
 		*/
 		perform_live_range_coalescence(cfg, live_ranges, graph);
 
 		//Show our live ranges once again if requested
-		if(print_irs == TRUE){
+		if(print_irs == TRUE && iterations == 0){
 			print_all_live_ranges(live_ranges);
 			printf("================= After Coalescing =======================\n");
 			print_blocks_with_live_ranges(cfg->head_block);
@@ -2310,7 +2327,14 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//So long as we can't color, we need to keep going
 	} while(colorable == FALSE);
 
-	//Once registers are allocated, we need to crawl and insert all stack allocations/subtractions
+
+	/**
+	 * STEP 6: caller/callee saving logic
+	 *
+	 * Once we make it down here, we have colored the entire graph successfully. But,
+	 * we still need to insert any caller/callee saving logic that is needed
+	 * when appropriate
+	*/
 	insert_saving_logic(cfg);
 
 	//One final print post allocation
