@@ -1352,6 +1352,22 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 
 
 /**
+ * A helper function for interference construction. This adds interference between every
+ * value in LIVE_NOW and the given destination_lr
+ */
+static void add_destination_interference(interference_graph_t* graph, dynamic_array_t* LIVE_NOW, live_range_t* destination_lr){
+	for(u_int16_t i = 0; i < LIVE_NOW->current_index; i++){
+		//Graph the LR out
+		live_range_t* range = dynamic_array_get_at(LIVE_NOW, i);
+
+		//Now we'll add this to the graph
+		add_interference(graph, destination_lr, range);
+	}
+}
+
+
+
+/**
  * Construct the interference graph using LIVENOW sets
  *
  * NOTE: We must walk the block from bottom to top
@@ -1396,17 +1412,15 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 			continue;
 		}
 
-		//live now is initially live out. Just settigg this pointer
-		//for naming congruety
+		/**
+		 * As you can see in the algorithm, the LIVE_NOW set initially starts
+		 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
+		 * set by a different name for our calculation
+		 */
 		dynamic_array_t* live_now = current->live_out;
-
-		//Even though we use the LIVENOW set in name, in reality it is just LIVEOUT. We'll
-		//keep using LIVEOUT for LIVENOW with that in mind
 		
-		//Grab a pointer to the operations
+		//We will crawl our way up backwards through the CFG
 		instruction_t* operation = current->exit_statement;
-
-		//For every operation that we have
 		while(operation != NULL){
 			//Hitch a ride on this traversal to do pre-coloring
 			pre_color(operation);
@@ -1451,15 +1465,35 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				continue;
 			}
 
+			/**
+			 * STEP:
+			 *
+			 * for each LRi in LIVENOW:
+			 * 	add(DEST, LRi) to Interference Graph E 
+			 *
+			 * 	Mark that the destination interferes with every LIVE_NOW range
+			 *
+			 * 	This is straightforward in the algorithm, but for us it's not so
+			 * 	straightforward. There are several cases where the destination
+			 * 	register may be present but this step in the algorithm will not 
+			 * 	apply or may apply in a different way
+			 */
+			if(operation->destination_register != NULL){
+				/**
+				 * This is if we have something like add LRa, LRb. LRb
+				 * is a destination but it's also a value. As such, we will
+				 * *not* delete this after we add our interference
+				 */
+				if(is_destination_also_operand(operation) == TRUE){
+					add_destination_interference(graph, live_now, operation->destination_register->associated_live_range);
+
+				} else if()
+
+			}
+
 			//Now that we know this operation is valid, we will add interference between this and every
 			//other value in live_now
-			for(u_int16_t i = 0; i < live_now->current_index; i++){
-				//Graph the LR out
-				live_range_t* range = dynamic_array_get_at(live_now, i);
-
-				//Now we'll add this to the graph
-				add_interference(graph, operation->destination_register->associated_live_range, range);
-			}
+			
 
 			//Once we're done with this, we'll delete the destination's live range from the LIVE_NOW set
 			//HOWEVER: we must account for the fact that x86 instructions often use the second operand
