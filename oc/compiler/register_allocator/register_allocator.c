@@ -774,8 +774,7 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
 		//Extract it
 		three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
 
-		//TODO THIS IS BROKEN
-		//Assign this to the source var LR
+		//NOT BROKEN, but disabled for now
 		//assign_live_range_to_source_variable(live_ranges, basic_block, parameter);
 	}
 }
