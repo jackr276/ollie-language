@@ -497,6 +497,17 @@ static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
 
 
 /**
+ * Add a LIVE_NOW live range
+ */
+static void add_live_now_live_range(live_range_t* live_range, dynamic_array_t* LIVE_NOW){
+	//Avoid duplicate addition
+	if(dynamic_array_contains(LIVE_NOW, live_range) == NOT_FOUND){
+		dynamic_array_add(LIVE_NOW, live_range);
+	}
+}
+
+
+/**
  * Add a variable to a live range, if it isn't already in there
  */
 static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
@@ -1466,10 +1477,11 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 			}
 
 			/**
-			 * STEP:
+			 * Step from algorithm:
 			 *
 			 * for each LRi in LIVENOW:
 			 * 	add(DEST, LRi) to Interference Graph E 
+			 * remove LC from LIVENOW
 			 *
 			 * 	Mark that the destination interferes with every LIVE_NOW range
 			 *
@@ -1487,36 +1499,27 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				if(is_destination_also_operand(operation) == TRUE){
 					add_destination_interference(graph, live_now, operation->destination_register->associated_live_range);
 
-				} else if()
+				/**
+				 * If the indirection level is more than 0, this means that we're moving into a memory
+				 * region. Since this is the case, we're not really assigning to the register here. In
+				 * fact, we're using it, so we'll need to add this to LIVE_NOW
+				 */
+				} else if(operation->destination_register->indirection_level > 0){
+					//Add it to live now and we're done
+					add_live_now_live_range(operation->destination_register->associated_live_range, live_now);
 
-			}
+				/**
+				 * The final case here is the ideal case in the algorithm, where we have a simple
+				 * assignment at the end. To satisfy the algorithm, we'll add all of the interference
+				 * between the destination and LIVE_NOW and then delete the destination from live_now
+				 */
+				} else {
+					//Add the interference
+					add_destination_interference(graph, live_now, operation->destination_register->associated_live_range);
 
-			//Now that we know this operation is valid, we will add interference between this and every
-			//other value in live_now
-			
-
-			//Once we're done with this, we'll delete the destination's live range from the LIVE_NOW set
-			//HOWEVER: we must account for the fact that x86 instructions often use the second operand
-			//as a destination. If this is not the case, then we can't remove this because we aren't done
-			if(is_destination_also_operand(operation) == TRUE){
-				//Even beyond this, since this is a source, we'll need to add it
-				if(dynamic_array_contains(live_now, operation->destination_register->associated_live_range) == NOT_FOUND){
-					dynamic_array_add(live_now, operation->destination_register->associated_live_range);
+					//And then scrap it from live_now
+					dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
 				}
-
-			//If the destination register is being dereferenced, then it does count as live because we need
-			//the internal value to remain untouched. An example of this would be:
-			// movq %rax, (%rcx)
-			// Even though RCX is the destination register, we aren't actually overwriting it, so it will still be live
-			} else if(operation->destination_register->indirection_level > 0){
-				//This will also count as a source, so we must add it
-				if(dynamic_array_contains(live_now, operation->destination_register->associated_live_range) == NOT_FOUND){
-					dynamic_array_add(live_now, operation->destination_register->associated_live_range);
-				}
-
-			//Otherwise we can delete. Getting here means that nothing before it can possibly rely on this live range
-			} else {
-				dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
 			}
 
 			//Now we'll add all interferences like this
