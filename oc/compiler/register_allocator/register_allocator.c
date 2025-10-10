@@ -2299,8 +2299,14 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		printf("============= After Live Range Determination ==============\n");
 	}
 
-	//Now let's perform our live range coalescence to reduce the overall size of our
-	//graph
+	/**
+	 * STEP 4: Live range coalescence optimization
+	 *
+	 * One small optimization that we can make is to perform live-range coalescence
+	 * on our given live ranges. We are able to coalesce live ranges if they do
+	 * not interfere and we have a pure copy like movq LR0, LR1. More detail
+	 * is given in the function
+	*/
 	perform_live_range_coalescence(cfg, live_ranges, graph);
 
 	//Show our live ranges once again if requested
