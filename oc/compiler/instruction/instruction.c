@@ -277,6 +277,14 @@ u_int8_t is_instruction_assignment_operation(instruction_t* instruction){
  */
 u_int8_t is_destination_also_operand(instruction_t* instruction){
 	switch(instruction->instruction_type){
+		case NOTB:
+		case NOTL:
+		case NOTW:
+		case NOTQ:
+		case NEGB:
+		case NEGW:
+		case NEGL:
+		case NEGQ:
 		case ADDB:
 		case ADDL:
 		case ADDW:
