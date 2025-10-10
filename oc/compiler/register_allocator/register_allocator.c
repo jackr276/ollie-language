@@ -1428,6 +1428,8 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 		 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
 		 * set by a different name for our calculation
 		 */
+
+		//TODO explore just cloning
 		dynamic_array_t* live_now = current->live_out;
 		
 		//We will crawl our way up backwards through the CFG
@@ -1490,25 +1492,46 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				}
 			}
 
-			//Now we'll add all interferences like this
-			if(operation->source_register != NULL
-				&& dynamic_array_contains(live_now, operation->source_register->associated_live_range) == NOT_FOUND){
-				dynamic_array_add(live_now, operation->source_register->associated_live_range);
+			/**
+			 * STEP:
+			 *  Add LA an LB to LIVENOW
+			 *
+			 * This really means add any non-destination variables to LIVENOW. We will take
+			 * into account every special case here, including function calls and INC/DEC instructions
+			 *
+			 * These first few are the obvious cases
+			 */
+			if(operation->source_register != NULL){
+				add_live_now_live_range(operation->source_register->associated_live_range, live_now);
 			}
 
-			if(operation->source_register2 != NULL
-				&& dynamic_array_contains(live_now, operation->source_register2->associated_live_range) == NOT_FOUND){
-				dynamic_array_add(live_now, operation->source_register2->associated_live_range);
+			if(operation->source_register2 != NULL){
+				add_live_now_live_range(operation->source_register2->associated_live_range, live_now);
 			}
 
-			if(operation->address_calc_reg1 != NULL
-				&& dynamic_array_contains(live_now, operation->address_calc_reg1->associated_live_range) == NOT_FOUND){
-				dynamic_array_add(live_now, operation->address_calc_reg1->associated_live_range);
+			if(operation->address_calc_reg1 != NULL){
+				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, live_now);
 			}
 
-			if(operation->address_calc_reg2 != NULL
-				&& dynamic_array_contains(live_now, operation->address_calc_reg2->associated_live_range) == NOT_FOUND){
-				dynamic_array_add(live_now, operation->address_calc_reg2->associated_live_range);
+			if(operation->address_calc_reg2 != NULL){
+				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, live_now);
+			}
+
+			/**
+			 * SPECIAL CASES:
+			 *
+			 * Function calls(direct/indirect) have function parameters that are being used
+			 * INC/DEC have a unique case where the op1 parameter is occupied to mark a use 
+			 */
+			switch(operation->instruction_type){
+				case CALL:
+				case INDIRECT_CALL:
+					//TODO
+					break;
+
+				//By default do nothing
+				default:
+					break;
 			}
 
 			//We also need to account for the function parameters an operation may have if it is a function call
