@@ -1914,35 +1914,6 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 
 
 /**
- * Repeate the process of register allocation until the sub-function
- * returns TRUE. TRUE means that we were able to allocate all registers without a need for a spill
- */
-static void allocate_registers(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
-	//Let the helper function color everything. If the graph was not colorable, then
-	//we need to redo everything after a spill
-	u_int8_t colorable = graph_color_and_allocate(cfg, live_ranges);
-
-	//So long as this wasn't colorable, we need to keep doing this
-	
-	while(colorable == FALSE){
-		printf("============= Retrying with ====================\n");
-
-		//Show our live ranges once again
-		print_all_live_ranges(live_ranges);
-		print_blocks_with_live_ranges(cfg->head_block);
-		//We now need to compute all of the LIVE OUT values
-		calculate_liveness_sets(cfg);
-
-		//Now let's determine the interference graph
-		graph = construct_interference_graph(cfg, live_ranges);
-
-		//Now we retry
-		colorable = graph_color_and_allocate(cfg, live_ranges);
-	}
-}
-
-
-/**
  * Insert caller saved logic for a direct function call. In a direct function call, we'll know what
  * registers are being used by the function being called. As such, we can be precise about what
  * we push/pop onto and off of the stack and have for a more efficient saving regime. This is not
@@ -2255,70 +2226,89 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
 
-	/**
-	 * STEP 1: Build all live ranges from variables:
-	 * 	
-	 * 	Invoke the helper rule to crawl the entire CFG, constructing all live
-	 * 	ranges *and* doing the needed bookkeeping for used & assigned variables
-	 * 	that will be needed for step 2
-	*/
-	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
+	//Save the flag that tells us whether or not the graph that we constructed was colorable
+	u_int8_t colorable = FALSE;
 
-	//If we want to print, we'll show all live ranges
-	if(print_irs == TRUE){
-		//Print whatever live ranges we did find
-		print_all_live_ranges(live_ranges);
-	}
-
-
-	/**
-	 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
-	 *
-	 * Before we can properly determine interference, we need
-	 * to construct the LIVE_IN and LIVE_OUT sets in each block.
-	 * We cannot simply reuse these from before because they've been so heavily
-	 * modified by this point in the compilation process that starting over
-	 * is easier
-	*/
-	calculate_liveness_sets(cfg);
-
-	/**
-	 * STEP 3: Construct the interference graph
-	 *
-	 * Now that we have the LIVE_IN and LIVE_OUT sets constructed, we're able
-	 * to determine the interference that exists between Live Ranges. This is
-	 * a necessary step in being able to allocate registers in any way at all
-	 * The algorithm is detailed more in the function
-	*/
-	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
-
-	//Again if we want to print, now is the time
-	if(print_irs == TRUE){
-		printf("============= After Live Range Determination ==============\n");
-		print_blocks_with_live_ranges(cfg->head_block);
-		printf("============= After Live Range Determination ==============\n");
-	}
-
-	/**
-	 * STEP 4: Live range coalescence optimization
-	 *
-	 * One small optimization that we can make is to perform live-range coalescence
-	 * on our given live ranges. We are able to coalesce live ranges if they do
-	 * not interfere and we have a pure copy like movq LR0, LR1. More detail
-	 * is given in the function
-	*/
-	perform_live_range_coalescence(cfg, live_ranges, graph);
-
-	//Show our live ranges once again if requested
-	if(print_irs == TRUE){
-		print_all_live_ranges(live_ranges);
-		printf("================= After Coalescing =======================\n");
-		print_blocks_with_live_ranges(cfg->head_block);
-		printf("================= After Coalescing =======================\n");
-	}
+	//Keep track of the iterations that we've been through
+	u_int32_t iterations = 0;
 	
-	//Let the allocator method take care of everything
-	allocate_registers(cfg, live_ranges, graph);
+	do {
+		/**
+		 * STEP 1: Build all live ranges from variables:
+		 * 	
+		 * 	Invoke the helper rule to crawl the entire CFG, constructing all live
+		 * 	ranges *and* doing the needed bookkeeping for used & assigned variables
+		 * 	that will be needed for step 2
+		*/
+		dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
+
+		//If we want to print, we'll show all live ranges
+		if(print_irs == TRUE){
+			//Print whatever live ranges we did find
+			print_all_live_ranges(live_ranges);
+		}
+
+
+		/**
+		 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
+		 *
+		 * Before we can properly determine interference, we need
+		 * to construct the LIVE_IN and LIVE_OUT sets in each block.
+		 * We cannot simply reuse these from before because they've been so heavily
+		 * modified by this point in the compilation process that starting over
+		 * is easier
+		*/
+		calculate_liveness_sets(cfg);
+
+		/**
+		 * STEP 3: Construct the interference graph
+		 *
+		 * Now that we have the LIVE_IN and LIVE_OUT sets constructed, we're able
+		 * to determine the interference that exists between Live Ranges. This is
+		 * a necessary step in being able to allocate registers in any way at all
+		 * The algorithm is detailed more in the function
+		*/
+		interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
+
+		//Again if we want to print, now is the time
+		if(print_irs == TRUE){
+			printf("============= After Live Range Determination ==============\n");
+			print_blocks_with_live_ranges(cfg->head_block);
+			printf("============= After Live Range Determination ==============\n");
+		}
+
+		/**
+		 * STEP 4: Live range coalescence optimization
+		 *
+		 * One small optimization that we can make is to perform live-range coalescence
+		 * on our given live ranges. We are able to coalesce live ranges if they do
+		 * not interfere and we have a pure copy like movq LR0, LR1. More detail
+		 * is given in the function
+		*/
+		perform_live_range_coalescence(cfg, live_ranges, graph);
+
+		//Show our live ranges once again if requested
+		if(print_irs == TRUE){
+			print_all_live_ranges(live_ranges);
+			printf("================= After Coalescing =======================\n");
+			print_blocks_with_live_ranges(cfg->head_block);
+			printf("================= After Coalescing =======================\n");
+		}
+		
+		/**
+		 * STEP 5: Invoke the actual allocator
+		 *
+		 * The allocator will attempt to color the graph. If the graph is not k-colorable, 
+		 * then the allocator will spill the least costly LR and return FALSE, and we will go through
+		 * this whol process again
+		*/
+		colorable = graph_color_and_allocate(cfg, live_ranges);
+
+		//One more iteration
+		iterations++;
+
+	//So long as we can't color, we need to keep going
+	} while(colorable == FALSE);
 
 	//Once registers are allocated, we need to crawl and insert all stack allocations/subtractions
 	insert_saving_logic(cfg);
