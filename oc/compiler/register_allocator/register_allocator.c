@@ -1521,31 +1521,32 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 			 * SPECIAL CASES:
 			 *
 			 * Function calls(direct/indirect) have function parameters that are being used
-			 * INC/DEC have a unique case where the op1 parameter is occupied to mark a use 
 			 */
 			switch(operation->instruction_type){
 				case CALL:
 				case INDIRECT_CALL:
-					//TODO
+					//No point here
+					if(operation->function_parameters == NULL){
+						break;
+					}
+					
+					//Grab it out
+					dynamic_array_t* operation_function_parameters = operation->function_parameters;
+
+					//Let's go through all of these and add them to LIVE_NOW
+					for(u_int16_t i = 0; i < operation_function_parameters->current_index; i++){
+						//Extract the variable
+						three_addr_var_t* variable = dynamic_array_get_at(operation_function_parameters, i);
+
+						//Add it to live_now
+						add_live_now_live_range(variable->associated_live_range, live_now);
+					}
+
 					break;
 
 				//By default do nothing
 				default:
 					break;
-			}
-
-			//We also need to account for the function parameters an operation may have if it is a function call
-			dynamic_array_t* operation_function_parameters = operation->function_parameters;
-
-			//Let's go through all of these and add them to LIVE_NOW
-			for(u_int16_t i = 0; operation_function_parameters != NULL && i < operation_function_parameters->current_index; i++){
-				//Extract the variable
-				three_addr_var_t* variable = dynamic_array_get_at(operation_function_parameters, i);
-
-				//If it's not already in the LIVE_NOW area, add it
-				if(dynamic_array_contains(live_now, variable->associated_live_range) == NOT_FOUND){
-					dynamic_array_add(live_now, variable->associated_live_range);
-				}
 			}
 
 			//Crawl back up by 1
@@ -1558,6 +1559,8 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 
 	//Now at the very end, we'll construct the matrix
 	graph = construct_interference_graph_from_adjacency_lists(live_ranges);
+
+	//And finally give the graph back
 	return graph;
 }
 
