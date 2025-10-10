@@ -1444,38 +1444,6 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				continue;
 			}
 
-			//If the destination register here is NULL, we
-			//may actually be dealing with a comparison operation of some kind.
-			//In doing this, we'll want to still mark the operands as LIVE
-			if(operation->destination_register == NULL){
-				//Now we'll add all interferences like this
-				if(operation->source_register != NULL
-					&& dynamic_array_contains(live_now, operation->source_register->associated_live_range) == NOT_FOUND){
-					dynamic_array_add(live_now, operation->source_register->associated_live_range);
-				}
-
-				//Check the second source register(could be a comparison op)
-				if(operation->source_register2 != NULL
-					&& dynamic_array_contains(live_now, operation->source_register2->associated_live_range) == NOT_FOUND){
-					dynamic_array_add(live_now, operation->source_register2->associated_live_range);
-				}
-
-				//Check the address calc registers
-				if(operation->address_calc_reg1 != NULL
-					&& dynamic_array_contains(live_now, operation->address_calc_reg1->associated_live_range) == NOT_FOUND){
-					dynamic_array_add(live_now, operation->address_calc_reg1->associated_live_range);
-				}
-				
-				//Check the address calc registers
-				if(operation->address_calc_reg2 != NULL
-					&& dynamic_array_contains(live_now, operation->address_calc_reg2->associated_live_range) == NOT_FOUND){
-					dynamic_array_add(live_now, operation->address_calc_reg2->associated_live_range);
-				}
-
-				operation = operation->previous_statement;
-				continue;
-			}
-
 			/**
 			 * Step from algorithm:
 			 *
