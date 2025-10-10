@@ -1271,8 +1271,12 @@ static void add_destination_interference(interference_graph_t* graph, dynamic_ar
 		//Graph the LR out
 		live_range_t* range = dynamic_array_get_at(LIVE_NOW, i);
 
-		//TODO if this is stack pointer or instruction pointer, then skip
-		//Will likely cause huge change
+		//If the live range is the stack pointer or instruction pointer, it does
+		//not really count as interference because those registers are never alive
+		//at the same time. As such, we'll skip if that's the case
+		if(range == stack_pointer_lr || range == instruction_pointer_lr){
+			continue;
+		}
 
 		//Now we'll add this to the graph
 		add_interference(graph, destination_lr, range);
