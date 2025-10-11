@@ -1506,7 +1506,7 @@ static u_int8_t does_precoloring_interference_exist(live_range_t* source, live_r
  * We coalesce source to destination. When we're done, the *source* should
  * survive, the destination should NOT
  */
-static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph){
+static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph, u_int8_t debug_printing){
 	//Run through every single block in here
 	basic_block_t* current = cfg->head_block;
 	while(current != NULL){
@@ -1533,8 +1533,11 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 			 * on, it's entirely pointless
 			 */
 			if(source_live_range == destination_live_range){
-				printf("Deleting DUPLICATE:\n");
-				print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+				//Print if we want debug printing
+				if(debug_printing == TRUE){
+					printf("Deleting DUPLICATE:\n");
+					print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+				}
 
 				//Grab a holder before we delete
 				instruction_t* holder = instruction;
@@ -1563,8 +1566,10 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 				&& does_precoloring_interference_exist(source_live_range, destination_live_range) == FALSE){
 
 				//DEBUG LOGS
-				printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
-				printf("DELETING LR%d\n", destination_live_range->live_range_id);
+				if(debug_printing == TRUE){
+					printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
+					printf("DELETING LR%d\n", destination_live_range->live_range_id);
+				}
 
 				//The destination now no longer exists
 				dynamic_array_delete(live_ranges, destination_live_range);
@@ -1579,8 +1584,10 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 				instruction = instruction->next_statement;
 
 				//DEBUG
-				printf("Deleting:\n");
-				print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+				if(debug_printing == TRUE){
+					printf("Deleting:\n");
+					print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+				}
 
 				//Delete the old one from the graph
 				delete_statement(holder);
@@ -2252,6 +2259,7 @@ static void insert_saving_logic(cfg_t* cfg){
 void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
+	u_int8_t debug_printing = options->enable_debug_printing;
 
 	//Save the flag that tells us whether or not the graph that we constructed was colorable
 	u_int8_t colorable = FALSE;
@@ -2328,7 +2336,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 * allow for even more coalescence. We will use this to our advantage
 		 * by letting this rule run every time
 		*/
-		perform_live_range_coalescence(cfg, live_ranges, graph);
+		perform_live_range_coalescence(cfg, live_ranges, graph, debug_printing);
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE && iterations == 0){
