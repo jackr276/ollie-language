@@ -1486,12 +1486,12 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
  * TODO in reality, having the source register as RSP is not interference. We'd be able to
  * coalesce those live ranges. This would be ideal because RSP is *never* spilled
  */
-static u_int8_t does_precoloring_interference_exist(live_range_t* a, live_range_t* b){
+static u_int8_t does_precoloring_interference_exist(live_range_t* source, live_range_t* destination){
 	/**
 	 * The logic here: if they *both* don't equal no reg *and* their registers
 	 * are not equal, then we have precoloring interference
 	 */
-	if(a->reg != NO_REG || b->reg != NO_REG){
+	if(source->reg != NO_REG || destination->reg != NO_REG){
 		return TRUE;
 	} else {
 		return FALSE;
@@ -1515,6 +1515,65 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 
 		//Now run through all of these
 		while(instruction != NULL){
+			//If it's not a pure copy *or* it's marked as non-combinable, just move along
+			if(is_instruction_pure_copy(instruction) == FALSE 
+				|| instruction->cannot_be_combined == TRUE){
+				instruction = instruction->next_statement;
+				continue;
+			}
+
+			//Otherwise if we get here, then we know that we have a pure copy instruction
+			live_range_t* source_live_range = instruction->source_register->associated_live_range;
+			live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
+
+
+			/**
+			 * One potential case, we could have done some optimizations where we're left with something
+			 * like movq LR0, LR0. If this is the case, we should just delete that instruction and move
+			 * on, it's entirely pointless
+			 */
+			if(source_live_range == destination_live_range){
+				printf("Deleting DUPLICATE:\n");
+				print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+
+				//Grab a holder before we delete
+				instruction_t* holder = instruction;
+
+				//Advance it up
+				instruction = instruction->next_statement;
+
+				//Delete the old one
+				delete_statement(holder);
+
+				//Onto the next iteration
+				continue;
+			}
+
+
+			//We need to ensure that the two live ranges:
+			//	1.) Do not interfere with one another(and as such they're in separate webs)
+			//	2.) Do not have any pre-coloring that would prevent them from being merged. For example, if the
+			//	destination register is %rdi because it's a function parameter, we can't just change the register
+			//	it's in
+			if(do_live_ranges_interfere(graph, destination_live_range, source_live_range) == FALSE
+				&& does_precoloring_interference_exist(source_live_range, destination_live_range) == FALSE){
+
+				//DEBUG LOGS
+				printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
+				printf("DELETING LR%d\n", destination_live_range->live_range_id);
+
+				//The destination now no longer exists
+				dynamic_array_delete(live_ranges, destination_live_range);
+
+				//Perform the actual coalescence
+				coalesce_live_ranges(graph, source_live_range, destination_live_range);
+
+				//Grab a holder to this 
+
+			}
+
+
+
 			//If we have a pure copy instruction(movX with no indirection), we can coalesce
 			if(is_instruction_pure_copy(instruction) == TRUE){
 				//If our live ranges do not interfere, we can perform the coalescing
@@ -1523,14 +1582,9 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 					&& instruction->cannot_be_combined == FALSE //Ensure that we actually can combine this
 					//Also check for precoloring interference
 					&& does_precoloring_interference_exist(instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range) == FALSE){
-					printf("Can coalesce LR%d and LR%d\n", instruction->source_register->associated_live_range->live_range_id, instruction->destination_register->associated_live_range->live_range_id);
-
-					printf("DELETING LR%d\n", instruction->destination_register->associated_live_range->live_range_id);
-					//Delete this live range from our list as it no longer exists
-					dynamic_array_delete(live_ranges, instruction->destination_register->associated_live_range);
 
 					//We will coalesce the destination register's live range and the source register's live range
-					coalesce_live_ranges(graph, instruction->source_register->associated_live_range, instruction->destination_register->associated_live_range);
+					coalesce_live_ranges(graph, instruction->source_register->associaed_live_range, instruction->destination_register->associated_live_range);
 
 					//Once we're done, this instruction is now useless, so we'll delete it
 					instruction_t* temp = instruction;
@@ -1550,8 +1604,6 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 					//Push this up
 					instruction = instruction->next_statement;
 
-					printf("Deleting DUPLICATE:\n");
-					print_instruction(stdout, temp, PRINTING_LIVE_RANGES);
 
 					//Delete the old one from the block
 					delete_statement(temp);
