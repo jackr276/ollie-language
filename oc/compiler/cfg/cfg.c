@@ -2830,13 +2830,18 @@ static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, th
  * Emit a bitwise not statement 
  */
 static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, u_int8_t is_branch_ending){
-	//First we'll create it here
-	instruction_t* not_stmt = emit_not_instruction(var);
+	//Emit a copy so that we are distinct
+	three_addr_var_t* assignee = emit_var_copy(var);
 
-	//This is also a case where the variable is read from, so it counts as live. It's also
-	//assigned to, so it counts as assigned
+	//First we'll create it here
+	instruction_t* not_stmt = emit_not_instruction(assignee);
+
+	//We will still save op1 here, for tracking reasons
+	not_stmt->op1 = var;
+
+	//The assignee was assigned
 	if(var->is_temporary == FALSE){
-		add_assigned_variable(basic_block, var);
+		add_assigned_variable(basic_block, assignee);
 	}
 
 	//Regardless this is still used here
