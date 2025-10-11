@@ -1481,20 +1481,45 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
  * is involved because moving into those exact registers is very important. Since we cannot guarantee
  * that we're going to move into those exact registers long in advance, we need to keep the movements
  * for precoloring around
- *
- *
- * TODO in reality, having the source register as RSP is not interference. We'd be able to
- * coalesce those live ranges. This would be ideal because RSP is *never* spilled
  */
 static u_int8_t does_precoloring_interference_exist(live_range_t* source, live_range_t* destination){
 	/**
-	 * The logic here: if they *both* don't equal no reg *and* their registers
-	 * are not equal, then we have precoloring interference
+	 * Cases here:
+	 *
+	 * Case 1: Source has no reg, and destination has no reg -> TRUE
+	 * Case 2: Source has no reg, and destination has reg -> FALSE(we can't overwrite the destination)
+	 * Case 3: Source has reg, and destination has no reg -> TRUE
+	 * Case 4: Source has reg, and destination has reg *and* source->reg == destination->reg -> TRUE
+	 * Case 5: Source has reg, and destination has reg *and* source->reg != destination->reg -> FALSE
 	 */
-	if(source->reg != NO_REG || destination->reg != NO_REG){
-		return TRUE;
-	} else {
-		return FALSE;
+	switch(source->reg){
+		//If the source is NO_REG, the destination must also be NO_REG
+		case NO_REG:
+			if(destination->reg == NO_REG){
+				//No interference
+				return FALSE;
+			}
+
+			//Interference
+			return TRUE;
+		
+		//This means the source has a register already assigned
+		default:
+			//We're fine overwriting the destination with the source if it has
+			//no reg
+			if(destination->reg == NO_REG){
+				//No interference
+				return FALSE;
+			}
+
+			//If they're the exact same, then this is also fine
+			if(destination->reg == source->reg){
+				//No interference
+				return FALSE;
+			}
+
+			//Otherwise we have interference
+			return TRUE;
 	}
 }
 
@@ -1559,10 +1584,6 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 			//	destination register is %rdi because it's a function parameter, we can't just change the register
 			//	it's in
 			if(do_live_ranges_interfere(graph, destination_live_range, source_live_range) == FALSE
-
-				//TODO YOU NEED TO CHANGE THE RSP/RIP RULE FOR THIS INTERFERENCE
-				//Also look into the interference more - it may be fine if the source register
-				//is already allocated
 				&& does_precoloring_interference_exist(source_live_range, destination_live_range) == FALSE){
 
 				//DEBUG LOGS

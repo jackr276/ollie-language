@@ -1896,6 +1896,8 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+	//This cannot be combined
+	result_movement->cannot_be_combined = TRUE;
 
 	//Insert the result movement instruction to be after the multiplication operation
 	insert_instruction_after_given(result_movement, multiplication_instruction);
