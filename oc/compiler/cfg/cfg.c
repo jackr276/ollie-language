@@ -160,6 +160,39 @@ static u_int8_t is_power_of_2(int64_t value){
 
 
 /**
+ * Reset the used, live in, live out, and assigned arrays in a block
+ */
+void reset_block_variable_tracking(basic_block_t* block){
+	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
+	//we'll allocate them fresh
+	if(block->assigned_variables == NULL){
+		block->assigned_variables = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(block->assigned_variables);
+	}
+
+	//Do the same with the used variables
+	if(block->used_variables == NULL){
+		block->used_variables = dynamic_array_alloc();
+	} else {
+		reset_dynamic_array(block->used_variables);
+	}
+
+	//Reset live in completely
+	if(block->live_in != NULL){
+		dynamic_array_dealloc(block->live_in);
+		block->live_in = NULL;
+	}
+
+	//Reset live out completely
+	if(block->live_out != NULL){
+		dynamic_array_dealloc(block->live_out);
+		block->live_out = NULL;
+	}
+}
+
+
+/**
  * For certain variables in conditionals, we want to emit a temp assignment of said variable for optimization
  * reasons. This function will take a variable in and:
  *   If it's a temp, just give it back
@@ -1596,8 +1629,8 @@ static void variable_dynamic_array_add(dynamic_array_t* array, three_addr_var_t*
  * for each block n in reverse order
  * 	in'[n] = in[n]
  * 	out'[n] = out[n]
- * 	in[n] = use[n] U (out[n] - def[n])
  * 	out[n] = {}U{x|x is an element of in[S] where S is a successor of n}
+ * 	in[n] = use[n] U (out[n] - def[n])
  *
  * NOTE: The algorithm converges very fast when the CFG is done in reverse order.
  * As such, we'll go back to front here
@@ -1616,30 +1649,49 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	//A cursor for the current block
 	basic_block_t* current;
 
-	do {
-		//We'll assume we didn't find a difference each iteration
-		difference_found = FALSE;
+	/**
+	 * We will run the algorithm for every single function. Since *all* functions
+	 * are *separate*, we can run the do-while algorithm on each function independently. This
+	 * avoids us needing to recompute the entire CFG every time the disjoint-union-find does not work
+	 */
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract it
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-		//Run through all of the blocks backwards
-		for(int16_t i = cfg->function_entry_blocks->current_index - 1; i >= 0; i--){
-			//Grab the block out
-			basic_block_t* func_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		//Calculate the reverse-post-order traversal so that we can make this converge quicker
+		function_entry->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(function_entry, TRUE);
 
-			//Calculate the reverse post order in reverse mode for this block, if it doesn't
-			//already exist
-			if(func_entry->reverse_post_order_reverse_cfg == NULL){
-				//True because we want this in reverse mode
-				func_entry->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(func_entry, TRUE);
-			}
+		//Run the algorithm until we have no difference found
+		do{
+			//We'll assume we didn't find a difference each iteration
+			difference_found = FALSE;
 
 			//Now we can go through the entire RPO set
-			for(u_int16_t _ = 0; _ < func_entry->reverse_post_order_reverse_cfg->current_index; _++){
+			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg->current_index; _++){
 				//The current block is whichever we grab
-				current = dynamic_array_get_at(func_entry->reverse_post_order_reverse_cfg, _);
+				current = dynamic_array_get_at(function_entry->reverse_post_order_reverse_cfg, _);
 
 				//Transfer the pointers over
 				in_prime = current->live_in;
 				out_prime = current->live_out;
+
+				//Set live out to be a new array
+				current->live_out = dynamic_array_alloc();
+
+				//Run through all of the successors
+				for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
+					//Grab the successor out
+					basic_block_t* successor = dynamic_array_get_at(current->successors, k);
+
+					//Add everything in his live_in set into the live_out set
+					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
+						//Let's check to make sure we haven't already added this
+						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
+
+						//Let the helper method do it for us
+						variable_dynamic_array_add(current->live_out, successor_live_in_var);
+					}
+				}
 
 				//The live in is a combination of the variables used
 				//at current and the difference of the LIVE_OUT variables defined
@@ -1661,29 +1713,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 						variable_dynamic_array_add(current->live_in, live_out_var);
 					}
 				}
-
-				//Now we'll turn our attention to live out. The live out set for any block is the union of the
-				//LIVE_IN set for all of it's successors
-				
-				//Set live out to be a new array
-				current->live_out = dynamic_array_alloc();
-
-				//Run through all of the successors
-				for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
-					//Grab the successor out
-					basic_block_t* successor = dynamic_array_get_at(current->successors, k);
-
-					//Add everything in his live_in set into the live_out set
-					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
-						//Let's check to make sure we haven't already added this
-						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
-
-						//Let the helper method do it for us
-						variable_dynamic_array_add(current->live_out, successor_live_in_var);
-					}
-				}
-
-
+			
 				//Now we'll go through and check if the new live in and live out sets are different. If they are different,
 				//we'll be doing this whole thing again
 
@@ -1701,9 +1731,10 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				dynamic_array_dealloc(in_prime);
 				dynamic_array_dealloc(out_prime);
 			}
-		}
-	//So long as we continue finding differences
-	} while(difference_found == TRUE);
+		
+		//So long as this holds we repeat
+		} while(difference_found == TRUE);
+	}
 }
 
 
@@ -2795,13 +2826,18 @@ static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, th
  * Emit a bitwise not statement 
  */
 static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, u_int8_t is_branch_ending){
-	//First we'll create it here
-	instruction_t* not_stmt = emit_not_instruction(var);
+	//Emit a copy so that we are distinct
+	three_addr_var_t* assignee = emit_var_copy(var);
 
-	//This is also a case where the variable is read from, so it counts as live. It's also
-	//assigned to, so it counts as assigned
+	//First we'll create it here
+	instruction_t* not_stmt = emit_not_instruction(assignee);
+
+	//We will still save op1 here, for tracking reasons
+	not_stmt->op1 = var;
+
+	//The assignee was assigned
 	if(var->is_temporary == FALSE){
-		add_assigned_variable(basic_block, var);
+		add_assigned_variable(basic_block, assignee);
 	}
 
 	//Regardless this is still used here
