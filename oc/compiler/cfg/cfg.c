@@ -1629,8 +1629,8 @@ static void variable_dynamic_array_add(dynamic_array_t* array, three_addr_var_t*
  * for each block n in reverse order
  * 	in'[n] = in[n]
  * 	out'[n] = out[n]
- * 	in[n] = use[n] U (out[n] - def[n])
  * 	out[n] = {}U{x|x is an element of in[S] where S is a successor of n}
+ * 	in[n] = use[n] U (out[n] - def[n])
  *
  * NOTE: The algorithm converges very fast when the CFG is done in reverse order.
  * As such, we'll go back to front here
@@ -1675,6 +1675,24 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				in_prime = current->live_in;
 				out_prime = current->live_out;
 
+				//Set live out to be a new array
+				current->live_out = dynamic_array_alloc();
+
+				//Run through all of the successors
+				for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
+					//Grab the successor out
+					basic_block_t* successor = dynamic_array_get_at(current->successors, k);
+
+					//Add everything in his live_in set into the live_out set
+					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
+						//Let's check to make sure we haven't already added this
+						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
+
+						//Let the helper method do it for us
+						variable_dynamic_array_add(current->live_out, successor_live_in_var);
+					}
+				}
+
 				//The live in is a combination of the variables used
 				//at current and the difference of the LIVE_OUT variables defined
 				//ones
@@ -1695,29 +1713,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 						variable_dynamic_array_add(current->live_in, live_out_var);
 					}
 				}
-
-				//Now we'll turn our attention to live out. The live out set for any block is the union of the
-				//LIVE_IN set for all of it's successors
-				
-				//Set live out to be a new array
-				current->live_out = dynamic_array_alloc();
-
-				//Run through all of the successors
-				for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
-					//Grab the successor out
-					basic_block_t* successor = dynamic_array_get_at(current->successors, k);
-
-					//Add everything in his live_in set into the live_out set
-					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
-						//Let's check to make sure we haven't already added this
-						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
-
-						//Let the helper method do it for us
-						variable_dynamic_array_add(current->live_out, successor_live_in_var);
-					}
-				}
-
-
+			
 				//Now we'll go through and check if the new live in and live out sets are different. If they are different,
 				//we'll be doing this whole thing again
 
