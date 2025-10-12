@@ -1691,6 +1691,9 @@ static live_range_t* handle_use_spill(dynamic_array_t* live_ranges, three_addr_v
 }
 
 
+/**
+ * Handle a spill of a source variable. This could include true source variables *or* instances where the destination is also a source
+ */
 static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* target_source, live_range_t** currently_spilled, live_range_t* spill_range, instruction_t* instruction){
 	//No point in going on here
 	if(target_source == NULL || target_source->associated_live_range != spill_range){
@@ -1704,12 +1707,11 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 	if(*currently_spilled == NULL){
 		//Invoke the helper for a use spill
 		target_source->associated_live_range = handle_use_spill(live_ranges, target_source, spill_range, instruction);
+		
+		//Be sure to flag currently spilled for the next use
 		*currently_spilled = target_source->associated_live_range;
-		return;
 	}
 
-	//Otherwise, we can just assign the associated live range to be what is currently spilled. Remember
-	//that we only spill one variable at a time, so we know that these will match
 	target_source->associated_live_range = *currently_spilled;
 }
 
@@ -1775,37 +1777,83 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 			handle_source_spill(live_ranges, current->address_calc_reg2, &currently_spilled, spill_range, current);
 
 			/**
-			 * We'll check for destination spills at the very end because this requires
-			 * us to reset the currently spilled var after we load to memory
+			 * Destination registers are a unique case because they could be source registers
+			 * as well. Additionally, if the destination register is being dereferenced, then
+			 * it is not truly a destination, and should be treated as a use
 			 */
-			if(current->destination_register != NULL
-				&& current->destination_register->associated_live_range == spill_range){
-				//Let the helper deal with it
-				handle_assignment_spill(current->destination_register, spill_range, current);
+			if(current->destination_register != NULL){
+				/**
+				 * Option 1: it could equal the spill range, and as such we have to deal with it
+				 */
+				if(current->destination_register->associated_live_range == spill_range){
+					//This counts as a source spill, and nothing more
+					if(current->destination_register->indirection_level > 0){
+						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
 
-				//Reset currenlty spilled
-				currently_spilled = NULL;
+					//Otherwise, we could also have a case where the destination is also
+					//our operand. This will lead us to having a source spill *and* an assignment
+					//spill afterwards
+					} else if(is_destination_also_operand(current) == TRUE){
+						//Do the source spill first
+						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
 
-				//Advance this up by 1 to get past the statement we just added in
-				current = current->next_statement;
+						//Now handle the assignment spill
+						handle_assignment_spill(current->destination_register, spill_range, current);
 
-			/**
-			 * We could also have a case where this is what was currently spilled. If so,
-			 * we'll also need to store that
-			 */
-			} else if(current->destination_register != NULL 
-						&& current->destination_register->associated_live_range == currently_spilled){
-				//Let the helper deal with it
-				handle_assignment_spill(current->destination_register, spill_range, current);
+						//And wipe out the currently spilled index
+						currently_spilled = NULL;
 
-				//Reset currenlty spilled
-				currently_spilled = NULL;
+						//Advance this up by 1 to get past the statement we just added in
+						current = current->next_statement;
 
-				//Advance this up by 1 to get past the statement we just added in
-				current = current->next_statement;
+					//Most basic case, just deal with the assignment spill
+					} else {
+						//Now handle the assignment spill
+						handle_assignment_spill(current->destination_register, spill_range, current);
+
+						//And wipe out the currently spilled index
+						currently_spilled = NULL;
+
+						//Advance this up by 1 to get past the statement we just added in
+						current = current->next_statement;
+					}
+
+				} else if(current->destination_register->associated_live_range == currently_spilled){
+					//This counts as a source spill, and nothing more
+					if(current->destination_register->indirection_level > 0){
+						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
+
+					//Otherwise, we could also have a case where the destination is also
+					//our operand. This will lead us to having a source spill *and* an assignment
+					//spill afterwards
+					} else if(is_destination_also_operand(current) == TRUE){
+						//Do the source spill first
+						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
+
+						//Now handle the assignment spill
+						handle_assignment_spill(current->destination_register, spill_range, current);
+
+						//And wipe out the currently spilled index
+						currently_spilled = NULL;
+
+						//Advance this up by 1 to get past the statement we just added in
+						current = current->next_statement;
+
+					//Most basic case, just deal with the assignment spill
+					} else {
+						//Now handle the assignment spill
+						handle_assignment_spill(current->destination_register, spill_range, current);
+
+						//And wipe out the currently spilled index
+						currently_spilled = NULL;
+
+						//Advance this up by 1 to get past the statement we just added in
+						current = current->next_statement;
+					}
+				}
 			}
 
-			//Advance the pointer
+			//Advance up by 1
 			current = current->next_statement;
 		}
 
