@@ -1688,6 +1688,15 @@ static three_addr_var_t* handle_use_spill(cfg_t* cfg, dynamic_array_t* live_rang
 
 
 /**
+ * Handle a source spill if the variable matches
+ */
+static void handle_source_spill(instruction_t* insturction, three_addr_var_t* target, live_range_t* spill_range){
+
+}
+
+
+
+/**
  * Spill a live range to memory to make a graph N-colorable
  *
  * After a live range is spilled, all definitions go to memory, and all uses
@@ -1735,7 +1744,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 	live_range_t* currently_spilled = NULL;
 
 	//Now we have our function block, and we'll crawl it until we reach the end
-	while(function_block != NULL && function_block->function_defined_in == spill_range->function_defined_in){
+	while(function_block != NULL){
 		//Now we'll crawl this block and find every place where this live range is used/defined
 		instruction_t* current = function_block->leader_statement;
 
@@ -1931,9 +1940,13 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 		//Grab a live range out by deletion
 		live_range_t* range = dynamic_array_delete_from_back(priority_live_ranges);
 
-		//Now that we have it, we'll color it
+		/**
+		 * This degree being less than the number of registers
+		 * means we should be able to allocate no issue
+		 */
 		if(range->degree < K_COLORS_GEN_USE){
 			allocate_register( range);
+
 		//Otherwise, we may still be able to allocate here
 		} else {
 			//We must still attempt to allocate it
