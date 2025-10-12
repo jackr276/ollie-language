@@ -38,13 +38,13 @@ const register_holder_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges);
 
 //Just hold the stack pointer live range
-live_range_t* stack_pointer_lr;
+static live_range_t* stack_pointer_lr;
 //Holds the instruction pointer LR
-live_range_t* instruction_pointer_lr;
+static live_range_t* instruction_pointer_lr;
 //The stack pointer
-three_addr_var_t* stack_pointer;
+static three_addr_var_t* stack_pointer;
 //And the type symtab
-type_symtab_t* type_symtab;
+static type_symtab_t* type_symtab;
 
 
 /**
@@ -1691,24 +1691,27 @@ static live_range_t* handle_use_spill(dynamic_array_t* live_ranges, three_addr_v
 }
 
 
-/**
- * Handle a source spill if the variable matches
- */
-static void handle_source_spill(instruction_t* instruction, three_addr_var_t* target_source, live_range_t** currently_spilled, live_range_t* spill_range){
-	//If it's NULL or not what we're after, then we leave
+static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* target_source, live_range_t** currently_spilled, live_range_t* spill_range, instruction_t* instruction){
+	//No point in going on here
 	if(target_source == NULL || target_source->associated_live_range != spill_range){
 		return;
 	}
 
-	//If we do *not* have something that is currently spilled, we'll
-	//need to do an actual spill
+	//If we make it here, then we know that we've got a match
+	
+	//If we do not already have something in memory that's been spilled,
+	//we will spill again
 	if(*currently_spilled == NULL){
-		//Let the helper deal with it
-		target_source->associated_live_range = handle_use_spill(cfg, live_ranges, current->source_register, spill_range, current);
-		currently_spilled = current->source_register->associated_live_range;
+		//Invoke the helper for a use spill
+		target_source->associated_live_range = handle_use_spill(live_ranges, target_source, spill_range, instruction);
+		*currently_spilled = target_source->associated_live_range;
+		return;
 	}
-}
 
+	//Otherwise, we can just assign the associated live range to be what is currently spilled. Remember
+	//that we only spill one variable at a time, so we know that these will match
+	target_source->associated_live_range = *currently_spilled;
+}
 
 
 /**
@@ -1765,41 +1768,11 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 		//Crawl through every block
 		while(current != NULL){
-			//We'll need a use spill if this is the case
-			//Handle the case for the source register
-			if(current->source_register != NULL
-				&& current->source_register->associated_live_range == spill_range){
-
-
-			}
-
-			//Check this register as well
-			if(current->source_register2 != NULL
-				&& current->source_register2->associated_live_range == spill_range){
-				if(currently_spilled == NULL){
-					//Let the helper deal with it
-					current->source_register2->associated_live_range = handle_use_spill(live_ranges, current->source_register2, spill_range, current);
-					currently_spilled = current->source_register2->associated_live_range;
-				}
-			}
-
-			//Check this register as well
-			if(current->address_calc_reg1 != NULL
-				&& current->address_calc_reg1->associated_live_range == spill_range){
-				if(currently_spilled == NULL){
-					//Let the helper deal with it
-					handle_use_spill(live_ranges, current->address_calc_reg1, spill_range, current);
-				}
-			}
-
-			//Check this register as well
-			if(current->address_calc_reg2 != NULL
-				&& current->address_calc_reg2->associated_live_range == spill_range){
-				if(currently_spilled == NULL){
-					//Let the helper deal with it
-					handle_use_spill(live_ranges, current->address_calc_reg2, spill_range, current);
-				}
-			}
+			//Handle all of the source spills
+			handle_source_spill(live_ranges, current->source_register, &currently_spilled, spill_range, current);
+			handle_source_spill(live_ranges, current->source_register2, &currently_spilled, spill_range, current);
+			handle_source_spill(live_ranges, current->address_calc_reg1, &currently_spilled, spill_range, current);
+			handle_source_spill(live_ranges, current->address_calc_reg2, &currently_spilled, spill_range, current);
 
 			/**
 			 * We'll check for destination spills at the very end because this requires
