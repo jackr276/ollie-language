@@ -103,14 +103,6 @@ typedef enum{
 	IDIVW,
 	IDIVL,
 	IDIVQ,
-	IDIVB_FOR_MOD,
-	IDIVW_FOR_MOD,
-	IDIVL_FOR_MOD,
-	IDIVQ_FOR_MOD,
-	DIVB_FOR_MOD,
-	DIVW_FOR_MOD,
-	DIVL_FOR_MOD,
-	DIVQ_FOR_MOD,
 	SUBB,
 	SUBW,
 	SUBL,
@@ -466,13 +458,13 @@ struct instruction_t{
 	three_addr_const_t* source_immediate;
 	//Our destination register/variable
 	three_addr_var_t* destination_register;
+	//Certain instructions like conversions, and divisions, have more
+	//than one destination register
+	three_addr_var_t* destination_register2;
 	three_addr_const_t* offset;
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
-	//The remainder register(used for div & mod)
-	three_addr_var_t* remainder_register;
-	//The offset
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;
 	//The LEA addition
@@ -590,7 +582,6 @@ u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction);
 /**
  * Is this a division instruction?
  */
-u_int8_t is_division_instruction(instruction_t* instruction);
 
 /**
  * Is this constant value 0?
@@ -606,11 +597,6 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant);
  * Is this constant a power of 2?
  */
 u_int8_t is_constant_power_of_2(three_addr_const_t* constant);
-
-/**
- * Is this a division instruction that is intended for modulus?
- */
-u_int8_t is_modulus_instruction(instruction_t* instruction);
 
 /**
  * Create and return a temporary variable
