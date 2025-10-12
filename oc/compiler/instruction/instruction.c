@@ -2748,16 +2748,24 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "nop\n");
 			break;
 		case CQTO:
-			fprintf(fl, "cqto\n");
+			fprintf(fl, "cqto /* Source: ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, "*/\n");
 			break;
 		case CLTD:
-			fprintf(fl, "cltd\n");
+			fprintf(fl, "cltd /* Source: ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, "*/\n");
 			break;
 		case CWTL:
-			fprintf(fl, "cltw\n");
+			fprintf(fl, "cwtl /* Source: ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, "*/\n");
 			break;
 		case CBTW:
-			fprintf(fl, "cbtw\n");
+			fprintf(fl, "cbtw /* Source: ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, "*/\n");
 			break;
 		case JMP:
 			fprintf(fl, "jmp .L%d\n", jumping_to_block->block_id);

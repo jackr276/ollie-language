@@ -402,6 +402,12 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 			break;
 	}
 
+	//The source register is the so-called "converted" register. In reality,
+	//this will always be %rax or a lower bit field in it
+	instruction->source_register = converted;
+
+	//The destination register is actually 2fold. It will occupy the %rdx and %rax registers
+
 	//And now we'll give it back
 	return instruction;
 }
