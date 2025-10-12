@@ -1818,6 +1818,8 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 						current = current->next_statement;
 					}
 
+				//The other option is that our destination live range *is* the currently spilled live
+				//live range. We'll also need to handle events like this if that's the case
 				} else if(current->destination_register->associated_live_range == currently_spilled){
 					//This counts as a source spill, and nothing more
 					if(current->destination_register->indirection_level > 0){
