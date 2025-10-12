@@ -71,18 +71,6 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 	b->degree = b->neighbors->current_index;
 }
 
-/**
- * Redo the adjacency matrix after a change has been made(usually coalescing)
- *
- *
- * TODO Whenever we do this, we'll probably need to overwrite everything
- */
-interference_graph_t* update_interference_graph(interference_graph_t* graph){
-	
-	//Give the pointer back
-	return graph;
-}
-
 
 /**
  * Mark that live ranges a and b do not interfere. This can be used if an interference
