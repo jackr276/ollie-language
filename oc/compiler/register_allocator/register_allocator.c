@@ -1889,6 +1889,40 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				}
 			}
 
+
+			/**
+			 * Destination registers are a unique case because they could be source registers
+			 * as well. Additionally, if the destination register is being dereferenced, then
+			 * it is not truly a destination, and should be treated as a use
+			 */
+			if(current->destination_register2 != NULL){
+				/**
+				 * Option 1: it could equal the spill range, and as such we have to deal with it
+				 */
+				if(current->destination_register2->associated_live_range == spill_range){
+					//Now handle the assignment spill
+					handle_assignment_spill(current->destination_register2, spill_range, current);
+
+					//And wipe out the currently spilled index
+					currently_spilled = NULL;
+
+					//Advance this up by 1 to get past the statement we just added in
+					current = current->next_statement;
+
+				//The other option is that our destination live range *is* the currently spilled live
+				//live range. We'll also need to handle events like this if that's the case
+				} else if(current->destination_register2->associated_live_range == currently_spilled){
+					//Now handle the assignment spill
+					handle_assignment_spill(current->destination_register2, spill_range, current);
+
+					//And wipe out the currently spilled index
+					currently_spilled = NULL;
+
+					//Advance this up by 1 to get past the statement we just added in
+					current = current->next_statement;
+				}
+			}
+
 			//Advance up by 1
 			current = current->next_statement;
 		}
