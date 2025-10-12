@@ -2933,6 +2933,8 @@ static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stac
  * Remediate a memory address instruction. Note that this will not convert a statement to
  * assembly, it will simply take the memory address instruction and put it into the
  * a different OIR form
+ *
+ * This needs to handle both stack variables and global variables
  */
 static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* instruction){
 	//Grab this out
@@ -2941,27 +2943,43 @@ static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* inst
 	//Extract the stack offset for our use
 	u_int32_t stack_offset = var->stack_offset;
 
-	//If this offset is not 0, then we have an operation in the form of
-	//"stack_pointer" + stack offset
-	if(stack_offset != 0){
-		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+	if(var->membership != GLOBAL_VARIABLE){
+		//If this offset is not 0, then we have an operation in the form of
+		//"stack_pointer" + stack offset
+		if(stack_offset != 0){
+			instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
-		//Addition statement
-		instruction->op = PLUS;
+			//Addition statement
+			instruction->op = PLUS;
 
-		//Emit the offset value
-		instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
+			//Emit the offset value
+			instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-		//And we're offsetting from the stack pointer
-		instruction->op1 = cfg->stack_pointer;
+			//And we're offsetting from the stack pointer
+			instruction->op1 = cfg->stack_pointer;
 
-	//Otherwise if this is 0, then all we're doing is assigning the stack pointer
+		//Otherwise if this is 0, then all we're doing is assigning the stack pointer
+		} else {
+			//This is an assign statement
+			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+			//And the op1 is the stack pointer
+			instruction->op1 = cfg->stack_pointer;
+		}
+	
+	//Otherwise it is a global variable, and we will treat it as such
 	} else {
-		//This is an assign statement
-		instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+		//These will always be lea's
+		instruction->instruction_type = LEAQ;
 
-		//And the op1 is the stack pointer
-		instruction->op1 = cfg->stack_pointer;
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//We'll use the at this point ignored op2 slot to hold the value of the offset
+		instruction->op2 = instruction->op1;
 	}
 }
 
