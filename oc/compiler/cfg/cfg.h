@@ -159,6 +159,11 @@ struct basic_block_t{
 
 
 /**
+ * Reset the used, live in, live out, and assigned arrays in a block
+ */
+void reset_block_variable_tracking(basic_block_t* block);
+
+/**
  * Build the entire CFG from the AST. This function returns the CFG struct, which
  * always has the root block
  */

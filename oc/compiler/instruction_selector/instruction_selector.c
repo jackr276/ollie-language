@@ -1895,6 +1895,8 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+	//This cannot be combined
+	result_movement->cannot_be_combined = TRUE;
 
 	//Insert the result movement instruction to be after the multiplication operation
 	insert_instruction_after_given(result_movement, multiplication_instruction);
@@ -2027,6 +2029,8 @@ static void handle_division_instruction(instruction_window_t* window){
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(division_instruction->assignee, division->destination_register);
+	//This cannot be combined
+	result_movement->cannot_be_combined = TRUE;
 
 	//Insert this before the original division instruction
 	insert_instruction_before_given(result_movement, division_instruction);
@@ -2113,6 +2117,8 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, division->destination_register);
+	//This also cannot be combined
+	result_movement->cannot_be_combined = TRUE;
 
 	//Insert this after the original modulus
 	insert_instruction_after_given(result_movement, modulus_instruction);
@@ -2233,6 +2239,8 @@ static void handle_inc_instruction(instruction_t* instruction){
 			break;
 	}
 
+	instruction->source_register = instruction->op1;
+
 	//Set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
 }
@@ -2264,6 +2272,8 @@ static void handle_dec_instruction(instruction_t* instruction){
 			instruction->instruction_type = DECQ;
 			break;
 	}
+
+	instruction->source_register = instruction->op1;
 
 	//Set the destination as the assignee
 	instruction->destination_register = instruction->assignee;

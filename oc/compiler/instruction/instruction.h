@@ -163,14 +163,14 @@ struct live_range_t{
 	symtab_function_record_t* function_defined_in;
 	//What is the stack offset of this live range?
 	u_int32_t stack_offset;
+	//Store the id of the live range
+	u_int32_t live_range_id;
 	//The degree of this live range
 	u_int16_t degree;
 	//The interference graph index of it
 	u_int16_t interference_graph_index;
 	//Store the heuristic spill cost
 	int16_t spill_cost;
-	//Store the id of the live range
-	u_int16_t live_range_id;
 	//Does this carry a function parameter?
 	u_int8_t carries_function_param;
 	//Does this carry a pre-colored value

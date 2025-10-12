@@ -41,11 +41,6 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 interference_graph_t* construct_interference_graph_from_adjacency_lists(dynamic_array_t* live_ranges);
 
 /**
- * Redo the adjacency matrix after a change has been made(usually coalescing)
- */
-interference_graph_t* update_interference_graph(interference_graph_t* graph);
-
-/**
  * Mark that live ranges a and b do not interfere
  */
 void remove_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b);

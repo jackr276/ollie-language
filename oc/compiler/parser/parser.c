@@ -8515,20 +8515,6 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 	//Grab this for convenience
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Return NULL to signify failure
-		return NULL;
-	}
-
 	//Check that it isn't some duplicated variable name
 	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
