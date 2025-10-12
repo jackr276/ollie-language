@@ -1213,15 +1213,6 @@ static void pre_color(instruction_t* instruction){
 		case IDIVW:
 		case IDIVL:
 		case IDIVQ:
-			//The source register for a division must be in RAX
-			instruction->source_register2->associated_live_range->reg = RAX;
-			instruction->source_register2->associated_live_range->is_precolored = TRUE;
-
-			//The destination must be in RAX here
-			instruction->destination_register->associated_live_range->reg = RAX;
-			instruction->destination_register->associated_live_range->is_precolored = TRUE;
-			break;
-
 		case DIVB_FOR_MOD:
 		case DIVW_FOR_MOD:
 		case IDIVB_FOR_MOD:
@@ -1234,9 +1225,13 @@ static void pre_color(instruction_t* instruction){
 			instruction->source_register2->associated_live_range->reg = RAX;
 			instruction->source_register2->associated_live_range->is_precolored = TRUE;
 
-			//The destination for all division remainders is RDX
-			instruction->destination_register->associated_live_range->reg = RDX;
+			//The first destination register is the quotient, and is in RAX
+			instruction->destination_register->associated_live_range->reg = RAX;
 			instruction->destination_register->associated_live_range->is_precolored = TRUE;
+
+			//The second destination register is the results, and is in RDX
+			instruction->destination_register2->associated_live_range->reg = RDX;
+			instruction->destination_register2->associated_live_range->is_precolored = TRUE;
 			break;
 
 		//Function calls always return through rax

@@ -2042,11 +2042,14 @@ static void handle_division_instruction(instruction_window_t* window){
 	//Now we should have what we need, so we can emit the division instruction
 	instruction_t* division = emit_div_instruction(division_instruction->assignee, source2, source, is_signed);
 
+	//The quotient is the destination register
+	three_addr_var_t* quotient = division->destination_register;
+
 	//Insert this before the division instruction
 	insert_instruction_before_given(division, division_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_movX_instruction(division_instruction->assignee, division->destination_register);
+	instruction_t* result_movement = emit_movX_instruction(division_instruction->assignee, quotient);
 	//This cannot be combined
 	result_movement->cannot_be_combined = TRUE;
 
@@ -2127,12 +2130,15 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//Now we should have what we need, so we can emit the division instruction
 	instruction_t* division = emit_mod_instruction(modulus_instruction->assignee, source2, source, is_signed);
+	
+	//Store the remainder register here
+	three_addr_var_t* remainder_register = division->destination_register2;
 
 	//Insert this before the original modulus
 	insert_instruction_before_given(division, modulus_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, division->destination_register);
+	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, remainder_register);
 	//This also cannot be combined
 	result_movement->cannot_be_combined = TRUE;
 
