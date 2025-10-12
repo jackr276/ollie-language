@@ -362,27 +362,6 @@ u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction){
 
 
 /**
- * Is this a division instruction?
- */
-u_int8_t is_division_instruction(instruction_t* instruction){
-	//Just in case
-	if(instruction == NULL){
-		return FALSE;
-	}
-
-	switch(instruction->instruction_type){
-		case DIVQ:
-		case DIVL:
-		case IDIVQ:
-		case IDIVL:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Is this constant value 0?
  */
 u_int8_t is_constant_value_zero(three_addr_const_t* constant){
@@ -472,26 +451,6 @@ u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
 	}
 }
 
-
-/**
- * Is this a division instruction that's intended for modulus??
- */
-u_int8_t is_modulus_instruction(instruction_t* instruction){
-	//Just in case
-	if(instruction == NULL){
-		return FALSE;
-	}
-
-	switch(instruction->instruction_type){
-		case DIVL_FOR_MOD:
-		case DIVQ_FOR_MOD:
-		case IDIVL_FOR_MOD:
-		case IDIVQ_FOR_MOD:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
 
 /**
  * Is this operation a pure copy? In other words, is it a move instruction
@@ -2116,6 +2075,40 @@ static void print_inc_instruction(FILE* fl, instruction_t* instruction, variable
 
 
 /**
+ * Print out a conversion instruction
+ *
+ * Always goes RAX := sign extend RDX:RAX
+ */
+static void print_conversion_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	switch(instruction->instruction_type){
+		case CQTO:
+			fprintf(fl, "cqto /* Source: ");
+			break;
+		case CLTD:
+			fprintf(fl, "cltd /* Source: ");
+			break;
+		case CWTL:
+			fprintf(fl, "cwtl /* Source: ");
+			break;
+		case CBTW:
+			fprintf(fl, "cbtw /* Source: ");
+			break;
+		default:
+			break;
+	}
+
+	print_variable(fl, instruction->source_register, mode);
+	fprintf(fl, "--> ");
+	//Print the appropriate bitfield mapping for the destination
+	print_variable(fl, instruction->destination_register2, mode);
+	fprintf(fl, ":");
+	print_variable(fl, instruction->destination_register, mode);
+	fprintf(fl, "*/\n");
+}
+
+
+
+/**
  * Print out an dec instruction
  */
 static void print_dec_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
@@ -2169,7 +2162,12 @@ static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* i
 	print_variable(fl, instruction->source_register, mode);
 
 	//Print where this went
-	fprintf(fl, " /* --> ");
+	fprintf(fl, " /* Implicit Source: ");
+	//Print out the implied source
+	print_variable(fl, instruction->source_register2, mode);
+
+	//Print where this went
+	fprintf(fl, " -->  ");
 	//Print this mode
 	print_variable(fl, instruction->destination_register, mode);
 
@@ -2223,35 +2221,27 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
 		case DIVB:
-		case DIVB_FOR_MOD:
 			fprintf(fl, "divb ");
 			break;
 		case DIVW:
-		case DIVW_FOR_MOD:
 			fprintf(fl, "divw ");
 			break;
 		case DIVL:
-		case DIVL_FOR_MOD:
 			fprintf(fl, "divl ");
 			break;
 		case DIVQ:
-		case DIVQ_FOR_MOD:
 			fprintf(fl, "divq ");
 			break;
 		case IDIVB:
-		case IDIVB_FOR_MOD:
 			fprintf(fl, "idivb ");
 			break;
 		case IDIVW:
-		case IDIVW_FOR_MOD:
 			fprintf(fl, "idivw ");
 			break;
 		case IDIVL:
-		case IDIVL_FOR_MOD:
 			fprintf(fl, "idivl ");
 			break;
 		case IDIVQ:
-		case IDIVQ_FOR_MOD:
 			fprintf(fl, "idivq ");
 			break;
 		//We'll never get here, just to stop the compiler from complaining
@@ -2262,8 +2252,21 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	//We'll only have a source register here
 	print_variable(fl, instruction->source_register, mode);
 
-	fprintf(fl, " /* --> ");
+	//Print the implied source
+	fprintf(fl, " /* Dividend: ");
+	
+	//Print out the higher order bit source if need be
+	if(instruction->address_calc_reg1 != NULL){
+		print_variable(fl, instruction->address_calc_reg1, mode);
+		fprintf(fl, ":");
+	}
+
+	print_variable(fl, instruction->source_register2, mode);
+	//Print out both the quotient and the remainder
+	fprintf(fl, " --> Quotient: ");
 	print_variable(fl, instruction->destination_register, mode);
+	fprintf(fl, ", Remainder: ");
+	print_variable(fl, instruction->destination_register2, mode);
 	fprintf(fl, " */\n");
 }
 
@@ -2822,16 +2825,10 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "nop\n");
 			break;
 		case CQTO:
-			fprintf(fl, "cqto\n");
-			break;
 		case CLTD:
-			fprintf(fl, "cltd\n");
-			break;
 		case CWTL:
-			fprintf(fl, "cltw\n");
-			break;
 		case CBTW:
-			fprintf(fl, "cbtw\n");
+			print_conversion_instruction(fl, instruction, mode);
 			break;
 		case JMP:
 			fprintf(fl, "jmp .L%d\n", jumping_to_block->block_id);
@@ -2957,14 +2954,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case IDIVW:
 		case IDIVL:
 		case IDIVQ:
-		case DIVB_FOR_MOD:
-		case DIVW_FOR_MOD:
-		case DIVL_FOR_MOD:
-		case DIVQ_FOR_MOD:
-		case IDIVB_FOR_MOD:
-		case IDIVW_FOR_MOD:
-		case IDIVQ_FOR_MOD:
-		case IDIVL_FOR_MOD:
 			print_division_instruction(fl, instruction, mode);
 			break;
 

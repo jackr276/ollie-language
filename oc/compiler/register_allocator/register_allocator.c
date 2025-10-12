@@ -688,6 +688,31 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 	} else {
 		add_assigned_live_range(live_range, block);
 	}
+
+	//All done
+	if(instruction->destination_register2 == NULL){
+		return;
+	}
+
+	/**
+	 * For certain instructions like conversion & division instructions, we have 2
+	 * destination registers. These registers will always be strict assignees so we
+	 * don't need to do any of the manipulation like before.
+	 */
+	//Extract for convenience
+	three_addr_var_t* destination_register2 = instruction->destination_register2;
+
+	//Let's see if we can find this
+	live_range = find_or_create_live_range(live_ranges, block, destination_register2);
+
+	//Add this into the live range
+	add_variable_to_live_range(live_range, block, destination_register2);
+
+	//Link the variable into this as well
+	destination_register2->associated_live_range = live_range;
+
+	//This will *always* be a purely assigned live range
+	add_assigned_live_range(live_range, block);
 }
 
 
@@ -1172,6 +1197,20 @@ static void pre_color(instruction_t* instruction){
 		
 			break;
 
+		case CQTO:
+		case CLTD:
+		case CWTL:
+		case CBTW:
+			//This is always RAX
+			instruction->source_register->associated_live_range->reg = RAX;
+
+			//The results are always RDX and RAX 
+			//Lower order bits
+			instruction->destination_register->associated_live_range->reg = RAX;
+			//Higher order bits
+			instruction->destination_register2->associated_live_range->reg = RDX;
+			break;
+
 		case DIVB:
 		case DIVW:
 		case DIVL:
@@ -1184,26 +1223,13 @@ static void pre_color(instruction_t* instruction){
 			instruction->source_register2->associated_live_range->reg = RAX;
 			instruction->source_register2->associated_live_range->is_precolored = TRUE;
 
-			//The destination must be in RAX here
+			//The first destination register is the quotient, and is in RAX
 			instruction->destination_register->associated_live_range->reg = RAX;
 			instruction->destination_register->associated_live_range->is_precolored = TRUE;
-			break;
 
-		case DIVB_FOR_MOD:
-		case DIVW_FOR_MOD:
-		case IDIVB_FOR_MOD:
-		case IDIVW_FOR_MOD:
-		case DIVL_FOR_MOD:
-		case DIVQ_FOR_MOD:
-		case IDIVL_FOR_MOD:
-		case IDIVQ_FOR_MOD:
-			//The source register for a division must be in RAX
-			instruction->source_register2->associated_live_range->reg = RAX;
-			instruction->source_register2->associated_live_range->is_precolored = TRUE;
-
-			//The destination for all division remainders is RDX
-			instruction->destination_register->associated_live_range->reg = RDX;
-			instruction->destination_register->associated_live_range->is_precolored = TRUE;
+			//The second destination register is the results, and is in RDX
+			instruction->destination_register2->associated_live_range->reg = RDX;
+			instruction->destination_register2->associated_live_range->is_precolored = TRUE;
 			break;
 
 		//Function calls always return through rax
@@ -1343,8 +1369,6 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 		 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
 		 * set by a different name for our calculation
 		 */
-
-		//TODO explore just cloning
 		dynamic_array_t* live_now = current->live_out;
 		
 		//We will crawl our way up backwards through the CFG
@@ -1405,6 +1429,18 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 					//And then scrap it from live_now
 					dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
 				}
+			}
+
+			/**
+			 * Some instructions like CXXX and division instructions have 2 destinations. The second destination,
+			 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
+			 */
+			if(operation->destination_register2 != NULL){
+				//Add the interference
+				add_destination_interference(graph, live_now, operation->destination_register2->associated_live_range);
+
+				//And then scrap it from live_now
+				dynamic_array_delete(live_now, operation->destination_register2->associated_live_range);
 			}
 
 			/**
@@ -1856,6 +1892,40 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 						//Advance this up by 1 to get past the statement we just added in
 						current = current->next_statement;
 					}
+				}
+			}
+
+
+			/**
+			 * Destination registers are a unique case because they could be source registers
+			 * as well. Additionally, if the destination register is being dereferenced, then
+			 * it is not truly a destination, and should be treated as a use
+			 */
+			if(current->destination_register2 != NULL){
+				/**
+				 * Option 1: it could equal the spill range, and as such we have to deal with it
+				 */
+				if(current->destination_register2->associated_live_range == spill_range){
+					//Now handle the assignment spill
+					handle_assignment_spill(current->destination_register2, spill_range, current);
+
+					//And wipe out the currently spilled index
+					currently_spilled = NULL;
+
+					//Advance this up by 1 to get past the statement we just added in
+					current = current->next_statement;
+
+				//The other option is that our destination live range *is* the currently spilled live
+				//live range. We'll also need to handle events like this if that's the case
+				} else if(current->destination_register2->associated_live_range == currently_spilled){
+					//Now handle the assignment spill
+					handle_assignment_spill(current->destination_register2, spill_range, current);
+
+					//And wipe out the currently spilled index
+					currently_spilled = NULL;
+
+					//Advance this up by 1 to get past the statement we just added in
+					current = current->next_statement;
 				}
 			}
 
