@@ -406,7 +406,11 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 	//this will always be %rax or a lower bit field in it
 	instruction->source_register = converted;
 
-	//The destination register is actually 2fold. It will occupy the %rdx and %rax registers
+	//There are 2 destinations here, it will always take the value in %rax and convert it to %rdx:%rax
+	instruction->destination_register = emit_temp_var(converted->type);
+	instruction->destination_register2 = emit_temp_var(converted->type);
+
+	//There are actually 2 destination registers here. They occupy RDX:RAX respectively
 
 	//And now we'll give it back
 	return instruction;
@@ -582,6 +586,11 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 	//This implicit source is important for our uses in the register allocator
 	instruction->source_register2 = implicit_source;
 
+	//Quotient register
+	instruction->destination_register = emit_temp_var(assignee->type);
+	//Remainder register
+	instruction->destination_register2 = emit_temp_var(assignee->type);
+
 	//And now we'll give it back
 	return instruction;
 }
@@ -639,6 +648,11 @@ static instruction_t* emit_mod_instruction(three_addr_var_t* assignee, three_add
 	//Finally we set the sources
 	instruction->source_register = direct_source;
 	instruction->source_register2 = implicit_source;
+
+	//Quotient register
+	instruction->destination_register = emit_temp_var(assignee->type);
+	//Remainder register
+	instruction->destination_register2 = emit_temp_var(assignee->type);
 
 	//And now we'll give it back
 	return instruction;
@@ -2031,9 +2045,6 @@ static void handle_division_instruction(instruction_window_t* window){
 	//Insert this before the division instruction
 	insert_instruction_before_given(division, division_instruction);
 
-	//This is the assignee, we just don't see it
-	division->destination_register = emit_temp_var(division_instruction->assignee->type);
-
 	//Once we've done all that, we need one final movement operation
 	instruction_t* result_movement = emit_movX_instruction(division_instruction->assignee, division->destination_register);
 	//This cannot be combined
@@ -2116,8 +2127,6 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//Now we should have what we need, so we can emit the division instruction
 	instruction_t* division = emit_mod_instruction(modulus_instruction->assignee, source2, source, is_signed);
-	//This is the assignee, we just don't see it
-	division->destination_register = emit_temp_var(modulus_instruction->assignee->type);
 
 	//Insert this before the original modulus
 	insert_instruction_before_given(division, modulus_instruction);

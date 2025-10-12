@@ -1166,6 +1166,20 @@ static void pre_color(instruction_t* instruction){
 		
 			break;
 
+		case CQTO:
+		case CLTD:
+		case CWTL:
+		case CBTW:
+			//This is always RAX
+			instruction->source_register->associated_live_range->reg = RAX;
+
+			//The results are always RDX and RAX 
+			//Lower order bits
+			instruction->destination_register->associated_live_range->reg = RAX;
+			//Higher order bits
+			instruction->destination_register2->associated_live_range->reg = RDX;
+			break;
+
 		case DIVB:
 		case DIVW:
 		case DIVL:

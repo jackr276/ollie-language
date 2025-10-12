@@ -466,13 +466,13 @@ struct instruction_t{
 	three_addr_const_t* source_immediate;
 	//Our destination register/variable
 	three_addr_var_t* destination_register;
+	//Certain instructions like conversions, and divisions, have more
+	//than one destination register
+	three_addr_var_t* destination_register2;
 	three_addr_const_t* offset;
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
-	//The remainder register(used for div & mod)
-	three_addr_var_t* remainder_register;
-	//The offset
 	//Store a reference to the block that we're jumping to
 	void* jumping_to_block;
 	//The LEA addition
