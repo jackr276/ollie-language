@@ -329,9 +329,9 @@ static void print_block_with_live_ranges(basic_block_t* block){
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_blocks_with_live_ranges(cfg_t* cfg, basic_block_t* head_block){
+static void print_blocks_with_live_ranges(cfg_t* cfg){
 	//Run through the direct successors so long as the block is not null
-	basic_block_t* current = head_block;
+	basic_block_t* current = cfg->head_block;
 
 	//So long as this one isn't NULL
 	while(current != NULL){
@@ -397,9 +397,9 @@ static void print_block_with_registers(basic_block_t* block){
  * Run through using the direct successor strategy and print all
  * ordered blocks with their registers after allocation
  */
-static void print_blocks_with_registers(cfg_t* cfg, basic_block_t* head_block){
+static void print_blocks_with_registers(cfg_t* cfg){
 	//Run through the direct successors so long as the block is not null
-	basic_block_t* current = head_block;
+	basic_block_t* current = cfg->head_block;
 
 	//So long as this one isn't NULL
 	while(current != NULL){
@@ -2412,7 +2412,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 		printf("============= Retrying with ====================\n");
 		    //Show our live ranges once again
 			print_all_live_ranges(live_ranges);
-			print_blocks_with_live_ranges(cfg->head_block);
+			print_blocks_with_live_ranges(cfg);
 
 		//Otherwise just the LRs
 		} else if(print_irs == TRUE && iterations == 0){
@@ -2435,7 +2435,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		//Again if we want to print, now is the time
 		if(print_irs == TRUE && iterations == 0){
 			printf("============= After Live Range Determination ==============\n");
-			print_blocks_with_live_ranges(cfg->head_block);
+			print_blocks_with_live_ranges(cfg);
 			printf("============= After Live Range Determination ==============\n");
 		}
 
@@ -2457,7 +2457,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		if(print_irs == TRUE && iterations == 0){
 			print_all_live_ranges(live_ranges);
 			printf("================= After Coalescing =======================\n");
-			print_blocks_with_live_ranges(cfg->head_block);
+			print_blocks_with_live_ranges(cfg);
 			printf("================= After Coalescing =======================\n");
 		}
 		
@@ -2498,7 +2498,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//One final print post allocation
 	if(print_irs == TRUE){
 		printf("================= After Allocation =======================\n");
-		print_blocks_with_registers(cfg, cfg->head_block);
+		print_blocks_with_registers(cfg);
 		printf("================= After Allocation =======================\n");
 	}
 }
