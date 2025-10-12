@@ -346,27 +346,6 @@ u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction){
 
 
 /**
- * Is this a division instruction?
- */
-u_int8_t is_division_instruction(instruction_t* instruction){
-	//Just in case
-	if(instruction == NULL){
-		return FALSE;
-	}
-
-	switch(instruction->instruction_type){
-		case DIVQ:
-		case DIVL:
-		case IDIVQ:
-		case IDIVL:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Is this constant value 0?
  */
 u_int8_t is_constant_value_zero(three_addr_const_t* constant){
@@ -2095,7 +2074,12 @@ static void print_unsigned_multiplication_instruction(FILE* fl, instruction_t* i
 	print_variable(fl, instruction->source_register, mode);
 
 	//Print where this went
-	fprintf(fl, " /* --> ");
+	fprintf(fl, " /* Implicit Source: ");
+	//Print out the implied source
+	print_variable(fl, instruction->source_register2, mode);
+
+	//Print where this went
+	fprintf(fl, " -->  ");
 	//Print this mode
 	print_variable(fl, instruction->destination_register, mode);
 
@@ -2188,7 +2172,11 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	//We'll only have a source register here
 	print_variable(fl, instruction->source_register, mode);
 
-	fprintf(fl, " /* --> ");
+	//Print the implied source
+	fprintf(fl, " /* Implied source: ");
+	print_variable(fl, instruction->source_register2, mode);
+	fprintf(fl, " --> ");
+
 	print_variable(fl, instruction->destination_register, mode);
 	fprintf(fl, " */\n");
 }

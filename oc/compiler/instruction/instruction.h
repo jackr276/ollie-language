@@ -590,7 +590,6 @@ u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction);
 /**
  * Is this a division instruction?
  */
-u_int8_t is_division_instruction(instruction_t* instruction);
 
 /**
  * Is this constant value 0?
