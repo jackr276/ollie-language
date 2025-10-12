@@ -10,7 +10,6 @@
 
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -2674,7 +2673,7 @@ static void handle_test_instruction(instruction_t* instruction){
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
  */
-static void handle_load_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+static void handle_load_instruction(cfg_t* cfg, instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -2696,33 +2695,58 @@ static void handle_load_instruction(three_addr_var_t* stack_pointer, instruction
 			break;
 	}
 
-	//Extract the variable record from the op1
-	symtab_variable_record_t* variable = instruction->op1->linked_var;
+	//Extract the variable that we're trying to load
+	three_addr_var_t* loaded_variable = instruction->op1;
 
-	//We need to grab this variable's stack offset
-	u_int32_t stack_offset = variable->stack_offset;
+	//Most common case - this is a stack variable
+	if(loaded_variable->linked_var->stack_variable == TRUE){
+		//Extract the variable record from the op1
+		symtab_variable_record_t* variable = instruction->op1->linked_var;
 
-	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+		//We need to grab this variable's stack offset
+		u_int32_t stack_offset = variable->stack_offset;
 
-	//This is in offset only mode
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		//Once we have that, we can emit our offset constant
+		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-	//And the offset itself is the offset constant
-	instruction->offset = offset_constant;
+		//This is in offset only mode
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-	//And the first address calc register is just our stack pointer
-	instruction->address_calc_reg1 = stack_pointer;
+		//And the offset itself is the offset constant
+		instruction->offset = offset_constant;
 
-	//And our destination register is the temp reg
-	instruction->destination_register = instruction->assignee;
+		//And the first address calc register is just our stack pointer
+		instruction->address_calc_reg1 = cfg->stack_pointer;
+
+		//And our destination register is the temp reg
+		instruction->destination_register = instruction->assignee;
+
+	/**
+	 * Otherwise, we have a global variable here so we'll need to emit something like the following:
+	 *
+	 * leaq <var_name>(%rip), t3
+	 */
+	} else {
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//And the second register is the variable itself. The variable name doubles as an address in
+		//memory in the final partial program. We'll use the op2 slot to avoid the register allocator
+		instruction->op2 = loaded_variable;
+
+		//The destination is the assignee
+		instruction->destination_register = instruction->assignee;
+	}
 }
 
 
 /**
  * Handle a store const instruction. This will be reorganized into a memory accessing move
  */
-static void handle_store_const_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+static void handle_store_const_instruction(cfg_t* cfg, instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -2744,33 +2768,54 @@ static void handle_store_const_instruction(three_addr_var_t* stack_pointer, inst
 			break;
 	}
 
-	//Extract the variable record from the assignee
-	symtab_variable_record_t* variable = instruction->assignee->linked_var;
+	//Extract the variable that we're trying to store
+	three_addr_var_t* stored_variable = instruction->assignee;
 
-	//We need to grab this variable's stack offset
-	u_int32_t stack_offset = variable->stack_offset;
+	//Regular stack storage
+	if(stored_variable->linked_var->stack_variable == TRUE){
+		//Extract the variable record from the assignee
+		symtab_variable_record_t* variable = stored_variable->linked_var;
 
-	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+		//We need to grab this variable's stack offset
+		u_int32_t stack_offset = variable->stack_offset;
 
-	//This is in offset only mode
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		//Once we have that, we can emit our offset constant
+		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-	//And the offset itself is the offset constant
-	instruction->offset = offset_constant;
+		//This is in offset only mode
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-	//And the first address calc register is just our stack pointer
-	instruction->address_calc_reg1 = stack_pointer;
+		//And the offset itself is the offset constant
+		instruction->offset = offset_constant;
 
-	//And for the source, we'll occupy the source immediate with our value
-	instruction->source_immediate = instruction->op1_const;
+		//And the first address calc register is just our stack pointer
+		instruction->address_calc_reg1 = cfg->stack_pointer;
+
+		//And for the source, we'll occupy the source immediate with our value
+		instruction->source_immediate = instruction->op1_const;
+
+	//Otherwise we have a global variable, so we'll need to emit
+	//a different kind of store
+	} else {
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//We'll use the at this point ignored op2 slot to hold the value of the offset
+		instruction->op2 = stored_variable;
+
+		//The const is the immediate source
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
 /**
  * Handle a store instruction. This will be reorganized into a memory accessing move
  */
-static void handle_store_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -2792,56 +2837,95 @@ static void handle_store_instruction(three_addr_var_t* stack_pointer, instructio
 			break;
 	}
 
-	//Extract the variable record from the assignee
-	symtab_variable_record_t* variable = instruction->assignee->linked_var;
+	//Extract the variable that we're trying to store
+	three_addr_var_t* stored_variable = instruction->assignee;
 
-	//We need to grab this variable's stack offset
-	u_int32_t stack_offset = variable->stack_offset;
+	//If this is a stack variable, then we'll do the normal procedure
+	if(stored_variable->linked_var->stack_variable == TRUE){
+		//Extract the variable record from the assignee
+		symtab_variable_record_t* variable = stored_variable->linked_var;
 
-	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+		//We need to grab this variable's stack offset
+		u_int32_t stack_offset = variable->stack_offset;
 
-	//This is in offset only mode
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		//Once we have that, we can emit our offset constant
+		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-	//And the offset itself is the offset constant
-	instruction->offset = offset_constant;
+		//This is in offset only mode
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-	//And the first address calc register is just our stack pointer
-	instruction->address_calc_reg1 = stack_pointer;
+		//And the offset itself is the offset constant
+		instruction->offset = offset_constant;
 
-	//The source register is just our op1
-	instruction->source_register = instruction->op1;
+		//And the first address calc register is just our stack pointer
+		instruction->address_calc_reg1 = cfg->stack_pointer;
+
+		//The source register is just our op1
+		instruction->source_register = instruction->op1;
+
+	//Otherwise, we have a global variable that needs to be stored by an offset calculation
+	//from the instruction pointer(rip)	
+	} else {
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//We'll use the at this point ignored op2 slot to hold the value of the offset
+		instruction->op2 = stored_variable;
+
+		//Op1 is the source register
+		instruction->source_register = instruction->op1;
+	}
 }
 
 
 /**
  * Translate the memory address instruction into stack form
+ *
+ * There are two options here - a stack address and a global variable. We will 
+ * handle both cases
  */
-static void handle_memory_address_instruction(three_addr_var_t* stack_pointer, instruction_t* instruction){
+static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stack_pointer, instruction_t* instruction){
 	//These will always be LEA's
 	instruction->instruction_type = LEAQ;
 
 	//Destination is always the assignee
 	instruction->destination_register = instruction->assignee;
 
-	//Extract the variable record from the assignee
-	symtab_variable_record_t* variable = instruction->op1->linked_var;
+	//Extract for convenience
+	three_addr_var_t* address_variable = instruction->op1;
+	symtab_variable_record_t* variable = address_variable->linked_var;
 
-	//We need to grab this variable's stack offset
-	u_int32_t stack_offset = variable->stack_offset;
+	//Is this a stack variable(most common case)
+	if(variable->membership != GLOBAL_VARIABLE){
+		//We need to grab this variable's stack offset
+		u_int32_t stack_offset = variable->stack_offset;
 
-	//Once we have that, we can emit our offset constant
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+		//Once we have that, we can emit our offset constant
+		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-	//The offset is the offset constant
-	instruction->offset = offset_constant;
+		//The offset is the offset constant
+		instruction->offset = offset_constant;
 
-	//Stack pointer is the calc reg 1
-	instruction->address_calc_reg1 = stack_pointer;
+		//Stack pointer is the calc reg 1
+		instruction->address_calc_reg1 = stack_pointer;
 
-	//We've only got the offset here
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		//We've only got the offset here
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//Otherwise we know that we have a global variable
+	} else {
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//We'll use the at this point ignored op2 slot to hold the value of the offset
+		instruction->op2 = address_variable;
+	}
 }
 
 
@@ -2849,6 +2933,8 @@ static void handle_memory_address_instruction(three_addr_var_t* stack_pointer, i
  * Remediate a memory address instruction. Note that this will not convert a statement to
  * assembly, it will simply take the memory address instruction and put it into the
  * a different OIR form
+ *
+ * This needs to handle both stack variables and global variables
  */
 static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* instruction){
 	//Grab this out
@@ -2857,27 +2943,43 @@ static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* inst
 	//Extract the stack offset for our use
 	u_int32_t stack_offset = var->stack_offset;
 
-	//If this offset is not 0, then we have an operation in the form of
-	//"stack_pointer" + stack offset
-	if(stack_offset != 0){
-		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+	if(var->membership != GLOBAL_VARIABLE){
+		//If this offset is not 0, then we have an operation in the form of
+		//"stack_pointer" + stack offset
+		if(stack_offset != 0){
+			instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
-		//Addition statement
-		instruction->op = PLUS;
+			//Addition statement
+			instruction->op = PLUS;
 
-		//Emit the offset value
-		instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
+			//Emit the offset value
+			instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-		//And we're offsetting from the stack pointer
-		instruction->op1 = cfg->stack_pointer;
+			//And we're offsetting from the stack pointer
+			instruction->op1 = cfg->stack_pointer;
 
-	//Otherwise if this is 0, then all we're doing is assigning the stack pointer
+		//Otherwise if this is 0, then all we're doing is assigning the stack pointer
+		} else {
+			//This is an assign statement
+			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+			//And the op1 is the stack pointer
+			instruction->op1 = cfg->stack_pointer;
+		}
+	
+	//Otherwise it is a global variable, and we will treat it as such
 	} else {
-		//This is an assign statement
-		instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+		//These will always be lea's
+		instruction->instruction_type = LEAQ;
 
-		//And the op1 is the stack pointer
-		instruction->op1 = cfg->stack_pointer;
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//We'll use the at this point ignored op2 slot to hold the value of the offset
+		instruction->op2 = instruction->op1;
 	}
 }
 
@@ -3298,18 +3400,17 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
-			handle_load_instruction(cfg->stack_pointer, instruction);
+			handle_load_instruction(cfg, instruction);
 			break;
 		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
-			handle_store_const_instruction(cfg->stack_pointer, instruction);
+			handle_store_const_instruction(cfg, instruction);
 			break;
 		case THREE_ADDR_CODE_STORE_STATEMENT:
-			handle_store_instruction(cfg->stack_pointer, instruction);
+			handle_store_instruction(cfg, instruction);
 			break;
 		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
-			handle_memory_address_instruction(cfg->stack_pointer, instruction);
+			handle_memory_address_instruction(cfg, cfg->stack_pointer, instruction);
 			break;
-			
 		default:
 			break;
 	}
@@ -4502,6 +4603,20 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		changed = TRUE;
 	}
 
+
+	//TODO ADD DOCS
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT
+		// Ignore global vars, they don't have stack addresses
+		&& window->instruction1->op1->linked_var->membership != GLOBAL_VARIABLE){
+		//We can reorgnaize this into an assignment instruction
+		if(window->instruction1->op1->stack_offset == 0){
+			//Reset the type
+			window->instruction1->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+			//The op1 is now the stack pointer
+			window->instruction1->op1 = cfg->stack_pointer;
+		}
+	}
+
 	/**
 	 * When we have a case like this for address calculations:
 	 * t32 <- stack_pointer
@@ -4510,6 +4625,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * We can simply make this:
 	 * t35 <- t32 + 32
 	 */
+
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT 
 		&& window->instruction2 != NULL
 		&& (window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT)
@@ -4760,7 +4876,7 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_ordered_blocks(basic_block_t* head_block, instruction_printing_mode_t mode){
+static void print_ordered_blocks(cfg_t* cfg, basic_block_t* head_block, instruction_printing_mode_t mode){
 	//Run through the direct successors so long as the block is not null
 	basic_block_t* current = head_block;
 
@@ -4771,6 +4887,9 @@ static void print_ordered_blocks(basic_block_t* head_block, instruction_printing
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
+
+	//Print all global variables after the blocks
+	print_all_global_variables(stdout, cfg->global_variables);
 }
 
 
@@ -4797,7 +4916,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//We'll first print before we simplify
 	if(print_irs == TRUE){
 		printf("============================== BEFORE SIMPLIFY ========================================\n");
-		print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
+		print_ordered_blocks(cfg, head_block, PRINT_THREE_ADDRESS_CODE);
 		printf("============================== AFTER SIMPLIFY ========================================\n");
 	}
 
@@ -4808,7 +4927,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 
 	//If we need to print IRS, we can do so here
 	if(print_irs == TRUE){
-		print_ordered_blocks(head_block, PRINT_THREE_ADDRESS_CODE);
+		print_ordered_blocks(cfg, head_block, PRINT_THREE_ADDRESS_CODE);
 		printf("============================== AFTER INSTRUCTION SELECTION ========================================\n");
 	}
 
@@ -4817,6 +4936,6 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 
 	//Final IR printing if requested by user
 	if(print_irs == TRUE){
-		print_ordered_blocks(head_block,PRINT_INSTRUCTION);
+		print_ordered_blocks(cfg, head_block, PRINT_INSTRUCTION);
 	}
 }

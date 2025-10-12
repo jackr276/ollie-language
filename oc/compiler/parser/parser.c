@@ -2011,7 +2011,10 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 					//If this is not already a memory region, then we need to flag it as one
 					//for later so that the cfg constructor knows what we'll eventually need to
 					//load
-					if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE){
+					if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE
+						//AND it's not a global var
+						&& cast_expr->variable->membership != GLOBAL_VARIABLE){
+
 						//IMPORTANT - we need to flag this as a stack variable now
 						cast_expr->variable->stack_variable = TRUE;
 					}
@@ -3716,7 +3719,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//node that we have and also add it into our symbol table
 	
 	//We'll first create the symtab record
-	symtab_variable_record_t* member_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* member_record = create_variable_record(name);
 	//Store the line number for error printing
 	member_record->line_number = parser_line_num;
 	//Store what the type is
@@ -4330,7 +4333,7 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 	}
 
 	//Finally we can create our member
-	symtab_variable_record_t* union_member = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* union_member = create_variable_record(name);
 	//Give it its type
 	union_member->type_defined_as = type;
 	//Store the mutability
@@ -4698,7 +4701,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
 		//to create the record and assign it a type
-		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme, STORAGE_CLASS_NORMAL);
+		symtab_variable_record_t* member_record = create_variable_record(lookahead.lexeme);
 
 		//Store the line number
 		member_record->line_number = parser_line_num;
@@ -5486,7 +5489,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	symtab_type_record_t* label_type = lookup_type_name_only(type_symtab, "u64");
 
 	//Now that we know we didn't find it, we'll create it
-	symtab_variable_record_t* label = create_variable_record(label_name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* label = create_variable_record(label_name);
 	//Store the type
 	label->type_defined_as = label_type->type;
 	//Store the fact that it is a label
@@ -7502,21 +7505,12 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	lexitem_t lookahead;
 	//Is it mutable? Our default is no
 	u_int8_t is_mutable = FALSE;
-	//The storage class, normal by default
-	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//Go based on what we see here
 	switch(lookahead.tok){
-		//This is bound to be a normal variable declaration
-		case STATIC:
-			storage_class = STORAGE_CLASS_STATIC;
-			//Refresh token
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-			break;
-
 		//If we see either of these tokens, it means that the user is predeclaring a function.
 		//In this case, we push the token back and let the function predeclaration rule
 		//handle it
@@ -7647,7 +7641,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
+	symtab_variable_record_t* declared_var = create_variable_record(name);
 	//Store its constant status
 	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
@@ -7688,6 +7682,19 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 
 		//Otherwise just leave
 		default:
+			//If this is a global variable, then we also must ensure that a declaration exists
+			if(is_global == TRUE){
+				//Actually create the node now
+				declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
+
+				//Also store this record with the root node
+				declaration_node->variable = declared_var;
+				//Store the type as well
+				declaration_node->inferred_type = declared_var->type_defined_as;
+				//Store the line number
+				declaration_node->line_number = current_line;
+			}
+
 			break;
 	}
 
@@ -7982,21 +7989,12 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	lexitem_t lookahead;
 	//Is it mutable?
 	u_int8_t is_mutable = FALSE;
-	//The storage class, normal by default
-	STORAGE_CLASS_T storage_class = STORAGE_CLASS_NORMAL;
 
 	//Let's first declare the root node
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
 
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we see static here, we'll make a note of that
-	if(lookahead.tok == STATIC){
-		storage_class = STORAGE_CLASS_STATIC;
-		//Refresh token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	}
 
 	//Let's now check and see if this is mutable
 	if(lookahead.tok == MUT){
@@ -8134,7 +8132,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
-	symtab_variable_record_t* declared_var = create_variable_record(name, storage_class);
+	symtab_variable_record_t* declared_var = create_variable_record(name);
 	//Store it's mutability status
 	declared_var->is_mutable = is_mutable;
 	//Store the type
@@ -8518,7 +8516,7 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 	dynamic_string_t name = lookahead.lexeme;
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
 	if(found_var != NULL){
@@ -8581,7 +8579,7 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 	//symbol table
 	
 	//Let's first construct the variable record
-	symtab_variable_record_t* param_record = create_variable_record(name, STORAGE_CLASS_NORMAL);
+	symtab_variable_record_t* param_record = create_variable_record(name);
 	//It is a function parameter
 	param_record->membership = FUNCTION_PARAMETER;
 	//We assume that it was initialized

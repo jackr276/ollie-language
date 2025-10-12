@@ -50,13 +50,6 @@ typedef struct symtab_constant_record_t symtab_constant_record_t;
 //The definition of a local constant(.LCx) block
 typedef struct local_constant_t local_constant_t;
 
-//The storage class of a given item
-typedef enum STORAGE_CLASS_T{
-	STORAGE_CLASS_STATIC,
-	STORAGE_CLASS_EXTERNAL,
-	STORAGE_CLASS_NORMAL,
-} STORAGE_CLASS_T;
-
 
 /**
  * What is the membership that a variable has?
@@ -169,8 +162,6 @@ struct symtab_variable_record_t{
 	//Where does this variable get stored? By default we assume register, so
 	//this flag will only be set if we have a memory address value
 	u_int8_t stack_variable;
-	//What's the storage class?
-	STORAGE_CLASS_T storage_class;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 };
@@ -341,7 +332,7 @@ void finalize_type_scope(type_symtab_t* symtab);
 /**
  * Create a record for the symbol table
  */
-symtab_variable_record_t* create_variable_record(dynamic_string_t name, STORAGE_CLASS_T storage_class);
+symtab_variable_record_t* create_variable_record(dynamic_string_t name);
 
 /**
  * Create a ternary variable record

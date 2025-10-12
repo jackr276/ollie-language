@@ -125,6 +125,8 @@ u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg){
 	//We'll first print the text segment of the program
 	print_text_section(options, output, cfg);
 
+	print_all_global_variables(output, cfg->global_variables);
+
 	//Once we're done, close the file
 	fclose(output);
 

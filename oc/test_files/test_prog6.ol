@@ -57,12 +57,12 @@ pub fn main() -> i32{
 
 	//Example asm inline statement
 	//defer asm{
-	//	push %rax \
-	//	push %rbx \
-	//	mov $2, %rax \
-	//	addl $3, %rax \
-	//	pop %rbx \
-	//	pop %rax \
+	//	push %rax;
+	//	push %rbx;
+	//	mov $2, %rax;
+	//	addl $3, %rax;
+	//	pop %rbx;
+	//	pop %rax;
 	//}
 
 	defer {

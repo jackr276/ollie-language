@@ -37,6 +37,22 @@ int32_t increment_and_get_temp_id(){
 
 
 /**
+ * A helper function that will create a global variable for us
+ */
+global_variable_t* create_global_variable(symtab_variable_record_t* variable, three_addr_const_t* value){
+	//Allocate it
+	global_variable_t* var = calloc(1, sizeof(global_variable_t));
+
+	//Copy these over
+	var->variable = variable;
+	var->value = value;
+
+	//Give the var back
+	return var;
+}
+
+
+/**
  * Let's determine if a value is a positive power of 2.
  * Here's how this will work. In binary, powers of 2 look like:
  * 0010
@@ -1203,6 +1219,51 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 
 
 /**
+ * Print all given global variables who's use count is not 0
+ */
+void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
+	//Just bail out if this is the case
+	if(global_variables == NULL || global_variables->current_index == 0){
+		return;
+	}
+
+	//Append to the .bss section
+	fprintf(fl, "\t.bss\n");
+
+	//Run through all of them
+	for(u_int16_t i = 0; i < global_variables->current_index; i++){
+		//Grab the variable out
+		global_variable_t* variable = dynamic_array_get_at(global_variables, i);
+
+		//Extract the name
+		char* name = variable->variable->var_name.string;
+
+		//Mark that this is global(globl)
+		fprintf(fl, "\t.globl %s\n", name);
+
+		//Now print out the alignment
+		fprintf(fl, "\t.align %d\n", get_base_alignment_type(variable->variable->type_defined_as)->type_size);
+		
+		//Now print out our type, it's always @Object
+		fprintf(fl, "\t.type %s, @object\n", name);
+
+		//Now emit the relevant type
+		fprintf(fl, "\t.size %s, %d\n", name, variable->variable->type_defined_as->type_size);
+
+		//Now fianlly we'll print the value out
+		fprintf(fl, "%s:\n", name);
+		
+		/**
+		 * If the value is NULL, we will initialize to be all zero
+		 */
+		if(variable->value == NULL){
+			fprintf(fl, "\t.zero %d\n", variable->variable->type_defined_as->type_size);
+		}
+	}
+}
+
+
+/**
  * Print a live range out
  */
 void print_live_range(FILE* fl, live_range_t* live_range){
@@ -1775,6 +1836,19 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			}
 
 			break;
+
+		/**
+		 * Global var address calculation
+		 */
+		case ADDRESS_CALCULATION_MODE_GLOBAL_VAR:
+			//Print the actual string name of the variable - no SSA and no registers
+			fprintf(fl, "%s", instruction->op2->linked_var->var_name.string);
+			fprintf(fl, "(");
+			//This will be the instruction pointer
+			print_variable(fl, instruction->address_calc_reg1, mode);
+			fprintf(fl, ")");
+
+		   	break;
 
 		/**
 		 * If we get here, that means we have this kind

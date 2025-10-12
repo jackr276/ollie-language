@@ -29,7 +29,7 @@ int main(){
 		dynamic_string_alloc(&string);
 		dynamic_string_set(&string, idents_l1[i]);
 
-		num_collisions += insert_variable(symtab, create_variable_record(string, STORAGE_CLASS_NORMAL));
+		num_collisions += insert_variable(symtab, create_variable_record(string));
 	}
 
 	printf("Collisions: %d\n", num_collisions);
@@ -43,7 +43,7 @@ int main(){
 		dynamic_string_alloc(&string);
 		dynamic_string_set(&string, idents_l2[i]);
 
-		num_collisions += insert_variable(symtab, create_variable_record(string, STORAGE_CLASS_NORMAL));
+		num_collisions += insert_variable(symtab, create_variable_record(string));
 	}
 
 

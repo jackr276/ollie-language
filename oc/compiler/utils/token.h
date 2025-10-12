@@ -44,7 +44,6 @@ typedef enum {
 	REQUIRE,
 	RETURN,
 	JUMP,
-	STATIC,
 	EXTERNAL,
 	DOUBLE_AND,
 	DOUBLE_OR,

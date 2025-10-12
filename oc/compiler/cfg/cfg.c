@@ -2157,6 +2157,13 @@ static void rename_all_variables(cfg_t* cfg){
 	//Before we do this - let's reset the entire CFG
 	reset_visited_status(cfg, FALSE);
 
+	//All global variables have themselves been assigned. As such, we'll
+	//need to mark that by giving them a left hand rename
+	for(u_int16_t i = 0; i < cfg->global_variables->current_index; i++){
+		global_variable_t* variable = dynamic_array_get_at(cfg->global_variables, i);
+		lhs_new_name_direct(variable->variable);
+	}
+
 	//We will call the rename block function on the first block
 	//for each of our functions. The rename block function is 
 	//recursive, so that should in theory take care of everything for us
@@ -2677,7 +2684,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 * If we're on the right side of the equation and this is a stack variable, when we want to use 
 	 * the address we have to load
 	 */
-	if(ident_node->side == SIDE_TYPE_RIGHT && ident_node->variable->stack_variable == TRUE){
+	if(ident_node->side == SIDE_TYPE_RIGHT && 
+		(ident_node->variable->stack_variable == TRUE || ident_node->variable->membership == GLOBAL_VARIABLE)){
 		//The final assignee
 		three_addr_var_t* assignee;
 
@@ -3615,8 +3623,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * the address of a struct for example, we don't need to add said struct to the
 					 * stack - it is already there. We need to account for these nuances when
 					 * we do this
+					 *
+					 * We do not do this if it's a global variable, because global variables have their own unique storage
+					 * mechanism that is not stack related
 					 */
-					if(does_stack_contain_symtab_variable(&(current_function->data_area), second_child->variable) == FALSE){
+					if(second_child->variable->membership != GLOBAL_VARIABLE
+						&& does_stack_contain_symtab_variable(&(current_function->data_area), second_child->variable) == FALSE){
 						//Add this variable onto the stack now, since we know it is not already on it
 						add_variable_to_stack(&(current_function->data_area), emit_var(second_child->variable));
 					}
@@ -4061,7 +4073,8 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			 * variable that is on the stack, then a regular assignment just won't do. We'll need to
 			 * emit a store operation
 			 */
-			if(left_hand_var->linked_var == NULL || left_hand_var->linked_var->stack_variable == FALSE){
+			if(left_hand_var->linked_var == NULL 
+				|| (left_hand_var->linked_var->stack_variable == FALSE && left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
 				//Finally we'll struct the whole thing
 				instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
@@ -7723,7 +7736,30 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 
 
 /**
- * Visit a let statement and handle all relative initializations
+ * Visit a global variable let statement(declaration + initialization)
+ */
+static void visit_global_let_statement(generic_ast_node_t* node){
+
+	printf("NOT IMPLEMENTED\n");
+	exit(0);
+
+}
+
+
+/**
+ * Visit a global variable declaration statement
+ */
+static void visit_global_declare_statement(generic_ast_node_t* node){
+	//We'll store it inside of the global variable struct
+	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
+
+	//And add it into the CFG
+	dynamic_array_add(cfg_ref->global_variables, global_variable);
+}
+
+
+/**
+ * Visit a let statement
  */
 static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Create the return package here
@@ -7817,21 +7853,21 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 				//All good to move along
 				break;
 
-			//========= WARNING - NOT YET SUPPORTED ========================
-			//We can also see a let statement
-			//TODO - should be a special global variable process for this
+			/**
+			 * We know that by nature of these variables being here that they
+			 * are global variables
+			 */
 			case AST_NODE_TYPE_LET_STMT:
 				//We'll visit the block here
-				visit_let_statement(ast_cursor, FALSE);
+				visit_global_let_statement(ast_cursor);
 				
 				//And we'll move along here
 				break;
 		
 			//Finally, we could see a declaration
-			//TODO - should be a special global variable process for this
 			case AST_NODE_TYPE_DECL_STMT:
 				//We'll visit the block here
-				visit_declaration_statement(ast_cursor);
+				visit_global_declare_statement(ast_cursor);
 				
 				//And we're done here
 				break;
@@ -7864,6 +7900,9 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 void print_all_cfg_blocks(cfg_t* cfg){
 	//We will emit the DF
 	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
+
+	//Print all global variables after the blocks
+	print_all_global_variables(stdout, cfg->global_variables);
 }
 
 
@@ -7971,6 +8010,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	cfg->created_blocks = dynamic_array_alloc();
 	cfg->function_entry_blocks = dynamic_array_alloc();
 	cfg->function_exit_blocks = dynamic_array_alloc();
+	cfg->global_variables = dynamic_array_alloc();
 
 	//Hold the cfg
 	cfg_ref = cfg;
