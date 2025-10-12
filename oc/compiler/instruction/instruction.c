@@ -2181,9 +2181,11 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	//Print the implied source
 	fprintf(fl, " /* Implied source: ");
 	print_variable(fl, instruction->source_register2, mode);
-	fprintf(fl, " --> ");
-
+	//Print out both the quotient and the remainder
+	fprintf(fl, " --> Quotient: ");
 	print_variable(fl, instruction->destination_register, mode);
+	fprintf(fl, ", Remainder: ");
+	print_variable(fl, instruction->destination_register2, mode);
 	fprintf(fl, " */\n");
 }
 
