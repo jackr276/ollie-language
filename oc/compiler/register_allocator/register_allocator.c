@@ -2311,6 +2311,54 @@ static void insert_saving_logic(cfg_t* cfg){
 
 
 /**
+ * One final order of business is to clean out any
+ * operations that look like: movq %rax, %rax that are
+ * leftover artifacts from our simplifcation & allocation
+ */
+static void cleanup_pass(cfg_t* cfg){
+	//Grab the head block
+	basic_block_t* current = cfg->head_block;
+
+	//Go until we hit the end
+	while(current != NULL){
+		//Grab a cursor
+		instruction_t* current_instruction = current->leader_statement;
+
+		//Run through all instructions
+		while(current_instruction != NULL){
+			//It's not a pure copy, so leave
+			if(is_instruction_pure_copy(current_instruction) == FALSE){
+				current_instruction = current_instruction->next_statement;
+				continue;
+			}
+
+			//Extract for convenience
+			live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
+			live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
+
+			//We have a pure copy, so we can delete
+			if(source_live_range->reg == destination_live_range->reg){
+				instruction_t* holder = current_instruction;
+
+				//Push this one up
+				current_instruction = current_instruction->next_statement;
+
+				//Delete the holder
+				delete_statement(holder);
+
+			//Just push it up
+			} else {
+				current_instruction = current_instruction->next_statement;
+			}
+		}
+
+		//Push it up
+		current = current->direct_successor;
+	}
+}
+
+
+/**
  * Perform our register allocation algorithm on the entire cfg
  */
 void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
@@ -2431,6 +2479,15 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 * when appropriate
 	*/
 	insert_saving_logic(cfg);
+
+	/**
+	 * STEP 7: final cleanup pass
+	 *
+	 * Due to the way OIR works, there is a chance that we could get instructions
+	 * like: movq %rax, %rax. These are now useless and we'll delete them in the cleanup pass
+	*/
+	cleanup_pass(cfg);
+
 
 	//One final print post allocation
 	if(print_irs == TRUE){
