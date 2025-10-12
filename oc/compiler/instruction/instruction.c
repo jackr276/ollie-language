@@ -2021,6 +2021,40 @@ static void print_inc_instruction(FILE* fl, instruction_t* instruction, variable
 
 
 /**
+ * Print out a conversion instruction
+ *
+ * Always goes RAX := sign extend RDX:RAX
+ */
+static void print_conversion_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	switch(instruction->instruction_type){
+		case CQTO:
+			fprintf(fl, "cqto /* Source: ");
+			break;
+		case CLTD:
+			fprintf(fl, "cltd /* Source: ");
+			break;
+		case CWTL:
+			fprintf(fl, "cwtl /* Source: ");
+			break;
+		case CBTW:
+			fprintf(fl, "cbtw /* Source: ");
+			break;
+		default:
+			break;
+	}
+
+	print_variable(fl, instruction->source_register, mode);
+	fprintf(fl, "--> ");
+	//Print the appropriate bitfield mapping for the destination
+	print_variable(fl, instruction->destination_register2, mode);
+	fprintf(fl, ":");
+	print_variable(fl, instruction->destination_register, mode);
+	fprintf(fl, "*/\n");
+}
+
+
+
+/**
  * Print out an dec instruction
  */
 static void print_dec_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
@@ -2736,24 +2770,10 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "nop\n");
 			break;
 		case CQTO:
-			fprintf(fl, "cqto /* Source: ");
-			print_variable(fl, instruction->source_register, mode);
-			fprintf(fl, "*/\n");
-			break;
 		case CLTD:
-			fprintf(fl, "cltd /* Source: ");
-			print_variable(fl, instruction->source_register, mode);
-			fprintf(fl, "*/\n");
-			break;
 		case CWTL:
-			fprintf(fl, "cwtl /* Source: ");
-			print_variable(fl, instruction->source_register, mode);
-			fprintf(fl, "*/\n");
-			break;
 		case CBTW:
-			fprintf(fl, "cbtw /* Source: ");
-			print_variable(fl, instruction->source_register, mode);
-			fprintf(fl, "*/\n");
+			print_conversion_instruction(fl, instruction, mode);
 			break;
 		case JMP:
 			fprintf(fl, "jmp .L%d\n", jumping_to_block->block_id);

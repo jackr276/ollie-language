@@ -682,6 +682,31 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 	} else {
 		add_assigned_live_range(live_range, block);
 	}
+
+	//All done
+	if(instruction->destination_register2 == NULL){
+		return;
+	}
+
+	/**
+	 * For certain instructions like conversion & division instructions, we have 2
+	 * destination registers. These registers will always be strict assignees so we
+	 * don't need to do any of the manipulation like before.
+	 */
+	//Extract for convenience
+	three_addr_var_t* destination_register2 = instruction->destination_register2;
+
+	//Let's see if we can find this
+	live_range = find_or_create_live_range(live_ranges, block, destination_register2);
+
+	//Add this into the live range
+	add_variable_to_live_range(live_range, block, destination_register2);
+
+	//Link the variable into this as well
+	destination_register2->associated_live_range = live_range;
+
+	//This will *always* be a purely assigned live range
+	add_assigned_live_range(live_range, block);
 }
 
 
