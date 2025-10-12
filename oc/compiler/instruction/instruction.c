@@ -437,26 +437,6 @@ u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
 
 
 /**
- * Is this a division instruction that's intended for modulus??
- */
-u_int8_t is_modulus_instruction(instruction_t* instruction){
-	//Just in case
-	if(instruction == NULL){
-		return FALSE;
-	}
-
-	switch(instruction->instruction_type){
-		case DIVL_FOR_MOD:
-		case DIVQ_FOR_MOD:
-		case IDIVL_FOR_MOD:
-		case IDIVQ_FOR_MOD:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-/**
  * Is this operation a pure copy? In other words, is it a move instruction
  * that moves one register to another?
  */
@@ -2167,35 +2147,27 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	//First we'll print out the appropriate variety of addition
 	switch(instruction->instruction_type){
 		case DIVB:
-		case DIVB_FOR_MOD:
 			fprintf(fl, "divb ");
 			break;
 		case DIVW:
-		case DIVW_FOR_MOD:
 			fprintf(fl, "divw ");
 			break;
 		case DIVL:
-		case DIVL_FOR_MOD:
 			fprintf(fl, "divl ");
 			break;
 		case DIVQ:
-		case DIVQ_FOR_MOD:
 			fprintf(fl, "divq ");
 			break;
 		case IDIVB:
-		case IDIVB_FOR_MOD:
 			fprintf(fl, "idivb ");
 			break;
 		case IDIVW:
-		case IDIVW_FOR_MOD:
 			fprintf(fl, "idivw ");
 			break;
 		case IDIVL:
-		case IDIVL_FOR_MOD:
 			fprintf(fl, "idivl ");
 			break;
 		case IDIVQ:
-		case IDIVQ_FOR_MOD:
 			fprintf(fl, "idivq ");
 			break;
 		//We'll never get here, just to stop the compiler from complaining
@@ -2899,14 +2871,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case IDIVW:
 		case IDIVL:
 		case IDIVQ:
-		case DIVB_FOR_MOD:
-		case DIVW_FOR_MOD:
-		case DIVL_FOR_MOD:
-		case DIVQ_FOR_MOD:
-		case IDIVB_FOR_MOD:
-		case IDIVW_FOR_MOD:
-		case IDIVQ_FOR_MOD:
-		case IDIVL_FOR_MOD:
 			print_division_instruction(fl, instruction, mode);
 			break;
 

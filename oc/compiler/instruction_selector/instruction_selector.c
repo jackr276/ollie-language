@@ -597,69 +597,6 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 
 /**
- * Emit a divX or idivX instruction that is intended for modulus
- *
- * Division instructions have no destination that need be written out. They only have a direct source and an implicit source
- */
-static instruction_t* emit_mod_instruction(three_addr_var_t* assignee, three_addr_var_t* direct_source, three_addr_var_t* implicit_source, u_int8_t is_signed){
-	//First we'll allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//We set the size based on the destination 
-	variable_size_t size = get_type_size(assignee->type);
-
-	//Now we'll decide this based on size and signedness
-	switch (size) {
-		case BYTE:
-			if(is_signed == TRUE){
-				instruction->instruction_type = IDIVB_FOR_MOD;
-			} else {
-				instruction->instruction_type = DIVB_FOR_MOD;
-			}
-			break;
-		case WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = IDIVW_FOR_MOD;
-			} else {
-				instruction->instruction_type = DIVW_FOR_MOD;
-			}
-			break;
-		case DOUBLE_WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = IDIVL_FOR_MOD;
-			} else {
-				instruction->instruction_type = DIVL_FOR_MOD;
-			}
-			break;
-
-		case QUAD_WORD:
-			if(is_signed == TRUE){
-				instruction->instruction_type = IDIVQ_FOR_MOD;
-			} else {
-				instruction->instruction_type = DIVQ_FOR_MOD;
-			}
-			break;
-
-		//Should never reach this
-		default:
-			break;
-	}
-
-	//Finally we set the sources
-	instruction->source_register = direct_source;
-	instruction->source_register2 = implicit_source;
-
-	//Quotient register
-	instruction->destination_register = emit_temp_var(assignee->type);
-	//Remainder register
-	instruction->destination_register2 = emit_temp_var(assignee->type);
-
-	//And now we'll give it back
-	return instruction;
-}
-
-
-/**
  * Initialize the instruction window by taking in the first 3 values in the head block
  */
 static instruction_window_t initialize_instruction_window(basic_block_t* head){
@@ -2129,7 +2066,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_mod_instruction(modulus_instruction->assignee, source2, source, is_signed);
+	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, source2, source, is_signed);
 	
 	//Store the remainder register here
 	three_addr_var_t* remainder_register = division->destination_register2;

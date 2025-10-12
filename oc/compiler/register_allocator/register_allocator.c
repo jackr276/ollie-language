@@ -1213,14 +1213,6 @@ static void pre_color(instruction_t* instruction){
 		case IDIVW:
 		case IDIVL:
 		case IDIVQ:
-		case DIVB_FOR_MOD:
-		case DIVW_FOR_MOD:
-		case IDIVB_FOR_MOD:
-		case IDIVW_FOR_MOD:
-		case DIVL_FOR_MOD:
-		case DIVQ_FOR_MOD:
-		case IDIVL_FOR_MOD:
-		case IDIVQ_FOR_MOD:
 			//The source register for a division must be in RAX
 			instruction->source_register2->associated_live_range->reg = RAX;
 			instruction->source_register2->associated_live_range->is_precolored = TRUE;

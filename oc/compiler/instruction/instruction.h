@@ -103,14 +103,6 @@ typedef enum{
 	IDIVW,
 	IDIVL,
 	IDIVQ,
-	IDIVB_FOR_MOD,
-	IDIVW_FOR_MOD,
-	IDIVL_FOR_MOD,
-	IDIVQ_FOR_MOD,
-	DIVB_FOR_MOD,
-	DIVW_FOR_MOD,
-	DIVL_FOR_MOD,
-	DIVQ_FOR_MOD,
 	SUBB,
 	SUBW,
 	SUBL,
@@ -605,11 +597,6 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant);
  * Is this constant a power of 2?
  */
 u_int8_t is_constant_power_of_2(three_addr_const_t* constant);
-
-/**
- * Is this a division instruction that is intended for modulus?
- */
-u_int8_t is_modulus_instruction(instruction_t* instruction);
 
 /**
  * Create and return a temporary variable
