@@ -535,7 +535,7 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
  * Division instructions have no destination that need be written out. They only have two sources - a direct
  * source and an implicit source
  */
-static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_addr_var_t* direct_source, three_addr_var_t* implicit_source, u_int8_t is_signed){
+static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_addr_var_t* direct_source, three_addr_var_t* implicit_source, three_addr_var_t* implicit_higher_order_bits, u_int8_t is_signed){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -585,6 +585,8 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 	instruction->source_register = direct_source;
 	//This implicit source is important for our uses in the register allocator
 	instruction->source_register2 = implicit_source;
+	//We will use address calc reg 1 for this purpose
+	instruction->address_calc_reg1 = implicit_higher_order_bits;
 
 	//Quotient register
 	instruction->destination_register = emit_temp_var(assignee->type);
@@ -1958,10 +1960,21 @@ static void handle_division_instruction(instruction_window_t* window){
 	//Let's determine signedness
 	u_int8_t is_signed = is_type_signed(division_instruction->assignee->type);
 
+	/**
+	 * For a signed division, the CXXX instruction will 
+	 * have a secondary destination that holds the higher order bits. We will
+	 * capture this if needed here
+	 */
+	three_addr_var_t* higher_order_source_bits = NULL;
+
 	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
 	if(is_signed == TRUE){
 		//Emit the cl instruction
 		instruction_t* cl_instruction = emit_conversion_instruction(source);
+
+		//Capute both the lower and higher order bit fields
+		source = cl_instruction->destination_register;
+		higher_order_source_bits = cl_instruction->destination_register2;
 
 		//Insert this before the given
 		insert_instruction_before_given(cl_instruction, division_instruction);
@@ -1977,7 +1990,7 @@ static void handle_division_instruction(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, source2, source, is_signed);
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, source2, source, higher_order_source_bits, is_signed);
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->destination_register;
@@ -2047,10 +2060,21 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	//Let's determine signedness
 	u_int8_t is_signed = is_type_signed(modulus_instruction->assignee->type);
 
+	/**
+	 * For a signed division, the CXXX instruction will 
+	 * have a secondary destination that holds the higher order bits. We will
+	 * capture this if needed here
+	 */
+	three_addr_var_t* higher_order_source_bits = NULL;
+
 	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
 	if(is_signed == TRUE){
 		//Emit the cl instruction
 		instruction_t* cl_instruction = emit_conversion_instruction(source);
+
+		//Store both here
+		source = cl_instruction->destination_register;
+		higher_order_source_bits = cl_instruction->destination_register2;
 
 		//Insert this before the mod instruction
 		insert_instruction_before_given(cl_instruction, modulus_instruction);
@@ -2066,7 +2090,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, source2, source, is_signed);
+	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, source2, source, higher_order_source_bits, is_signed);
 	
 	//Store the remainder register here
 	three_addr_var_t* remainder_register = division->destination_register2;

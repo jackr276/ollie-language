@@ -2179,7 +2179,14 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	print_variable(fl, instruction->source_register, mode);
 
 	//Print the implied source
-	fprintf(fl, " /* Implied source: ");
+	fprintf(fl, " /* Dividend: ");
+	
+	//Print out the higher order bit source if need be
+	if(instruction->address_calc_reg1 != NULL){
+		print_variable(fl, instruction->address_calc_reg1, mode);
+		fprintf(fl, ":");
+	}
+
 	print_variable(fl, instruction->source_register2, mode);
 	//Print out both the quotient and the remainder
 	fprintf(fl, " --> Quotient: ");
