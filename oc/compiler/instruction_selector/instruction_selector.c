@@ -535,7 +535,7 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
  * Division instructions have no destination that need be written out. They only have two sources - a direct
  * source and an implicit source
  */
-static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_addr_var_t* direct_source, three_addr_var_t* implicit_source, three_addr_var_t* implicit_higher_order_bits, u_int8_t is_signed){
+static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_addr_var_t* divisor, three_addr_var_t* dividend, three_addr_var_t* higher_order_dividend_bits, u_int8_t is_signed){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -582,11 +582,11 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 	}
 
 	//Finally we set the sources
-	instruction->source_register = direct_source;
+	instruction->source_register = divisor;
 	//This implicit source is important for our uses in the register allocator
-	instruction->source_register2 = implicit_source;
+	instruction->source_register2 = dividend;
 	//We will use address calc reg 1 for this purpose
-	instruction->address_calc_reg1 = implicit_higher_order_bits;
+	instruction->address_calc_reg1 = higher_order_dividend_bits;
 
 	//Quotient register
 	instruction->destination_register = emit_temp_var(assignee->type);
@@ -1937,13 +1937,13 @@ static void handle_division_instruction(instruction_window_t* window){
 	instruction_t* division_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
-	three_addr_var_t* source;
-	three_addr_var_t* source2;
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
 	if(is_expanding_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		source = handle_expanding_move_operation(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+		dividend = handle_expanding_move_operation(division_instruction, division_instruction->op1, division_instruction->assignee->type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -1954,7 +1954,7 @@ static void handle_division_instruction(instruction_window_t* window){
 		insert_instruction_before_given(move_to_rax, division_instruction);
 
 		//This is just the destination register here
-		source = move_to_rax->destination_register;
+		dividend = move_to_rax->destination_register;
 	}
 
 	//Let's determine signedness
@@ -1965,16 +1965,16 @@ static void handle_division_instruction(instruction_window_t* window){
 	 * have a secondary destination that holds the higher order bits. We will
 	 * capture this if needed here
 	 */
-	three_addr_var_t* higher_order_source_bits = NULL;
+	three_addr_var_t* higher_order_dividend_bits = NULL;
 
 	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
 	if(is_signed == TRUE){
 		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_conversion_instruction(source);
+		instruction_t* cl_instruction = emit_conversion_instruction(dividend);
 
 		//Capute both the lower and higher order bit fields
-		source = cl_instruction->destination_register;
-		higher_order_source_bits = cl_instruction->destination_register2;
+		dividend = cl_instruction->destination_register;
+		higher_order_dividend_bits = cl_instruction->destination_register2;
 
 		//Insert this before the given
 		insert_instruction_before_given(cl_instruction, division_instruction);
@@ -1982,15 +1982,15 @@ static void handle_division_instruction(instruction_window_t* window){
 
 	//Do we need to do a type conversion? If so, we'll do a converting move here
 	if(is_expanding_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-		source2 = handle_expanding_move_operation(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+		divisor = handle_expanding_move_operation(division_instruction, division_instruction->op2, division_instruction->assignee->type);
 
-	//Otherwise source 2 is just the op2
+	//Otherwise divisor is just the op2
 	} else {
-		source2 = division_instruction->op2;
+		divisor = division_instruction->op2;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(division_instruction->assignee, source2, source, higher_order_source_bits, is_signed);
+	instruction_t* division = emit_div_instruction(division_instruction->assignee, divisor, dividend, higher_order_dividend_bits, is_signed);
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->destination_register;
@@ -2037,13 +2037,13 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	instruction_t* modulus_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
-	three_addr_var_t* source;
-	three_addr_var_t* source2;
+	three_addr_var_t* dividend;
+	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
 	if(is_expanding_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		source = handle_expanding_move_operation(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+		dividend = handle_expanding_move_operation(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -2054,7 +2054,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 		insert_instruction_before_given(move_to_rax, modulus_instruction);
 
 		//This is just the destination register here
-		source = move_to_rax->destination_register;
+		dividend = move_to_rax->destination_register;
 	}
 
 	//Let's determine signedness
@@ -2065,16 +2065,16 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	 * have a secondary destination that holds the higher order bits. We will
 	 * capture this if needed here
 	 */
-	three_addr_var_t* higher_order_source_bits = NULL;
+	three_addr_var_t* higher_order_dividend_bits = NULL;
 
 	//Now, we'll need the appropriate extension instruction *if* we're doing signed division
 	if(is_signed == TRUE){
 		//Emit the cl instruction
-		instruction_t* cl_instruction = emit_conversion_instruction(source);
+		instruction_t* cl_instruction = emit_conversion_instruction(dividend);
 
 		//Store both here
-		source = cl_instruction->destination_register;
-		higher_order_source_bits = cl_instruction->destination_register2;
+		dividend = cl_instruction->destination_register;
+		higher_order_dividend_bits = cl_instruction->destination_register2;
 
 		//Insert this before the mod instruction
 		insert_instruction_before_given(cl_instruction, modulus_instruction);
@@ -2082,15 +2082,15 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 	//Do we need to do a type conversion? If so, we'll do a converting move here
 	if(is_expanding_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-		source2 = handle_expanding_move_operation(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+		divisor = handle_expanding_move_operation(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
 
 	//Otherwise source 2 is just the op2
 	} else {
-		source2 = modulus_instruction->op2;
+		divisor = modulus_instruction->op2;
 	}
 
 	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, source2, source, higher_order_source_bits, is_signed);
+	instruction_t* division = emit_div_instruction(modulus_instruction->assignee, divisor, dividend, higher_order_dividend_bits, is_signed);
 	
 	//Store the remainder register here
 	three_addr_var_t* remainder_register = division->destination_register2;
