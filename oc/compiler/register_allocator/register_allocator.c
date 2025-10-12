@@ -1363,8 +1363,6 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 		 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
 		 * set by a different name for our calculation
 		 */
-
-		//TODO explore just cloning
 		dynamic_array_t* live_now = current->live_out;
 		
 		//We will crawl our way up backwards through the CFG
@@ -1425,6 +1423,18 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 					//And then scrap it from live_now
 					dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
 				}
+			}
+
+			/**
+			 * Some instructions like CXXX and division instructions have 2 destinations. The second destination,
+			 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
+			 */
+			if(operation->destination_register2 != NULL){
+				//Add the interference
+				add_destination_interference(graph, live_now, operation->destination_register2->associated_live_range);
+
+				//And then scrap it from live_now
+				dynamic_array_delete(live_now, operation->destination_register2->associated_live_range);
 			}
 
 			/**
