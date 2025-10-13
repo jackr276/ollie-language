@@ -539,10 +539,6 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const);
 
 /**
- * Emit a memory address statement
- */
-
-/**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
  */
 instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant);
@@ -623,6 +619,11 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
  * Emit a jump statement. The jump statement can take on several different types of jump
  */
 instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_type);
+
+/**
+ * Emit a branch statement
+ */
+instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type);
 
 /**
  * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.

@@ -3723,6 +3723,34 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_typ
 
 
 /**
+ * Emit a branch statement
+ */
+instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Let's now populate it with values
+	stmt->statement_type = THREE_ADDR_CODE_BRANCH_STMT;
+	
+	//If and else block storage
+	stmt->if_block = if_block;
+	stmt->else_block = else_block;
+
+	//Branch type
+	stmt->branch_type = branch_type;
+
+	//And we'll store the variable that we're making a decision based on here
+	stmt->op1 = relies_on;
+
+	//What function are we in
+	stmt->function = current_function;
+
+	//Give the statement back
+	return stmt;
+}
+
+
+/**
  * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.
  * These statements are intended for when we create user-defined jumps
  */
