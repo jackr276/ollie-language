@@ -2534,11 +2534,19 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, thr
  * Emit a branch statement with an if destination, else destination, conditional result and branch type
  *
  * This rule also handles all successor management required for the rule
- *
- * TODO may add more params
  */
-void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_result){
-	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type_t branch_type);
+void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result){
+	//Emit the actual instruction here
+	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
+
+	//Mark this as the op1 so that we can track in the optimizer
+	branch_instruction->op1 = conditional_result;
+
+	//This counts as a use for the result variable
+	add_used_variable(basic_block, conditional_result);
+
+	//Add the statement into the block
+	add_statement(basic_block, branch_instruction);
 
 	//The if and else destinations are now both successors
 	add_successor(basic_block, if_destination);
@@ -3786,6 +3794,9 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	if(expression_package.operator == BLANK){
 		conditional_decider = emit_test_code(current_block, expression_package.assignee, expression_package.assignee, TRUE);
 	}
+
+	//emit the branch statement
+	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider);
 	
 	//Now we'll emit a jump to the if block and else block
 	emit_jump(current_block, if_block, conditional_decider, jump, is_branch_ending, FALSE);
