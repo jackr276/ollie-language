@@ -2531,6 +2531,22 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, thr
 
 
 /**
+ * Emit a branch statement with an if destination, else destination, conditional result and branch type
+ *
+ * This rule also handles all successor management required for the rule
+ *
+ * TODO may add more params
+ */
+void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_result){
+	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type_t branch_type);
+
+	//The if and else destinations are now both successors
+	add_successor(basic_block, if_destination);
+	add_successor(basic_block, else_destination);
+}
+
+
+/**
  * Emit a user defined jump statement that points to a label, not to a block
  */
 static void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_record_t* label, three_addr_var_t* conditional_decider, jump_type_t type, u_int8_t is_branch_ending){
