@@ -324,10 +324,6 @@ struct instruction_t{
 	u_int8_t has_multiplicator;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
-	//If this is a conditional move statement, what's the class?
-	conditional_move_type_t move_type;
-	//Memory access type
-	type_class_t access_class;
 	//What kind of address calculation mode do we have?
 	address_calculation_mode_t calculation_mode;
 	//The register that we're popping or pushing
