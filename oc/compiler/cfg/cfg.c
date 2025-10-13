@@ -3792,8 +3792,8 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 		conditional_decider = emit_test_code(current_block, expression_package.assignee, expression_package.assignee, TRUE);
 	}
 
-	//Select the jump type for our conditional
-	branch_type_t branch_type = select_appropriate_branch_statement(expression_package.operator, is_type_signed(conditional_decider->type));
+	//Select the jump type for our conditional. This is a normal branch, we aren't doing any inverting
+	branch_type_t branch_type = select_appropriate_branch_statement(expression_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 	//emit the branch statement
 	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider);
@@ -6261,8 +6261,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//And the final block is the end
 					current_block = generic_results.final_block;
 				} else {
-					//Add a successor to the current block
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a jump from current to the start
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					//The current block is just whatever is at the end
@@ -6281,8 +6279,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = generic_results.final_block;
 				//We never merge these
 				} else {
-					//Add as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a direct jump to it
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					//And the current block is just the end block
@@ -6301,8 +6297,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = generic_results.final_block;
 				//We never merge do-while's, they are strictly successors
 				} else {
-					//Add this in as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a jump from the current block to this
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					//And we now know that the current block is just the end block
@@ -6321,8 +6315,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = generic_results.final_block;
 				//We don't merge, we'll add successors
 				} else {
-					//Add the start as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//We go right to the exit block here
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					//Go right to the final block here
@@ -6348,8 +6340,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
 
-					//We'll now add a successor for this block
-					add_successor(current_block, continuing_to);
 					//We always jump to the start of the loop statement unconditionally
 					emit_jump(current_block, continuing_to, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
