@@ -103,23 +103,25 @@ typedef enum{
 
 
 /**
- * What kind of jump statement do we have?
+ * Define the kind of branch that we have in an ollie branch
+ * command
  */
 typedef enum{
-	NO_CONDITIONAL_MOVE = 0, //This is the default, and what we get when we have 0
-	CONDITIONAL_MOVE_NE,
-	CONDITIONAL_MOVE_E,
-	CONDITIONAL_MOVE_NZ,
-	CONDITIONAL_MOVE_Z,
-	CONDITIONAL_MOVE_L, // LT(SIGNED)
-	CONDITIONAL_MOVE_G, //GT(SIGNED)
-	CONDITIONAL_MOVE_GE, //GE(SIGNED)
-	CONDITIONAL_MOVE_LE, //LE(SIGNED)
-	CONDITIONAL_MOVE_A, //GT(UNSIGNED)
-	CONDITIONAL_MOVE_AE, //GE(UNSIGNED)
-	CONDITIONAL_MOVE_B, // LT(UNSIGNED)
-	CONDITIONAL_MOVE_BE, //LE(UNSIGNED)
-} conditional_move_type_t;
+	NO_BRANCH, //This is the default, and what we get when we have 0
+	BRANCH_NE,
+	BRANCH_E,
+	BRANCH_NZ,
+	BRANCH_Z,
+	BRANCH_L, //Jump LT(SIGNED)
+	BRANCH_G, //Jump GT(SIGNED)
+	BRANCH_GE, //Jump GE(SIGNED)
+	BRANCH_LE, //Jump LE(SIGNED)
+	BRANCH_A, //Jump GT(UNSIGNED)
+	BRANCH_AE, //Jump GE(UNSIGNED)
+	BRANCH_B, //Jump LT(UNSIGNED)
+	BRANCH_BE, //Jump LE(UNSIGNED)
+} branch_type_t;
+
 
 /**
  * What kind of memory addressing mode do we have?
@@ -135,6 +137,7 @@ typedef enum{
 	ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE, // 4(%rax, %rcx, 8)
 	ADDRESS_CALCULATION_MODE_GLOBAL_VAR //Super special case, we will use address_calc_reg2 as the offset like this: <val>(%rip)
 } address_calculation_mode_t;
+
 
 /**
  * For variable printing, where we're printing
