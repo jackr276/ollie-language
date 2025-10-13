@@ -133,9 +133,9 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 		//So long as this isn't null
 		while(current_stmt != NULL){
 			//If it's a jump statement AND the jump target is the empty block, we're interested
-			if(current_stmt->statement_type == THREE_ADDR_CODE_JUMP_STMT && current_stmt->jumping_to_block == empty_block){
+			if(current_stmt->statement_type == THREE_ADDR_CODE_JUMP_STMT && current_stmt->if_block == empty_block){
 				//Update the reference
-				current_stmt->jumping_to_block = replacement;
+				current_stmt->if_block = replacement;
 				//Be sure to add the new block as a successor 
 				add_successor(predecessor, replacement);
 			}
@@ -246,10 +246,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 					//Otherwise it is a jump statement
 					//If we haven't seen one yet, then we'll mark it here
 					if(end_branch_target == NULL){
-						end_branch_target = stmt->jumping_to_block;
+						end_branch_target = stmt->if_block;
 					//Otherwise we have seen one. If these do not match, then we're done
 					//here
-					} else if(end_branch_target != stmt->jumping_to_block) {
+					} else if(end_branch_target != stmt->if_block) {
 						//If this is the case, we're done. Set the flag to false and get
 						//out
 						redundant_branch = FALSE;
@@ -278,7 +278,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			}
 
 			//The block that we're jumping to
-			basic_block_t* jumping_to_block = current->exit_statement->jumping_to_block;
+			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 			
 			//=============================== EMPTY BLOCK REMOVAL ============================================
 			//If this is the only thing that is in here, then the entire block is redundant and just serves as a branching
@@ -414,7 +414,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 					//lists accordingly
 					if(cursor->statement_type == THREE_ADDR_CODE_JUMP_STMT){
 						//Whatever we're jumping to is now a successor of cursor
-						add_successor(current, cursor->jumping_to_block);
+						add_successor(current, cursor->if_block);
 					}
 
 					//Advance the cursor up
@@ -884,10 +884,10 @@ static void optimize_compound_logic(cfg_t* cfg){
 			printf("HERE in block: .L%d\n", block->block_id);
 			//These will be inverse of what we normally have
 			//We made it here, so we know that this is the else target
-			else_target = block->exit_statement->previous_statement->jumping_to_block;
+			else_target = block->exit_statement->previous_statement->if_block;
 
 			//This will be our if target
-			if_target = block->exit_statement->jumping_to_block;
+			if_target = block->exit_statement->if_block;
 
 			//Set the flag
 			use_inverse_jump = TRUE;
@@ -895,10 +895,10 @@ static void optimize_compound_logic(cfg_t* cfg){
 		//Otherwise it's a normal conditional scenario
 		} else {
 			//We made it here, so we know that this is the else target
-			else_target = block->exit_statement->jumping_to_block;
+			else_target = block->exit_statement->if_block;
 
 			//This will be our if target
-			if_target = block->exit_statement->previous_statement->jumping_to_block;
+			if_target = block->exit_statement->previous_statement->if_block;
 
 			//Set the flag
 			use_inverse_jump = FALSE;
@@ -1207,7 +1207,7 @@ static void sweep(cfg_t* cfg){
 				//then this statements jump table is useless
 				if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
 					//We'll need to deallocate this jump table
-					jump_table_dealloc(temp->jumping_to_block);
+					jump_table_dealloc(temp->if_block);
 
 					//We also want to flag this as null in the block that this statement
 					//comes from

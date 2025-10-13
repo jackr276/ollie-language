@@ -3305,7 +3305,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		window->instruction2->source_register = true_source;
 
 		//Store the jumping to block where the jump table is
-		window->instruction2->jumping_to_block = window->instruction1->jumping_to_block;
+		window->instruction2->if_block = window->instruction1->if_block;
 
 		//We also have an "S" multiplicator factor that will always be a power of 2 stored in the lea_multiplicator
 		window->instruction2->lea_multiplicator = window->instruction1->lea_multiplicator;
@@ -3458,7 +3458,7 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 	//If we have an exit statement that is a direct jump, then we've hit our match
 	if(block->exit_statement != NULL && block->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT
 	 && block->exit_statement->jump_type == JUMP_TYPE_JMP){
-		jumps_to = block->exit_statement->jumping_to_block;
+		jumps_to = block->exit_statement->if_block;
 	}
 
 	//Give back whatever we found

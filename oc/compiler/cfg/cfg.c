@@ -7295,7 +7295,7 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
 			}
 
 			//Otherwise if we get here we know that we found the correct label
-			jump_instruction->jumping_to_block = labeled_block;
+			jump_instruction->if_block = labeled_block;
 
 			//Add this in as a successor
 			add_successor(jump_instruction->block_contained_in, labeled_block);

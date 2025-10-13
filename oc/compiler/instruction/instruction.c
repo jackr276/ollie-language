@@ -834,7 +834,7 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
 	stmt->statement_type = THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT;
 	stmt->assignee = assignee;
 	//We store the jumping to block as our operand. It's really a jump table
-	stmt->jumping_to_block = op1;
+	stmt->if_block = op1;
 	stmt->op2 = op2;
 	stmt->lea_multiplicator = type_size;
 
@@ -1507,7 +1507,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_JUMP_STMT:
 			//Then print out the block label
-			fprintf(fl, "%s .L%d\n", jump_type_to_string(stmt->jump_type), ((basic_block_t*)(stmt->jumping_to_block))->block_id);
+			fprintf(fl, "%s .L%d\n", jump_type_to_string(stmt->jump_type), ((basic_block_t*)(stmt->if_block))->block_id);
 			break;
 
 		case THREE_ADDR_CODE_FUNC_CALL:
@@ -1709,7 +1709,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 
 			//Print out the jump block ID
-			fprintf(fl, " <- .JT%d + ", ((jump_table_t*)(stmt->jumping_to_block))->jump_table_id);
+			fprintf(fl, " <- .JT%d + ", ((jump_table_t*)(stmt->if_block))->jump_table_id);
 			
 			//Now print out the variable
 			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
@@ -2807,7 +2807,7 @@ static void print_xor_instruction(FILE* fl, instruction_t* instruction, variable
  */
 void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//This will be null often, but if we need it it'll be here
-	basic_block_t* jumping_to_block = instruction->jumping_to_block;
+	basic_block_t* jumping_to_block = instruction->if_block;
 
 	//Switch based on what type we have
 	switch (instruction->instruction_type) {
@@ -3119,7 +3119,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "jmp *");
 
 			//Grab this out for convenience
-			jump_table_t* jumping_to_block = instruction->jumping_to_block;
+			jump_table_t* jumping_to_block = instruction->if_block;
 
 			//We first print out the jumping to block
 			fprintf(fl, ".JT%d(,", jumping_to_block->jump_table_id);
@@ -3671,7 +3671,7 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_typ
 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_JUMP_STMT;
-	stmt->jumping_to_block = jumping_to_block;
+	stmt->if_block = jumping_to_block;
 	stmt->jump_type = jump_type;
 	//What function are we in
 	stmt->function = current_function;

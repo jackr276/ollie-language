@@ -236,6 +236,10 @@ struct instruction_t{
 	dynamic_string_t inlined_assembly;
 	//What block holds this?
 	void* block_contained_in;
+	//We have 2 ways to jump. The if jump is our affirmative jump,
+	//else is our alternative
+	void* if_block;
+	void* else_block;
 	//For linked list properties -- the next statement
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
@@ -261,8 +265,6 @@ struct instruction_t{
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
-	//Store a reference to the block that we're jumping to
-	void* jumping_to_block;
 	//The LEA addition
 	u_int64_t lea_multiplicator;
 	//The function called
