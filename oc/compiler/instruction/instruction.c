@@ -4219,50 +4219,102 @@ jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_
 /**
  * select the appropriate branch statement given the circumstances, including operand and signedness
  */
-branch_type_t select_appropriate_branch_statement(ollie_token_t op, u_int8_t is_signed){
+branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_category_t branch_type, u_int8_t is_signed){
 	//Let's see what we have here
 	switch(op){
 		case G_THAN:
-			if(is_signed == TRUE){
-				//Signed version
-				return BRANCH_G;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				if(is_signed == TRUE){
+					//Signed version
+					return BRANCH_LE;
+				} else {
+					//Unsigned version
+					return BRANCH_BE;
+				}
 			} else {
-				//Unsigned version
-				return BRANCH_A;
+				if(is_signed == TRUE){
+					//Signed version
+					return BRANCH_G;
+				} else {
+					//Unsigned version
+					return BRANCH_A;
+				}
 			}
 		case L_THAN:
-			if(is_signed == TRUE){
-				//Signed version
-				return BRANCH_L;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				if(is_signed == TRUE){
+					//Signed version
+					return BRANCH_GE;
+				} else {
+					//Unsigned version
+					return BRANCH_AE;
+				}
 			} else {
-				//Unsigned version
-				return BRANCH_B;
+				if(is_signed == TRUE){
+					//Signed version
+					return BRANCH_L;
+				} else {
+					//Unsigned version
+					return BRANCH_B;
+				}
 			}
 		case L_THAN_OR_EQ:
-			if(is_signed == TRUE){
-				//Signed version
-				return BRANCH_LE;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				if(is_signed == TRUE){
+					//Signed version
+					return BRANCH_G;
+				} else {
+					//Unsigned version
+					return BRANCH_A;
+				}
 			} else {
-				//Unsigned version
-				return BRANCH_BE;
+				if(is_signed == TRUE){
+					//Signed version
+					return BRANCH_LE;
+				} else {
+					//Unsigned version
+					return BRANCH_BE;
+				}
 			}
 		case G_THAN_OR_EQ:
-			if(is_signed == TRUE){
-				//Signed version
-				return BRANCH_GE;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				if(is_signed == TRUE){
+					//Signed version
+					return BRANCH_L;
+				} else {
+					//Unsigned version
+					return BRANCH_B;
+				}
 			} else {
-				//Unsigned version
-				return BRANCH_AE;
+				if(is_signed == TRUE){
+					//Signed version
+					return BRANCH_GE;
+				} else {
+					//Unsigned version
+					return BRANCH_AE;
+				}
 			}
 		case DOUBLE_EQUALS:
-			return BRANCH_E;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				return BRANCH_NE;
+			} else {
+				return BRANCH_E;
+			}
 		case NOT_EQUALS:
-			return BRANCH_NE;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				return BRANCH_E;
+			} else {
+				return BRANCH_NE;
+			}
 		//If we get here, it was some kind of
 		//non relational operator. In this case,
 		//we default to 0 = false non zero = true
 		default:
-			return BRANCH_NZ;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				return BRANCH_Z;
+			} else {
+				return BRANCH_NZ;
+			}
 	}
 }
 

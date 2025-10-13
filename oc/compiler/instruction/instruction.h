@@ -58,6 +58,31 @@ typedef enum{
 
 
 /**
+ * Do we want to have a regular branch or an inverse
+ * branch? An inverse branch will down the road set the conditional
+ * to be the opposite of what is put in.
+ *
+ * So for example
+ *
+ * if(x == 3) then A else B
+ *
+ * Regular mode
+ * cmp 3, x
+ * je A <-----  if
+ * jmp B <----- else
+ *
+ * Inverse mode
+ * cmp 3, x
+ * jne A <-----  if(inverted)
+ * jmp B <----- else
+ */
+typedef enum {
+	BRANCH_CATEGORY_NORMAL,
+	BRANCH_CATEGORY_INVERSE
+} branch_category_t;
+
+
+/**
  * What kind of jump statement do we have?
  */
 typedef enum{
@@ -713,7 +738,7 @@ jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_
 /**
  * select the appropriate branch statement given the circumstances, including operand and signedness
  */
-branch_type_t select_appropriate_branch_statement(ollie_token_t op, u_int8_t is_signed);
+branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_category_t branch_type, u_int8_t is_signed);
 
 /**
  * Select the appropriate set type given the circumstances, including the operand and the signedness
