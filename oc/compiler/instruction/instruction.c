@@ -648,7 +648,7 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee){
  * by directly emitting a push instruction with the register in it. This
  * saves us allocation overhead
  */
-instruction_t* emit_direct_register_push_instruction(register_holder_t reg){
+instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -725,7 +725,7 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee){
  * by directly emitting a pop instruction with the register in it. This
  * saves us allocation overhead
  */
-instruction_t* emit_direct_register_pop_instruction(register_holder_t reg){
+instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -900,7 +900,7 @@ instruction_t* emit_setne_code(three_addr_var_t* assignee){
  * 64 bits because 8, 16, 32 and 64 bit uses can't occupy the same register at the 
  * same time
  */
-static void print_8_bit_register_name(FILE* fl, register_holder_t reg){
+static void print_8_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
 		case NO_REG:
@@ -968,7 +968,7 @@ static void print_8_bit_register_name(FILE* fl, register_holder_t reg){
  * 64 bits because 32 and 64 bit uses can't occupy the same register at the 
  * same time
  */
-static void print_16_bit_register_name(FILE* fl, register_holder_t reg){
+static void print_16_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
 		case NO_REG:
@@ -1035,7 +1035,7 @@ static void print_16_bit_register_name(FILE* fl, register_holder_t reg){
  * 64 bits because 32 and 64 bit uses can't occupy the same register at the 
  * same time
  */
-static void print_32_bit_register_name(FILE* fl, register_holder_t reg){
+static void print_32_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
 		case NO_REG:
@@ -1100,7 +1100,7 @@ static void print_32_bit_register_name(FILE* fl, register_holder_t reg){
 /**
  * Print a 64 bit register name out
  */
-static void print_64_bit_register_name(FILE* fl, register_holder_t reg){
+static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
 		case NO_REG:
@@ -4190,7 +4190,7 @@ instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_sig
 /**
  * Is the given register caller saved?
  */
-u_int8_t is_register_caller_saved(register_holder_t reg){
+u_int8_t is_register_caller_saved(general_purpose_register_t reg){
 	switch(reg){
 		case RDI:
 		case RSI:
@@ -4210,7 +4210,7 @@ u_int8_t is_register_caller_saved(register_holder_t reg){
 /**
  * Is the given register callee saved?
  */
-u_int8_t is_register_callee_saved(register_holder_t reg){
+u_int8_t is_register_callee_saved(general_purpose_register_t reg){
 	//This is all determined based on the register type
 	switch(reg){
 		case RBX:

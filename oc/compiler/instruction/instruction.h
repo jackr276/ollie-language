@@ -17,6 +17,7 @@
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/ollie_intermediary_representation.h"
 #include "../utils/x86_assembly_instruction.h"
+#include "../utils/x86_genpurpose_registers.h"
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -54,31 +55,6 @@ typedef enum{
 	JUMP_CATEGORY_INVERSE,
 	JUMP_CATEGORY_NORMAL,
 } jump_category_t;
-
-/**
- * Define the standard x86-64 register table
- */
-typedef enum{
-	NO_REG = 0, //Default is that there's no register used
-	RAX,
-	RCX,
-	RDX,
-	RSI,
-	RDI,
-	R8,
-	R9,
-	R10,
-	R11,
-	R12,
-	R13,
-	R14,
-	R15, 
-	RBX,
-	RBP, //base pointer
-	//ALL general purpose registers come first(items 1-15)
-	RSP, //Stack pointer
-	RIP, //Instruction pointer
-} register_holder_t;
 
 
 /**
@@ -179,7 +155,7 @@ struct live_range_t{
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
 	//What register is this live range in?
-	register_holder_t reg; 
+	general_purpose_register_t reg; 
 	//The size of the variable in the live range
 	variable_size_t size;
 };
@@ -223,7 +199,7 @@ struct three_addr_var_t{
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//What register is this in?
-	register_holder_t variable_register;
+	general_purpose_register_t variable_register;
 };
 
 
@@ -330,7 +306,7 @@ struct instruction_t{
 	//What kind of address calculation mode do we have?
 	address_calculation_mode_t calculation_mode;
 	//The register that we're popping or pushing
-	register_holder_t push_or_pop_reg;
+	general_purpose_register_t push_or_pop_reg;
 };
 
 /**
@@ -474,7 +450,7 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee);
  * by directly emitting a push instruction with the register in it. This
  * saves us allocation overhead
  */
-instruction_t* emit_direct_register_push_instruction(register_holder_t reg);
+instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg);
 
 /**
  * Emit a movzx(zero extend) instruction
@@ -497,7 +473,7 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee);
  * by directly emitting a pop instruction with the register in it. This
  * saves us allocation overhead
  */
-instruction_t* emit_direct_register_pop_instruction(register_holder_t reg);
+instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg);
 
 /**
  * Emit a movX instruction
@@ -739,12 +715,12 @@ instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_sig
 /**
  * Is the given register caller saved?
  */
-u_int8_t is_register_caller_saved(register_holder_t reg);
+u_int8_t is_register_caller_saved(general_purpose_register_t reg);
 
 /**
  * Is the given register callee saved?
  */
-u_int8_t is_register_callee_saved(register_holder_t reg);
+u_int8_t is_register_callee_saved(general_purpose_register_t reg);
 
 /**
  * Pretty print a three address code statement

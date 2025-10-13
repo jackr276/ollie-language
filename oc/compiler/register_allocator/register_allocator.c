@@ -32,7 +32,7 @@
 u_int32_t live_range_id = 0;
 
 //The array that holds all of our parameter passing
-const register_holder_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
+const general_purpose_register_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 
 //Avoid need to rearrange
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges);
@@ -2106,7 +2106,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		live_range_t* lr = dynamic_array_get_at(result_lr->neighbors, i);
 
 		//And grab it's register out
-		register_holder_t reg = lr->reg;
+		general_purpose_register_t reg = lr->reg;
 
 		//If it isn't caller saved, we don't care
 		if(is_register_caller_saved(reg) == FALSE){
@@ -2173,7 +2173,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		live_range_t* interferee = dynamic_array_get_at(result_live_range->neighbors, i);
 
 		//And we'll extract the interfering register
-		register_holder_t interfering_register = interferee->reg;
+		general_purpose_register_t interfering_register = interferee->reg;
 
 		//If this is not caller saved, then we don't care about it
 		if(is_register_caller_saved(interfering_register) == FALSE){
@@ -2278,7 +2278,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 
 		//Otherwise if we get here, we know that we use it. Remember
 		//the register value is always offset by one
-		register_holder_t used_reg = i + 1;
+		general_purpose_register_t used_reg = i + 1;
 
 		//If this isn't callee saved, then we know to move on
 		if(is_register_callee_saved(used_reg) == FALSE){
@@ -2347,7 +2347,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 
 			//Remember that our positional coding is off by 1(0 is NO_REG value), so we'll
 			//add 1 to make the value correct
-			register_holder_t used_reg = j + 1;
+			general_purpose_register_t used_reg = j + 1;
 
 			//If it's not callee saved then we don't care
 			if(is_register_callee_saved(used_reg) == FALSE){
