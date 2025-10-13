@@ -1535,7 +1535,7 @@ static void mark(cfg_t* cfg){
 		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
 			case THREE_ADDR_CODE_PHI_FUNC:
-				params = stmt->phi_function_parameters;
+				params = stmt->parameters;
 				//Add this in here
 				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
 					//Grab the param out
@@ -1551,7 +1551,7 @@ static void mark(cfg_t* cfg){
 			//is important
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Grab the parameters out
-				params = stmt->function_parameters;
+				params = stmt->parameters;
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
@@ -1568,7 +1568,7 @@ static void mark(cfg_t* cfg){
 				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
 
 				//Grab the parameters out
-				params = stmt->function_parameters;
+				params = stmt->parameters;
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){

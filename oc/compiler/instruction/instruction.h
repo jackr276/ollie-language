@@ -88,14 +88,14 @@ typedef enum{
 	BRANCH_E,
 	BRANCH_NZ,
 	BRANCH_Z,
-	BRANCH_L, //Jump LT(SIGNED)
-	BRANCH_G, //Jump GT(SIGNED)
-	BRANCH_GE, //Jump GE(SIGNED)
-	BRANCH_LE, //Jump LE(SIGNED)
-	BRANCH_A, //Jump GT(UNSIGNED)
-	BRANCH_AE, //Jump GE(UNSIGNED)
-	BRANCH_B, //Jump LT(UNSIGNED)
-	BRANCH_BE, //Jump LE(UNSIGNED)
+	BRANCH_L, //Branch LT(SIGNED)
+	BRANCH_G, //Branch GT(SIGNED)
+	BRANCH_GE, //Branch GE(SIGNED)
+	BRANCH_LE, //Branch LE(SIGNED)
+	BRANCH_A, //Branch GT(UNSIGNED)
+	BRANCH_AE, //Branch GE(UNSIGNED)
+	BRANCH_B, //Branch LT(UNSIGNED)
+	BRANCH_BE, //Branch LE(UNSIGNED)
 } branch_type_t;
 
 
@@ -271,10 +271,8 @@ struct instruction_t{
 	symtab_variable_record_t* var_record;
 	//What function are we currently in?
 	symtab_function_record_t* function;
-	//The phi function parameters - stored in a dynamic array
-	void* phi_function_parameters;
-	//The list of temp variable parameters at most 6
-	void* function_parameters;
+	//Generic parameter list - could be used for phi functions or function calls
+	void* parameters;
 	//What is the three address code type
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
@@ -303,6 +301,8 @@ struct instruction_t{
 	u_int8_t has_multiplicator;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
+	//If it's a branch statment, then we'll use this
+	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?
 	address_calculation_mode_t calculation_mode;
 	//The register that we're popping or pushing

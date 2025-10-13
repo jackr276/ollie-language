@@ -1523,7 +1523,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "call %s(", stmt->called_function->func_name.string);
 
 			//Grab this out
-			func_params = stmt->function_parameters;
+			func_params = stmt->parameters;
 
 			//Now we can go through and print out all of our parameters here
 			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
@@ -1561,7 +1561,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "(");
 
 			//Grab this out
-			func_params = stmt->function_parameters;
+			func_params = stmt->parameters;
 
 			//Now we can go through and print out all of our parameters here
 			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
@@ -1689,7 +1689,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- PHI(");
 
 			//For convenience
-			dynamic_array_t* phi_func_params = stmt->phi_function_parameters;
+			dynamic_array_t* phi_func_params = stmt->parameters;
 
 			//Now run through all of the parameters
 			for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
@@ -3140,7 +3140,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, " <- PHI(");
 
 			//For convenience
-			dynamic_array_t* phi_func_params = instruction->phi_function_parameters;
+			dynamic_array_t* phi_func_params = instruction->parameters;
 
 			//Now run through all of the parameters
 			for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
@@ -3973,14 +3973,14 @@ instruction_t* copy_instruction(instruction_t* copied){
 	//function calls
 	
 	//Null these out, better safe than sorry
-	copy->phi_function_parameters = NULL;
+	copy->parameters = NULL;
 	copy->inlined_assembly = copied->inlined_assembly;
 	copy->next_statement = NULL;
 	copy->previous_statement = NULL;
 	
 	//If we have function call parameters, emit a copy of them
-	if(copied->function_parameters != NULL){
-		copy->function_parameters = clone_dynamic_array(copied->function_parameters);
+	if(copied->parameters != NULL){
+		copy->parameters = clone_dynamic_array(copied->parameters);
 	}
 
 	//Give back the copied one
@@ -4337,13 +4337,8 @@ void instruction_dealloc(instruction_t* stmt){
 	}
 
 	//If we have a phi function, deallocate the dynamic array
-	if(stmt->phi_function_parameters != NULL){
-		dynamic_array_dealloc(stmt->phi_function_parameters);
-	}
-
-	//If we have function parameters get rid of them
-	if(stmt->function_parameters != NULL){
-		dynamic_array_dealloc(stmt->function_parameters);
+	if(stmt->parameters != NULL){
+		dynamic_array_dealloc(stmt->parameters);
 	}
 	
 	//Free the overall stmt -- variables handled elsewhere

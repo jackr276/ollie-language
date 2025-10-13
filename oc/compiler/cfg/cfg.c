@@ -755,13 +755,13 @@ static void add_phi_statement(basic_block_t* target, instruction_t* phi_statemen
  */
 static void add_phi_parameter(instruction_t* phi_statement, three_addr_var_t* var){
 	//If we've not yet given the dynamic array
-	if(phi_statement->phi_function_parameters == NULL){
+	if(phi_statement->parameters == NULL){
 		//Take care of allocation then
-		phi_statement->phi_function_parameters = dynamic_array_alloc();
+		phi_statement->parameters = dynamic_array_alloc();
 	}
 
 	//Add this to the phi statement parameters
-	dynamic_array_add(phi_statement->phi_function_parameters, var);
+	dynamic_array_add(phi_statement->parameters, var);
 }
 
 
@@ -2062,7 +2062,7 @@ static void rename_block(basic_block_t* entry){
 			//Special case - do we have a function call?
 			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL){
 				//Grab it out
-				dynamic_array_t* func_params = cursor->function_parameters;
+				dynamic_array_t* func_params = cursor->parameters;
 				//Run through them all
 				for(u_int16_t k = 0; func_params != NULL && k < func_params->current_index; k++){
 					//Grab it out
@@ -4199,7 +4199,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//If this isn't NULL, we have parameters
 	if(param_cursor != NULL){
 		//Create this
-		func_call_stmt->function_parameters = dynamic_array_alloc();
+		func_call_stmt->parameters = dynamic_array_alloc();
 	}
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
@@ -4234,7 +4234,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		assignment->assignee->parameter_number = current_func_param_idx;
 		
 		//Add the parameter in
-		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
 
 		//The assignment's assignee is also used
 		add_used_variable(current, assignment->assignee);
@@ -4317,7 +4317,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//If this isn't NULL, we have parameters
 	if(param_cursor != NULL){
 		//Create this
-		func_call_stmt->function_parameters = dynamic_array_alloc();
+		func_call_stmt->parameters = dynamic_array_alloc();
 	}
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
@@ -4352,7 +4352,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		assignment->assignee->parameter_number = current_func_param_idx;
 		
 		//Add the parameter in
-		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
 
 		//The assignment here is used implicitly by the function call
 		add_used_variable(current, assignment->assignee);

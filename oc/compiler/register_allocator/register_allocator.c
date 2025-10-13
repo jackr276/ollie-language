@@ -797,7 +797,7 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
 	assign_live_range_to_source_variable(live_ranges, basic_block, instruction->source_register);
 
 	//Extract for us
-	dynamic_array_t* function_parameters = instruction->function_parameters;
+	dynamic_array_t* function_parameters = instruction->parameters;
 
 	//If these are NULL then there's nothing else for us here
 	if(function_parameters == NULL){
@@ -1248,7 +1248,7 @@ static void pre_color(instruction_t* instruction){
 			 */
 
 			//Grab the parameters out
-			dynamic_array_t* function_params = instruction->function_parameters;
+			dynamic_array_t* function_params = instruction->parameters;
 
 			//If we actually have function parameters
 			if(function_params != NULL){
@@ -1477,12 +1477,12 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				case CALL:
 				case INDIRECT_CALL:
 					//No point here
-					if(operation->function_parameters == NULL){
+					if(operation->parameters == NULL){
 						break;
 					}
 					
 					//Grab it out
-					dynamic_array_t* operation_function_parameters = operation->function_parameters;
+					dynamic_array_t* operation_function_parameters = operation->parameters;
 
 					//Let's go through all of these and add them to LIVE_NOW
 					for(u_int16_t i = 0; i < operation_function_parameters->current_index; i++){
