@@ -3781,31 +3781,20 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 		current_block = expression_package.final_block;
 	}
 
-	//The package's assignee is what we base all conditional moves on
-	u_int8_t is_signed = is_type_signed(expression_package.assignee->type); 
-	
 	//Store for later
 	three_addr_var_t* conditional_decider = expression_package.assignee;
-
-	//Select the jump type for our conditional
-	jump_type_t jump = select_appropriate_jump_stmt(expression_package.operator, JUMP_CATEGORY_NORMAL, is_signed);
 
 	//If this is blank, we need a test instruction
 	if(expression_package.operator == BLANK){
 		conditional_decider = emit_test_code(current_block, expression_package.assignee, expression_package.assignee, TRUE);
 	}
 
+	//Select the jump type for our conditional
+	branch_type_t branch_type = select_appropriate_branch_statement(expression_package.operator, is_type_signed(conditional_decider->type));
+
 	//emit the branch statement
 	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider);
 	
-	//Now we'll emit a jump to the if block and else block
-	emit_jump(current_block, if_block, conditional_decider, jump, is_branch_ending, FALSE);
-	emit_jump(current_block, else_block, NULL, JUMP_TYPE_JMP, is_branch_ending, FALSE);
-
-	//These are both now successors to the if block
-	add_successor(current_block, if_block);
-	add_successor(current_block, else_block);
-
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
 
