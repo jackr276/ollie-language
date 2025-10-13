@@ -1398,6 +1398,43 @@ static char* jump_type_to_string(jump_type_t jump_type){
 
 
 /**
+ * Convert a jump type to a string
+ */
+static char* branch_type_to_string(branch_type_t branch_type){
+	switch(branch_type){
+		case BRANCH_A:
+			return "cbranch_a";
+		case BRANCH_AE:
+			return "cbranch_ae";
+		case BRANCH_B:
+			return "cbranch_b";
+		case BRANCH_BE:
+			return "cbranch_be";
+		case BRANCH_E:
+			return "cbranch_e";
+		case BRANCH_NE:
+			return "cbranch_ne";
+		case BRANCH_Z:
+			return "cbranch_z";
+		case BRANCH_NZ:
+			return "cbranch_nz";
+		case BRANCH_GE:
+			return "cbranch_ge";
+		case BRANCH_G:
+			return "cbranch_g";
+		case BRANCH_LE:
+			return "cbranch_le";
+		case BRANCH_L:
+			return "cbranch_l";
+		//SHould never get here
+		default:
+			fprintf(stderr, "Fatal internal compiler error: Invalid branch type detected");
+			exit(1);
+	}
+}
+
+
+/**
  * Pretty print a three address code statement
  *
 */
@@ -1508,6 +1545,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_JUMP_STMT:
 			//Then print out the block label
 			fprintf(fl, "%s .L%d\n", jump_type_to_string(stmt->jump_type), ((basic_block_t*)(stmt->if_block))->block_id);
+			break;
+
+		//Branch statements represent the ends of blocks
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			fprintf(fl, "%s .L%d else .L%d\n", branch_type_to_string(stmt->branch_type), ((basic_block_t*)(stmt->if_block))->block_id, ((basic_block_t*)(stmt->else_block))->block_id);
 			break;
 
 		case THREE_ADDR_CODE_FUNC_CALL:
