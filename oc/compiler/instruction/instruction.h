@@ -711,6 +711,11 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_type, u_int8_t is_signed);
 
 /**
+ * select the appropriate branch statement given the circumstances, including operand and signedness
+ */
+branch_type_t select_appropriate_branch_statement(ollie_token_t op, u_int8_t is_signed);
+
+/**
  * Select the appropriate set type given the circumstances, including the operand and the signedness
  */
 instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed);

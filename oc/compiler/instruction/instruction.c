@@ -4217,6 +4217,57 @@ jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_
 
 
 /**
+ * select the appropriate branch statement given the circumstances, including operand and signedness
+ */
+branch_type_t select_appropriate_branch_statement(ollie_token_t op, u_int8_t is_signed){
+	//Let's see what we have here
+	switch(op){
+		case G_THAN:
+			if(is_signed == TRUE){
+				//Signed version
+				return BRANCH_G;
+			} else {
+				//Unsigned version
+				return BRANCH_A;
+			}
+		case L_THAN:
+			if(is_signed == TRUE){
+				//Signed version
+				return BRANCH_L;
+			} else {
+				//Unsigned version
+				return BRANCH_B;
+			}
+		case L_THAN_OR_EQ:
+			if(is_signed == TRUE){
+				//Signed version
+				return BRANCH_LE;
+			} else {
+				//Unsigned version
+				return BRANCH_BE;
+			}
+		case G_THAN_OR_EQ:
+			if(is_signed == TRUE){
+				//Signed version
+				return BRANCH_GE;
+			} else {
+				//Unsigned version
+				return BRANCH_AE;
+			}
+		case DOUBLE_EQUALS:
+			return BRANCH_E;
+		case NOT_EQUALS:
+			return BRANCH_NE;
+		//If we get here, it was some kind of
+		//non relational operator. In this case,
+		//we default to 0 = false non zero = true
+		default:
+			return BRANCH_NZ;
+	}
+}
+
+
+/**
  * Select the appropriate set type given the circumstances, including the operand and the signedness
  */
 instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed){
