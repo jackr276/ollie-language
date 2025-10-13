@@ -2527,6 +2527,9 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, thr
 	if(conditional_result != NULL){
 		add_used_variable(basic_block, conditional_result);
 	}
+
+	//The destination block is by definition a successor here
+	add_successor(basic_block, destination_block);
 }
 
 
@@ -3846,10 +3849,6 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block, NULL, JUMP_TYPE_JMP, is_branch_ending, FALSE);
-
-	//The end block is a successor to both the if and else blocks
-	add_successor(if_block, end_block);
-	add_successor(else_block, end_block);
 
 	//The direct successor of the starting block is the ending block
 	starting_block->direct_successor = end_block;
