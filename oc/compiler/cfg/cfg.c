@@ -5210,7 +5210,8 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
-	//If it's null, that means that we were given an empty while loop here
+	//If it's null, that means that we were given an empty while loop here.
+	//We'll just allocate our own and use that
 	if(compound_statement_results.starting_block == NULL){
 		//Just give a dummy here
 		compound_statement_results.starting_block = basic_block_alloc(1);
