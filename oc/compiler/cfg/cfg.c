@@ -6378,8 +6378,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
 
-					//We'll need to break out of the loop
-					add_successor(current_block, breaking_to);
 					//We will jump to it -- this is always an uncoditional jump
 					emit_jump(current_block, breaking_to, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
@@ -6401,26 +6399,26 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Store this for later
 					three_addr_var_t* conditional_decider = ret_package.assignee;
 
-					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
-
 					//If this is blank, we'll need a test instruction
 					if(ret_package.operator == BLANK){
 						conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
 					}
 
+					//First we'll select the appropriate branch type. We are using a regular branch type here
+					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
 
-					//Add a successor to the end
-					add_successor(current_block, breaking_to);
-					//We will jump to it -- this jump is decided above
-					emit_jump(current_block, breaking_to, conditional_decider, jump_type, TRUE, FALSE);
-
-					//Add the new block as a successor as well
-					add_successor(current_block, new_block);
-					//Emit a jump to the new block
-					emit_jump(current_block, new_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					/**
+					 * Now we'll emit the branch like so:
+					 *
+					 * if conditional
+					 * 	goto end block
+					 * else 
+					 * 	goto new block
+					 */
+					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 					//Make sure we mark this properly
 					current_block->direct_successor = new_block;
@@ -6925,8 +6923,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
 
-					//We'll need to break out of the loop
-					add_successor(current_block, breaking_to);
 					//We will jump to it -- this is always an uncoditional jump
 					emit_jump(current_block, breaking_to, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
@@ -6945,29 +6941,29 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//First let's emit the conditional code
 					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
 
-					//Store for later
+					//Store this for later
 					three_addr_var_t* conditional_decider = ret_package.assignee;
-
-					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
 					//If this is blank, we'll need a test instruction
 					if(ret_package.operator == BLANK){
 						conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
 					}
 
+					//First we'll select the appropriate branch type. We are using a regular branch type here
+					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
 
-					//Add a successor to the end
-					add_successor(current_block, breaking_to);
-					//We will jump to it -- this jump is decided above
-					emit_jump(current_block, breaking_to, conditional_decider, jump_type, TRUE, FALSE);
-
-					//Add the new block as a successor as well
-					add_successor(current_block, new_block);
-					//Emit a jump to the new block
-					emit_jump(current_block, new_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					/**
+					 * Now we'll emit the branch like so:
+					 *
+					 * if conditional
+					 * 	goto end block
+					 * else 
+					 * 	goto new block
+					 */
+					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 					//Make sure we mark this properly
 					current_block->direct_successor = new_block;
