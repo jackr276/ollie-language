@@ -5235,19 +5235,13 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 	//If it's null, that means that we were given an empty while loop here
 	if(compound_statement_results.starting_block == NULL){
-		//We do still need to have our successor be the ending block
-		add_successor(while_statement_entry_block, while_statement_end_block);
-
-		//We'll just return now
-		return result_package;
+		//Just give a dummy here
+		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.final_block = basic_block_alloc(1);
 	}
 
 	//What does the conditional jump rely on?
 	three_addr_var_t* conditional_decider = package.assignee;
-
-	//We'll now determine what kind of jump statement that we have here. We want to jump to the exit if
-	//we're bad, so we'll do an inverse jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE, is_type_signed(package.assignee->type));
 
 	//If the operator is blank, we need to emit a test instruction
 	if(package.operator == BLANK){
@@ -5255,25 +5249,22 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 	conditional_decider = emit_test_code(while_statement_entry_block, package.assignee, package.assignee, TRUE);
 	}
 
-	//"Jump over" the body if it's bad
-	emit_jump(while_statement_entry_block, while_statement_end_block, conditional_decider, jump_type, TRUE, TRUE);
+	//The branch type here will be an inverse branch
+	branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
 
-	//Otherwise it isn't null, so we can add it as a successor
-	add_successor(while_statement_entry_block, compound_statement_results.starting_block);
-
-	//We want to have a direct jump to the body too
-	emit_jump(while_statement_entry_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-	//The exit block is also a successor to the entry block
-	add_successor(while_statement_entry_block, while_statement_end_block);
+	/**
+	 * Inverse jump out of the while loop to the end if bad
+	 *
+	 * If destination -> end of loop
+	 * Else destination -> loop body
+	 */
+	emit_branch(while_statement_entry_block, while_statement_end_block, compound_statement_results.starting_block, branch_type, conditional_decider);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If it's not a return statement, we can add all of these in
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
-		//A successor to the end block is the block at the top of the loop
-		add_successor(compound_stmt_end, while_statement_entry_block);
 		//His direct successor is the end block
 		compound_stmt_end->direct_successor = while_statement_end_block;
 		//The compound statement end will jump right back up to the entry block
