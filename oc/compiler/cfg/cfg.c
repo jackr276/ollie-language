@@ -5134,8 +5134,6 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 		(*num_warnings_ref)++;
 	}
 
-	//No matter what, this will get merged into the top statement
-	add_successor(do_while_stmt_entry_block, compound_statement_results.starting_block);
 	//Now we'll jump to it
 	emit_jump(do_while_stmt_entry_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
@@ -5153,12 +5151,6 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//Add the conditional check into the end here
 	cfg_result_package_t package = emit_expression(compound_stmt_end, ast_cursor->next_sibling, TRUE, TRUE);
 
-	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
-	//exit block
-	add_successor(compound_stmt_end, do_while_stmt_entry_block);
-	//It's other successor though is the loop entry. This is for flow analysis
-	add_successor(compound_stmt_end, do_while_stmt_exit_block);
-
 	//Make sure it's the direct successor
 	compound_stmt_end->direct_successor = do_while_stmt_exit_block;
 
@@ -5168,18 +5160,24 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//Store for later
 	three_addr_var_t* conditional_decider = package.assignee;
 
-	//Discern the jump type here--This is a direct jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
 	//If this is blank, we'll need to emit the test code here
 	if(package.operator == BLANK){
 		conditional_decider = emit_test_code(compound_stmt_end, package.assignee, package.assignee, TRUE);
 	}
+
+	//Select the appropriate branch type
+	branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 		
-	//We'll need a jump statement here to the entrance block
-	emit_jump(compound_stmt_end, do_while_stmt_entry_block, conditional_decider, jump_type, TRUE, FALSE);
-	//Also emit a jump statement to the ending block
-	emit_jump(compound_stmt_end, do_while_stmt_exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+	/**
+	 * Branch works in a regular way
+	 *
+	 * If condition 
+	 * 	goto entry
+	 * else
+	 * 	exit
+	 */
+	emit_branch(compound_stmt_end, do_while_stmt_entry_block, do_while_stmt_exit_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+
 	//This is our condition block here, so we'll add the estimated cost
 	compound_stmt_end->estimated_execution_frequency = LOOP_ESTIMATED_COST;
 
