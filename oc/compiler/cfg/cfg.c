@@ -5026,7 +5026,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//regardless
 	if(compound_statement_results.starting_block == NULL){
 		compound_statement_results.starting_block = basic_block_alloc(1);
-		compound_statement_results.starting_block = compound_statement_results.final_block;
+		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
 	//Determine the kind of branch that we'll need here
@@ -5214,7 +5214,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	if(compound_statement_results.starting_block == NULL){
 		//Just give a dummy here
 		compound_statement_results.starting_block = basic_block_alloc(1);
-		compound_statement_results.final_block = compound_statement_results.final_block;
+		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
 	//What does the conditional jump rely on?
