@@ -2460,7 +2460,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
 
 		//If we hit a ternary here, we'll need to reassign what our current block is
-		if(expression_package.final_block != NULL && expression_package.final_block != current){
+		if(expression_package.final_block != current){
 			//Assign current to be the new end
 			current = expression_package.final_block;
 
@@ -3023,7 +3023,7 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child, is_branch_ending, FALSE);
 
 	//If there is a difference in current and the final block, we'll reassign here
-	if(expression_package.final_block != NULL && current_block != expression_package.final_block){
+	if(current_block != expression_package.final_block){
 		//Set this to be at the end
 		current_block = expression_package.final_block;
 	}
@@ -3208,7 +3208,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, is_branch_ending);
 
 	//Reassign the current block if need be
-	if(first_child_results.final_block != NULL && first_child_results.final_block != current_block){
+	if(first_child_results.final_block != current_block){
 		current_block = first_child_results.final_block;
 	}
 
@@ -3331,7 +3331,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, is_branch_ending);
 
 	//If this is now different, which it could be, we'll change what current is
-	if(postfix_expression_results.final_block != NULL && postfix_expression_results.final_block != current_block){
+	if(postfix_expression_results.final_block != current_block){
 		current_block = postfix_expression_results.final_block;
 	}
 
@@ -3399,7 +3399,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, is_branch_ending);
 
 		//If this is now different, which it could be, we'll change what current is
-		if(copied_package.final_block != NULL && copied_package.final_block != current_block){
+		if(copied_package.final_block != current_block){
 			current_block = copied_package.final_block;
 		}
 
@@ -3455,7 +3455,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3518,7 +3518,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, is_branch_ending);
 
 				//If this is now different, which it could be, we'll change what current is
-				if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				if(unary_package.final_block != current_block){
 					current_block = unary_package.final_block;
 				}
 
@@ -3546,7 +3546,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3584,7 +3584,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3602,7 +3602,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3628,7 +3628,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3791,7 +3791,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t expression_package = emit_binary_expression(current_block, cursor, is_branch_ending);
 
 	//Let's see if we need to reassign
-	if(expression_package.final_block != NULL && expression_package.final_block != current_block){
+	if(expression_package.final_block != current_block){
 		//Reassign this to be at the true end
 		current_block = expression_package.final_block;
 	}
@@ -3817,7 +3817,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t if_branch = emit_expression(if_block, cursor, is_branch_ending, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
-	if(if_branch.final_block != NULL && if_branch.final_block != if_block){
+	if(if_branch.final_block != if_block){
 		if_block = if_branch.final_block;
 	}
 
@@ -3843,7 +3843,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t else_branch = emit_expression(else_block, cursor, is_branch_ending, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
-	if(else_branch.final_block != NULL && else_branch.final_block != else_block){
+	if(else_branch.final_block != else_block){
 		else_block = else_branch.final_block;
 	}
 
@@ -3921,7 +3921,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	cfg_result_package_t left_side = emit_binary_expression(current_block, cursor, is_branch_ending);
 
 	//If these are different, then we'll need to reassign current
-	if(left_side.final_block != NULL && left_side.final_block != current_block){
+	if(left_side.final_block != current_block){
 		//Reassign current
 		current_block = left_side.final_block;
 
@@ -3936,7 +3936,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	cfg_result_package_t right_side = emit_binary_expression(current_block, cursor, is_branch_ending);
 
 	//If these are different, then we'll need to reassign current
-	if(right_side.final_block != NULL && right_side.final_block != current_block){
+	if(right_side.final_block != current_block){
 		//Reassign current
 		current_block = right_side.final_block;
 
@@ -4045,7 +4045,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			cfg_result_package_t unary_package = emit_unary_expression(current_block, cursor, is_branch_ending);
 
 			//If this is different(which it could be), we'll reassign current
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				//Reassign current to be at the end
 				current_block = unary_package.final_block;
 
@@ -4063,7 +4063,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			cfg_result_package_t expression_package = emit_expression(current_block, cursor, is_branch_ending, FALSE);
 
 			//Again, if this is different(which it could be), we'll reassign current
-			if(expression_package.final_block != NULL && expression_package.final_block != current_block){
+			if(expression_package.final_block != current_block){
 				//Reassign current to be at the end
 				current_block = expression_package.final_block;
 
@@ -4239,7 +4239,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
 		//to reassign
-		if(package.final_block != NULL && package.final_block != current){
+		if(package.final_block != current){
 			//We've seen a ternary, reassign current
 			current = package.final_block;
 
@@ -4357,7 +4357,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
 		//to reassign
-		if(package.final_block != NULL && package.final_block != current){
+		if(package.final_block != current){
 			//We've seen a ternary, reassign current
 			current = package.final_block;
 
@@ -4966,7 +4966,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 				first_child_result_package = emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
 
 				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
-				if(first_child_result_package.final_block != NULL && first_child_result_package.final_block != for_stmt_entry_block){
+				if(first_child_result_package.final_block != for_stmt_entry_block){
 				//Make this the new end
 					for_stmt_entry_block = first_child_result_package.final_block;
 				}
@@ -5688,7 +5688,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE, TRUE);
 
 	//Check for ternary expansion
-	if(input_results.final_block != NULL && input_results.final_block != root_level_block){
+	if(input_results.final_block != root_level_block){
 		root_level_block = input_results.final_block;
 	}
 
@@ -5987,7 +5987,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE, TRUE);
 
 	//We could have had a ternary here, so we'll need to account for that possibility
-	if(input_results.final_block != NULL && root_level_block != input_results.final_block){
+	if(root_level_block != input_results.final_block){
 		//Just reassign what current is
 		root_level_block = input_results.final_block;
 	}
@@ -6231,7 +6231,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				//If this is the case, it means that we've hit a ternary at some point and need
 				//to reassign this final block
-				if(generic_results.final_block != NULL && generic_results.final_block != current_block){
+				if(generic_results.final_block != current_block){
 					current_block = generic_results.final_block;
 				}
 
@@ -6542,7 +6542,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
 
 				//We'll now update the current block accordingly
-				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
+				if(ret_package.final_block != current_block){
 					current_block = ret_package.final_block;
 				}
 
@@ -6769,7 +6769,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//If this is the case, it means that we've hit a ternary at some point and need
 				//to reassign this final block
-				if(generic_results.final_block != NULL && generic_results.final_block != current_block){
+				if(generic_results.final_block != current_block){
 					current_block = generic_results.final_block;
 				}
 
@@ -7092,7 +7092,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
 
 				//We'll now update the current block accordingly
-				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
+				if(ret_package.final_block != current_block){
 					current_block = ret_package.final_block;
 				}
 
@@ -7519,7 +7519,7 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		}
 
 		//Change the current block if there is a change. This is possible with ternary expressions
-		if(initializer_results.final_block != NULL && initializer_results.final_block != current_block){
+		if(initializer_results.final_block != current_block){
 			current_block = initializer_results.final_block;
 		}
 
@@ -7640,7 +7640,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		}
 
 		//Change the current block if there is a change. This is possible with ternary expressions
-		if(initializer_results.final_block != NULL && initializer_results.final_block != current_block){
+		if(initializer_results.final_block != current_block){
 			current_block = initializer_results.final_block;
 		}
 
@@ -7696,7 +7696,7 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 			intermediary_results = emit_expression(current_block, initializer_root, is_branch_ending, FALSE);
 
 			//The current block here is whatever the final block in the package is 
-			if(intermediary_results.final_block != NULL && intermediary_results.final_block != current_block){
+			if(intermediary_results.final_block != current_block){
 				//We'll reassign this to be the final block. If this does happen, it means that
 				//at some point we had a ternary expression
 				current_block = intermediary_results.final_block;
