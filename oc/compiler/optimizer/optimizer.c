@@ -1795,6 +1795,10 @@ static void recompute_all_dominance_relations(cfg_t* cfg){
  * runs for in it's current iteration
 */
 cfg_t* optimize(cfg_t* cfg){
+	//FOR NOW so we don't loop forever
+	exit(0);
+
+
 	//First thing we'll do is reset the visited status of the CFG. This just ensures
 	//that we won't have any issues with the CFG in terms of traversal
 	reset_visited_status(cfg, FALSE);

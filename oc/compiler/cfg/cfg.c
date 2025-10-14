@@ -2538,7 +2538,7 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, thr
  *
  * This rule also handles all successor management required for the rule
  */
-void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result){
+void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category){
 	//Emit the actual instruction here
 	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
 
@@ -2551,9 +2551,20 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
 	//Add the statement into the block
 	add_statement(basic_block, branch_instruction);
 
-	//The if and else destinations are now both successors
-	add_successor(basic_block, if_destination);
-	add_successor(basic_block, else_destination);
+	/**
+	 * Based on what the category is, we can add the successors in a different
+	 * order just so that the IRs look somewhat nicer. This has no effect on
+	 * functionality, purely visual
+	 */
+	if(branch_category == BRANCH_CATEGORY_NORMAL){
+		//The if and else destinations are now both successors
+		add_successor(basic_block, if_destination);
+		add_successor(basic_block, else_destination);
+	} else {
+		//The if and else destinations are now both successors
+		add_successor(basic_block, else_destination);
+		add_successor(basic_block, if_destination);
+	}
 }
 
 
@@ -3796,7 +3807,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	branch_type_t branch_type = select_appropriate_branch_statement(expression_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 	//emit the branch statement
-	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider);
+	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 	
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
@@ -5211,11 +5222,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	result_package.starting_block = while_statement_entry_block;
 	result_package.final_block = while_statement_end_block;
 
-	//This has no assignee/operator
-	result_package.assignee = NULL;
-	result_package.operator = BLANK;
-
-	//For drilling efficiency reasons, we'll want the entry block's direct successor to be the end block
+	//Just set our direct successor here
 	while_statement_entry_block->direct_successor = while_statement_end_block;
 
 	//Grab this for convenience
@@ -5258,7 +5265,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 * If destination -> end of loop
 	 * Else destination -> loop body
 	 */
-	emit_branch(while_statement_entry_block, while_statement_end_block, compound_statement_results.starting_block, branch_type, conditional_decider);
+	emit_branch(while_statement_entry_block, while_statement_end_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
