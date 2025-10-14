@@ -4912,8 +4912,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
- * A for-statement is another kind of control flow construct. As always the direct successor is the path that reliably
- * leads us down and out
+ * A for-statement is another kind of control flow construct
  */
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Initialize the return package
@@ -4927,6 +4926,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	for_stmt_exit_block->block_type = BLOCK_TYPE_FOR_STMT_END;
 
 	//All breaks will go to the exit block
+	//Hold off on the continue block for now
 	push(break_stack, for_stmt_exit_block);
 
 	//Once we get here, we already know what the start and exit are for this statement
@@ -4938,9 +4938,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//Grab a cursor for walking the sub-tree
 	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
-
-	//We will always see 3 nodes here to start out with, of the type for_loop_cond_ast_node_t. These
-	//nodes contain an "is_blank" field that will alert us if this is just a placeholder. 
 
 	//If the very first one is not blank
 	if(ast_cursor->first_child != NULL){
@@ -4982,9 +4979,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//always executes at the end of each iteration
 	basic_block_t* condition_block = basic_block_alloc(LOOP_ESTIMATED_COST);
 
-	//The condition block is always a successor to the entry block
-	add_successor(for_stmt_entry_block, condition_block);
-
 	//We will now emit a jump from the entry block, to the condition block
 	emit_jump(for_stmt_entry_block, condition_block, NULL, JUMP_TYPE_JMP ,TRUE, FALSE);
 
@@ -4996,9 +4990,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//Store this for later
 	three_addr_var_t* conditional_decider = condition_block_vals.assignee;
-
-	//We'll use our inverse jumping("jump out") strategy here. We'll need this jump for later
-	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE, is_type_signed(condition_block_vals.assignee->type));
 
 	//If this is blank, we need to change this
 	if(condition_block_vals.operator == BLANK){
@@ -5021,9 +5012,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Unconditional jump to condition block
 	emit_jump(for_stmt_update_block, condition_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
-	//This node will always jump right back to the start
-	add_successor(for_stmt_update_block, condition_block);
-
 	//All continues will go to the update block
 	push(continue_stack, for_stmt_update_block);
 	
@@ -5034,38 +5022,25 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//because that is what repeats on continue
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
-	//If it's null, that's actually ok here
+	//If we have an empty interior just emit a dummy block. It will be optimized away 
+	//regardless
 	if(compound_statement_results.starting_block == NULL){
-		//We'll make sure that the start points to this block
-		add_successor(condition_block, for_stmt_update_block);
-
-		//And also make sure that the condition block can point to the
-		//exit
-		add_successor(condition_block, for_stmt_exit_block);
-
-		//Make the condition block jump to the exit. This is an inverse jump
-		emit_jump(condition_block, for_stmt_exit_block, conditional_decider, jump_type, TRUE, TRUE);
-
-		//Pop both values off of the stack
-		pop(continue_stack);
-		pop(break_stack);
-
-		//And we're done
-		return result_package;
+		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.starting_block = compound_statement_results.final_block;
 	}
 
-	//This will always be a successor to the conditional statement
-	add_successor(condition_block, compound_statement_results.starting_block);
+	//Determine the kind of branch that we'll need here
+	branch_type_t branch_type = select_appropriate_branch_statement(condition_block_vals.operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
 
-	//We must also remember that the condition block can point to the ending block, because
-	//if the condition fails, we will be jumping here
-	add_successor(condition_block, for_stmt_exit_block);
-
-	//Make the condition block jump to the exit. This is an inverse jump
-	emit_jump(condition_block, for_stmt_exit_block, conditional_decider, jump_type, TRUE, TRUE);
-
-	//Emit a direct jump from the condition block to the compound stmt start
-	emit_jump(condition_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+	/**
+	 * Inverse jumping logic so
+	 *
+	 * if not condition 
+	 * 	goto exit
+	 * else
+	 * 	goto update
+	 */
+	emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
 
 	//This is a loop ending block
 	condition_block->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
@@ -5078,9 +5053,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		//We also need an uncoditional jump right to the update block
 		emit_jump(compound_stmt_end, for_stmt_update_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
-
-	//We'll add the successor either way for control flow reasons
-	add_successor(compound_stmt_end, for_stmt_update_block);
 
 	//The direct successor to the entry block is the exit block, for efficiency reasons
 	for_stmt_entry_block->direct_successor = for_stmt_exit_block;
@@ -5242,7 +5214,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	if(compound_statement_results.starting_block == NULL){
 		//Just give a dummy here
 		compound_statement_results.starting_block = basic_block_alloc(1);
-		compound_statement_results.final_block = basic_block_alloc(1);
+		compound_statement_results.final_block = compound_statement_results.final_block;
 	}
 
 	//What does the conditional jump rely on?
