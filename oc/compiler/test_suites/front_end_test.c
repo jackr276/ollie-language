@@ -102,6 +102,9 @@ int main(int argc, char** argv){
 	//Grab all the options using the helper
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
+	//Do we want to time or not
+	u_int8_t time_execution = options->time_execution;
+
 	//Print out what we're testing
 	printf("TESTING FILE: %s\n\n", options->file_name);
 
@@ -120,7 +123,11 @@ int main(int argc, char** argv){
 		time_spent = (double)(end - begin)/CLOCKS_PER_SEC;
 
 		char info[500];
-		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", parse_results->num_errors, parse_results->num_warnings, time_spent);
+		sprintf(info, "Parsing failed with %d errors and %d warnings", parse_results->num_errors, parse_results->num_warnings);
+		if(time_execution == TRUE){
+			sprintf(info, " in %.8f seconds", time_spent);
+		}
+
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", parse_results->lines_processed);
 		printf("%s\n", info);
@@ -159,7 +166,11 @@ int main(int argc, char** argv){
 	//Print out the summary now that we're done
 	printf("\n===================== FRONT END TEST SUMMARY ==========================\n");
 	printf("Lexer processed %d lines\n", parse_results->lines_processed);
-	printf("Parsing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
+	printf("Parsing succeeded ");
+	if(time_execution == TRUE){
+		printf("in %.8f seconds ", time_spent);
+	}
+	printf("with %d warnings\n", num_warnings);
 	printf("=======================================================================\n\n");
 
 final_printout:
