@@ -5327,8 +5327,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
 		//The successor to the if-stmt end path is the if statement end block
 		emit_jump(if_compound_stmt_end, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-		//If this is the case, the end block is a successor of the if_stmt end
-		add_successor(if_compound_stmt_end, exit_block);
 	} else {
 		//If this is the case, the end block is a successor of the if_stmt end
 		add_successor(if_compound_stmt_end, function_exit_block);
@@ -5341,12 +5339,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//because we may have else-if cases that we need to add down the road
 	emit_branch(entry_block, if_compound_statement_results.starting_block, NULL, entry_block_branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
-	/**
-	 * Keep track of what the previous entry block is for later tracking
-	 */
-	basic_block_t* previous_entry_block = NULL;
-	//For holding the new current entry block
-	basic_block_t* current_entry_block = entry_block;
+	//From our perspective, the previous entry block
+	//is now the one we've just made
+	basic_block_t* previous_entry_block = entry_block;
 
 	//Advance the cursor up to it's next sibling
 	cursor = cursor->next_sibling;
@@ -5356,10 +5351,8 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//Grab a cursor to traverse the else-if block
 		generic_ast_node_t* else_if_cursor = cursor->first_child;
 
-		//Save the old one
-		previous_entry_block = current_entry_block;
 		//Make a new one
-		current_entry_block = basic_block_alloc(1);
+		basic_block_t* new_entry_block = basic_block_alloc(1);
 
 		//Extract the old branch statement from the previous entry block
 		instruction_t* branch_statement = previous_entry_block->exit_statement;
@@ -5369,15 +5362,13 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		 * point here to the current entry block. We'll also need
 		 * to add a successor
 		 */
-		branch_statement->else_block = current_entry_block;
-
-		//The new one is a successor of the old one
-		add_successor(temp, current_entry_block);
-		//And we'll emit a direct jump from the old one to the new one
-		emit_jump(temp, current_entry_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		branch_statement->else_block = new_entry_block;
+		//The current entry block is the else branch for the conditional
+		//branch in the previous one
+		add_successor(previous_entry_block, new_entry_block);
 
 		//So we've seen the else-if clause. Let's grab the expression first
-		package = emit_expression(current_entry_block, else_if_cursor, TRUE, TRUE);
+		package = emit_expression(new_entry_block, else_if_cursor, TRUE, TRUE);
 
 		//Advance it up -- we should now have a compound statement
 		else_if_cursor = else_if_cursor->next_sibling;
@@ -5385,53 +5376,42 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//Let this handle the compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
 
+		//If this is NULL, then we need to emit dummy blocks
+		if(else_if_compound_statement_results.starting_block == NULL){
+			else_if_compound_statement_results.starting_block = basic_block_alloc(1);
+			else_if_compound_statement_results.final_block = else_if_compound_statement_results.starting_block;
+		}
+
 		//This is the package's assignee
 		conditional_decider = package.assignee;
 
-		//If it's not null, we'll process fully
-		if(else_if_compound_statement_results.starting_block != NULL){
-			//Add the if statement node in as a direct successor
-			add_successor(current_entry_block, else_if_compound_statement_results.starting_block);
-			//We will perform a normal jump to this one
-			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
-			//If the operator is blank, we need to emit a test instruction
-			if(package.operator == BLANK){
-				//Emit the testing instruction
-	 			conditional_decider = emit_test_code(current_entry_block, package.assignee, package.assignee, TRUE);
-			}
-
-			//Emit a jump based on the decider
-			emit_jump(current_entry_block, else_if_compound_statement_results.starting_block, conditional_decider, jump_to_if, TRUE, FALSE);
-
-			//Now we'll find the end of this statement
-			basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
-
-			//If this is not a return block, we will add these
-			if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
-				//The successor to the if-stmt end path is the if statement end block
-				emit_jump(else_if_compound_stmt_exit, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-				//If this is the case, the end block is a successor of the if_stmt end
-				add_successor(else_if_compound_stmt_exit, exit_block);
-			} else {
-				add_successor(else_if_compound_stmt_exit, function_exit_block);
-			}
-
-		//If this is NULL, it's fine, but we should warn
-		} else {
-			//We'll just set this to jump out of here
-			//We will perform a normal jump to this one
-			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
-			//If the operator is blank, we need to emit a test instruction
-			if(package.operator == BLANK){
-				//Emit the testing instruction
-	 			conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
-			}
-
-			emit_jump(current_entry_block, exit_block, conditional_decider, jump_to_else_if, TRUE, FALSE);
-			add_successor(current_entry_block, exit_block);
+		//If the operator is blank, we need to emit a test instruction
+		if(package.operator == BLANK){
+			//Emit the testing instruction
+			conditional_decider = emit_test_code(new_entry_block, package.assignee, package.assignee, TRUE);
 		}
+
+		//Select the branch here as well
+		branch_type_t else_if_branch = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
+		//Now we'll emit the branch statement into the current entry block. Again we intentionally
+		//leave the else area null for later use
+		emit_branch(new_entry_block, else_if_compound_statement_results.starting_block, NULL, else_if_branch, conditional_decider, BRANCH_CATEGORY_NORMAL);
+
+		//Now we'll find the end of this statement
+		basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
+
+		//If this is not a return block, we will add these
+		if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			//The successor to the if-stmt end path is the if statement end block
+			emit_jump(else_if_compound_stmt_exit, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		} else {
+			add_successor(else_if_compound_stmt_exit, function_exit_block);
+		}
+
+		//Now for our bookkeeping, the current entry block here now also counts as the previous
+		//entry block
+		previous_entry_block = new_entry_block;
 
 		//Advance this up to the next one
 		cursor = cursor->next_sibling;
@@ -5439,43 +5419,49 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 	//Now that we're out of here - we may have an else statement on our hands
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_COMPOUND_STMT){
-		//Let's handle the compound statement
-		
 		//Grab the compound statement
 		cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
 
-		//If it's NULL, that's fine, we'll just throw a warning
-		if(else_compound_statement_values.starting_block == NULL){
-			//We'll jump to the end here
-			add_successor(current_entry_block, exit_block);
-			//Emit a direct jump here
-			emit_jump(current_entry_block, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-		} else {
-			//Add the if statement node in as a direct successor
-			add_successor(current_entry_block, else_compound_statement_values.starting_block);
-			//We will perform a normal jump to this one
-			emit_jump(current_entry_block, else_compound_statement_values.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		//Extract for convenience
+		instruction_t* branch_statement = previous_entry_block->exit_statement;
 
-			//Now we'll find the end of this statement
+		//This very well could be NULL, in which case we can just go to the end
+		if(else_compound_statement_values.starting_block != NULL){
+			//The else block here now points to the else's start
+			branch_statement->else_block = else_compound_statement_values.starting_block;
+
+			//It is also now a successor as well
+			add_successor(previous_entry_block, else_compound_statement_values.starting_block);
+
+			//More bookeeping based on the exit type
 			basic_block_t* else_compound_statement_exit = else_compound_statement_values.final_block;
 
 			//If this is not a return block, we will add these
 			if(else_compound_statement_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//The successor to the if-stmt end path is the if statement end block
 				emit_jump(else_compound_statement_exit, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-				//If this is the case, the end block is a successor of the if_stmt end
-				add_successor(else_compound_statement_exit, exit_block);
 			} else {
 				add_successor(else_compound_statement_exit, function_exit_block);
 			}
+
+		} else {
+			//The else block here is just the exit block
+			branch_statement->else_block = exit_block;
+
+			//And it's a successor as well
+			add_successor(previous_entry_block, exit_block);
 		}
 
 	//Otherwise the if statement will need to jump directly to the end
 	} else {
-		//We'll jump to the end here
-		add_successor(current_entry_block, exit_block);
-		//Emit a direct jump here
-		emit_jump(current_entry_block, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		//Extract the branch for convenience
+		instruction_t* branch_statement = previous_entry_block->exit_statement;
+
+		//The else scenario here is just the exit block
+		branch_statement->else_block = exit_block;
+
+		//The exit block is now a successor as well
+		add_successor(previous_entry_block, exit_block);
 	}
 
 	//If we have an exit block that has no predecessors, that means that we return through every
