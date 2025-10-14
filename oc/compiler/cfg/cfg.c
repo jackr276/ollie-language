@@ -5100,10 +5100,10 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//We go right into the compound statement here
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
-	//If this is NULL, it means that we really don't have a compound statement there
+	//It being NULL is ok, we'll just insert a dummy
 	if(compound_statement_results.starting_block == NULL){
-		print_parse_message(PARSE_ERROR, "Do-while statement has empty clause, statement has no effect", do_while_stmt_node->line_number);
-		(*num_warnings_ref)++;
+		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
 	//Now we'll jump to it
