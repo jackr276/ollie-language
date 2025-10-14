@@ -5665,7 +5665,11 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Th starting and ending blocks for the switch statements
-	basic_block_t* starting_block = basic_block_alloc(1);
+	basic_block_t* root_level_block = basic_block_alloc(1);
+	//The upper bound check block
+	basic_block_t* upper_bound_check_block = basic_block_alloc(1);
+	//The jump calculation block
+	basic_block_t* jump_calculation_block = basic_block_alloc(1);
 	//Since C-style switches support break statements, we'll need
 	//this as well
 	basic_block_t* ending_block = basic_block_alloc(1);
@@ -5674,28 +5678,25 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	push(break_stack, ending_block);
 
 	//We already know what these will be, so populate them
-	result_package.starting_block = starting_block;
+	result_package.starting_block = root_level_block;
 	result_package.final_block = ending_block;
 
 	//We'll grab a cursor to the first child and begin crawling through
 	generic_ast_node_t* cursor = root_node->first_child;
-
-	//We'll also have a cursor to the top level block to avoid confusion
-	basic_block_t* root_level_block = starting_block;
 
 	//We'll first need to emit the expression node
 	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE, TRUE);
 
 	//Check for ternary expansion
 	if(input_results.final_block != NULL && input_results.final_block != root_level_block){
-		root_level_block = starting_block;
+		root_level_block = input_results.final_block;
 	}
 
 	//This is a switch type block
-	root_level_block->block_type = BLOCK_TYPE_SWITCH;
+	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 
 	//We'll now allocate this one's jump table
-	root_level_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
+	jump_calculation_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
 
 	//The offset(amount that we'll need to knock down any case values by) is always the 
 	//case statement's value subtracted by the lower bound. We'll call it offset here
@@ -5726,7 +5727,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				case_default_results = visit_c_style_case_statement(cursor);
 
 				//Add this in as an entry to the jump table
-				add_jump_table_entry(root_level_block->jump_table, cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
+				add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 
 				break;
 
@@ -5747,7 +5748,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		}
 
 		//This block counts as a successor to the root level block
-		add_successor(root_level_block, case_default_results.starting_block);
+		add_successor(jump_calculation_block, case_default_results.starting_block);
 
 		//Reassign current block
 		current_block = case_default_results.final_block;
@@ -5853,10 +5854,10 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	//will be set to point to the default block
-	for(u_int16_t i = 0; i < root_level_block->jump_table->num_nodes; i++){
+	for(u_int16_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		//If it's null, we'll make it the default
-		if(dynamic_array_get_at(root_level_block->jump_table->nodes, i) == NULL){
-			dynamic_array_set_at(root_level_block->jump_table->nodes, default_block, i);
+		if(dynamic_array_get_at(jump_calculation_block->jump_table->nodes, i) == NULL){
+			dynamic_array_set_at(jump_calculation_block->jump_table->nodes, default_block, i);
 		}
 	}
 
@@ -5865,6 +5866,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//We'll need both of these as constants for our computation
 	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
 	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
+
+	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
+	//range or above the upper range. If it is, we jump to the very end
 
 	/**
 	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
@@ -5877,24 +5881,46 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	generic_type_t* input_result_type = input_results.assignee->type;
 
 	//Grab the signedness of the result
-	u_int8_t is_signed = is_type_signed(input_results.assignee->type);
+	u_int8_t is_signed = is_type_signed(input_result_type);
+
+	//This will be used for tracking
+	three_addr_var_t* lower_than_decider = emit_temp_var(input_result_type);
 
 	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, L_THAN, lower_bound, TRUE);
+	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_results.assignee, L_THAN, lower_bound, TRUE);
 
-	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
-	//Now we'll emit our jump
-	emit_jump(root_level_block, default_block, input_results.assignee, jump_lower_than, TRUE, FALSE);
+	//Select a branch for the lower type
+	branch_type_t branch_lower_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
 
-	//Next step -> if we're above the maximum, jump to default
-	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
+	/**
+	 * Now we'll emit the branch like this:
+	 *
+	 * if lower than:
+	 * 	goto default block 
+	 * else:
+	 * 	goto upper_bound_check
+	 */
+	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL);
 
-	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
-	//Now we'll emit our jump
-	emit_jump(root_level_block, default_block, input_results.assignee, jump_greater_than, TRUE, FALSE);
+	//This will be used for tracking
+	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
+
+	//Now we handle the case where we're above the upper bound
+	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_results.assignee, G_THAN, upper_bound, TRUE);
+
+	//Select a branch for the higher type
+	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
+
+	/**
+	 * Now we'll emit the branch like this
+	 *
+	 * if greater than:
+	 * 	goto default block
+	 * else:
+	 *  goto jump block calculation
+	 */
+	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
@@ -5903,11 +5929,11 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	add_used_variable(root_level_block, input_results.assignee);
 
 	//Add it into the block
-	add_statement(root_level_block, temporary_variable_assignent);
+	add_statement(jump_calculation_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, emit_temp_var(input_result_type), temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -5917,16 +5943,10 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * 	
 	 */
 	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, root_level_block->jump_table, input, TRUE);
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(jump_calculation_block, jump_calculation_block->jump_table, input, TRUE);
 
 	//Now we'll emit the indirect jump to the address
-	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);
-
-	//Ensure that we wire this in properly
-	result_package.starting_block->direct_successor = result_package.final_block;
-
-	//Remove the exit statement from the breaking stack
-	pop(break_stack);
+	emit_indirect_jump(jump_calculation_block, address, JUMP_TYPE_JMP, TRUE);
 
 	//Give back the starting block
 	return result_package;
@@ -6069,7 +6089,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * jumps. We will emit a jump if we are: lower, higher or an indirect jump if we
 	 * are in the range
 	 */
-
 
 	//Grab the type our for convenience
 	generic_type_t* input_result_type = input_results.assignee->type;
