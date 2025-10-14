@@ -13,6 +13,7 @@
 #include "cfg.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/select.h>
 #include <sys/types.h>
 #include "../utils/queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
@@ -6327,9 +6328,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Store for later
 					three_addr_var_t* conditional_decider = package.assignee;
 
-					//Decide the appropriate jump statement -- direct path here
-					jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
 					//If this is blank, we'll need a test instruction
 					if(package.operator == BLANK){
 						conditional_decider = emit_test_code(current_block, package.assignee, package.assignee, TRUE);
@@ -6340,18 +6338,20 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
-					
-					//Otherwise we are in a loop, so this means that we need to point the continue statement to
-					//the loop entry block
-					//Add the successor in
-					add_successor(current_block, continuing_to);
-					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, continuing_to, conditional_decider, jump_type, TRUE, FALSE);
 
-					//Add this new block in as a successor
-					add_successor(current_block, new_block);
-					//The other end of the conditional continue will be jumping to this new block
-					emit_jump(current_block, new_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					//Select the appropriate branch type using
+					//a normal jump
+					branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
+					/**
+					 * Now we will emit the branch like so
+					 *
+					 * if condition:
+					 * 	goto continue_block
+					 * else:
+					 * 	goto new block
+					 */
+					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 					//Restore the direct successor
 					current_block->direct_successor = new_block;
@@ -6360,7 +6360,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = new_block;
 				}
 
-					break;
+				break;
 
 			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
@@ -6858,8 +6858,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
 
-					//We'll now add a successor for this block
-					add_successor(current_block, continuing_to);
 					//We always jump to the start of the loop statement unconditionally
 					emit_jump(current_block, continuing_to, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
@@ -6878,9 +6876,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Store for later
 					three_addr_var_t* conditional_decider = package.assignee;
 
-					//Decide the appropriate jump statement -- direct path here
-					jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
 					//If this is blank, we'll need a test instruction
 					if(package.operator == BLANK){
 						conditional_decider = emit_test_code(current_block, package.assignee, package.assignee, TRUE);
@@ -6891,18 +6886,19 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
-					
-					//Otherwise we are in a loop, so this means that we need to point the continue statement to
-					//the loop entry block
-					//Add the successor in
-					add_successor(current_block, continuing_to);
-					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, continuing_to, conditional_decider, jump_type, TRUE, FALSE);
 
-					//Add this new block in as a successor
-					add_successor(current_block, new_block);
-					//The other end of the conditional continue will be jumping to this new block
-					emit_jump(current_block, new_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					//Select the appropriate branch type, we will not use an inverse jump here
+					branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
+					/**
+					 * Now we will emit the branch like so
+					 *
+					 * if condition:
+					 * 	goto continue_block
+					 * else:
+					 * 	goto new block
+					 */
+					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 					//Restore the direct successor
 					current_block->direct_successor = new_block;
@@ -6911,7 +6907,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = new_block;
 				}
 
-					break;
+				break;
 
 			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
