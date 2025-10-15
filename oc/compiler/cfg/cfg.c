@@ -3862,9 +3862,6 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block, NULL, JUMP_TYPE_JMP, is_branch_ending, FALSE);
 
-	//The direct successor of the starting block is the ending block
-	starting_block->direct_successor = end_block;
-
 	//Add the final things in here
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
@@ -4744,11 +4741,6 @@ void add_successor_only(basic_block_t* target, basic_block_t* successor){
 		return;
 	}
 
-	//TODO DEPRECATE
-	if(target->successors->current_index == 0){
-		target->direct_successor = successor;
-	}
-
 	//Otherwise we're set to add it in
 	dynamic_array_add(target->successors, successor);
 }
@@ -4861,8 +4853,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		}
 	}
 
-	//Also make note of any direct succession
-	a->direct_successor = b->direct_successor;
 	//Copy over the block type and terminal type
 	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
 		a->block_type = b->block_type;
@@ -5060,9 +5050,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		emit_jump(compound_stmt_end, for_stmt_update_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
 
-	//The direct successor to the entry block is the exit block, for efficiency reasons
-	for_stmt_entry_block->direct_successor = for_stmt_exit_block;
-
 	//Now that we're done, we'll need to remove these both from the stack
 	pop(continue_stack);
 	pop(break_stack);
@@ -5129,12 +5116,6 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//Add the conditional check into the end here
 	cfg_result_package_t package = emit_expression(compound_stmt_end, ast_cursor->next_sibling, TRUE, TRUE);
 
-	//Make sure it's the direct successor
-	compound_stmt_end->direct_successor = do_while_stmt_exit_block;
-
-	//We'll set the entry block's direct successor to be the exit block for efficiency
-	do_while_stmt_entry_block->direct_successor = do_while_stmt_exit_block;
-
 	//Store for later
 	three_addr_var_t* conditional_decider = package.assignee;
 
@@ -5198,9 +5179,6 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	result_package.starting_block = while_statement_entry_block;
 	result_package.final_block = while_statement_end_block;
 
-	//Just set our direct successor here
-	while_statement_entry_block->direct_successor = while_statement_end_block;
-
 	//Grab this for convenience
 	generic_ast_node_t* while_stmt_node = root_node;
 
@@ -5249,14 +5227,9 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 	//If it's not a return statement, we can add all of these in
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
-		//His direct successor is the end block
-		compound_stmt_end->direct_successor = while_statement_end_block;
 		//The compound statement end will jump right back up to the entry block
 		emit_jump(compound_stmt_end, while_statement_entry_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 	}
-
-	//Set this to make sure
-	compound_stmt_end->direct_successor = while_statement_end_block;
 
 	//Set the termination type of this block
 	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
@@ -5469,10 +5442,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//exit block
 	if(exit_block->predecessors == NULL || exit_block->predecessors->current_index == 0){
 		result_package.final_block = function_exit_block;
-		//Also set the direct successor here
-		entry_block->direct_successor = function_exit_block;
-	} else {
-		entry_block->direct_successor = exit_block;
 	}
 
 	//Give back the result package
@@ -6379,9 +6348,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					 */
 					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
-					//Restore the direct successor
-					current_block->direct_successor = new_block;
-
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
 				}
@@ -6445,9 +6411,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					 * 	goto new block
 					 */
 					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
-
-					//Make sure we mark this properly
-					current_block->direct_successor = new_block;
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -6924,9 +6887,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					 */
 					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
-					//Restore the direct successor
-					current_block->direct_successor = new_block;
-
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
 				}
@@ -6990,9 +6950,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					 * 	goto new block
 					 */
 					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
-
-					//Make sure we mark this properly
-					current_block->direct_successor = new_block;
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -7329,6 +7286,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//Store this in the entry block
 	function_starting_block->function_defined_in = func_record;
 
+	//These will always be direct successors here
+	function_starting_block->direct_successor = function_exit_block;
+
 	/**
 	 * If we have function parameters that are *also* stack variables(meaning the user will
 	 * at some point want to take the memory address of them), then we need to load
@@ -7380,13 +7340,11 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 		//We will mark that this end here has a direct successor in the function exit block
 		add_successor(compound_statement_exit_block, function_exit_block);
-		//Ensure that it's the direct successor
-		compound_statement_exit_block->direct_successor = function_exit_block;
 	
-	//Otherwise we'll just connect the exit and entry
+	//Otherwise, we have an empty function definition. If this is the case, then the only
+	//predecessor to the exit block is the entry block
 	} else {
 		add_successor(function_starting_block, function_exit_block);
-		function_starting_block->direct_successor = function_exit_block;
 	}
 
 	//Determine and insert any needed ret statements
