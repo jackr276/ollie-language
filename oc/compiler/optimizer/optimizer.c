@@ -1137,21 +1137,23 @@ static void sweep(cfg_t* cfg){
 				//here we leave them
 				case THREE_ADDR_CODE_JUMP_STMT:
 					stmt = stmt->next_statement;
-					continue;
+
+					//Break out of the switch
+					break;
 
 				//If we have a branch that is now useless,
 				//we'll need to replace it with a jump to
 				//it's nearest marked postdominator
 				case THREE_ADDR_CODE_BRANCH_STMT:
-					//This is now useless
-					delete_statement(stmt);
-
 					/**
 					 * Once we do this, the if and else blocks are no longer
 					 * successors, so we'll remove them
 					 */
 					delete_successor(block, stmt->if_block);
 					delete_successor(block, stmt->else_block);
+
+					//This is now useless
+					delete_statement(stmt);
 
 					//We'll first find the nearest marked postdominator
 					basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
@@ -1160,6 +1162,12 @@ static void sweep(cfg_t* cfg){
 					//NOTE: the emit jump adds the successor in for us, so we don't need to
 					//do so here
 					emit_jump(block, immediate_postdominator, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+
+					//This now is the current statement
+					stmt = block->exit_statement;
+
+					//Break out of the switch
+					break;
 
 				/**
 				 * By default no special treatment, we're just deleting
@@ -1183,6 +1191,7 @@ static void sweep(cfg_t* cfg){
 					//Delete the statement, now that we know it is not a jump
 					delete_statement(temp);
 
+					//Break out of the switch
 					break;
 			}
 		}
