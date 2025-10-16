@@ -5321,9 +5321,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
 		//The successor to the if-stmt end path is the if statement end block
 		emit_jump(if_compound_stmt_end, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-	} else {
-		//If this is the case, the end block is a successor of the if_stmt end
-		add_successor(if_compound_stmt_end, function_exit_block);
 	}
 
 	//Select an appropriate branch for the entry block
@@ -5399,8 +5396,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 			//The successor to the if-stmt end path is the if statement end block
 			emit_jump(else_if_compound_stmt_exit, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-		} else {
-			add_successor(else_if_compound_stmt_exit, function_exit_block);
 		}
 
 		//Now for our bookkeeping, the current entry block here now also counts as the previous
@@ -5434,8 +5429,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			if(else_compound_statement_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//The successor to the if-stmt end path is the if statement end block
 				emit_jump(else_compound_statement_exit, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-			} else {
-				add_successor(else_compound_statement_exit, function_exit_block);
 			}
 
 		} else {
@@ -5740,7 +5733,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 							break;
 						}
 
-					//And of course a return statement means we can't add anything afterwards
+					//And of course a return/branch statement means we can't add anything afterwards
+					case THREE_ADDR_CODE_BRANCH_STMT:
 					case THREE_ADDR_CODE_RET_STMT:
 						break;
 
@@ -7298,8 +7292,10 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 			compound_statement_exit_block = compound_statement_results.final_block;
 		}
 
-		//We will mark that this end here has a direct successor in the function exit block
-		add_successor(compound_statement_exit_block, function_exit_block);
+		//If these 2 are not the same, then ensure this works by adding a successor
+		if(compound_statement_exit_block != function_exit_block){
+			add_successor(compound_statement_exit_block, function_exit_block);
+		}
 	
 	//Otherwise, we have an empty function definition. If this is the case, then the only
 	//predecessor to the exit block is the entry block
