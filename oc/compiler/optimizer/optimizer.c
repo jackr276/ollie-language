@@ -1597,100 +1597,52 @@ static void mark(cfg_t* cfg){
 		//Grab this out for convenience
 		basic_block_t* block = stmt->block_contained_in;
 
-		//Now for everything in this statement's block's RDF, we'll mark it's block-ending branches
-		//as useful
+		/**
+		 * Now we'll apply this logic to the branching/indirect jumping
+		 * statements here
+		 *
+		 * for each block b in RDF(block(i))
+		 * 	let j be the branch that ends b
+		 * 	if j is unmarked then
+		 * 		mark j
+		 * 		add j to worklist
+		 */
+
 		for(u_int16_t i = 0; block->reverse_dominance_frontier != NULL && i < block->reverse_dominance_frontier->current_index; i++){
 			//Grab the block out of the RDF
 			basic_block_t* rdf_block = dynamic_array_get_at(block->reverse_dominance_frontier, i);
 
-			//If this is a switch statement block, then we'll simply mark everything
-			//We'll know it's a switch statement block based on whether or not we have an indirect jump here.
-			//Indirect jumps in Ollie are only ever used in switch statements
-			if(rdf_block->exit_statement->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
-				//Run through and mark everything in it
-				instruction_t* cursor = rdf_block->leader_statement;
+			//Grab out the exit statement
+			instruction_t* exit_statement = rdf_block->exit_statement;
 
-				//Keep going through and marking
-				while(cursor != NULL){
-					if(cursor->mark == FALSE){
-						cursor->mark = TRUE;
-						//If it's not a jump, add to worklist
-						if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT){
-							dynamic_array_add(worklist, cursor);
-						}
-					}
+			//We'll now go based on what the exit statement is
+			switch(exit_statement->statement_type){
+				/**
+				 * An indirect jump means that we had some kind of switch statement. This
+				 * will be marked as important
+				 */
+				case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+					//Mark it
+					exit_statement->mark = TRUE;
+					//Add it to the worklist
+					dynamic_array_add(worklist, exit_statement);
+					break;
 
-					//Advance to the next
-					cursor = cursor->next_statement;
-				}
+				/**
+				 * This is the most common case, we'll have a branch that
+				 * ends the predecessor
+				 */
+				case THREE_ADDR_CODE_BRANCH_STMT:
+					//Mark it
+					exit_statement->mark = TRUE;
+					//Add it to the worklist
+					dynamic_array_add(worklist, exit_statement);
+					break;
 
-				//Go to the next iteration, this block is done
-				continue;
+				//By default just leave
+				default:
+					break;
 			}
-
-
-			/**
-			 * This is the pattern we are on the lookout for. These kinds of patterns
-			 * always appear at the bottom of a block, and as such we will only search
-			 * from the bottom up
-			 *
-			 * Important branch
-			 * t1 <- a && b <------ condition
-			 * jne .L8 <--------- if
-			 * jmp .L9 <---------- else
-			 */
-
-			//Grab the exit statement. We will crawl our way from the bottom up here
-			instruction_t* rdf_block_stmt = rdf_block->exit_statement;
-			
-			/**
-			 * If the exit statement is:
-			 * 	1.) NULL or
-			 * 	2.) Not a jump statement or
-			 * 	3.) Not a direct(jmp) statement
-			 *
-			 * we don't care to look any further, so we'll continue to the next one
-			 */
-			if(rdf_block_stmt == NULL || rdf_block_stmt->statement_type != THREE_ADDR_CODE_JUMP_STMT 
-				|| rdf_block_stmt->jump_type != JUMP_TYPE_JMP){
-				continue;
-			}
-
-			//Otherwise, this is a jump statement and it's our "jump to else" statement. 
-			instruction_t* jump_to_else = rdf_block_stmt;
-
-			//Advance the statement back by one
-			rdf_block_stmt = rdf_block_stmt->previous_statement;
-
-			/**
-			 * Now we're looking for the conditional jump statement. This is where a lot
-			 * of blocks will be disqualified, because most blocks end in a jump, not a
-			 * conditional branch
-			 *
-			 * If this statement:
-			 * 	1.) Is null or
-			 * 	2.) Not a jump statement or
-			 * 	3.) A direct(jmp) statement and not a conditional jump
-			 *
-			 * we don't care to look any further
-			 */
-			if(rdf_block_stmt == NULL || rdf_block_stmt->statement_type != THREE_ADDR_CODE_JUMP_STMT 
-				|| rdf_block_stmt->jump_type == JUMP_TYPE_JMP){
-				continue;
-			}
-
-			//If we make it here, then we've found the conditional part of our jump. This
-			//will be our jump to if
-			instruction_t* jump_to_if = rdf_block_stmt;
-
-			//Mark and add the definitions of the op1 that this conditional jump relies on as important
-			mark_and_add_definition(cfg, jump_to_if->op1, stmt->function, worklist);
-
-			//Mark both of these values as important
-			jump_to_if->mark = TRUE;
-			jump_to_else->mark = TRUE;
-
-			//And we're done - we'll let this loop to the next statement
 		}
 	}
 
@@ -1795,10 +1747,6 @@ static void recompute_all_dominance_relations(cfg_t* cfg){
  * runs for in it's current iteration
 */
 cfg_t* optimize(cfg_t* cfg){
-	//FOR NOW so we don't loop forever
-	exit(0);
-
-
 	//First thing we'll do is reset the visited status of the CFG. This just ensures
 	//that we won't have any issues with the CFG in terms of traversal
 	reset_visited_status(cfg, FALSE);
@@ -1806,6 +1754,8 @@ cfg_t* optimize(cfg_t* cfg){
 	//PASS 1: Mark algorithm
 	//The mark algorithm marks all useful operations. It will perform one full pass of the program
 	mark(cfg);
+
+	exit(0);
 
 	//PASS 2: Sweep algorithm
 	//Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
