@@ -187,6 +187,21 @@ void add_statement(basic_block_t* target, instruction_t* statement_node);
 void delete_statement(instruction_t* stmt);
 
 /**
+ * Delete a successor from a block
+ */
+void delete_successor_only(basic_block_t* target, basic_block_t* successor);
+
+/**
+ * Delete a predecessor from a block
+ */
+void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor);
+
+/**
+ * Delete a successor from a block
+ */
+void delete_successor(basic_block_t* target, basic_block_t* deleted_successor);
+
+/**
  * Add a successor to the block
  */
 void add_successor(basic_block_t* target, basic_block_t* successor);

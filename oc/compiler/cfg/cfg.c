@@ -4789,6 +4789,32 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
 
 
 /**
+ * Delete a successor from a block
+ */
+void delete_successor_only(basic_block_t* target, basic_block_t* successor){
+
+}
+
+
+/**
+ * Delete a predecessor from a block
+ */
+void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
+
+}
+
+
+/**
+ * Delete a successor from the target block's list. This function is
+ * entirely comprehensive. Since target used to be a predecessor
+ * of the deleted successor, that will also be deleted
+ */
+void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
+
+}
+
+
+/**
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated
  *
  * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
