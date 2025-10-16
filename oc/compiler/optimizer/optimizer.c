@@ -1622,10 +1622,14 @@ static void mark(cfg_t* cfg){
 				 * will be marked as important
 				 */
 				case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
-					//Mark it
-					exit_statement->mark = TRUE;
-					//Add it to the worklist
-					dynamic_array_add(worklist, exit_statement);
+					//Avoids infinite loops
+					if(exit_statement->mark == FALSE){
+						//Mark it
+						exit_statement->mark = TRUE;
+						//Add it to the worklist
+						dynamic_array_add(worklist, exit_statement);
+					}
+
 					break;
 
 				/**
@@ -1633,10 +1637,14 @@ static void mark(cfg_t* cfg){
 				 * ends the predecessor
 				 */
 				case THREE_ADDR_CODE_BRANCH_STMT:
-					//Mark it
-					exit_statement->mark = TRUE;
-					//Add it to the worklist
-					dynamic_array_add(worklist, exit_statement);
+					//Avoids infinite loops
+					if(exit_statement->mark == FALSE){
+						//Mark it
+						exit_statement->mark = TRUE;
+						//Add it to the worklist
+						dynamic_array_add(worklist, exit_statement);
+					}
+
 					break;
 
 				//By default just leave
