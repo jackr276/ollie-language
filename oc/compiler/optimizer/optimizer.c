@@ -1094,6 +1094,8 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 
 /**
  * The sweep algorithm will go through and remove every operation that has not been marked
+ *
+ *
  */
 static void sweep(cfg_t* cfg){
 	//For each and every operation in every basic block
@@ -1110,6 +1112,41 @@ static void sweep(cfg_t* cfg){
 			if(stmt->mark == TRUE){
 				stmt = stmt->next_statement;
 				continue;
+			}
+
+			//A holder for when we perform deletions
+			instruction_t* temp;
+
+			/**
+			 * Some statements like jumps and branches
+			 * require special attention
+			 */
+			switch(stmt->statement_type){
+
+				/**
+				 * By default no special treatment, we're just deleting
+				 */
+				default:
+					//Perform the deletion and advancement
+					temp = stmt;
+
+					//If we are deleting an indirect jump address calculation statement,
+					//then this statements jump table is useless
+					if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+						//We'll need to deallocate this jump table
+						jump_table_dealloc(block->jump_table);
+
+						//Flag it as null
+						block->jump_table = NULL;
+					}
+
+					//Advance the statement
+					stmt = stmt->next_statement;
+					//Delete the statement, now that we know it is not a jump
+					delete_statement(temp);
+					instruction_dealloc(temp);
+
+					break;
 			}
 
 			//Otherwise we know that the statement is unmarked(useless)
@@ -1198,28 +1235,6 @@ static void sweep(cfg_t* cfg){
 				//We're done with this part
 				break;
 
-			//Otherwise we delete the statement. Jump statements are ALWAYS considered useful
-			} else {
-				//Perform the deletion and advancement
-				instruction_t* temp = stmt;
-
-				//If we are deleting an indirect jump address calculation statement,
-				//then this statements jump table is useless
-				if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
-					//We'll need to deallocate this jump table
-					jump_table_dealloc(temp->if_block);
-
-					//We also want to flag this as null in the block that this statement
-					//comes from
-					basic_block_t* block = temp->block_contained_in; 
-					block->jump_table = NULL;
-				}
-
-				//Advance the statement
-				stmt = stmt->next_statement;
-				//Delete the statement, now that we know it is not a jump
-				delete_statement(temp);
-				instruction_dealloc(temp);
 			}
 		}
 	}
@@ -1449,6 +1464,18 @@ static void mark(cfg_t* cfg){
 				 * we also always consider it to be important
 				 */
 				case THREE_ADDR_CODE_FUNC_CALL:
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Any *unconditional* jump is by default
+				 * considered important
+				 */
+				case THREE_ADDR_CODE_JUMP_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
 					dynamic_array_add(worklist, current_stmt);
@@ -1763,6 +1790,7 @@ cfg_t* optimize(cfg_t* cfg){
 	//The mark algorithm marks all useful operations. It will perform one full pass of the program
 	mark(cfg);
 
+	//Stopper for now
 	exit(0);
 
 	//PASS 2: Sweep algorithm
