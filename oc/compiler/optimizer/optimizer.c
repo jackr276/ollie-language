@@ -1161,10 +1161,7 @@ static void sweep(cfg_t* cfg){
 					//Emit the jump statement to the nearest marked postdominator
 					//NOTE: the emit jump adds the successor in for us, so we don't need to
 					//do so here
-					emit_jump(block, immediate_postdominator, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-					//This now is the current statement
-					stmt = block->exit_statement;
+					stmt = emit_jump(block, immediate_postdominator, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
 					//Break out of the switch
 					break;

@@ -2503,8 +2503,10 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 /**
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
+ *
+ * Returns the jump that is emitted
  */
-void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, three_addr_var_t* conditional_result, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
+instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, three_addr_var_t* conditional_result, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
 	//Use the helper function to emit the statement
 	instruction_t* stmt = emit_jmp_instruction(destination_block, type);
 
@@ -2531,6 +2533,9 @@ void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, thr
 
 	//The destination block is by definition a successor here
 	add_successor(basic_block, destination_block);
+
+	//And we give it back
+	return stmt;
 }
 
 
