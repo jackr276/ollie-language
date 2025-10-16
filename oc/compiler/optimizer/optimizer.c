@@ -1095,6 +1095,15 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 /**
  * The sweep algorithm will go through and remove every operation that has not been marked
  *
+ * procedure sweep:
+ * 	for each operation i:
+ * 		if is is unmarked then:
+ * 			if i is a branch then
+ * 			  rewrite i with a jump to i's nearest
+ * 			  marked postdominator
+ *
+ * 			if i is not a jump then:
+ * 			  delete i
  *
  */
 static void sweep(cfg_t* cfg){
@@ -1122,6 +1131,32 @@ static void sweep(cfg_t* cfg){
 			 * require special attention
 			 */
 			switch(stmt->statement_type){
+				//We *never* delete jump statements because
+				//they are critical to the control flow. They
+				//may be cleaned up by other optimizations, but for
+				//here we leave them
+				case THREE_ADDR_CODE_JUMP_STMT:
+					stmt = stmt->next_statement;
+					continue;
+
+				//If we have a branch that is now useless,
+				//we'll need to replace it with a jump to
+				//it's nearest marked postdominator
+				case THREE_ADDR_CODE_BRANCH_STMT:
+					//TODO we really need a custom remove successor and remove predecessor
+					//method here
+
+
+					//This is now useless
+					delete_statement(stmt);
+
+					//We'll first find the nearest marked postdominator
+					basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
+
+					//We'll then emit a jump to that node
+					instruction_t* jump_stmt = emit_jmp_instruction(immediate_postdominator, JUMP_TYPE_JMP);
+
+	
 
 				/**
 				 * By default no special treatment, we're just deleting
@@ -1147,94 +1182,6 @@ static void sweep(cfg_t* cfg){
 					instruction_dealloc(temp);
 
 					break;
-			}
-
-			//Otherwise we know that the statement is unmarked(useless)
-			//There are two options when this happens. If it's just a normal statement, we'll just delete it 
-			//and that's the end of things. If it's a branch that we've identified as useless, then we'll
-			//replace that branch with a jump to it's nearest marked postdominator
-
-			//We've encountered a jump statement of some kind. Now this is interesting. We do NOT delete
-			//solitary jumps. We only delete jumps if they are a part of a conditional branch that has been deemed useless
-			if(stmt->statement_type == THREE_ADDR_CODE_JUMP_STMT){
-				//If it's not a conditional jump - we don't care. just go onto the next
-				if(stmt->jump_type == JUMP_TYPE_JMP){
-					//One thing we can check for here: if we see an unconditional jump(which means we got here)
-					//followed by another unconditional jump, then the second unconditional jump is useless.
-					//We can as such delete it
-					//Advance the statement
-					stmt = stmt->next_statement;
-
-					/**
-					 * If we get here, this means we have something like:
-					 *  jmp .L8
-					 *  jmp .L9 <---------- USELESS
-					 *
-					 * As such, we'll delete the .L9 jump and update successors
-					 */
-					if(stmt != NULL && stmt->statement_type == THREE_ADDR_CODE_JUMP_STMT && stmt->jump_type == JUMP_TYPE_JMP){
-						instruction_t* temp = stmt;
-						//Advance stmt
-						stmt = stmt->next_statement;
-						//Remove the statement
-						delete_statement(temp);
-						//And we're done
-					}
-
-					continue;
-				}
-
-				//If we make it down here then we know that this statement is some kind of custom jump. We're assuming	
-				//that whatever conditional it was jumping on has been deleted, simply because we made it this far
-				instruction_t* jump_to_if = stmt;
-
-				//Let's see if we also have a jump to else here
-				stmt = stmt->next_statement;
-
-				//If this is not some jump to else, we're done here
-				//If it's marked, we definitely don't want it
-				if(stmt->mark == TRUE){
-					stmt = stmt->next_statement;
-					continue;
-				//If it's not a jump, we'll also just delete
-				} else if(stmt->statement_type != THREE_ADDR_CODE_JUMP_STMT){
-					//Perform the deletion and advancement
-					instruction_t* temp = stmt;
-					stmt = stmt->next_statement;
-					//Delete the statement, now that we know it is not a jump
-					delete_statement(temp);
-					instruction_dealloc(temp);
-					continue;
-				//One final snag we could catch - if it's a jump, but a conditional one, we'll also
-				//leave it alone
-				} else if(stmt->jump_type != JUMP_TYPE_JMP){
-					stmt = stmt->next_statement;
-					continue;
-				}
-
-				//Grab the block out. We need to do this here because we're about to be deleting blocks,
-				//and we'll lose the reference if we do
-				basic_block_t* block = stmt->block_contained_in;
-
-				//So if we get down here, we know that this statement is unamrked and its a direct jump.
-				//At this point, we have our conditional branch
-				instruction_t* jump_to_else = stmt;
-
-				//Now we can delete these both
-				delete_statement(jump_to_else);
-				delete_statement(jump_to_if);
-
-				//We'll first find the nearest marked postdominator
-				basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
-				//We'll then emit a jump to that node
-				instruction_t* jump_stmt = emit_jmp_instruction(immediate_postdominator, JUMP_TYPE_JMP);
-				//Add this statement in
-				add_statement(block, jump_stmt);
-				//It is also now a successor
-				add_successor(block, immediate_postdominator);
-				//We're done with this part
-				break;
-
 			}
 		}
 	}
@@ -1472,18 +1419,6 @@ static void mark(cfg_t* cfg){
 					break;
 
 				/**
-				 * Any *unconditional* jump is by default
-				 * considered important
-				 */
-				case THREE_ADDR_CODE_JUMP_STMT:
-					current_stmt->mark = TRUE;
-					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
-					//The block now has a mark
-					current->contains_mark = TRUE;
-					break;
-
-				/**
 				 * Indirect function calls are the same as function calls. They will 
 				 * always count becuase we do not know whether or not the indirectly
 				 * called function performs some important task. As such, we will 
@@ -1655,6 +1590,8 @@ static void mark(cfg_t* cfg){
 						exit_statement->mark = TRUE;
 						//Add it to the worklist
 						dynamic_array_add(worklist, exit_statement);
+						//This now has a mark
+						rdf_block->contains_mark = TRUE;
 					}
 
 					break;
@@ -1670,6 +1607,8 @@ static void mark(cfg_t* cfg){
 						exit_statement->mark = TRUE;
 						//Add it to the worklist
 						dynamic_array_add(worklist, exit_statement);
+						//This now has a mark
+						rdf_block->contains_mark = TRUE;
 					}
 
 					break;
