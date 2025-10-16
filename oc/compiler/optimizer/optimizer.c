@@ -1143,20 +1143,23 @@ static void sweep(cfg_t* cfg){
 				//we'll need to replace it with a jump to
 				//it's nearest marked postdominator
 				case THREE_ADDR_CODE_BRANCH_STMT:
-					//TODO we really need a custom remove successor and remove predecessor
-					//method here
-
-
 					//This is now useless
 					delete_statement(stmt);
+
+					/**
+					 * Once we do this, the if and else blocks are no longer
+					 * successors, so we'll remove them
+					 */
+					delete_successor(block, stmt->if_block);
+					delete_successor(block, stmt->else_block);
 
 					//We'll first find the nearest marked postdominator
 					basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
 
-					//We'll then emit a jump to that node
-					instruction_t* jump_stmt = emit_jmp_instruction(immediate_postdominator, JUMP_TYPE_JMP);
-
-	
+					//Emit the jump statement to the nearest marked postdominator
+					//NOTE: the emit jump adds the successor in for us, so we don't need to
+					//do so here
+					emit_jump(block, immediate_postdominator, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
 				/**
 				 * By default no special treatment, we're just deleting
@@ -1179,7 +1182,6 @@ static void sweep(cfg_t* cfg){
 					stmt = stmt->next_statement;
 					//Delete the statement, now that we know it is not a jump
 					delete_statement(temp);
-					instruction_dealloc(temp);
 
 					break;
 			}
@@ -1729,14 +1731,14 @@ cfg_t* optimize(cfg_t* cfg){
 	//The mark algorithm marks all useful operations. It will perform one full pass of the program
 	mark(cfg);
 
-	//Stopper for now
-	exit(0);
-
 	//PASS 2: Sweep algorithm
 	//Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
 	//comes across branch ending statements that are unmarked, it will replace them with a jump to the
 	//nearest marked postdominator
 	sweep(cfg);
+
+	//Stopper for now
+	exit(0);
 
 	//PASS 4: Clean algorithm
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
