@@ -2571,6 +2571,8 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
 
 /**
  * Emit a user defined jump statement that points to a label, not to a block
+ *
+ * We'll leave out all of the successor logic here as well, until we reach the end
  */
 static void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable_record_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_decider, branch_type_t branch_type){
 	//Emit the branch, purposefully leaving the if area NULL
@@ -6487,13 +6489,10 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 
 				//We'll need a block at the very end which we'll hit after we jump
-				basic_block_t* jumping_to_block = basic_block_alloc(1);
+				basic_block_t* else_block = basic_block_alloc(1);
 
 				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
-
-				//Now that we're here, we can begin to emit the jumps
-				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
 				//If the return package's operator is blank,
 				//then we'll need to emit a test instruction here
@@ -6501,17 +6500,15 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
 				}
 
-				//Emit the user defined jump now. The ast cursor's variable contains the label variable that we jump to
-				emit_user_defined_jump(current_block, ast_cursor->variable, conditional_decider, type, TRUE);
+				//Select the needed branch statement
+				branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
-				//And we'll also emit the direct jump at the end
-				emit_jump(current_block, jumping_to_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-				//Add the jumping to block as one of the successors(we'll add the other successor in later)
-				add_successor(current_block, jumping_to_block);
+				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
+				//method for each function that handles filling the rest in
+				emit_user_defined_branch(current_block, ast_cursor->variable, else_block, conditional_decider, branch_type);
 
 				//The current block now is said jumping to block
-				current_block = jumping_to_block;
+				current_block = else_block;
 
 				break;
 
@@ -7031,13 +7028,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				//We'll need a block at the very end which we'll hit after we jump
-				basic_block_t* jumping_to_block = basic_block_alloc(1);
+				basic_block_t* else_block = basic_block_alloc(1);
 
-				//Store this in here for later
+				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
-
-				//Now that we're here, we can begin to emit the jumps
-				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
 				//If the return package's operator is blank,
 				//then we'll need to emit a test instruction here
@@ -7045,17 +7039,15 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
 				}
 
-				//Emit the user defined jump now. The ast cursor's variable contains the label we're jumping to
-				emit_user_defined_jump(current_block, ast_cursor->variable, conditional_decider, type, TRUE);
+				//Select the needed branch statement
+				branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
-				//And we'll also emit the direct jump at the end
-				emit_jump(current_block, jumping_to_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-				//Add the jumping to block as one of the successors(we'll add the other successor in later)
-				add_successor(current_block, jumping_to_block);
+				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
+				//method for each function that handles filling the rest in
+				emit_user_defined_branch(current_block, ast_cursor->variable, else_block, conditional_decider, branch_type);
 
 				//The current block now is said jumping to block
-				current_block = jumping_to_block;
+				current_block = else_block;
 
 				break;
 
@@ -7225,7 +7217,7 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
 	//Run through every jump statement
 	while(dynamic_array_is_empty(user_defined_jumps) == FALSE){
 		//Delete from the back
-		instruction_t* jump_instruction = dynamic_array_delete_from_back(user_defined_jumps);
+		instruction_t* branch_instruction = dynamic_array_delete_from_back(user_defined_jumps);
 
 		//We'll now need to scan through the labeled blocks to find who this should point to
 		for(u_int16_t i = 0; i < labeled_blocks->current_index; i++){
@@ -7233,15 +7225,16 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
 			basic_block_t* labeled_block = dynamic_array_get_at(labeled_blocks, i);
 
 			//If this labeled block doesn't have the same variable, we're out
-			if(labeled_block->label != jump_instruction->var_record){
+			if(labeled_block->label != branch_instruction->var_record){
 				continue;
 			}
 
 			//Otherwise if we get here we know that we found the correct label
-			jump_instruction->if_block = labeled_block;
+			branch_instruction->if_block = labeled_block;
 
-			//Add this in as a successor
-			add_successor(jump_instruction->block_contained_in, labeled_block);
+			//Add both of the successors so that we can maintain a nice order
+			add_successor(branch_instruction->block_contained_in, labeled_block);
+			add_successor(branch_instruction->block_contained_in, branch_instruction->else_block);
 			
 			//Break out of the for loop
 			break;

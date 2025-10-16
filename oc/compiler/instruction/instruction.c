@@ -1552,11 +1552,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "%s .L%d else .L%d\n", branch_type_to_string(stmt->branch_type), ((basic_block_t*)(stmt->if_block))->block_id, ((basic_block_t*)(stmt->else_block))->block_id);
 			break;
 
-		//Branch statements represent the ends of blocks
-		case THREE_ADDR_CODE_BRANCH_STMT:
-			fprintf(fl, "%s .L%d else .L%d\n", branch_type_to_string(stmt->branch_type), ((basic_block_t*)(stmt->if_block))->block_id, ((basic_block_t*)(stmt->else_block))->block_id);
-			break;
-
 		case THREE_ADDR_CODE_FUNC_CALL:
 			//First we'll print out the assignment, if one exists
 			if(stmt->assignee != NULL){
