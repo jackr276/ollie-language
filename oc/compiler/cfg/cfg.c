@@ -2572,27 +2572,21 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
 /**
  * Emit a user defined jump statement that points to a label, not to a block
  */
-static void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_record_t* label, three_addr_var_t* conditional_decider, jump_type_t type, u_int8_t is_branch_ending){
-	//Use the helper function to emit the statement
-	instruction_t* stmt = emit_incomplete_jmp_instruction(conditional_decider, type);
-
-	//Is this branch ending?
-	stmt->is_branch_ending = is_branch_ending;
+static void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable_record_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_decider, branch_type_t branch_type){
+	//Emit the branch, purposefully leaving the if area NULL
+	instruction_t* branch = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
 
 	//We'll need to store the label in here for later on down the line
-	stmt->var_record = label;
+	branch->var_record = if_destination;
 
 	//Mark where we came from
-	stmt->block_contained_in = basic_block;
-
-	//These will never be basic blocks
-	stmt->inverse_jump = FALSE;
+	branch->block_contained_in = basic_block;
 
 	//Add this to the array of user defined jumps
-	dynamic_array_add(current_function_user_defined_jump_statements, stmt);
+	dynamic_array_add(current_function_user_defined_jump_statements, branch);
 
 	//Add this into the first block
-	add_statement(basic_block, stmt);
+	add_statement(basic_block, branch);
 }
 
 

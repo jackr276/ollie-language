@@ -1552,6 +1552,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "%s .L%d else .L%d\n", branch_type_to_string(stmt->branch_type), ((basic_block_t*)(stmt->if_block))->block_id, ((basic_block_t*)(stmt->else_block))->block_id);
 			break;
 
+		//Branch statements represent the ends of blocks
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			fprintf(fl, "%s .L%d else .L%d\n", branch_type_to_string(stmt->branch_type), ((basic_block_t*)(stmt->if_block))->block_id, ((basic_block_t*)(stmt->else_block))->block_id);
+			break;
+
 		case THREE_ADDR_CODE_FUNC_CALL:
 			//First we'll print out the assignment, if one exists
 			if(stmt->assignee != NULL){
@@ -3745,29 +3750,6 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 	//What function are we in
 	stmt->function = current_function;
 
-	//Give the statement back
-	return stmt;
-}
-
-
-/**
- * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.
- * These statements are intended for when we create user-defined jumps
- */
-instruction_t* emit_incomplete_jmp_instruction(three_addr_var_t* relies_on, jump_type_t jump_type){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Let's now populate it with values
-	stmt->statement_type = THREE_ADDR_CODE_JUMP_STMT;
-	stmt->jump_type = jump_type;
-
-	//Store the variable that this relies on. This will be NULL for direct jumps,
-	//and occupied for conditional jumps
-	stmt->op1 = relies_on;
-
-	//What function are we in
-	stmt->function = current_function;
 	//Give the statement back
 	return stmt;
 }
