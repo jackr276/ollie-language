@@ -4721,11 +4721,6 @@ void dealloc_cfg(cfg_t* cfg){
  * Exclusively add a successor to target. The predecessors of successor will not be touched
  */
 void add_successor_only(basic_block_t* target, basic_block_t* successor){
-	//If we ever find this - don't add it
-	if(target == successor){
-		return;
-	}
-
 	//If this is null, we'll perform the initial allocation
 	if(target->successors == NULL){
 		target->successors = dynamic_array_alloc();
@@ -4747,11 +4742,6 @@ void add_successor_only(basic_block_t* target, basic_block_t* successor){
  * will be touched
  */
 void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
-	//If we ever find this - don't add it
-	if(target == predecessor){
-		return;
-	}
-
 	//If this is NULL, we'll allocate here
 	if(target->predecessors == NULL){
 		target->predecessors = dynamic_array_alloc();
@@ -4810,7 +4800,16 @@ void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
  * of the deleted successor, that will also be deleted
  */
 void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
+	//Bail out if this happens
+	if(deleted_successor == NULL){
+		return;
+	}
 
+	//Delete the target from the list of predecessors in this block
+	delete_predecessor_only(deleted_successor, target);
+
+	//Delete the successor from the list of successors in the target block
+	delete_successor_only(target, deleted_successor);
 }
 
 
@@ -6194,13 +6193,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = generic_results.final_block;
 				}
 
-				//Destroy any/all successors of the current block. Once you have a return statement in a block, there
-				//can be no other successors
-				if(current_block->successors != NULL){
-					dynamic_array_dealloc(current_block->successors);
-					current_block->successors = NULL;
-				}
-
 				//A successor to this block is the exit block
 				add_successor(current_block, function_exit_block);
 
@@ -6712,13 +6704,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//to reassign this final block
 				if(generic_results.final_block != current_block){
 					current_block = generic_results.final_block;
-				}
-
-				//Destroy any/all successors of the current block. Once you have a return statement in a block, there
-				//can be no other successors
-				if(current_block->successors != NULL){
-					dynamic_array_dealloc(current_block->successors);
-					current_block->successors = NULL;
 				}
 
 				//A successor to this block is the exit block
