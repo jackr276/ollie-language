@@ -4780,17 +4780,27 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
 
 /**
  * Delete a successor from a block
+ *
+ * This is mainly just a wrapper for a dynamic_array_delete, for readability
+ *
+ * Target: the block that has the successor
+ * Successor: the successor itself
  */
 void delete_successor_only(basic_block_t* target, basic_block_t* successor){
-
+	dynamic_array_delete(target->successors, successor);
 }
 
 
 /**
  * Delete a predecessor from a block
+ *
+ * This is mainly just a wrapper for a dynamic_array_delete, for readability
+ *
+ * Target: the block that has the predecessor
+ * Predecessor: the predecessor itself
  */
 void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
-
+	dynamic_array_delete(target->predecessors, predecessor);
 }
 
 
@@ -4805,10 +4815,10 @@ void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
 		return;
 	}
 
-	//Delete the target from the list of predecessors in this block
+	//The target is no longer a predecessor of said successor
 	delete_predecessor_only(deleted_successor, target);
 
-	//Delete the successor from the list of successors in the target block
+	//The said successor is no longer a successor of the target
 	delete_successor_only(target, deleted_successor);
 }
 
