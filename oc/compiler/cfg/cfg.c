@@ -5723,9 +5723,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 					//In this case, to guarantee the fallthrough property, we must
 					//add a jump here
 					default:
-						//Fallthrough the block
-						add_successor(previous_block, case_default_results.starting_block);
-
 						//Emit the direct jump. This may be optimized away in the optimizer, but we
 						//need to guarantee behavior
 						emit_jump(previous_block, case_default_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
@@ -5735,9 +5732,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 			//If it is null, then we definitiely need a jump here
 			} else {
-				//Fallthrough the block
-				add_successor(previous_block, case_default_results.starting_block);
-
 				//Emit the direct jump. This may be optimized away in the optimizer, but we
 				//need to guarantee behavior
 				emit_jump(previous_block, case_default_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
@@ -5774,9 +5768,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			//However if we have this, we need to ensure that we go from this final block
 			//directly to the end
 			default:
-				//This one's successor is the end block
-				add_successor(current_block, ending_block);
-
 				//Emit the direct jump. This may be optimized away in the optimizer, but we
 				//need to guarantee behavior
 				emit_jump(current_block, ending_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
@@ -5786,9 +5777,6 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Otherwise it is null, so we definitely need a jump to the end here
 	} else {
-		//This one's successor is the end block
-		add_successor(current_block, ending_block);
-
 		//Emit the direct jump. This may be optimized away in the optimizer, but we
 		//need to guarantee behavior
 		emit_jump(current_block, ending_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
@@ -5996,9 +5984,6 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 		//If we don't have a return terminal type, we can add the ending block as a successor
 		if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
-			//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
-			add_successor(current_block, ending_block);
-
 			//We will always emit a direct jump from this block to the ending block
 			emit_jump(current_block, ending_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 		}
@@ -6429,8 +6414,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					if(starting_block == NULL){
 						starting_block = compound_statement_results.starting_block;
 					} else {
-						//Otherwise it's a successor
-						add_successor(current_block, compound_statement_results.starting_block);
 						//Jump to it - important for optimizer
 						emit_jump(current_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					}
@@ -6459,7 +6442,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Otherwise we'll need to emit a jump to it
 				} else {
 					//Add it in as a successor
-					add_successor(current_block, labeled_block);
 					emit_jump(current_block, labeled_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
@@ -6521,8 +6503,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					//Otherwise this is a direct successor
-					add_successor(current_block, generic_results.starting_block);
 					//We will also emit a jump from the current block to the entry
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
@@ -6541,8 +6521,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					//Otherwise this is a direct successor
-					add_successor(current_block, generic_results.starting_block);
 					//We will also emit a jump from the current block to the entry
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
@@ -6749,8 +6727,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//And the final block is the end
 					current_block = generic_results.final_block;
 				} else {
-					//Add a successor to the current block
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a jump from current to the start
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					//The current block is just whatever is at the end
@@ -6769,8 +6745,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = generic_results.final_block;
 				//We never merge these
 				} else {
-					//Add as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a direct jump to it
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					//And the current block is just the end block
@@ -6789,8 +6763,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = generic_results.final_block;
 				//We never merge do-while's, they are strictly successors
 				} else {
-					//Add this in as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a jump from the current block to this
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					//And we now know that the current block is just the end block
@@ -6809,8 +6781,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = generic_results.final_block;
 				//We don't merge, we'll add successors
 				} else {
-					//Add the start as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//We go right to the exit block here
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					//Go right to the final block here
@@ -6963,8 +6933,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					if(starting_block == NULL){
 						starting_block = compound_statement_results.starting_block;
 					} else {
-						//Otherwise it's a successor
-						add_successor(current_block, compound_statement_results.starting_block);
 						//Jump to it - important for optimizer
 						emit_jump(current_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 					}
@@ -6997,8 +6965,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					starting_block = labeled_block;
 				//Otherwise we'll need to emit a jump to it
 				} else {
-					//Add it in as a successor
-					add_successor(current_block, labeled_block);
 					emit_jump(current_block, labeled_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
 
@@ -7060,8 +7026,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					//Otherwise this is a direct successor
-					add_successor(current_block, generic_results.starting_block);
 					//We will also emit a jump from the current block to the entry
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
@@ -7080,8 +7044,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					//Otherwise this is a direct successor
-					add_successor(current_block, generic_results.starting_block);
 					//We will also emit a jump from the current block to the entry
 					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 				}
