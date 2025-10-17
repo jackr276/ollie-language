@@ -1009,11 +1009,6 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		}
 	}
 
-	if(B->block_type != BLOCK_TYPE_FUNC_ENTRY){
-		printf("IMMEDIATE DOMINATOR OF BLOCK IS NULL: .L%d\n\n", B->block_id);
-		exit(0);
-	}
-
 	//Otherwise we didn't find it, so there is no immediate dominator
 	return NULL;
 }
@@ -1078,11 +1073,6 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 
 	//Destroy the queue
 	heap_queue_dealloc(queue);
-
-	if(ipdom == NULL){
-		printf("ITS NULL FOR: .L%d\n\n\n", B->block_id);
-	}
-
 
 	//Give it back
 	return ipdom;
@@ -7876,7 +7866,6 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo){
 
 			for(u_int16_t a = 0; a < block->reverse_post_order_reverse_cfg->current_index; a++){
 				basic_block_t* internal_block = dynamic_array_get_at(block->reverse_post_order_reverse_cfg, a);
-				printf(".L%d\n", internal_block->block_id);
 			}
 		}
 	}

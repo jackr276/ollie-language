@@ -688,16 +688,6 @@ static void sweep(cfg_t* cfg){
 					//We'll first find the nearest marked postdominator
 					nearest_marked_postdom = nearest_marked_postdominator(cfg, block);
 
-					/**
-					 * Once we do this, the if and else blocks are no longer
-					 * successors, so we'll remove them
-					 *
-					 * IMPORTANT: We cannot delete these until after
-					 * we've found that postdominator
-					 */
-					delete_successor(block, stmt->if_block);
-					delete_successor(block, stmt->else_block);
-
 					//This is now useless
 					delete_statement(stmt);
 
@@ -1608,16 +1598,16 @@ cfg_t* optimize(cfg_t* cfg){
 	//that has been made useless by sweep()
 	clean(cfg);
 
-	exit(0);
-	printf("========== AFTER ============\n\n\n\n");
-	print_all_cfg_blocks(cfg);
-
 	//PASS 4: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 	//etc. So, to remedy this, we will recalculate everything in the CFG
 	//cleanup_all_control_relations(cfg);
 	recompute_all_dominance_relations(cfg);
 
+	//printf("========== AFTER ============\n\n\n\n");
+	//print_all_cfg_blocks(cfg);
+
+	exit(0);
 	//PASS 5: Estimate execution frequencies
 	//This will become important in the register allocation later on. We'll need to estimate how often a block will be executed in order
 	//to decide where to allocate registers appropriately.
