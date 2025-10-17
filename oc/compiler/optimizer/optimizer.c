@@ -103,7 +103,7 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
  * Replace all targets that jump to "empty block" with "replacement". This is a helper 
  * function for the "Empty Block Removal" step of clean()
  */
-static void replace_all_branch_targets(cfg_t* cfg, basic_block_t* empty_block, basic_block_t* replacement){
+static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
 	//For everything in the predecessor set of the empty block
 	for(u_int16_t _ = 0; _ < empty_block->predecessors->current_index; _++){
 		//Grab a given predecessor out
@@ -170,11 +170,8 @@ static void replace_all_branch_targets(cfg_t* cfg, basic_block_t* empty_block, b
 
 	}
 
-	//We also want to remove this block from the predecessors of the replacement
-	dynamic_array_delete(replacement->predecessors, empty_block);
-	
-	//This block is now entirely useless, so we delete it
-	dynamic_array_delete(cfg->created_blocks, empty_block);
+	//The empty block now no longer has the replacement as a successor
+	delete_successor(empty_block, replacement);
 }
 
 
@@ -252,6 +249,9 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 				//Emit a jump here instead
 				emit_jump(current, branch->if_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+
+				//This counts as a change
+				changed = TRUE;
 			}
 		}
 
@@ -263,6 +263,34 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//Extract the block(j) that we're going to
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
+			/**
+			 * If i is empty then
+			 * 	replace transfers to i with transfers to j
+			 */
+			//We know it's empty if these are the same
+			if(current->exit_statement == current->leader_statement && current->block_type != BLOCK_TYPE_FUNC_ENTRY){
+				//Replace all jumps to the current block with those to the jumping block
+				replace_all_branch_targets(current, jumping_to_block);
+
+				//Current is no longer in the picture
+				dynamic_array_delete(cfg->created_blocks, current);
+
+				//Counts as a change
+				changed = TRUE;
+
+				//We are done here, no need to continue on
+				continue;
+			}
+
+			/**
+			 * If j only has one predecessor then
+			 * 	merge i and j
+			 */
+			if(jumping_to_block->predecessors->current_index == 1){
+
+			}
+
+
 		}
 
 
@@ -273,33 +301,9 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			//is, now we just need to check if the other one is
 			u_int8_t ends_in_branch = FALSE;
 
-			//If the prior statement is not NULL and it's a jump, we end in a conditional
-			if(current->exit_statement->previous_statement != NULL && current->exit_statement->previous_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT
-			  && current->exit_statement->previous_statement->op != JUMP){
-				ends_in_branch = TRUE;
-			}
-
 			//The block that we're jumping to
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 			
-			//=============================== EMPTY BLOCK REMOVAL ============================================
-			//If this is the only thing that is in here, then the entire block is redundant and just serves as a branching
-			//point. As such, we'll replace branches to i with branches to whatever it jumps to
-			if(ends_in_branch == FALSE && current->leader_statement == current->exit_statement && current->block_type != BLOCK_TYPE_FUNC_ENTRY){
-				//Replace any and all statements that jump to "current" with ones that jump to whichever block it
-				//unconditionally jumps to
-				replace_all_jump_targets(cfg, current, jumping_to_block);
-
-				//This counts as a change
-				changed = TRUE;
-
-				//There is no point in sticking around here. In getting to this area, we know that there was
-				//only one statement in here. As such, any attempt to block merge this would be in error and not desirable, because
-				//the block merging algorithm requires that there be more than one statement.
-				//We'll continue here, and allow the next iteration to go forward
-				continue;
-			}
-
 			//============================== BLOCK MERGING =================================================
 			//This is another special case -- if the block we're jumping to only has one predecessor, then
 			//we may as well avoid the jump and just merge the two
