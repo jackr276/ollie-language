@@ -1158,6 +1158,11 @@ static void sweep(cfg_t* cfg){
 					//We'll first find the nearest marked postdominator
 					basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
 
+					if(immediate_postdominator == NULL){
+						printf("ITS NULL FOR\n");
+						print_three_addr_code_stmt(stdout, stmt);
+					} 
+
 					//Emit the jump statement to the nearest marked postdominator
 					//NOTE: the emit jump adds the successor in for us, so we don't need to
 					//do so here
@@ -1746,7 +1751,7 @@ cfg_t* optimize(cfg_t* cfg){
 	//Stopper for now
 	exit(0);
 
-	//PASS 4: Clean algorithm
+	//PASS 3: Clean algorithm
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
 	//entire block. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()

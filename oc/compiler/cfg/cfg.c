@@ -13,7 +13,6 @@
 #include "cfg.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/select.h>
 #include <sys/types.h>
 #include "../utils/queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
@@ -933,7 +932,6 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
  * Grab the immediate dominator of the block
  * A IDOM B if A SDOM B and there does not exist a node C 
  * such that C ≠ A, C ≠ B, A dom C, and C dom B
- *
  */
 static basic_block_t* immediate_dominator(basic_block_t* B){
 	//If we've already found the immediate dominator, why find it again?
@@ -1012,10 +1010,8 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 
 
 /**
- * Grab the immediate postdominator dominator of the block
- * A IPDOM B if A SPDOM B and there does not exist a node C 
- * such that C ≠ A, C ≠ B, A pdom C, and C pdom B
- *
+ * The immediate postdominator is the first breadth-first 
+ * successor that post dominates a node
  */
 static basic_block_t* immediate_postdominator(basic_block_t* B){
 	//If we've already found the immediate dominator, why find it again?
@@ -1024,72 +1020,42 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 		return B->immediate_postdominator;
 	}
 
-	//Regular variable declarations
-	basic_block_t* A; 
-	basic_block_t* C;
-	u_int8_t A_is_IPDOM;
-	
-	//For each node in B's PostDominantor set(we call this node A)
-	//These nodes are our candidates for immediate postdominator
-	for(u_int16_t i = 0; B->postdominator_set != NULL && i < B->postdominator_set->current_index; i++){
-		//By default we assume A is a IPDOM
-		A_is_IPDOM = TRUE;
+	//Create the queue
+	heap_queue_t* queue = heap_queue_alloc();
 
-		//A is our "candidate" for possibly being an immediate postdominator
-		A = dynamic_array_get_at(B->postdominator_set, i);
+	//Extract the postdominator set
+	dynamic_array_t* postdominator_set = B->postdominator_set;
 
-		//If A == B, that means that A does NOT strictly postdominate(PDOM)
-		//B, so it's disqualified
-		if(A == B){
-			continue;
+	//Seed the search with B
+	enqueue(queue, B);
+
+	//So long as the queue isn't empty
+	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		//Pop off of the queue
+		basic_block_t* current = dequeue(queue);
+
+		//If this wasn't visited, we'll print
+		if(block->visited == FALSE){
+			print_block_three_addr_code(block, print_df);	
 		}
 
-		//If we get here, we know that A SPDOM B
-		//Now we must check, is there any "C" in the way.
-		//We can tell if this is the case by checking every other
-		//node in the dominance frontier of B, and seeing if that
-		//node is also dominated by A
-		
-		//For everything in B's dominator set that IS NOT A, we need
-		//to check if this is an intermediary. As in, does C get in-between
-		//A and B in the dominance chain
-		for(u_int16_t j = 0; j < B->postdominator_set->current_index; j++){
-			//Skip this case
-			if(i == j){
-				continue;
+		//Now we'll mark this as visited
+		block->visited = TRUE;
+
+		//And finally we'll add all of these onto the queue
+		for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
+			//Add the successor into the queue, if it has not yet been visited
+			basic_block_t* successor = block->successors->internal_array[j];
+
+			if(successor->visited == FALSE){
+				enqueue(queue, successor);
 			}
-
-			//If it's aleady B or A, we're skipping
-			C = dynamic_array_get_at(B->postdominator_set, j);
-
-			//If this is the case, disqualified
-			if(C == B || C == A){
-				continue;
-			}
-
-			//We can now see that C dominates B. The true test now is
-			//if C is dominated by A. If that's the case, then we do NOT
-			//have an immediate dominator in A.
-			//
-			//This would look like A -PDoms> C -PDoms> B, so A is not an immediate postdominator
-			if(dynamic_array_contains(C->postdominator_set, A) != NOT_FOUND){
-				//A is disqualified, it's not an IDOM
-				A_is_IPDOM = FALSE;
-				break;
-			}
-		}
-
-		//If we survived, then we're done here
-		if(A_is_IPDOM == TRUE){
-			//Mark this for any future runs...we won't waste any time doing this
-			//calculation over again
-			B->immediate_postdominator = A;
-			return A;
 		}
 	}
 
-	//Otherwise we didn't find it, so there is no immediate postdominator
-	return NULL;
+
+	//Destory the queue
+	heap_queue_dealloc(queue);
 }
 
 
