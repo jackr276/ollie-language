@@ -60,9 +60,6 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 		}
 	}
 
-	//Also make note of any direct succession
-	a->direct_successor = b->direct_successor;
-
 	//Copy over the block type and terminal type
 	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
 		a->block_type = b->block_type;
@@ -487,10 +484,13 @@ static void mark(cfg_t* cfg){
  * function for the "Empty Block Removal" step of clean()
  */
 static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
+	//Use a clone since we are mutating
+	dynamic_array_t* clone = clone_dynamic_array(empty_block->predecessors);
+
 	//For everything in the predecessor set of the empty block
-	for(u_int16_t _ = 0; _ < empty_block->predecessors->current_index; _++){
+	for(u_int16_t _ = 0; _ < clone->current_index; _++){
 		//Grab a given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(empty_block->predecessors, _);
+		basic_block_t* predecessor = dynamic_array_get_at(clone, _);
 
 		//The empty block is no longer a successor of this predecessor
 		delete_successor(predecessor, empty_block);
@@ -555,6 +555,9 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 
 	//The empty block now no longer has the replacement as a successor
 	delete_successor(empty_block, replacement);
+
+	//Destroy the clone array
+	dynamic_array_dealloc(clone);
 }
 
 
@@ -1606,6 +1609,8 @@ cfg_t* optimize(cfg_t* cfg){
 	clean(cfg);
 
 	exit(0);
+	printf("========== AFTER ============\n\n\n\n");
+	print_all_cfg_blocks(cfg);
 
 	//PASS 4: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
