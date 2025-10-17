@@ -330,11 +330,30 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 					//Add it to the current block
 					add_statement(current, copy);
 
+					//Add as assigned
 					if(copy->assignee != NULL){
-					//	add_ass
+						add_assigned_variable(current, copy->assignee);
 					}
 
+					//Add these as used
+					add_used_variable(current, copy->op1);
+					add_used_variable(current, copy->op2);
+
+					//Add it over
+					current_stmt = current_stmt->next_statement;
 				}
+
+				//Once we get to the very end here, we'll need to do the bookkeeping
+				//from the branch
+				basic_block_t* if_destination = jumping_to_block->exit_statement->if_block;
+				basic_block_t* else_destination = jumping_to_block->exit_statement->else_block;
+				
+				//These both count as successor
+				add_successor(current, if_destination);
+				add_successor(current, else_destination);
+
+				//This counts as a change
+				changed = TRUE;
 			}
 		}
 	}
@@ -1662,7 +1681,7 @@ cfg_t* optimize(cfg_t* cfg){
 
 	//PASS 3: Clean algorithm
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
-	//entire block. Clean uses 4 different steps in a specific order to eliminate control flow
+	//entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()
 	clean(cfg);
 	
