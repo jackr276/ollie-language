@@ -3478,11 +3478,6 @@ instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, thr
 	//What function are we in
 	stmt->function = current_function;
 
-	//If the operator is a || or && operator, then this statement is eligible for short circuiting
-	if(op == DOUBLE_AND || op == DOUBLE_OR){
-		stmt->is_short_circuit_eligible = TRUE;
-	}
-
 	//Give back the newly allocated statement
 	return stmt;
 }

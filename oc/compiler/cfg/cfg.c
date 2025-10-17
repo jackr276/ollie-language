@@ -120,7 +120,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 static cfg_result_package_t emit_initialization(basic_block_t* current_block, three_addr_var_t* assignee, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer, u_int8_t is_branch_ending);
-static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
+basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
  * Let's determine if a value is a positive power of 2.
@@ -4406,7 +4406,7 @@ static int32_t increment_and_get(){
  * Allocate a basic block using calloc. NO data assignment
  * happens in this function
 */
-static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
+basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 

@@ -787,24 +787,20 @@ static void optimize_compound_logic(cfg_t* cfg){
 			continue;
 		}
 
-		//We always have two targets: the if(conditional) target and the else(nonconditional) target
-		basic_block_t* if_target;
-		basic_block_t* else_target;
+		//The branch is the block's exit statement
+		instruction_t* branch_statement = block->exit_statement;
 
-
-		//If we don't end in two jumps, this isn't going to work. The exit must be a direct jump 
-		if(block->exit_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT || block->exit_statement->jump_type != JUMP_TYPE_JMP){
-			continue;
-		}
-
-		//Now we need to check for the if target. If it's null, not a jump statement, or a direct jump, we're out of here
-		if(block->exit_statement->previous_statement == NULL || block->exit_statement->previous_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT
-			|| block->exit_statement->previous_statement->jump_type == JUMP_TYPE_JMP){
+		//If the exit statement is not a branch, then we're done here
+		if(branch_statement->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
 			continue;
 		}
 
 		//Do we need to use the inverse jumping methodology?
-		u_int8_t use_inverse_jump = FALSE;
+		u_int8_t use_inverse_jump = branch_statement->inverse_jump;
+
+		//Extract our two targets here
+		basic_block_t* if_target = branch_statement->if_block;
+		basic_block_t* else_target = branch_statement->else_block;
 
 		//If this IS an inverse jump, then our else clause is actually the conditional
 		if(block->exit_statement->previous_statement->inverse_jump == TRUE){
@@ -1676,8 +1672,11 @@ cfg_t* optimize(cfg_t* cfg){
 	//nearest marked postdominator
 	sweep(cfg);
 
-	//Stopper for now
-	exit(0);
+	//PASS 3: compound logic optimization
+	//Now that we've cleaned up all irrelevant brances, we can look at the branches that are left
+	//and see if we can optimize any of the compound logic associated with them. We will do this before
+	//we clean because it will generate more basic blocks/branches to look at
+	optimize_compound_logic(cfg);
 
 	//PASS 3: Clean algorithm
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
@@ -1685,6 +1684,9 @@ cfg_t* optimize(cfg_t* cfg){
 	//that has been made useless by sweep()
 	clean(cfg);
 	
+	//Stopper for now
+	exit(0);
+
 	//PASS 4: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 	//etc. So, to remedy this, we will recalculate everything in the CFG
@@ -1695,13 +1697,6 @@ cfg_t* optimize(cfg_t* cfg){
 	//This will become important in the register allocation later on. We'll need to estimate how often a block will be executed in order
 	//to decide where to allocate registers appropriately.
 	estimate_execution_frequencies(cfg);
-
-	//PASS 5: Shortcircuiting logic optimization
-	//Sometimes, we are able avoid extra work by using short-circuiting logic for compound logical statements(&& and ||). This
-	//only works for these kinds of statements, so the optimization is very specific. When the CFG is constructed, compound logic
-	//statements like these are marked as eligible for short-circuiting optimizations. Now that we've gone through and deleted everything
-	//that is useless, it's worth it to look at these statements and optimize them in one special pass
-	optimize_compound_logic(cfg);
 
 	//Give back the CFG
 	return cfg;

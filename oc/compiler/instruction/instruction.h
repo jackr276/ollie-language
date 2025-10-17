@@ -310,8 +310,6 @@ struct instruction_t{
 	u_int8_t is_jump_table;
 	//Is this operation critical?
 	u_int8_t mark;
-	//Is this operation eligible for logical short-circuiting optimizations
-	u_int8_t is_short_circuit_eligible;
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;

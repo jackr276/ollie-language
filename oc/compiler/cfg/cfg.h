@@ -256,6 +256,12 @@ void print_all_cfg_blocks(cfg_t* cfg);
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor);
 
 /**
+ * Allocate a basic block using calloc. NO data assignment
+ * happens in this function
+*/
+basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
+
+/**
  * Deallocate a block
  */
 void basic_block_dealloc(basic_block_t* block);
