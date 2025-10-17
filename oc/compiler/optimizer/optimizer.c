@@ -235,7 +235,8 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 		/**
 		 * If block i ends in a conditional branch
 		 */
-		if(current->exit_statement != NULL && current->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+		if(current->exit_statement != NULL 
+			&& current->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
 			//Extract the branch statement
 			instruction_t* branch = current->exit_statement;
 
@@ -259,7 +260,8 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 		/**
 		 * If block i ends in a jump to j then..
 		 */
-		if(current->exit_statement != NULL && current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
+		if(current->exit_statement != NULL
+			&& current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
 			//Extract the block(j) that we're going to
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
@@ -268,7 +270,8 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * 	replace transfers to i with transfers to j
 			 */
 			//We know it's empty if these are the same
-			if(current->exit_statement == current->leader_statement && current->block_type != BLOCK_TYPE_FUNC_ENTRY){
+			if(current->exit_statement == current->leader_statement
+				&& current->block_type != BLOCK_TYPE_FUNC_ENTRY){
 				//Replace all jumps to the current block with those to the jumping block
 				replace_all_branch_targets(current, jumping_to_block);
 
@@ -287,152 +290,36 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * 	merge i and j
 			 */
 			if(jumping_to_block->predecessors->current_index == 1){
-
-			}
-
-
-		}
-
-
-		//Do we end in a jump statement? - this is the precursor to all optimizations in branch reduce
-		if(current->exit_statement != NULL && current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
-			//Now let's do a touch more work to see if we end in a conditional branch. We end in a conditional
-			//branch if the last two statements are jump statements. We already know that the last one 
-			//is, now we just need to check if the other one is
-			u_int8_t ends_in_branch = FALSE;
-
-			//The block that we're jumping to
-			basic_block_t* jumping_to_block = current->exit_statement->if_block;
-			
-			//============================== BLOCK MERGING =================================================
-			//This is another special case -- if the block we're jumping to only has one predecessor, then
-			//we may as well avoid the jump and just merge the two
-			if(jumping_to_block->predecessors->current_index == 1 && jumping_to_block->block_type != BLOCK_TYPE_LABEL){
-				//We need to check here -- is there only ONE jump to the jumping to block inside of this
-				//block? If there is only one, then we are all set to merge
-
-				//Grab a statement cursor
-				instruction_t* cursor = current->exit_statement->previous_statement;
-
-				//Are we good to merge?
-				u_int8_t good_to_merge = TRUE;
-
-				while(cursor != NULL){
-					//Another option here - if this is short circuit eligible, then merging like this would ruin the
-					//detection of short circuiting. So if we see this, we also will NOT merge
-					if(cursor->is_short_circuit_eligible == TRUE){
-						good_to_merge = FALSE;
-						break;
-					}
-
-					//Otherwise we keep going up
-					cursor = cursor->previous_statement;
-				}
-
-				if(good_to_merge == TRUE){
-					//We will combine(merge) the current block and the one that it's jumping to
-					//Remove the statement that jumps to the one we're about to merge
-					delete_statement(current->exit_statement); 
-
-					//By that same token, we no longer was current to have the jumping to block as a successor
-					dynamic_array_delete(current->successors, jumping_to_block);
-
-					//Now we'll actually merge the blocks
-					combine(cfg, current, jumping_to_block);
-				
-					//This will count as a change
-					changed = TRUE;
-
-					//This is an endgame optimization. Once we've done this, there no longer is a branch for branch
-					//hoisting to look at. As such, if this happens, we'll continue to the next iteration
-					continue;
-				}
-			}
-
-			//=============================== BRANCH HOISTING ==================================================
-			// The final special case - if we discover a that the block we're jumping to is empty and ends entirely
-			// in a conditional branch, then we can copy all of that conditional branch code into the branch
-			// that we're coming from
-			//
-			// If the leader is branch ending AND the block ends in a conditional, this means that the block itself is entirely
-			// conditional
-			// If the very first statement is branch ending and NOT a direct jump? If it is, we have a candidate for hoisting
-			if(ends_in_branch == FALSE && jumping_to_block->leader_statement != NULL && jumping_to_block->leader_statement->is_branch_ending == TRUE
-				&& jumping_to_block->leader_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT){
-	 			//Let's check now and see if it's truly a conditional branch only
-				
-				//If it's not a jump, we're out here
-	 			if(jumping_to_block->exit_statement == NULL || jumping_to_block->exit_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT){
-	 				continue;
-	 			}
-
-				//Final check: If the statement right before the exit also isn't a jump, we don't have a branch
-				if(jumping_to_block->exit_statement->previous_statement == NULL || jumping_to_block->exit_statement->previous_statement->statement_type != THREE_ADDR_CODE_JUMP_STMT){
-					continue;
-				}
-
-				//If we made it all the way down here, we know that we have:
-				//	1.) A block whose leader statement is branch ending
-				//	2.) A block whose end statements are jumps
-				//	3.) This leads us to believe we can "hoist" the block
-				
-				//Set this flag, we have changed here
-				changed = TRUE;
-	 
-				//We want to remove the current block as a predecessor of this block
-				dynamic_array_delete(jumping_to_block->predecessors, current);
-
-				//Also, we'll want to remove this block as a successor of the current block
-				dynamic_array_delete(current->successors, jumping_to_block);
-
-				//We'll delete the statement that jumps from current to the jumping_to_block(this is the exit statement, remember from above)
+				//Delete the jump statement because it's now useless
 				delete_statement(current->exit_statement);
 
-				//If we make it here we know that we have some kind of conditional branching logic here in the jumping to block, we'll need to create
-				//a complete copy of it. This new copy will then be added into the current block in lieu of the jump statement that we just deleted
-	
-				//The leader of this new string of statement 
-				instruction_t* head = NULL;
-				//The one that we're currently operating on
-				instruction_t* tail = NULL;
+				//Decouple these as predecessors/successors
+				delete_successor(current, jumping_to_block);
 
-				//We'll use this cursor to run through the entirety of the jumping to block's code
-				instruction_t* cursor = jumping_to_block->leader_statement;
-				
-				//So long as we have stuff to add
-				while(cursor != NULL){
-					//Get a complete copy of the statement
-					instruction_t* new = copy_instruction(cursor);
+				//Combine the two
+				combine(cfg, current, jumping_to_block);
 
-					//If we're adding the very first one
-					if(head == NULL){
-						head = new;
-						tail = new;
-					//Otherwise add to the end
-					} else {
-						//Add it in
-						tail->next_statement = new;
-						new->previous_statement = tail;
-						tail = new;
-					}
+				//Counts as a change 
+				changed = TRUE;
 
-					//One last thing -- if this is a jump statement, we'll need to update the predecessor and successor
-					//lists accordingly
-					if(cursor->statement_type == THREE_ADDR_CODE_JUMP_STMT){
-						//Whatever we're jumping to is now a successor of cursor
-						add_successor(current, cursor->if_block);
-					}
+				//And we're done here
+				continue;
+			}
 
-					//Advance the cursor up
-					cursor = cursor->next_statement;
-				}
+			/**
+			 * If j is empty(except for the branch) and ends in a conditional branch then
+			 * 	overwrite i's jump with a copy of j's branch
+			 */
+			if(jumping_to_block->leader_statement->is_branch_ending == TRUE
+				&& jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+				//Delete the jump statement in i
+				delete_statement(current->exit_statement);
 
-				//When we get to the very end, we now need to add everything into the current block's statement set
-				current->exit_statement->next_statement = head;
-				head->previous_statement = current->exit_statement;
-				//Reassign exit
-				current->exit_statement = tail;
-				//And we're done
+				//These are also no longer successors
+				delete_successor(current, jumping_to_block);
+
+
+
 			}
 		}
 	}
