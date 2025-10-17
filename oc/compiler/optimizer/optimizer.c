@@ -1335,7 +1335,7 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
  * x_1 <- t17
  * jmp .L5	
  */
-static void optimize_compound_logic(cfg_t* cfg){
+static void optimize_short_circuit_logic(cfg_t* cfg){
 	//For every single block in the CFG
 	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
 		//Grab the block out
@@ -1366,18 +1366,18 @@ static void optimize_compound_logic(cfg_t* cfg){
 
 		//Store all of our eligible statements in this block. This will be done in a FIFO
 		//fashion
-		dynamic_array_t* eligible_statements = NULL;
+		dynamic_array_t* eligible_statements = dynamic_array_alloc();
 
 		//Let's run through and see if we can find a statement that's eligible for short circuiting.
 		while(cursor != NULL){
-			//If we make it here, then we've found something that is eligible for a compound logic optimization
-			if(cursor->is_branch_ending == TRUE){
-				//For now we'll add this to the list of potential ones
-				if(eligible_statements == NULL){
-					//If we didn't have one of these, make it now
-					eligible_statements = dynamic_array_alloc();
-				}
+			//Not branch ending - move on
+			if(cursor->is_branch_ending == FALSE){
+				cursor = cursor->previous_statement;
+				continue;
+			}
 
+			//If we make it here, then we've found something that is eligible for a compound logic optimization
+			if(cursor->op == DOUBLE_AND || cursor->op == DOUBLE_OR){
 				//Add the cursor. We will iterate over these statements in the order we found them,
 				//so going through in
 				dynamic_array_add(eligible_statements, cursor);
@@ -1416,10 +1416,8 @@ static void optimize_compound_logic(cfg_t* cfg){
 			}
 		}
 
-		//If we had anything, deallocate it
-		if(eligible_statements != NULL){
-			dynamic_array_dealloc(eligible_statements);
-		}
+		//Deallocate the array
+		dynamic_array_dealloc(eligible_statements);
 	}
 }
 
@@ -1591,20 +1589,19 @@ cfg_t* optimize(cfg_t* cfg){
 	//nearest marked postdominator
 	sweep(cfg);
 
-	//PASS 3: compound logic optimization
-	//Now that we've cleaned up all irrelevant brances, we can look at the branches that are left
-	//and see if we can optimize any of the compound logic associated with them. We will do this before
-	//we clean because it will generate more basic blocks/branches to look at
-	//optimize_compound_logic(cfg);
-
-	//printf("========== AFTER ============\n\n\n\n");
-	//print_all_cfg_blocks(cfg);
-	//printf("========== AFTER ============\n\n\n\n");
 	//PASS 3: Clean algorithm
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
 	//entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()
 	clean(cfg);
+
+	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
+
+		if(block->block_type != BLOCK_TYPE_FUNC_ENTRY && (block->predecessors == NULL || block->predecessors->current_index == 0)){
+			printf("BLOCK .L%d is unreachable\n", block->block_id);
+		}
+	}
 
 	//PASS 4: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
@@ -1612,14 +1609,18 @@ cfg_t* optimize(cfg_t* cfg){
 	//cleanup_all_control_relations(cfg);
 	recompute_all_dominance_relations(cfg);
 
-	//printf("========== FINAL ============\n\n\n\n");
-	//print_all_cfg_blocks(cfg);
-	//printf("========== FINAL ============\n\n\n\n");
-	exit(0);
 	//PASS 5: Estimate execution frequencies
 	//This will become important in the register allocation later on. We'll need to estimate how often a block will be executed in order
 	//to decide where to allocate registers appropriately.
 	estimate_execution_frequencies(cfg);
+
+	//PASS 6: compound logic optimization
+	//Now that we've cleaned up all irrelevant brances, we can look at the branches that are left
+	//and see if we can optimize any of the compound logic associated with them. We will do this before
+	//we clean because it will generate more basic blocks/branches to look at
+	//optimize_short_circuit_logic(cfg);
+
+	exit(0);
 
 	//Give back the CFG
 	return cfg;
