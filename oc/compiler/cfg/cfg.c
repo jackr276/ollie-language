@@ -2529,6 +2529,9 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
 	//Emit the actual instruction here
 	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
 
+	//By definitiona, this is true
+	branch_instruction->is_branch_ending = TRUE;
+
 	//Mark this as the op1 so that we can track in the optimizer
 	branch_instruction->op1 = conditional_result;
 

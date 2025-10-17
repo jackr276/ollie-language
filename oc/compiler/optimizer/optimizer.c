@@ -203,10 +203,33 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 	//Our current block
 	basic_block_t* current;
 
-	//For each block in postorder
+	/**
+	 * For each block in postorder
+	 */
 	for(u_int16_t _ = 0; _ < postorder->current_index; _++){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
+
+		/**
+		 * If block i ends in a conditional branch
+		 */
+		if(current->exit_statement != NULL && current->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+			//Extract the branch statement
+			instruction_t* branch = current->exit_statement;
+
+			/**
+			 * If both targets are identical(j) then:
+			 * 	replace branch with a jump to j
+			 */
+			if(branch->if_block == branch->else_block){
+				//Remove these all
+				delete_all_branching_statements(current);
+
+				//Emit a jump here instead
+				emit_jump(current, branch->if_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+			}
+		}
+
 
 		//Do we end in a jump statement? - this is the precursor to all optimizations in branch reduce
 		if(current->exit_statement != NULL && current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
@@ -219,62 +242,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			if(current->exit_statement->previous_statement != NULL && current->exit_statement->previous_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT
 			  && current->exit_statement->previous_statement->op != JUMP){
 				ends_in_branch = TRUE;
-			}
-
-			//============================== REDUNDANT CONDITIONAL REMOVAL(FOLD) =================================
-			// If we have a block that ends in a conditional branch where all targets are the exact same, then
-			// the conditional branch is useless. We can replace the entire conditional with what's called a fold
-			if(ends_in_branch == TRUE){
-				//So we do end in a conditional branch. Now the question is if we have the same jump target for all of our conditional
-				//jumps. Initially, we're going to assume that we don't
-				u_int8_t redundant_branch = FALSE;
-				
-				//What are we jumping to?
-				basic_block_t* end_branch_target = NULL;
-				
-				//Grab a statement cursor. This time, since we care about what we end with, we'll crawl from the bottom up
-				instruction_t* stmt = current->exit_statement;
-
-				//So long as we are still branch ending and seeing statements
-				while(stmt != NULL && stmt->is_branch_ending == TRUE){
-					//If it isn't a jump statement, just move along
-					if(stmt->statement_type != THREE_ADDR_CODE_JUMP_STMT){
-						stmt = stmt->previous_statement;
-						continue;
-					}
-
-					//Otherwise it is a jump statement
-					//If we haven't seen one yet, then we'll mark it here
-					if(end_branch_target == NULL){
-						end_branch_target = stmt->if_block;
-					//Otherwise we have seen one. If these do not match, then we're done
-					//here
-					} else if(end_branch_target != stmt->if_block) {
-						//If this is the case, we're done. Set the flag to false and get
-						//out
-						redundant_branch = FALSE;
-						break;
-					//If we get all of the way down here, the two matched
-					} else {
-						//As of right now, we've seen a redundant branch
-						redundant_branch = TRUE;
-					}
-
-					//If we made it here, go to the prior statement
-					stmt = stmt->previous_statement;
-				}
-
-				//If this is true all of the way down here, we've found one
-				if(redundant_branch == TRUE){
-					//We'll need to eliminate all of the branch ending statements
-					delete_all_branching_statements(current);
-					//Once we're done deleting, we'll emit a jump right to that jumping to
-					//block. This constitutes our "fold"
-					emit_jump(current, end_branch_target, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-					//This does mean that we've changed
-					changed = TRUE;
-				}
-				//And now we're set, onto the next optimization
 			}
 
 			//The block that we're jumping to
