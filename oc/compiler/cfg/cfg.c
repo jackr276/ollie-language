@@ -1023,6 +1023,12 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 	//Create the queue
 	heap_queue_t* queue = heap_queue_alloc();
 
+	//The visited array
+	dynamic_array_t* visited = dynamic_array_alloc();
+
+	//Save this for when we find it
+	basic_block_t* ipdom = NULL;
+
 	//Extract the postdominator set
 	dynamic_array_t* postdominator_set = B->postdominator_set;
 
@@ -1034,28 +1040,37 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 		//Pop off of the queue
 		basic_block_t* current = dequeue(queue);
 
-		//If this wasn't visited, we'll print
-		if(block->visited == FALSE){
-			print_block_three_addr_code(block, print_df);	
+		/**
+		 * If we have found the first breadth-first successor that postdominates B,
+		 * we are done
+		 */
+		if(current != B && dynamic_array_contains(postdominator_set, current) != NOT_FOUND){
+			ipdom = current;
+			break;
 		}
 
-		//Now we'll mark this as visited
-		block->visited = TRUE;
+		//Add to the visited set
+		dynamic_array_add(visited, current);
 
 		//And finally we'll add all of these onto the queue
-		for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
+		for(u_int16_t j = 0; current->successors != NULL && j < current->successors->current_index; j++){
 			//Add the successor into the queue, if it has not yet been visited
-			basic_block_t* successor = block->successors->internal_array[j];
+			basic_block_t* successor = current->successors->internal_array[j];
 
-			if(successor->visited == FALSE){
+			if(dynamic_array_contains(visited, successor) == NOT_FOUND){
 				enqueue(queue, successor);
 			}
 		}
 	}
 
+	//Destroy visited
+	dynamic_array_dealloc(visited);
 
-	//Destory the queue
+	//Destroy the queue
 	heap_queue_dealloc(queue);
+
+	//Give it back
+	return ipdom;
 }
 
 
@@ -1165,7 +1180,7 @@ static void calculate_reverse_dominance_frontiers(cfg_t* cfg){
 			//Grab it out
 			cursor = block->successors->internal_array[i];
 
-			//While cursor is not the immediate dominator of block
+			//While cursor is not the immediate postdominator of block
 			while(cursor != immediate_postdominator(block)){
 				//Add block to cursor's reverse dominance frontier set
 				add_block_to_reverse_dominance_frontier(cursor, block);
