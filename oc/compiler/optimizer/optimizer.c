@@ -1112,6 +1112,9 @@ static void sweep(cfg_t* cfg){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
 
+		//Holder for the postdom
+		basic_block_t* nearest_marked_postdom;
+
 		//Grab the statement out
 		instruction_t* stmt = block->leader_statement;
 
@@ -1145,9 +1148,15 @@ static void sweep(cfg_t* cfg){
 				//we'll need to replace it with a jump to
 				//it's nearest marked postdominator
 				case THREE_ADDR_CODE_BRANCH_STMT:
+					//We'll first find the nearest marked postdominator
+					nearest_marked_postdom = nearest_marked_postdominator(cfg, block);
+
 					/**
 					 * Once we do this, the if and else blocks are no longer
 					 * successors, so we'll remove them
+					 *
+					 * IMPORTANT: We cannot delete these until after
+					 * we've found that postdominator
 					 */
 					delete_successor(block, stmt->if_block);
 					delete_successor(block, stmt->else_block);
@@ -1155,18 +1164,10 @@ static void sweep(cfg_t* cfg){
 					//This is now useless
 					delete_statement(stmt);
 
-					//We'll first find the nearest marked postdominator
-					basic_block_t* immediate_postdominator = nearest_marked_postdominator(cfg, block);
-
-					if(immediate_postdominator == NULL){
-						printf("ITS NULL FOR\n");
-						print_three_addr_code_stmt(stdout, stmt);
-					} 
-
 					//Emit the jump statement to the nearest marked postdominator
 					//NOTE: the emit jump adds the successor in for us, so we don't need to
 					//do so here
-					stmt = emit_jump(block, immediate_postdominator, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					stmt = emit_jump(block, nearest_marked_postdom, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 
 					//Break out of the switch
 					break;
