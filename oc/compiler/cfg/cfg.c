@@ -1,4 +1,4 @@
-/*
+/**
  * The implementation file for all CFG related operations
  *
  * The CFG will translate the higher level code into something referred to as 
@@ -425,7 +425,12 @@ void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
  * header. It is important to note that only actual variables(not temp variables) count
  * as live
  */
-static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
+void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
+	//If it's temp just don't add it
+	if(var->is_temporary == TRUE){
+		return;
+	}
+
 	//If the assigned variable dynamic array is NULL, we'll allocate it here
 	if(basic_block->assigned_variables == NULL){
 		basic_block->assigned_variables = dynamic_array_alloc();
@@ -2746,9 +2751,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 	instruction_t* inc_code = emit_inc_instruction(incrementee);
 
 	//This will count as live if we read from it
-	if(incrementee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, inc_code->assignee);
-	}
+	add_assigned_variable(basic_block, inc_code->assignee);
 
 	//This is a rare case were we're assigning to AND using
 	add_used_variable(basic_block, incrementee);
@@ -2772,9 +2775,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 	instruction_t* dec_code = emit_dec_instruction(decrementee);
 
 	//This will count as live if we read from it
-	if(decrementee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, dec_code->assignee);
-	}
+	add_assigned_variable(basic_block, dec_code->assignee);
 
 	//This is a rare case were we're assigning to AND using
 	add_used_variable(basic_block, decrementee);
@@ -2868,9 +2869,7 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
 	not_stmt->op1 = var;
 
 	//The assignee was assigned
-	if(var->is_temporary == FALSE){
-		add_assigned_variable(basic_block, assignee);
-	}
+	add_assigned_variable(basic_block, assignee);
 
 	//Regardless this is still used here
 	add_used_variable(basic_block, var);
@@ -2891,9 +2890,7 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
  */
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant, u_int8_t is_branch_ending){
 	//Assigned variables need to be non-constant
-	if(assignee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, assignee);
-	}
+	add_assigned_variable(basic_block, assignee);
 
 	//Add op1 as a used variable
 	add_used_variable(basic_block, op1);
@@ -3979,9 +3976,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	instruction_t* binary_operation = emit_binary_operation_instruction(assignee, op1, binary_operator, op2);
 
 	//If this isn't temporary, it's being assigned
-	if(assignee->is_temporary == FALSE){
-		add_assigned_variable(current_block, assignee);
-	}
+	add_assigned_variable(current_block, assignee);
 
 	//If these are not temporary, they're being used
 	add_used_variable(current_block, op1);
@@ -4088,9 +4083,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
 				//If this is not a temp var, then we can flag it as being assigned
-				if(left_hand_var->is_temporary == FALSE){
-					add_assigned_variable(current_block, left_hand_var);
-				}
+				add_assigned_variable(current_block, left_hand_var);
 
 				//This counts as a use
 				add_used_variable(current_block, final_op1);
@@ -4108,9 +4101,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				instruction_t* final_assignment = emit_store_ir_code(left_hand_var, final_op1);
 
 				//If this is not a temp var, then we can flag it as being assigned
-				if(left_hand_var->is_temporary == FALSE){
-					add_assigned_variable(current_block, left_hand_var);
-				}
+				add_assigned_variable(current_block, left_hand_var);
 
 				//This counts as a use
 				add_used_variable(current_block, final_op1);

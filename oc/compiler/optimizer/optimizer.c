@@ -318,8 +318,23 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//These are also no longer successors
 				delete_successor(current, jumping_to_block);
 
+				//Run through every statement in the jumping to block and 
+				//copy them into current
+				instruction_t* current_stmt = jumping_to_block->leader_statement;
 
+				//So long as there is more to copy
+				while(current_stmt != NULL){
+					//Copy it
+					instruction_t* copy = copy_instruction(current_stmt);
 
+					//Add it to the current block
+					add_statement(current, copy);
+
+					if(copy->assignee != NULL){
+					//	add_ass
+					}
+
+				}
 			}
 		}
 	}
