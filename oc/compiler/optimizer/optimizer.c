@@ -515,6 +515,11 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 		//can only happen at the end
 		instruction_t* exit_statement = predecessor->exit_statement;
 
+		//This can happen - and if it's the case, we move along
+		if(exit_statement == NULL){
+			continue;
+		}
+
 		//Go based on the type
 		switch(exit_statement->statement_type){
 			//One type of block exit
@@ -1592,6 +1597,9 @@ cfg_t* optimize(cfg_t* cfg){
 	//we clean because it will generate more basic blocks/branches to look at
 	//optimize_compound_logic(cfg);
 
+	//printf("========== AFTER ============\n\n\n\n");
+	//print_all_cfg_blocks(cfg);
+	//printf("========== AFTER ============\n\n\n\n");
 	//PASS 3: Clean algorithm
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
 	//entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
@@ -1604,9 +1612,9 @@ cfg_t* optimize(cfg_t* cfg){
 	//cleanup_all_control_relations(cfg);
 	recompute_all_dominance_relations(cfg);
 
-	//printf("========== AFTER ============\n\n\n\n");
+	//printf("========== FINAL ============\n\n\n\n");
 	//print_all_cfg_blocks(cfg);
-
+	//printf("========== FINAL ============\n\n\n\n");
 	exit(0);
 	//PASS 5: Estimate execution frequencies
 	//This will become important in the register allocation later on. We'll need to estimate how often a block will be executed in order
