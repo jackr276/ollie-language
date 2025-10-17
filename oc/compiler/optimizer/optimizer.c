@@ -103,15 +103,14 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
  * Replace all targets that jump to "empty block" with "replacement". This is a helper 
  * function for the "Empty Block Removal" step of clean()
  */
-static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, basic_block_t* replacement){
+static void replace_all_branch_targets(cfg_t* cfg, basic_block_t* empty_block, basic_block_t* replacement){
 	//For everything in the predecessor set of the empty block
 	for(u_int16_t _ = 0; _ < empty_block->predecessors->current_index; _++){
 		//Grab a given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(empty_block->predecessors, _);
 
-		//We'll firstly remove the empty block as a successor
-		dynamic_array_delete(predecessor->successors, empty_block); 
-		//We won't even bother modifying the empty block's predecessors -- it's being deleted anyways
+		//The empty block is no longer a successor of this predecessor
+		delete_successor(predecessor, empty_block);
 		
 		//Run through the jump table and replace all of those targets as well. Most of the time,
 		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
@@ -122,27 +121,53 @@ static void replace_all_jump_targets(cfg_t* cfg, basic_block_t* empty_block, bas
 				if(dynamic_array_get_at(predecessor->jump_table->nodes, idx) == empty_block){
 					//This now points to the replacement
 					dynamic_array_set_at(predecessor->jump_table->nodes, replacement, idx);
+
+					//The replacement is now a successor of this predecessor
+					add_successor(predecessor, replacement);
 				}
 			}
 		}
 
-		//Now we'll go through every single statement in this block. If it's a jump statement whose target
-		//is the empty block, we'll replace that reference with the replacement
-		instruction_t* current_stmt = predecessor->leader_statement;
+		//We always will be starting at the exit statement. Branches/jumps
+		//can only happen at the end
+		instruction_t* exit_statement = predecessor->exit_statement;
 
-		//So long as this isn't null
-		while(current_stmt != NULL){
-			//If it's a jump statement AND the jump target is the empty block, we're interested
-			if(current_stmt->statement_type == THREE_ADDR_CODE_JUMP_STMT && current_stmt->if_block == empty_block){
-				//Update the reference
-				current_stmt->if_block = replacement;
-				//Be sure to add the new block as a successor 
-				add_successor(predecessor, replacement);
-			}
+		//Go based on the type
+		switch(exit_statement->statement_type){
+			//One type of block exit
+			case THREE_ADDR_CODE_JUMP_STMT:
+				//If this is the right target, then replace it
+				if(exit_statement->if_block == empty_block){
+					exit_statement->if_block = replacement;
+					//Counts as a successor
+					add_successor(predecessor, replacement);
+				}
 
-			//Advance it
-			current_stmt = current_stmt->next_statement;
+				break;
+
+			//Other type of block exit
+			case THREE_ADDR_CODE_BRANCH_STMT:
+				//If this is the right target, then replace it
+				if(exit_statement->if_block == empty_block){
+					exit_statement->if_block = replacement;
+					//Counts as a successor
+					add_successor(predecessor, replacement);
+				}
+
+				//Same for the else block
+				if(exit_statement->else_block == empty_block){
+					exit_statement->else_block = replacement;
+					//Counts as a successor
+					add_successor(predecessor, replacement);
+				}
+
+				break;
+
+			//By default do nothing
+			default:
+				break;
 		}
+
 	}
 
 	//We also want to remove this block from the predecessors of the replacement
@@ -228,6 +253,16 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//Emit a jump here instead
 				emit_jump(current, branch->if_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
 			}
+		}
+
+
+		/**
+		 * If block i ends in a jump to j then..
+		 */
+		if(current->exit_statement != NULL && current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
+			//Extract the block(j) that we're going to
+			basic_block_t* jumping_to_block = current->exit_statement->if_block;
+
 		}
 
 
