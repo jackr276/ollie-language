@@ -1009,6 +1009,9 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		}
 	}
 
+	printf("IMMEDIATE DOMINATOR OF BLOCK IS NULL: .L%d\n\n", B->block_id);
+	exit(0);
+
 	//Otherwise we didn't find it, so there is no immediate dominator
 	return NULL;
 }
@@ -1127,6 +1130,7 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != immediate_dominator(block)){
+				printf("HERE\n\n");
 				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);
 				

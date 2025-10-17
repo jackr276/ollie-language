@@ -6,7 +6,6 @@
 */
 #include "optimizer.h"
 #include "../utils/queue/heap_queue.h"
-#include <stdio.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -556,6 +555,184 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 
 	//The empty block now no longer has the replacement as a successor
 	delete_successor(empty_block, replacement);
+}
+
+
+/**
+ * To find the nearest marked postdominator, we can do a breadth-first
+ * search starting at our block B. Whenever we find a node that is both:
+ * 	a.) A postdominator of B
+ * 	b.) marked
+ * we'll have our answer
+ */
+static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B){
+	//We'll need a queue for the BFS
+	heap_queue_t* queue = heap_queue_alloc();
+
+	//First, we'll reset every single block here
+	reset_visited_status(cfg, FALSE);
+
+	//Seed the search with B
+	enqueue(queue, B);
+
+	//The nearest marked postdominator and a holder for our candidates
+	basic_block_t* nearest_marked_postdominator = NULL;
+	basic_block_t* candidate;
+
+	//So long as the queue is not empty
+	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		//Grab the block off
+		candidate = dequeue(queue);
+		
+		//If we've been here before, continue;
+		if(candidate->visited == TRUE){
+			continue;
+		}
+
+		//Mark this for later
+		candidate->visited = TRUE;
+
+		//Now let's check for our criterion.
+		//We want:
+		//	it to be in the postdominator set
+		//	it to have a mark
+		//	it to not equal itself
+		if(dynamic_array_contains(B->postdominator_set, candidate) != NOT_FOUND
+		  && candidate->contains_mark == TRUE && B != candidate){
+			//We've found it, so we're done
+			nearest_marked_postdominator = candidate;
+			//Get out
+			break;
+		}
+
+		//Otherwise, we didn't find anything, so we'll keep going
+		//Enqueue all of the successors
+		for(u_int16_t i = 0; candidate->successors != NULL && i < candidate->successors->current_index; i++){
+			//Grab the successor out
+			basic_block_t* successor = dynamic_array_get_at(candidate->successors, i);
+
+			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
+			if(successor->visited == FALSE){
+				enqueue(queue, successor);
+			}
+		}
+	}
+
+	//Destroy the queue when done
+	heap_queue_dealloc(queue);
+
+	//And give this back
+	return nearest_marked_postdominator;
+}
+
+
+/**
+ * The sweep algorithm will go through and remove every operation that has not been marked
+ *
+ * procedure sweep:
+ * 	for each operation i:
+ * 		if is is unmarked then:
+ * 			if i is a branch then
+ * 			  rewrite i with a jump to i's nearest
+ * 			  marked postdominator
+ *
+ * 			if i is not a jump then:
+ * 			  delete i
+ *
+ */
+static void sweep(cfg_t* cfg){
+	//For each and every operation in every basic block
+	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+
+		//Holder for the postdom
+		basic_block_t* nearest_marked_postdom;
+
+		//Grab the statement out
+		instruction_t* stmt = block->leader_statement;
+
+		//For each statement in the block
+		while(stmt != NULL){
+			//If it's useful, ignore it
+			if(stmt->mark == TRUE){
+				stmt = stmt->next_statement;
+				continue;
+			}
+
+			//A holder for when we perform deletions
+			instruction_t* temp;
+
+			/**
+			 * Some statements like jumps and branches
+			 * require special attention
+			 */
+			switch(stmt->statement_type){
+				//We *never* delete jump statements because
+				//they are critical to the control flow. They
+				//may be cleaned up by other optimizations, but for
+				//here we leave them
+				case THREE_ADDR_CODE_JUMP_STMT:
+					stmt = stmt->next_statement;
+
+					//Break out of the switch
+					break;
+
+				//If we have a branch that is now useless,
+				//we'll need to replace it with a jump to
+				//it's nearest marked postdominator
+				case THREE_ADDR_CODE_BRANCH_STMT:
+					//We'll first find the nearest marked postdominator
+					nearest_marked_postdom = nearest_marked_postdominator(cfg, block);
+
+					/**
+					 * Once we do this, the if and else blocks are no longer
+					 * successors, so we'll remove them
+					 *
+					 * IMPORTANT: We cannot delete these until after
+					 * we've found that postdominator
+					 */
+					delete_successor(block, stmt->if_block);
+					delete_successor(block, stmt->else_block);
+
+					//This is now useless
+					delete_statement(stmt);
+
+					//Emit the jump statement to the nearest marked postdominator
+					//NOTE: the emit jump adds the successor in for us, so we don't need to
+					//do so here
+					stmt = emit_jump(block, nearest_marked_postdom, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+
+					//Break out of the switch
+					break;
+
+				/**
+				 * By default no special treatment, we're just deleting
+				 */
+				default:
+					//Perform the deletion and advancement
+					temp = stmt;
+
+					//If we are deleting an indirect jump address calculation statement,
+					//then this statements jump table is useless
+					if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
+						//We'll need to deallocate this jump table
+						jump_table_dealloc(block->jump_table);
+
+						//Flag it as null
+						block->jump_table = NULL;
+					}
+
+					//Advance the statement
+					stmt = stmt->next_statement;
+					//Delete the statement, now that we know it is not a jump
+					delete_statement(temp);
+
+					//Break out of the switch
+					break;
+			}
+		}
+	}
 }
 
 
@@ -1186,33 +1363,8 @@ static void optimize_compound_logic(cfg_t* cfg){
 		basic_block_t* if_target = branch_statement->if_block;
 		basic_block_t* else_target = branch_statement->else_block;
 
-		//If this IS an inverse jump, then our else clause is actually the conditional
-		if(block->exit_statement->previous_statement->inverse_jump == TRUE){
-			printf("HERE in block: .L%d\n", block->block_id);
-			//These will be inverse of what we normally have
-			//We made it here, so we know that this is the else target
-			else_target = block->exit_statement->previous_statement->if_block;
-
-			//This will be our if target
-			if_target = block->exit_statement->if_block;
-
-			//Set the flag
-			use_inverse_jump = TRUE;
-
-		//Otherwise it's a normal conditional scenario
-		} else {
-			//We made it here, so we know that this is the else target
-			else_target = block->exit_statement->if_block;
-
-			//This will be our if target
-			if_target = block->exit_statement->previous_statement->if_block;
-
-			//Set the flag
-			use_inverse_jump = FALSE;
-		}
-
 		//Grab a statement cursor
-		instruction_t* cursor = block->exit_statement;
+		instruction_t* cursor = block->exit_statement->previous_statement;
 
 		//Store all of our eligible statements in this block. This will be done in a FIFO
 		//fashion
@@ -1221,7 +1373,7 @@ static void optimize_compound_logic(cfg_t* cfg){
 		//Let's run through and see if we can find a statement that's eligible for short circuiting.
 		while(cursor != NULL){
 			//If we make it here, then we've found something that is eligible for a compound logic optimization
-			if(TRUE && cursor->is_branch_ending == TRUE){
+			if(cursor->is_branch_ending == TRUE){
 				//For now we'll add this to the list of potential ones
 				if(eligible_statements == NULL){
 					//If we didn't have one of these, make it now
@@ -1329,184 +1481,6 @@ static void clean(cfg_t* cfg){
 	}
 }
 
-
-
-/**
- * To find the nearest marked postdominator, we can do a breadth-first
- * search starting at our block B. Whenever we find a node that is both:
- * 	a.) A postdominator of B
- * 	b.) marked
- * we'll have our answer
- */
-static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B){
-	//We'll need a queue for the BFS
-	heap_queue_t* queue = heap_queue_alloc();
-
-	//First, we'll reset every single block here
-	reset_visited_status(cfg, FALSE);
-
-	//Seed the search with B
-	enqueue(queue, B);
-
-	//The nearest marked postdominator and a holder for our candidates
-	basic_block_t* nearest_marked_postdominator = NULL;
-	basic_block_t* candidate;
-
-	//So long as the queue is not empty
-	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
-		//Grab the block off
-		candidate = dequeue(queue);
-		
-		//If we've been here before, continue;
-		if(candidate->visited == TRUE){
-			continue;
-		}
-
-		//Mark this for later
-		candidate->visited = TRUE;
-
-		//Now let's check for our criterion.
-		//We want:
-		//	it to be in the postdominator set
-		//	it to have a mark
-		//	it to not equal itself
-		if(dynamic_array_contains(B->postdominator_set, candidate) != NOT_FOUND
-		  && candidate->contains_mark == TRUE && B != candidate){
-			//We've found it, so we're done
-			nearest_marked_postdominator = candidate;
-			//Get out
-			break;
-		}
-
-		//Otherwise, we didn't find anything, so we'll keep going
-		//Enqueue all of the successors
-		for(u_int16_t i = 0; candidate->successors != NULL && i < candidate->successors->current_index; i++){
-			//Grab the successor out
-			basic_block_t* successor = dynamic_array_get_at(candidate->successors, i);
-
-			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
-			if(successor->visited == FALSE){
-				enqueue(queue, successor);
-			}
-		}
-	}
-
-	//Destroy the queue when done
-	heap_queue_dealloc(queue);
-
-	//And give this back
-	return nearest_marked_postdominator;
-}
-
-
-/**
- * The sweep algorithm will go through and remove every operation that has not been marked
- *
- * procedure sweep:
- * 	for each operation i:
- * 		if is is unmarked then:
- * 			if i is a branch then
- * 			  rewrite i with a jump to i's nearest
- * 			  marked postdominator
- *
- * 			if i is not a jump then:
- * 			  delete i
- *
- */
-static void sweep(cfg_t* cfg){
-	//For each and every operation in every basic block
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
-		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
-
-		//Holder for the postdom
-		basic_block_t* nearest_marked_postdom;
-
-		//Grab the statement out
-		instruction_t* stmt = block->leader_statement;
-
-		//For each statement in the block
-		while(stmt != NULL){
-			//If it's useful, ignore it
-			if(stmt->mark == TRUE){
-				stmt = stmt->next_statement;
-				continue;
-			}
-
-			//A holder for when we perform deletions
-			instruction_t* temp;
-
-			/**
-			 * Some statements like jumps and branches
-			 * require special attention
-			 */
-			switch(stmt->statement_type){
-				//We *never* delete jump statements because
-				//they are critical to the control flow. They
-				//may be cleaned up by other optimizations, but for
-				//here we leave them
-				case THREE_ADDR_CODE_JUMP_STMT:
-					stmt = stmt->next_statement;
-
-					//Break out of the switch
-					break;
-
-				//If we have a branch that is now useless,
-				//we'll need to replace it with a jump to
-				//it's nearest marked postdominator
-				case THREE_ADDR_CODE_BRANCH_STMT:
-					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = nearest_marked_postdominator(cfg, block);
-
-					/**
-					 * Once we do this, the if and else blocks are no longer
-					 * successors, so we'll remove them
-					 *
-					 * IMPORTANT: We cannot delete these until after
-					 * we've found that postdominator
-					 */
-					delete_successor(block, stmt->if_block);
-					delete_successor(block, stmt->else_block);
-
-					//This is now useless
-					delete_statement(stmt);
-
-					//Emit the jump statement to the nearest marked postdominator
-					//NOTE: the emit jump adds the successor in for us, so we don't need to
-					//do so here
-					stmt = emit_jump(block, nearest_marked_postdom, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-					//Break out of the switch
-					break;
-
-				/**
-				 * By default no special treatment, we're just deleting
-				 */
-				default:
-					//Perform the deletion and advancement
-					temp = stmt;
-
-					//If we are deleting an indirect jump address calculation statement,
-					//then this statements jump table is useless
-					if(temp->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT){
-						//We'll need to deallocate this jump table
-						jump_table_dealloc(block->jump_table);
-
-						//Flag it as null
-						block->jump_table = NULL;
-					}
-
-					//Advance the statement
-					stmt = stmt->next_statement;
-					//Delete the statement, now that we know it is not a jump
-					delete_statement(temp);
-
-					//Break out of the switch
-					break;
-			}
-		}
-	}
-}
 
 
 /**
@@ -1630,8 +1604,7 @@ cfg_t* optimize(cfg_t* cfg){
 	//entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()
 	clean(cfg);
-	
-	//Stopper for now
+
 	exit(0);
 
 	//PASS 4: Recalculate everything
