@@ -7632,17 +7632,6 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 
 
 /**
- * Visit a global variable let statement(declaration + initialization)
- */
-static void visit_global_let_statement(generic_ast_node_t* node){
-
-	printf("NOT IMPLEMENTED\n");
-	exit(0);
-
-}
-
-
-/**
  * Visit a global variable declaration statement
  */
 static void visit_global_declare_statement(generic_ast_node_t* node){
@@ -7754,9 +7743,8 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			 * are global variables
 			 */
 			case AST_NODE_TYPE_LET_STMT:
-				//We'll visit the block here
-				visit_global_let_statement(ast_cursor);
-				
+				printf("NOT IMPLEMENTED\n");
+				exit(0);
 				//And we'll move along here
 				break;
 		
@@ -7863,10 +7851,6 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo){
 
 			//Recompute the reverse post order cfg
 			block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(block, TRUE);
-
-			for(u_int16_t a = 0; a < block->reverse_post_order_reverse_cfg->current_index; a++){
-				basic_block_t* internal_block = dynamic_array_get_at(block->reverse_post_order_reverse_cfg, a);
-			}
 		}
 	}
 }

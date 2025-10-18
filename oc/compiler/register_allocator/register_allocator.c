@@ -2506,7 +2506,6 @@ static void postprocess(cfg_t* cfg){
 					current_instruction = current_instruction->next_statement;
 				}
 
-				//TODO MAY NOT NEED
 				continue;
 			}
 
@@ -2527,15 +2526,6 @@ static void postprocess(cfg_t* cfg){
 					} else {
 						//Temp holder
 						instruction_t* temp = current_instruction;
-
-						if(temp != current->exit_statement){
-							printf("BLOCK MISMATCH FOR:\n");
-							print_instruction(stdout, temp, PRINTING_REGISTERS);
-							basic_block_t* block_contained = temp->block_contained_in;
-							printf("Thinks it is in block .L%d but it is really in block .L%d\n", block_contained->block_id, current->block_id);
-							exit(1);
-
-						}
 
 						//Advance this
 						current_instruction = current_instruction->next_statement;
