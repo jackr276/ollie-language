@@ -2346,6 +2346,69 @@ static void handle_lea_statement(instruction_t* instruction){
 
 
 /**
+ * A branch statement always selects 2 instructions, the conditional
+ * jump-to-if and the unconditional else jump
+ *
+ * NOTE: we know that the branch instruction here is always instruction 1
+ */
+static void handle_branch_instruction(instruction_window_t* window){
+	//Add it in here
+	instruction_t* branch_stmt = window->instruction1;
+
+	//Grab out the if and else blocks
+	basic_block_t* if_block = branch_stmt->if_block;
+	basic_block_t* else_block = branch_stmt->else_block;
+
+	//Placeholder for the jump to if instruction
+	instruction_t* jump_to_if;
+
+	switch(branch_stmt->branch_type){
+		case BRANCH_A:
+			jump_to_if = emit_jump_instruction_directly(if_block, JA);
+			break;
+		case BRANCH_AE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+			break;
+		case BRANCH_B:
+			jump_to_if = emit_jump_instruction_directly(if_block, JB);
+			break;
+		case BRANCH_BE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+			break;
+		case BRANCH_E:
+			jump_to_if = emit_jump_instruction_directly(if_block, JE);
+			break;
+		case BRANCH_NE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+			break;
+		case BRANCH_Z:
+			jump_to_if = emit_jump_instruction_directly(if_block, JZ);
+			break;
+		case BRANCH_NZ:
+			jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
+			break;
+		case BRANCH_G:
+			jump_to_if = emit_jump_instruction_directly(if_block, JG);
+			break;
+		case BRANCH_GE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JGE);
+			break;
+		case BRANCH_L:
+			jump_to_if = emit_jump_instruction_directly(if_block, JL);
+			break;
+		case BRANCH_LE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JLE);
+			break;
+
+		//We in reality should never reach here
+		default:
+			break;
+	}
+
+}
+
+
+/**
  *	//=========================== Logical Notting =============================
  * Although it may not seem like it, logical not is actually a multiple instruction
  * pattern
@@ -3299,6 +3362,11 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//more complex rules
 		case THREE_ADDR_CODE_JUMP_STMT:
 			instruction->instruction_type = JMP;
+			break;
+		//A branch statement will have more complex
+		//selection rules, so we'll use a helper function
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			handle_branch_instruction(window);
 			break;
 		//Special case here - we don't change anything
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
