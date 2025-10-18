@@ -46,6 +46,55 @@ static three_addr_var_t* stack_pointer;
 //And the type symtab
 static type_symtab_t* type_symtab;
 
+/**
+ * Combine two blocks into one. This is different than other combine methods,
+ * because post register-allocation, we do not really care about anything like
+ * used variables, dominance relations, etc.
+ *
+ * Combine B into A
+ *
+ * After this happens, B no longer exists
+ */
+static void combine_blocks(basic_block_t* a, basic_block_t* b){
+	//What if a was never even assigned?
+	if(a->exit_statement == NULL){
+		a->leader_statement = b->leader_statement;
+		a->exit_statement = b->exit_statement;
+
+	//If the leader statement is NULL - we really don't need to do anything. If it's not however, we
+	//will need to add everything in
+	} else if(b->leader_statement != NULL){
+		//Otherwise it's a "true merge"
+		//The leader statement in b will be connected to a's tail
+		a->exit_statement->next_statement = b->leader_statement;
+		//Connect backwards too
+		b->leader_statement->previous_statement = a->exit_statement;
+		//Now once they're connected we'll set a's exit to be b's exit
+		a->exit_statement = b->exit_statement;
+	}
+
+	//Copy over the block type and terminal type
+	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
+		a->block_type = b->block_type;
+	}
+
+	//If b is a switch statment start block, we'll copy the jump table
+	if(b->jump_table != NULL){
+		a->jump_table = b->jump_table;
+	}
+
+	//For each statement in b, all of it's old statements are now "defined" in a
+	instruction_t* b_stmt = b->leader_statement;
+
+	//Modify these "block contained in" references to be A
+	while(b_stmt != NULL){
+		b_stmt->block_contained_in = a;
+
+		//Push it up
+		b_stmt = b_stmt->next_statement;
+	}
+}
+
 
 /**
  * Priority queue insert a live range in here
@@ -2437,8 +2486,15 @@ static void postprocess(cfg_t* cfg){
 			if(current_instruction->instruction_type == JMP){
 				//Extract where we're jumping to
 				basic_block_t* jumping_to_block = current_instruction->if_block;
-				
-				
+
+				//If the direct sucessor is the jumping to block, there are a few actions
+				//that we may be able to take
+				if(jumping_to_block == current->direct_successor){
+					if(){
+
+					}
+
+				}
 			}
 
 			current_instruction = current_instruction->next_statement;
