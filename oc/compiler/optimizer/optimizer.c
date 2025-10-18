@@ -1637,17 +1637,16 @@ cfg_t* optimize(cfg_t* cfg){
 	//nearest marked postdominator
 	sweep(cfg);
 
-	//PASS 3: Clean algorithm
+	//PASS 3: compound logic optimization
+	//Now that we've sweeped everything, we know that what branches are left must be useful. This means
+	//that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
+	optimize_short_circuit_logic(cfg);
+
+	//PASS 4: Clean algorithm
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
 	//entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
 	//that has been made useless by sweep()
 	clean(cfg);
-
-	//PASS 4: compound logic optimization
-	//Now that we've cleaned up all irrelevant brances, we can look at the branches that are left
-	//and see if we can optimize any of the compound logic associated with them. We will do this before
-	//we clean because it will generate more basic blocks/branches to look at
-	optimize_short_circuit_logic(cfg);
 	
 	//PASS 5: Delete all unreachable blocks
 	//There is a chance that we have some blocks who are now unreachable. We will
