@@ -191,22 +191,6 @@ void set_new_function(symtab_function_record_t* func){
 
 
 /**
- * Determine the signedness of a jump type
- */
-u_int8_t is_jump_type_signed(jump_type_t type){
-	switch(type){
-		case JUMP_TYPE_JG:
-		case JUMP_TYPE_JGE:
-		case JUMP_TYPE_JLE:
-		case JUMP_TYPE_JL:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * A simple helper function to determine if an operator is a comparison operator
  */
 u_int8_t is_operator_relational_operator(ollie_token_t op){
@@ -1366,43 +1350,6 @@ static char* op_to_string(ollie_token_t op){
 /**
  * Convert a jump type to a string
  */
-static char* jump_type_to_string(jump_type_t jump_type){
-	switch(jump_type){
-		case JUMP_TYPE_JE:
-			return "je";
-		case JUMP_TYPE_JNE:
-			return "jne";
-		case JUMP_TYPE_JG:
-			return "jg";
-		case JUMP_TYPE_JL:
-			return "jl";
-		case JUMP_TYPE_JNZ:
-			return "jnz";
-		case JUMP_TYPE_JZ:
-			return "jz";
-		case JUMP_TYPE_JMP:
-			return "jmp";
-		case JUMP_TYPE_JGE:
-			return "jge";
-		case JUMP_TYPE_JLE:
-			return "jle";
-		case JUMP_TYPE_JAE:
-			return "jae";
-		case JUMP_TYPE_JBE:
-			return "jbe";
-		case JUMP_TYPE_JA:
-			return "ja";
-		case JUMP_TYPE_JB:
-			return "jb";
-		default:
-			return "jmp";
-	}
-}
-
-
-/**
- * Convert a jump type to a string
- */
 static char* branch_type_to_string(branch_type_t branch_type){
 	switch(branch_type){
 		case BRANCH_A:
@@ -1547,7 +1494,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_JUMP_STMT:
 			//Then print out the block label
-			fprintf(fl, "%s .L%d\n", jump_type_to_string(stmt->jump_type), ((basic_block_t*)(stmt->if_block))->block_id);
+			fprintf(fl, "jmp .L%d\n", ((basic_block_t*)(stmt->if_block))->block_id);
 			break;
 
 		//Branch statements represent the ends of blocks
@@ -1765,7 +1712,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 			//Indirection
-			fprintf(fl, "%s *", jump_type_to_string(stmt->jump_type));
+			fprintf(fl, "jmp *");
 
 			//Now the variable
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
@@ -3705,14 +3652,13 @@ instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_c
 /**
  * Emit a jump statement where we jump to the block with the ID provided
  */
-instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_type){
+instruction_t* emit_jmp_instruction(void* jumping_to_block){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_JUMP_STMT;
 	stmt->if_block = jumping_to_block;
-	stmt->jump_type = jump_type;
 	//What function are we in
 	stmt->function = current_function;
 	//Give the statement back
@@ -3768,7 +3714,7 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_type_t jump_type){
+instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -3776,7 +3722,6 @@ instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_typ
 	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
 	//The address we're jumping to is in op1
 	stmt->op1 = address;
-	stmt->jump_type = jump_type;
 	//What function we're in
 	stmt->function = current_function;
 	//And give it back
@@ -4101,110 +4046,6 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 
 	//We always give back constant 2
 	return constant2;
-}
-
-
-/**
- * Select the appropriate jump type to use. We can either use
- * inverse jumps or direct jumps
- */
-jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_type, u_int8_t is_signed){
-	//Let's see what we have here
-	switch(op){
-		case G_THAN:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				if(is_signed == TRUE){
-					//Signed version
-					return JUMP_TYPE_JLE;
-				} else {
-					//Unsigned version
-					return JUMP_TYPE_JBE;
-				}
-			} else {
-				if(is_signed == TRUE){
-					//Signed version
-					return JUMP_TYPE_JG;
-				} else {
-					//Unsigned version
-					return JUMP_TYPE_JA;
-				}
-			}
-		case L_THAN:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				if(is_signed == TRUE){
-					//Signed version
-					return JUMP_TYPE_JGE;
-				} else {
-					//Unsigned version
-					return JUMP_TYPE_JAE;
-				}
-			} else {
-				if(is_signed == TRUE){
-					//Signed version
-					return JUMP_TYPE_JL;
-				} else {
-					//Unsigned version
-					return JUMP_TYPE_JB;
-				}
-			}
-		case L_THAN_OR_EQ:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				if(is_signed == TRUE){
-					//Signed version
-					return JUMP_TYPE_JG;
-				} else {
-					//Unsigned version
-					return JUMP_TYPE_JA;
-				}
-			} else {
-				if(is_signed == TRUE){
-					//Signed version
-					return JUMP_TYPE_JLE;
-				} else {
-					//Unsigned version
-					return JUMP_TYPE_JBE;
-				}
-			}
-		case G_THAN_OR_EQ:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				if(is_signed == TRUE){
-					//Signed version
-					return JUMP_TYPE_JL;
-				} else {
-					//Unsigned version
-					return JUMP_TYPE_JB;
-				}
-			} else {
-				if(is_signed == TRUE){
-					//Signed version
-					return JUMP_TYPE_JGE;
-				} else {
-					//Unsigned version
-					return JUMP_TYPE_JAE;
-				}
-			}
-		case DOUBLE_EQUALS:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JNE;
-			} else {
-				return JUMP_TYPE_JE;
-			}
-		case NOT_EQUALS:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JE;
-			} else {
-				return JUMP_TYPE_JNE;
-			}
-		//If we get here, it was some kind of
-		//non relational operator. In this case,
-		//we default to 0 = false non zero = true
-		default:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JZ;
-			} else {
-				return JUMP_TYPE_JNZ;
-			}
-	}
 }
 
 

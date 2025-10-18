@@ -167,7 +167,7 @@ void remove_statement(instruction_t* stmt){
  * NOTE: this rule does *no* successor management or branch insertion
  *
  */
-static void bisect_block(basic_block_t* original, basic_block_t* new, instruction_t* bisect_start){
+static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
 	//Grab a cursor to the start statement
 	instruction_t* cursor = bisect_start;
 
@@ -305,9 +305,6 @@ static void mark(cfg_t* cfg){
 
 		//Grab a cursor to the current statement
 		instruction_t* current_stmt = current->leader_statement;
-
-		//For later storage
-		symtab_variable_record_t* related_memory_address;
 
 		/**
 		 * We'll now go through and mark every statement that we
@@ -792,7 +789,7 @@ static void sweep(cfg_t* cfg){
 					//Emit the jump statement to the nearest marked postdominator
 					//NOTE: the emit jump adds the successor in for us, so we don't need to
 					//do so here
-					stmt = emit_jump(block, nearest_marked_postdom, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					stmt = emit_jump(block, nearest_marked_postdom, NULL, TRUE, FALSE);
 
 					//Break out of the switch
 					break;
@@ -901,7 +898,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				delete_all_branching_statements(current);
 
 				//Emit a jump here instead
-				emit_jump(current, branch->if_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current, branch->if_block, NULL, TRUE, FALSE);
 
 				//This counts as a change
 				changed = TRUE;
@@ -1087,7 +1084,7 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 	//Now we've found where we need to effectively split the block into 2 pieces
 	//Everything after this op1 assignment needs to be removed from this block
 	//and put into the new block. The split starts at the first half cursor's *next statement*
-	bisect_block(original_block, second_half_block, first_half_cursor->next_statement);
+	bisect_block(second_half_block, first_half_cursor->next_statement);
 
 	/**
 	 * Now starting at the second half cursor's next statement, we'll *delete* everything
@@ -1231,7 +1228,7 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	//Now we've found where we need to effectively split the block into 2 pieces
 	//Everything after this op1 assignment needs to be removed from this block
 	//and put into the new block. The split starts at the first half cursor's *next statement*
-	bisect_block(original_block, second_half_block, first_half_cursor->next_statement);
+	bisect_block(second_half_block, first_half_cursor->next_statement);
 
 	/**
 	 * Now starting at the second half cursor's next statement, we'll *delete* everything
@@ -1381,9 +1378,6 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 		if(branch_statement->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
 			continue;
 		}
-
-		//Do we need to use the inverse jumping methodology?
-		u_int8_t use_inverse_jump = branch_statement->inverse_jump;
 
 		//Extract both of these values - we will need them
 		basic_block_t* if_target = branch_statement->if_block;

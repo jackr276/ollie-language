@@ -83,27 +83,6 @@ typedef enum {
 
 
 /**
- * What kind of jump statement do we have?
- */
-typedef enum{
-	NO_JUMP, //This is the default, and what we get when we have 0
-	JUMP_TYPE_JNE,
-	JUMP_TYPE_JE,
-	JUMP_TYPE_JNZ,
-	JUMP_TYPE_JZ,
-	JUMP_TYPE_JL, //Jump LT(SIGNED)
-	JUMP_TYPE_JG, //Jump GT(SIGNED)
-	JUMP_TYPE_JGE, //Jump GE(SIGNED)
-	JUMP_TYPE_JLE, //Jump LE(SIGNED)
-	JUMP_TYPE_JA, //Jump GT(UNSIGNED)
-	JUMP_TYPE_JAE, //Jump GE(UNSIGNED)
-	JUMP_TYPE_JB, //Jump LT(UNSIGNED)
-	JUMP_TYPE_JBE, //Jump LE(UNSIGNED)
-	JUMP_TYPE_JMP,
-} jump_type_t;
-
-
-/**
  * Define the kind of branch that we have in an ollie branch
  * command
  */
@@ -324,8 +303,6 @@ struct instruction_t{
 	u_int8_t is_converting_move;
 	//Does this have a multiplicator
 	u_int8_t has_multiplicator;
-	//If it's a jump statement, what's the type?
-	jump_type_t jump_type;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?
@@ -358,12 +335,6 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
  * Declare that we are in a new function
  */
 void set_new_function(symtab_function_record_t* func);
-
-
-/**
- * Determine the signedness of a jump type
- */
-u_int8_t is_jump_type_signed(jump_type_t type);
 
 /**
  * Helper function to determine if an operator is a relational operator
@@ -641,7 +612,7 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 /**
  * Emit a jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_type);
+instruction_t* emit_jmp_instruction(void* jumping_to_block);
 
 /**
  * Emit a jump instruction directly
@@ -656,7 +627,7 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_type_t jump_type);
+instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address);
 
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in
@@ -726,11 +697,6 @@ instruction_t* copy_instruction(instruction_t* copied);
  * The result will be: constant2 = constant1 + constant2
  */
 three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
-
-/**
- * Select the appropriate jump type given the circumstances, including the operand and the signedness
- */
-jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_type, u_int8_t is_signed);
 
 /**
  * select the appropriate branch statement given the circumstances, including operand and signedness
