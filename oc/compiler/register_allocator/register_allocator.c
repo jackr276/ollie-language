@@ -2517,8 +2517,16 @@ static void postprocess(cfg_t* cfg){
 				//If the direct sucessor is the jumping to block, there are a few actions
 				//that we may be able to take
 				if(current->direct_successor == jumping_to_block){
-					if(current->predecessors == NULL || current->predecessors->current_index == 0){
-						//Combine
+					//We can combine the two blocks into one
+					if(jumping_to_block->predecessors == NULL || jumping_to_block->predecessors->current_index == 1){
+						//Delete the jump statement
+						delete_statement(current_instruction);
+
+						//Combine the two blocks here
+						current_instruction = combine_blocks(current, jumping_to_block);
+
+						//The jumping to block is no longer a place here
+						dynamic_array_delete(cfg->created_blocks, jumping_to_block);
 					
 					/**
 					 * Otherwise, we should still be able to just delete this jump instruction
@@ -2532,9 +2540,9 @@ static void postprocess(cfg_t* cfg){
 
 						//Just delete the temp instruction
 						delete_statement(temp);
-
-						continue;
 					}
+
+					continue;
 				}
 			}
 
