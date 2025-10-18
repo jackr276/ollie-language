@@ -1238,15 +1238,14 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
  * t8 <- 1
  * t7 <- t7 != t8 <------- If this is true, jump to if
  * cbranch_ne .L12 else .L13
- *
- *
- * t9 <- t5 && t7 <----------- if the *use count* of t9 is more than 1, we'll still need to keep it around. Otherwise we delete
  */
 static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
 	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	//VERY important that we copy this on over
+	second_half_block->function_defined_in = original_block->function_defined_in;
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
 	for(u_int16_t i = 0; i < original_block->successors->current_index; i++){
@@ -1256,8 +1255,9 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 		delete_successor(original_block, successor);
 	}
 
-	//Extract the op1, we'll need to trave 
+	//Extract the op1, we'll need to traverse
 	three_addr_var_t* op1 = short_circuit_statment->op1;
+	three_addr_var_t* op2 = short_circuit_statment->op2;
 
 	//The cursor for our first half
 	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;
@@ -1268,87 +1268,87 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 		first_half_cursor = first_half_cursor->previous_statement;
 	}
 
-	//Now we've found where we need to effectively split the block into 2 pieces
-	//Everything after this op1 assignment needs to be removed from this block
-	//and put into the new block
-	bisect_block()
+	//The cursor for our second half
+	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
 
-
-
-
-
-
-	//Starting off-we're given the and stmt as a parameter, and our two jumps
-	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
-	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
-	three_addr_var_t* op1 = stmt->op1;
-	//Grab a statement cursor. We start at the previous one because we've no need
-	//for the one we're currently on
-	instruction_t* cursor = stmt->previous_statement;
-
-	//Run backwards until we find where op1 is the assignee
-	while(cursor != NULL && variables_equal(op1, cursor->assignee, FALSE) == FALSE){
+	//Trace our way up to where op2 was assigned
+	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
 		//Keep advancing backward
-		cursor = cursor->previous_statement;
+		second_half_cursor = second_half_cursor->previous_statement;
 	}
 
-	//Is our first op signed
-	u_int8_t first_op_signed = is_type_signed(cursor->assignee->type);
+	//Now we've found where we need to effectively split the block into 2 pieces
+	//Everything after this op1 assignment needs to be removed from this block
+	//and put into the new block. The split starts at the first half cursor's *next statement*
+	bisect_block(original_block, second_half_block, first_half_cursor->next_statement);
 
-	//Once we get out here, we have the statement that assigns op1. Since this is an "and" target,
-	//we'll jump to ELSE if we have a bad result here(result being zero) because that would cause
-	//the rest of the and to be false
+	/**
+	 * Now starting at the second half cursor's next statement, we'll *delete* everything
+	 * after it because we no longer need it
+	 */
+	instruction_t* delete_cursor = second_half_cursor->next_statement;
 	
-	//We need to select the appropriate jump type for our statement. We want an inverse jump, 
-	//because we're jumping if this condition fails
-	jump_type_t jump = select_appropriate_jump_stmt(cursor->op, JUMP_CATEGORY_INVERSE, first_op_signed);
+	//Delete until we run out
+	while(delete_cursor != NULL){
+		//Hold onto it
+		instruction_t* holder = delete_cursor;
+
+		//Move it along up
+		delete_cursor = delete_cursor->next_statement;
+
+		//Delete the holder. This is a full delete, this statement
+		//isn't ever coming back
+		delete_statement(holder);
+	}
+
+	//Now we have 2 blocks, split nicely in half for us to work with
+	//The first block contains the first condition, and the second
+	//block contains the second condition and nothing else after it
+	//The old branch and the compound and condition is now gone
 	
-	//Jump to else here
-	instruction_t* jump_to_else_stmt = emit_jmp_instruction(else_target, jump);
-	//Mark where this came from
-	jump_to_else_stmt->block_contained_in = block;
-	//Make sure to mark that this is branch ending
-	jump_to_else_stmt->is_branch_ending = TRUE;
+	/**
+	 * HANDLING THE FIRST BLOCK
+	 *
+	 * The first block will exploit the logical and property that if the
+	 * first condition fails, the second *should never execute*. We have
+	 * an inverse jump of sorts here
+	 */
+	//We need the operator
+	ollie_token_t first_condition_op = first_half_cursor->op;
+	//And if the type is signed
+	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
 
-	//We'll now need to insert this statement right after where op1 is assigned at cursor
-	instruction_t* after = cursor->next_statement;
+	//Determine an appropriate branch. Remember, if this *fails* the if condition
+	//succeeds, so this is an *inverse* jump
+	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_INVERSE, first_half_signed);
 
-	//The jump statement is now in between the two
-	cursor->next_statement = jump_to_else_stmt;
-	jump_to_else_stmt->previous_statement = cursor;
+	//Now we'll emit our branch at the very end of the first block. Remember it's:
+	//if condition fails:
+	//	goto else
+	//else
+	//	goto second_half_block 
+	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
 
-	//And we'll also update the references for after
-	jump_to_else_stmt->next_statement = after;
-	after->previous_statement = jump_to_else_stmt;
+	/**
+	 * HANDLING THE SECOND BLOCK
+	 *
+	 * The second block is only reachable if the first condition is true. Therefore, if the second condition
+	 * is also true, we can jump to our if target. Otherwise, go to the else target
+	 */
+	ollie_token_t second_condition_op = second_half_cursor->op;
+	//And if the type is signed
+	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
 
-	//Hang onto these
-	instruction_t* previous = stmt->previous_statement;
-	instruction_t* next = stmt->next_statement;
-	instruction_t* final_jump = next->next_statement;
+	//Determine an appropriate branch. Remember, if this *succeeds* the if condition
+	//succeeds, so this is a *regular* jump
+	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_NORMAL, second_half_signed);
 
-	//And even better, we now don't need the compound and at all. We can delete the whole stmt
-	delete_statement(stmt);
-
-	//We also no longer need the following jump statement
-	delete_statement(next);
-
-	//Our second op signedness - unsigned by default
-	u_int8_t second_op_signed = is_type_signed(previous->assignee->type);
-
-	//Now, we'll construct an entirely new statement based on what we have as the previous's operator
-	//We'll do a direct jump here - if it's affirmative
-	jump = select_appropriate_jump_stmt(previous->op, JUMP_CATEGORY_NORMAL, second_op_signed);
-
-	//Now we'll emit the jump to if
-	instruction_t* final_cond_jump = emit_jmp_instruction(if_target, jump);
-	//Mark where this came from
-	final_cond_jump->block_contained_in = block;
-
-	//We'll now add this one in right as the previous one
-	previous->next_statement = final_cond_jump;
-	final_cond_jump->previous_statement = previous;
-	final_cond_jump->next_statement = final_jump;
-	final_jump->previous_statement = final_cond_jump;
+	//Now we'll emit our final branch at the end of the first block. Remember it's:
+	//if condition succeeds:
+	// goto if_block
+	//else 
+	// goto else_block
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
 }
 
 
@@ -1555,17 +1555,17 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 					optimize_logical_and_branch_logic(short_circuit_statement, if_target, else_target);
 				} else {
 					//Invoke the inverse function
-					optimize_compound_and_jump_inverse(cfg, block, short_circuit_statement, if_target, else_target);
+					//optimize_compound_and_jump_inverse(cfg, block, short_circuit_statement, if_target, else_target);
 				}
 			//Otherwise we have the double or
 			} else {
 				//No inverse jump, this is the common case
 				if(use_inverse_jump == FALSE){
 					//Invoke the or helper
-					optimize_compound_or_jump(cfg, block, short_circuit_statement, if_target, else_target);
+					//optimize_compound_or_jump(cfg, block, short_circuit_statement, if_target, else_target);
 				} else {
 					//Use the inverse helper
-					optimize_compound_or_jump_inverse(cfg, block, short_circuit_statement, if_target, else_target);
+					//optimize_compound_or_jump_inverse(cfg, block, short_circuit_statement, if_target, else_target);
 				}
 			}
 		}
@@ -1781,27 +1781,30 @@ cfg_t* optimize(cfg_t* cfg){
 	//that has been made useless by sweep()
 	clean(cfg);
 
-	//PASS 4: Delete all unreachable blocks
+	//PASS 4: compound logic optimization
+	//Now that we've cleaned up all irrelevant brances, we can look at the branches that are left
+	//and see if we can optimize any of the compound logic associated with them. We will do this before
+	//we clean because it will generate more basic blocks/branches to look at
+	optimize_short_circuit_logic(cfg);
+
+	printf("=============== AFTER =================\n");
+	print_all_cfg_blocks(cfg);
+	printf("=============== AFTER =================\n");
+	//PASS 5: Delete all unreachable blocks
 	//There is a chance that we have some blocks who are now unreachable. We will
 	//remove them now
 	delete_unreachable_blocks(cfg);
 
-	//PASS 5: Recalculate everything
+	//PASS 6: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 	//etc. So, to remedy this, we will recalculate everything in the CFG
 	//cleanup_all_control_relations(cfg);
 	recompute_all_dominance_relations(cfg);
 
-	//PASS 6: Estimate execution frequencies
+	//PASS 7: Estimate execution frequencies
 	//This will become important in the register allocation later on. We'll need to estimate how often a block will be executed in order
 	//to decide where to allocate registers appropriately.
 	estimate_execution_frequencies(cfg);
-
-	//PASS 7: compound logic optimization
-	//Now that we've cleaned up all irrelevant brances, we can look at the branches that are left
-	//and see if we can optimize any of the compound logic associated with them. We will do this before
-	//we clean because it will generate more basic blocks/branches to look at
-	//optimize_short_circuit_logic(cfg);
 
 	//Give back the CFG
 	return cfg;
