@@ -641,7 +641,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Only if this is false - global var blocks don't have any of these
 	printf("Dominator set: {");
-	if(block->dominance_frontier != NULL){
+	if(block->dominator_set != NULL){
 		//Run through and print them all out
 		for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
 			basic_block_t* printing_block = block->dominator_set->internal_array[i];
@@ -7832,11 +7832,6 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo){
 
 	//Calculate the postdominator sets for later analysis in the optimizer
 	calculate_postdominator_sets(cfg);
-
-	printf("=============== AFTER =================\n");
-	print_all_cfg_blocks(cfg);
-	printf("=============== AFTER =================\n");
-
 
 	//We'll also now calculate the reverse dominance frontier that will be used
 	//in later analysis by the optimizer
