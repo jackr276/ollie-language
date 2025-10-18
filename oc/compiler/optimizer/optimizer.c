@@ -1571,6 +1571,38 @@ static void recompute_all_dominance_relations(cfg_t* cfg){
 
 
 /**
+ * After everything runs, it is possible that we'll have blocks leftover
+ * with no predecessors. These blocks are useless, and just gunk up our pipeline.
+ * We will remove them all now.
+ */
+static void delete_unreachable_blocks(cfg_t* cfg){
+	//Clone all blocks here - we will be messing with the original
+	//array, so we can't count on it for an accurate count
+	dynamic_array_t* all_blocks = clone_dynamic_array(cfg->created_blocks);
+
+	//Run through all blocks
+	for(u_int16_t i = 0; i < all_blocks->current_index; i++){
+		//Extract this
+		basic_block_t* current = dynamic_array_get_at(all_blocks, i);
+
+		//Nothing we can do about this
+		if(current->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			continue;
+		}
+
+		//This is our deletion case - this block is unreachable
+		if(current->predecessors == NULL || current->predecessors->current_index == 0){
+			//Scrap it from here
+			dynamic_array_delete(cfg->created_blocks, current);
+		}
+	}
+
+	//Once we're done, deallocate the all_blocks array
+	dynamic_array_dealloc(all_blocks);
+}
+
+
+/**
  * The generic optimize function. We have the option to specific how many passes the optimizer
  * runs for in it's current iteration
 */
@@ -1595,32 +1627,29 @@ cfg_t* optimize(cfg_t* cfg){
 	//that has been made useless by sweep()
 	clean(cfg);
 
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
+	//PASS 4: Delete all unreachable blocks
+	//There is a chance that we have some blocks who are now unreachable. We will
+	//remove them now
+	delete_unreachable_blocks(cfg);
 
-		if(block->block_type != BLOCK_TYPE_FUNC_ENTRY && (block->predecessors == NULL || block->predecessors->current_index == 0)){
-			printf("BLOCK .L%d is unreachable\n", block->block_id);
-		}
-	}
-
-	//PASS 4: Recalculate everything
+	//PASS 5: Recalculate everything
 	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 	//etc. So, to remedy this, we will recalculate everything in the CFG
 	//cleanup_all_control_relations(cfg);
 	recompute_all_dominance_relations(cfg);
 
-	//PASS 5: Estimate execution frequencies
+	//PASS 6: Estimate execution frequencies
 	//This will become important in the register allocation later on. We'll need to estimate how often a block will be executed in order
 	//to decide where to allocate registers appropriately.
 	estimate_execution_frequencies(cfg);
 
-	//PASS 6: compound logic optimization
+	//PASS 7: compound logic optimization
 	//Now that we've cleaned up all irrelevant brances, we can look at the branches that are left
 	//and see if we can optimize any of the compound logic associated with them. We will do this before
 	//we clean because it will generate more basic blocks/branches to look at
 	//optimize_short_circuit_logic(cfg);
 
-	exit(0);
+	//exit(0);
 
 	//Give back the CFG
 	return cfg;

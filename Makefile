@@ -326,6 +326,9 @@ front_test_non_timed: front_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -d -f
 
 middle_test: middle_end_test
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -t -f
+
+middle_test_non_timed: middle_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
 
 string_test: dynamic_string_test
