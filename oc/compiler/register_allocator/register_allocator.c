@@ -2561,6 +2561,7 @@ static void postprocess(cfg_t* cfg){
 void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
+	u_int8_t print_post_allocation = options->print_post_allocation;
 	u_int8_t debug_printing = options->enable_debug_printing;
 
 	//Save these in global state
@@ -2686,7 +2687,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	postprocess(cfg);
 
 	//One final print post allocation
-	if(print_irs == TRUE){
+	if(print_irs == TRUE || print_post_allocation == TRUE){
 		printf("================= After Allocation =======================\n");
 		print_blocks_with_registers(cfg);
 		printf("================= After Allocation =======================\n");
