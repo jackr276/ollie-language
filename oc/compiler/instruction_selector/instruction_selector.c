@@ -2407,11 +2407,14 @@ static void handle_branch_instruction(instruction_window_t* window){
 	//The else jump is always a direct jump no matter what
 	instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
+	//Grab the block our
+	basic_block_t* block = branch_stmt->block_contained_in;
+
 	//The if must go after the branch statement before the else
-	insert_instruction_after_given(jump_to_if, branch_stmt);
+	add_statement(block, jump_to_if);
 	//And the jump to else always goes after the if jump
-	insert_instruction_after_given(jump_to_else, jump_to_if);
-	
+	add_statement(block, jump_to_else);
+
 	//Once this is all done, we can delete the branch
 	delete_statement(branch_stmt);
 

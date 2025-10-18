@@ -55,7 +55,7 @@ static type_symtab_t* type_symtab;
  *
  * After this happens, B no longer exists
  */
-static void combine_blocks(basic_block_t* a, basic_block_t* b){
+static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
 	//What if a was never even assigned?
 	if(a->exit_statement == NULL){
 		a->leader_statement = b->leader_statement;
@@ -73,6 +73,26 @@ static void combine_blocks(basic_block_t* a, basic_block_t* b){
 		a->exit_statement = b->exit_statement;
 	}
 
+	//In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
+	//As such, we won't even bother looking at the predecessors
+
+	//Now merge successors
+	for(u_int16_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(b->successors, i);
+
+		//Add b's successors to be a's successors
+		add_successor_only(a, successor);
+
+		//Now for each of the predecessors that equals b, it needs to now point to A
+		for(u_int16_t j = 0; successor->predecessors != NULL && j < successor->predecessors->current_index; j++){
+			//If it's pointing to b, it needs to be updated
+			if(successor->predecessors->internal_array[j] == b){
+				//Update it to now be correct
+				successor->predecessors->internal_array[j] = a;
+			}
+		}
+	}
+
 	//Copy over the block type and terminal type
 	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
 		a->block_type = b->block_type;
@@ -82,6 +102,10 @@ static void combine_blocks(basic_block_t* a, basic_block_t* b){
 	if(b->jump_table != NULL){
 		a->jump_table = b->jump_table;
 	}
+
+
+	//A's direct successor is now b's direct successor
+	a->direct_successor = b->direct_successor;
 
 	//For each statement in b, all of it's old statements are now "defined" in a
 	instruction_t* b_stmt = b->leader_statement;
@@ -93,6 +117,9 @@ static void combine_blocks(basic_block_t* a, basic_block_t* b){
 		//Push it up
 		b_stmt = b_stmt->next_statement;
 	}
+
+	//Always return b's leader
+	return b->leader_statement;
 }
 
 
@@ -2479,6 +2506,7 @@ static void postprocess(cfg_t* cfg){
 					current_instruction = current_instruction->next_statement;
 				}
 
+				//TODO MAY NOT NEED
 				continue;
 			}
 
@@ -2489,11 +2517,34 @@ static void postprocess(cfg_t* cfg){
 
 				//If the direct sucessor is the jumping to block, there are a few actions
 				//that we may be able to take
-				if(jumping_to_block == current->direct_successor){
-					if(){
+				if(current->direct_successor == jumping_to_block){
+					if(current->predecessors == NULL || current->predecessors->current_index == 0){
+						//Combine
+					
+					/**
+					 * Otherwise, we should still be able to just delete this jump instruction
+					 */
+					} else {
+						//Temp holder
+						instruction_t* temp = current_instruction;
 
+						if(temp != current->exit_statement){
+							printf("BLOCK MISMATCH FOR:\n");
+							print_instruction(stdout, temp, PRINTING_REGISTERS);
+							basic_block_t* block_contained = temp->block_contained_in;
+							printf("Thinks it is in block .L%d but it is really in block .L%d\n", block_contained->block_id, current->block_id);
+							exit(1);
+
+						}
+
+						//Advance this
+						current_instruction = current_instruction->next_statement;
+
+						//Just delete the temp instruction
+						delete_statement(temp);
+
+						continue;
 					}
-
 				}
 			}
 
