@@ -236,7 +236,7 @@ void cleanup_all_control_relations(cfg_t* cfg);
 /**
  * Calculate(or recalculate) all control relations in the CFG
  */
-void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo);
+void calculate_all_control_relations(cfg_t* cfg);
 
 /**
  * Emit a jump statement directly into a block
@@ -279,7 +279,7 @@ dynamic_array_t* compute_post_order_traversal(basic_block_t* entry);
 /**
  * Get and return a reverse post order traversal for the CFG
  */
-dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_int8_t use_reverse_cfg);
+dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry);
 
 /**
  * Reset all reverse post order sets

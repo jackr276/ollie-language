@@ -219,12 +219,11 @@ static three_addr_var_t* handle_conditional_identifier_copy_if_needed(basic_bloc
 }
 
 
-
 /**
  * We'll go through in the regular traversal, pushing each node onto the stack in
  * postorder. 
  */
-static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t* entry, u_int8_t use_reverse_cfg){
+static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, basic_block_t* entry){
 	//If we've already seen this then we're done
 	if(entry->visited == TRUE){
 		return;
@@ -233,22 +232,11 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
 	//Mark it as visited
 	entry->visited = TRUE;
 
-	//Dependending on what we're doing here, we may be using reverse mode
-	if(use_reverse_cfg == TRUE){
-		//For every child(predecessor-it's reverse), we visit it as well
-		for(u_int16_t _ = 0; entry->predecessors != NULL && _ < entry->predecessors->current_index; _++){
-			//Visit each of the blocks
-			reverse_post_order_traversal_rec(stack, dynamic_array_get_at(entry->predecessors, _), use_reverse_cfg);
-		}
-	} else {
-		//We'll go in regular order
-		//For every child(successor), we visit it as well
-		for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
-			//Visit each of the blocks
-			reverse_post_order_traversal_rec(stack, dynamic_array_get_at(entry->successors, _), use_reverse_cfg);
-		}
+	//For every child(predecessor-it's reverse), we visit it as well
+	for(u_int16_t _ = 0; entry->predecessors != NULL && _ < entry->predecessors->current_index; _++){
+		//Visit each of the blocks
+		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(entry->predecessors, _));
 	}
-
 
 	//Now we can push entry onto the stack
 	push(stack, entry);
@@ -256,27 +244,73 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
 
 
 /**
- * Get and return a reverse post order traversal of a function-level CFG
- * 
- * NOTE: for data liveness problems, we have the option to compute this on the reverse cfg. This will
- * treat every successor like a predecessor, and vice versa
+ * Get and return a reverse post order traversal of a function-level CFG where
+ * we are going in reverse order. This is used mainly for data flow(liveness)
  */
-dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_int8_t use_reverse_cfg){
+dynamic_array_t* compute_reverse_post_order_traversal_reverse_cfg(basic_block_t* entry){
 	//For our postorder traversal
 	heap_stack_t* stack = heap_stack_alloc();
 	//We'll need this eventually for postorder
 	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
 
-	//If we are using the reverse tree, we'll need to reformulate entry to be exit
-	if(use_reverse_cfg == TRUE){
-		//Go all the way to the bottom
-		while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
-			entry = entry->direct_successor;
-		}
+	//Go all the way to the bottom
+	while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
+		entry = entry->direct_successor;
 	}
 
 	//Invoke the recursive helper
-	reverse_post_order_traversal_rec(stack, entry, use_reverse_cfg);
+	reverse_post_order_traversal_reverse_cfg_rec(stack, entry);
+
+	//Now we'll pop everything off of the stack, and put it onto the RPO 
+	//array in backwards order
+	while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
+		dynamic_array_add(reverse_post_order_traversal, pop(stack));
+	}
+
+	//And when we're done, get rid of the stack
+	heap_stack_dealloc(stack);
+
+	//Give back the reverse post order traversal
+	return reverse_post_order_traversal;
+}
+
+
+/**
+ * We'll go through in the regular traversal, pushing each node onto the stack in
+ * postorder. 
+ */
+static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t* entry){
+	//If we've already seen this then we're done
+	if(entry->visited == TRUE){
+		return;
+	}
+
+	//Mark it as visited
+	entry->visited = TRUE;
+
+	//We'll go in regular order
+	//For every child(successor), we visit it as well
+	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
+		//Visit each of the blocks
+		reverse_post_order_traversal_rec(stack, dynamic_array_get_at(entry->successors, _));
+	}
+
+	//Now we can push entry onto the stack
+	push(stack, entry);
+}
+
+
+/**
+ * Get and return a reverse-post order traversal for a function level CFG
+ */
+dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry){
+	//For our postorder traversal
+	heap_stack_t* stack = heap_stack_alloc();
+	//We'll need this eventually for postorder
+	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
+
+	//Invoke the recursive helper
+	reverse_post_order_traversal_rec(stack, entry);
 
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
@@ -1264,10 +1298,6 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-		if(current_function_block->reverse_post_order == NULL){
-			current_function_block->reverse_post_order = compute_reverse_post_order_traversal(current_function_block, FALSE);
-		}
-
 		//Have we seen a change
 		u_int8_t changed;
 		
@@ -1643,9 +1673,6 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		//Extract it
 		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
-
-		//Calculate the reverse-post-order traversal so that we can make this converge quicker
-		function_entry->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(function_entry, TRUE);
 
 		//Run the algorithm until we have no difference found
 		do{
@@ -7810,6 +7837,35 @@ void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
 
 
 /**
+ * Recalculate the reverse-post-order traversals
+ * and the reverse-post-order-reverse-cfg traversals
+ */
+void calculate_all_reverse_traversals(cfg_t* cfg){
+	//Clear all of these old values out
+	reset_reverse_post_order_sets(cfg);
+
+	//For each function entry block, recompute all reverse post order
+	//CFG work
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(cfg->function_entry_blocks, i);
+
+		//Reset the visited status
+		reset_visited_status(cfg, FALSE);
+
+		//Compute the reverse post order traversal
+		block->reverse_post_order = compute_reverse_post_order_traversal(block);
+
+		//Reset once more
+		reset_visited_status(cfg, FALSE);
+
+		//Now use the reverse CFG(successors are predecessors, and vice versa)
+		block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal_reverse_cfg(block);
+	}
+}
+
+
+/**
  * We will calculate:
  *  1.) Dominator Sets
  *  2.) Dominator Trees
@@ -7820,7 +7876,10 @@ void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
  *
  * For every block in the CFG
  */
-void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo){
+void calculate_all_control_relations(cfg_t* cfg){
+	//Calculate all reverse traversals
+	calculate_all_reverse_traversals(cfg);
+
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
 	
@@ -7837,21 +7896,6 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo){
 	//We'll also now calculate the reverse dominance frontier that will be used
 	//in later analysis by the optimizer
 	calculate_reverse_dominance_frontiers(cfg);
-
-	if(recalculate_rpo == TRUE){
-		//Clear all of these old values out
-		reset_reverse_post_order_sets(cfg);
-
-		//For each function entry block, recompute all reverse post order
-		//CFG work
-		for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-			//Grab the block out
-			basic_block_t* block = dynamic_array_get_at(cfg->function_entry_blocks, i);
-
-			//Recompute the reverse post order cfg
-			block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(block, TRUE);
-		}
-	}
 }
 
 
@@ -7919,7 +7963,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	}
 
 	//Let the helper deal with this
-	calculate_all_control_relations(cfg, FALSE);
+	calculate_all_control_relations(cfg);
 
 	//now we calculate the liveness sets
 	calculate_liveness_sets(cfg);
