@@ -7970,7 +7970,6 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo){
 
 			for(u_int16_t a = 0; a < block->reverse_post_order_reverse_cfg->current_index; a++){
 				basic_block_t* internal_block = dynamic_array_get_at(block->reverse_post_order_reverse_cfg, a);
-				printf(".L%d\n", internal_block->block_id);
 			}
 		}
 	}
