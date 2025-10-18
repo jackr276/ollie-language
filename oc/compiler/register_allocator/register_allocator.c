@@ -2387,11 +2387,20 @@ static void insert_saving_logic(cfg_t* cfg){
 
 
 /**
- * One final order of business is to clean out any
- * operations that look like: movq %rax, %rax that are
- * leftover artifacts from our simplifcation & allocation
+ * In the postprocess step, we will run through every statement and perform a few
+ * optimizations:
+ *   1.) If we see an operation like movq %rax, %rax - it is useless so we will delete it
+ *   2.) If we see this
+ *   		.L2:
+ *   			-- stuff ---
+ *   			jmp .L3
+ *
+ *   		.L3
+ *
+ * 			*AND* .L3 has *one* predecessor(.L2), we can combine the two. We don't care
+ * 			about liveness information anymore, so this is all we'll need to do
  */
-static void cleanup_pass(cfg_t* cfg){
+static void postprocess(cfg_t* cfg){
 	//Grab the head block
 	basic_block_t* current = cfg->head_block;
 
@@ -2403,29 +2412,36 @@ static void cleanup_pass(cfg_t* cfg){
 		//Run through all instructions
 		while(current_instruction != NULL){
 			//It's not a pure copy, so leave
-			if(is_instruction_pure_copy(current_instruction) == FALSE){
-				current_instruction = current_instruction->next_statement;
+			if(is_instruction_pure_copy(current_instruction) == TRUE){
+				//Extract for convenience
+				live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
+				live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
+
+				//We have a pure copy, so we can delete
+				if(source_live_range->reg == destination_live_range->reg){
+					instruction_t* holder = current_instruction;
+
+					//Push this one up
+					current_instruction = current_instruction->next_statement;
+
+					//Delete the holder
+					delete_statement(holder);
+				} else {
+					current_instruction = current_instruction->next_statement;
+				}
+
 				continue;
 			}
 
-			//Extract for convenience
-			live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
-			live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
-
-			//We have a pure copy, so we can delete
-			if(source_live_range->reg == destination_live_range->reg){
-				instruction_t* holder = current_instruction;
-
-				//Push this one up
-				current_instruction = current_instruction->next_statement;
-
-				//Delete the holder
-				delete_statement(holder);
-
-			//Just push it up
-			} else {
-				current_instruction = current_instruction->next_statement;
+			//If we have a jump instruction here
+			if(current_instruction->instruction_type == JMP){
+				//Extract where we're jumping to
+				basic_block_t* jumping_to_block = current_instruction->if_block;
+				
+				
 			}
+
+			current_instruction = current_instruction->next_statement;
 		}
 
 		//Push it up
@@ -2562,8 +2578,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 * Due to the way OIR works, there is a chance that we could get instructions
 	 * like: movq %rax, %rax. These are now useless and we'll delete them in the cleanup pass
 	*/
-	cleanup_pass(cfg);
-
+	postprocess(cfg);
 
 	//One final print post allocation
 	if(print_irs == TRUE){
