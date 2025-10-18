@@ -328,9 +328,16 @@ ptest-debug: parser_test_debug
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test_debug -i -d -f
 
 front_test: front_end_test
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -t -d -f
+
+# No timed output
+front_test_non_timed: front_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -d -f
 
 middle_test: middle_end_test
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -t -f
+
+middle_test_non_timed: middle_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
 
 selector_test: instruction_selector_test

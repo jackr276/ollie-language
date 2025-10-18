@@ -36,6 +36,8 @@ typedef enum{
 	THREE_ADDR_CODE_RET_STMT,
 	//A jump statement -- used for control flow
 	THREE_ADDR_CODE_JUMP_STMT,
+	//A branch statement, also used for control flow
+	THREE_ADDR_CODE_BRANCH_STMT,
 	//A three address code conditional movement statement
 	THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT,
 	//An indirect jump statement -- used for switch statement jump tables

@@ -155,6 +155,25 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr){
 
 
 /**
+ * Clear a dynamic array entirely - keeps the size unchanged, but
+ * sets the entire internal array to 0
+ */
+void clear_dynamic_array(dynamic_array_t* array){
+	//Just to be safe
+	if(array == NULL){
+		printf("ERROR: Attempting to clear a NULL dynamic array\n");
+		exit(1);
+	}
+
+	//Wipe the entire thing out
+	memset(array->internal_array, 0, sizeof(void*) * array->current_max_size);
+
+	//Our current index is now 0
+	array->current_index = 0;
+}
+
+
+/**
  * Get an element at a specified index. Do not remove the element
  */
 void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){

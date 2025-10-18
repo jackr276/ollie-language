@@ -68,6 +68,11 @@ u_int8_t dynamic_array_is_empty(dynamic_array_t* array);
  */
 void dynamic_array_add(dynamic_array_t* array, void* ptr);
 
+/**
+ * Clear a dynamic array entirely - keeps the size unchanged, but
+ * sets the entire internal array to 0
+ */
+void clear_dynamic_array(dynamic_array_t* array);
 
 /**
  * Get an element at a specified index. Do not remove the element

@@ -12,7 +12,7 @@ fn unused() -> u32{
 	ret 2;
 }
 
-fn empty_func() -> void{
+fn empty_func() -> void {
 
 }
 

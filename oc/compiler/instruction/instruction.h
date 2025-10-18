@@ -17,6 +17,7 @@
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/ollie_intermediary_representation.h"
 #include "../utils/x86_assembly_instruction.h"
+#include "../utils/x86_genpurpose_registers.h"
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -55,30 +56,30 @@ typedef enum{
 	JUMP_CATEGORY_NORMAL,
 } jump_category_t;
 
+
 /**
- * Define the standard x86-64 register table
+ * Do we want to have a regular branch or an inverse
+ * branch? An inverse branch will down the road set the conditional
+ * to be the opposite of what is put in.
+ *
+ * So for example
+ *
+ * if(x == 3) then A else B
+ *
+ * Regular mode
+ * cmp 3, x
+ * je A <-----  if
+ * jmp B <----- else
+ *
+ * Inverse mode
+ * cmp 3, x
+ * jne A <-----  if(inverted)
+ * jmp B <----- else
  */
-typedef enum{
-	NO_REG = 0, //Default is that there's no register used
-	RAX,
-	RCX,
-	RDX,
-	RSI,
-	RDI,
-	R8,
-	R9,
-	R10,
-	R11,
-	R12,
-	R13,
-	R14,
-	R15, 
-	RBX,
-	RBP, //base pointer
-	//ALL general purpose registers come first(items 1-15)
-	RSP, //Stack pointer
-	RIP, //Instruction pointer
-} register_holder_t;
+typedef enum {
+	BRANCH_CATEGORY_NORMAL,
+	BRANCH_CATEGORY_INVERSE
+} branch_category_t;
 
 
 /**
@@ -103,23 +104,25 @@ typedef enum{
 
 
 /**
- * What kind of jump statement do we have?
+ * Define the kind of branch that we have in an ollie branch
+ * command
  */
 typedef enum{
-	NO_CONDITIONAL_MOVE = 0, //This is the default, and what we get when we have 0
-	CONDITIONAL_MOVE_NE,
-	CONDITIONAL_MOVE_E,
-	CONDITIONAL_MOVE_NZ,
-	CONDITIONAL_MOVE_Z,
-	CONDITIONAL_MOVE_L, // LT(SIGNED)
-	CONDITIONAL_MOVE_G, //GT(SIGNED)
-	CONDITIONAL_MOVE_GE, //GE(SIGNED)
-	CONDITIONAL_MOVE_LE, //LE(SIGNED)
-	CONDITIONAL_MOVE_A, //GT(UNSIGNED)
-	CONDITIONAL_MOVE_AE, //GE(UNSIGNED)
-	CONDITIONAL_MOVE_B, // LT(UNSIGNED)
-	CONDITIONAL_MOVE_BE, //LE(UNSIGNED)
-} conditional_move_type_t;
+	NO_BRANCH, //This is the default, and what we get when we have 0
+	BRANCH_NE,
+	BRANCH_E,
+	BRANCH_NZ,
+	BRANCH_Z,
+	BRANCH_L, //Branch LT(SIGNED)
+	BRANCH_G, //Branch GT(SIGNED)
+	BRANCH_GE, //Branch GE(SIGNED)
+	BRANCH_LE, //Branch LE(SIGNED)
+	BRANCH_A, //Branch GT(UNSIGNED)
+	BRANCH_AE, //Branch GE(UNSIGNED)
+	BRANCH_B, //Branch LT(UNSIGNED)
+	BRANCH_BE, //Branch LE(UNSIGNED)
+} branch_type_t;
+
 
 /**
  * What kind of memory addressing mode do we have?
@@ -135,6 +138,7 @@ typedef enum{
 	ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE, // 4(%rax, %rcx, 8)
 	ADDRESS_CALCULATION_MODE_GLOBAL_VAR //Super special case, we will use address_calc_reg2 as the offset like this: <val>(%rip)
 } address_calculation_mode_t;
+
 
 /**
  * For variable printing, where we're printing
@@ -176,7 +180,7 @@ struct live_range_t{
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
 	//What register is this live range in?
-	register_holder_t reg; 
+	general_purpose_register_t reg; 
 	//The size of the variable in the live range
 	variable_size_t size;
 };
@@ -220,7 +224,7 @@ struct three_addr_var_t{
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//What register is this in?
-	register_holder_t variable_register;
+	general_purpose_register_t variable_register;
 };
 
 
@@ -257,6 +261,10 @@ struct instruction_t{
 	dynamic_string_t inlined_assembly;
 	//What block holds this?
 	void* block_contained_in;
+	//We have 2 ways to jump. The if jump is our affirmative jump,
+	//else is our alternative
+	void* if_block;
+	void* else_block;
 	//For linked list properties -- the next statement
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
@@ -282,8 +290,6 @@ struct instruction_t{
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
-	//Store a reference to the block that we're jumping to
-	void* jumping_to_block;
 	//The LEA addition
 	u_int64_t lea_multiplicator;
 	//The function called
@@ -292,10 +298,8 @@ struct instruction_t{
 	symtab_variable_record_t* var_record;
 	//What function are we currently in?
 	symtab_function_record_t* function;
-	//The phi function parameters - stored in a dynamic array
-	void* phi_function_parameters;
-	//The list of temp variable parameters at most 6
-	void* function_parameters;
+	//Generic parameter list - could be used for phi functions or function calls
+	void* parameters;
 	//What is the three address code type
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
@@ -306,8 +310,6 @@ struct instruction_t{
 	u_int8_t is_jump_table;
 	//Is this operation critical?
 	u_int8_t mark;
-	//Is this operation eligible for logical short-circuiting optimizations
-	u_int8_t is_short_circuit_eligible;
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;
@@ -324,14 +326,12 @@ struct instruction_t{
 	u_int8_t has_multiplicator;
 	//If it's a jump statement, what's the type?
 	jump_type_t jump_type;
-	//If this is a conditional move statement, what's the class?
-	conditional_move_type_t move_type;
-	//Memory access type
-	type_class_t access_class;
+	//If it's a branch statment, then we'll use this
+	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?
 	address_calculation_mode_t calculation_mode;
 	//The register that we're popping or pushing
-	register_holder_t push_or_pop_reg;
+	general_purpose_register_t push_or_pop_reg;
 };
 
 /**
@@ -475,7 +475,7 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee);
  * by directly emitting a push instruction with the register in it. This
  * saves us allocation overhead
  */
-instruction_t* emit_direct_register_push_instruction(register_holder_t reg);
+instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg);
 
 /**
  * Emit a movzx(zero extend) instruction
@@ -498,7 +498,7 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee);
  * by directly emitting a pop instruction with the register in it. This
  * saves us allocation overhead
  */
-instruction_t* emit_direct_register_pop_instruction(register_holder_t reg);
+instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg);
 
 /**
  * Emit a movX instruction
@@ -560,10 +560,6 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
  * using stack memory here
  */
 instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const);
-
-/**
- * Emit a memory address statement
- */
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
@@ -648,10 +644,14 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_type);
 
 /**
- * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.
- * These statements are intended for when we create user-defined jumps
+ * Emit a jump instruction directly
  */
-instruction_t* emit_incomplete_jmp_instruction(three_addr_var_t* relies_on, jump_type_t jump_type);
+instruction_t* emit_jump_instruction_directly(void* jumping_to_block, instruction_type_t jump_instruction_type);
+
+/**
+ * Emit a branch statement
+ */
+instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type);
 
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
@@ -733,6 +733,11 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_type, u_int8_t is_signed);
 
 /**
+ * select the appropriate branch statement given the circumstances, including operand and signedness
+ */
+branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_category_t branch_type, u_int8_t is_signed);
+
+/**
  * Select the appropriate set type given the circumstances, including the operand and the signedness
  */
 instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed);
@@ -740,12 +745,12 @@ instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_sig
 /**
  * Is the given register caller saved?
  */
-u_int8_t is_register_caller_saved(register_holder_t reg);
+u_int8_t is_register_caller_saved(general_purpose_register_t reg);
 
 /**
  * Is the given register callee saved?
  */
-u_int8_t is_register_callee_saved(register_holder_t reg);
+u_int8_t is_register_callee_saved(general_purpose_register_t reg);
 
 /**
  * Pretty print a three address code statement

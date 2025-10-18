@@ -32,7 +32,7 @@
 u_int32_t live_range_id = 0;
 
 //The array that holds all of our parameter passing
-const register_holder_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
+const general_purpose_register_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 
 //Avoid need to rearrange
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges);
@@ -45,6 +45,82 @@ static live_range_t* instruction_pointer_lr;
 static three_addr_var_t* stack_pointer;
 //And the type symtab
 static type_symtab_t* type_symtab;
+
+/**
+ * Combine two blocks into one. This is different than other combine methods,
+ * because post register-allocation, we do not really care about anything like
+ * used variables, dominance relations, etc.
+ *
+ * Combine B into A
+ *
+ * After this happens, B no longer exists
+ */
+static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
+	//What if a was never even assigned?
+	if(a->exit_statement == NULL){
+		a->leader_statement = b->leader_statement;
+		a->exit_statement = b->exit_statement;
+
+	//If the leader statement is NULL - we really don't need to do anything. If it's not however, we
+	//will need to add everything in
+	} else if(b->leader_statement != NULL){
+		//Otherwise it's a "true merge"
+		//The leader statement in b will be connected to a's tail
+		a->exit_statement->next_statement = b->leader_statement;
+		//Connect backwards too
+		b->leader_statement->previous_statement = a->exit_statement;
+		//Now once they're connected we'll set a's exit to be b's exit
+		a->exit_statement = b->exit_statement;
+	}
+
+	//In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
+	//As such, we won't even bother looking at the predecessors
+
+	//Now merge successors
+	for(u_int16_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(b->successors, i);
+
+		//Add b's successors to be a's successors
+		add_successor_only(a, successor);
+
+		//Now for each of the predecessors that equals b, it needs to now point to A
+		for(u_int16_t j = 0; successor->predecessors != NULL && j < successor->predecessors->current_index; j++){
+			//If it's pointing to b, it needs to be updated
+			if(successor->predecessors->internal_array[j] == b){
+				//Update it to now be correct
+				successor->predecessors->internal_array[j] = a;
+			}
+		}
+	}
+
+	//Copy over the block type and terminal type
+	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
+		a->block_type = b->block_type;
+	}
+
+	//If b is a switch statment start block, we'll copy the jump table
+	if(b->jump_table != NULL){
+		a->jump_table = b->jump_table;
+	}
+
+
+	//A's direct successor is now b's direct successor
+	a->direct_successor = b->direct_successor;
+
+	//For each statement in b, all of it's old statements are now "defined" in a
+	instruction_t* b_stmt = b->leader_statement;
+
+	//Modify these "block contained in" references to be A
+	while(b_stmt != NULL){
+		b_stmt->block_contained_in = a;
+
+		//Push it up
+		b_stmt = b_stmt->next_statement;
+	}
+
+	//Always return b's leader
+	return b->leader_statement;
+}
 
 
 /**
@@ -797,7 +873,7 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
 	assign_live_range_to_source_variable(live_ranges, basic_block, instruction->source_register);
 
 	//Extract for us
-	dynamic_array_t* function_parameters = instruction->function_parameters;
+	dynamic_array_t* function_parameters = instruction->parameters;
 
 	//If these are NULL then there's nothing else for us here
 	if(function_parameters == NULL){
@@ -1248,7 +1324,7 @@ static void pre_color(instruction_t* instruction){
 			 */
 
 			//Grab the parameters out
-			dynamic_array_t* function_params = instruction->function_parameters;
+			dynamic_array_t* function_params = instruction->parameters;
 
 			//If we actually have function parameters
 			if(function_params != NULL){
@@ -1477,12 +1553,12 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				case CALL:
 				case INDIRECT_CALL:
 					//No point here
-					if(operation->function_parameters == NULL){
+					if(operation->parameters == NULL){
 						break;
 					}
 					
 					//Grab it out
-					dynamic_array_t* operation_function_parameters = operation->function_parameters;
+					dynamic_array_t* operation_function_parameters = operation->parameters;
 
 					//Let's go through all of these and add them to LIVE_NOW
 					for(u_int16_t i = 0; i < operation_function_parameters->current_index; i++){
@@ -2106,7 +2182,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		live_range_t* lr = dynamic_array_get_at(result_lr->neighbors, i);
 
 		//And grab it's register out
-		register_holder_t reg = lr->reg;
+		general_purpose_register_t reg = lr->reg;
 
 		//If it isn't caller saved, we don't care
 		if(is_register_caller_saved(reg) == FALSE){
@@ -2173,7 +2249,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		live_range_t* interferee = dynamic_array_get_at(result_live_range->neighbors, i);
 
 		//And we'll extract the interfering register
-		register_holder_t interfering_register = interferee->reg;
+		general_purpose_register_t interfering_register = interferee->reg;
 
 		//If this is not caller saved, then we don't care about it
 		if(is_register_caller_saved(interfering_register) == FALSE){
@@ -2278,7 +2354,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 
 		//Otherwise if we get here, we know that we use it. Remember
 		//the register value is always offset by one
-		register_holder_t used_reg = i + 1;
+		general_purpose_register_t used_reg = i + 1;
 
 		//If this isn't callee saved, then we know to move on
 		if(is_register_callee_saved(used_reg) == FALSE){
@@ -2347,7 +2423,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 
 			//Remember that our positional coding is off by 1(0 is NO_REG value), so we'll
 			//add 1 to make the value correct
-			register_holder_t used_reg = j + 1;
+			general_purpose_register_t used_reg = j + 1;
 
 			//If it's not callee saved then we don't care
 			if(is_register_callee_saved(used_reg) == FALSE){
@@ -2387,11 +2463,20 @@ static void insert_saving_logic(cfg_t* cfg){
 
 
 /**
- * One final order of business is to clean out any
- * operations that look like: movq %rax, %rax that are
- * leftover artifacts from our simplifcation & allocation
+ * In the postprocess step, we will run through every statement and perform a few
+ * optimizations:
+ *   1.) If we see an operation like movq %rax, %rax - it is useless so we will delete it
+ *   2.) If we see this
+ *   		.L2:
+ *   			-- stuff ---
+ *   			jmp .L3
+ *
+ *   		.L3
+ *
+ * 			*AND* .L3 has *one* predecessor(.L2), we can combine the two. We don't care
+ * 			about liveness information anymore, so this is all we'll need to do
  */
-static void cleanup_pass(cfg_t* cfg){
+static void postprocess(cfg_t* cfg){
 	//Grab the head block
 	basic_block_t* current = cfg->head_block;
 
@@ -2403,29 +2488,65 @@ static void cleanup_pass(cfg_t* cfg){
 		//Run through all instructions
 		while(current_instruction != NULL){
 			//It's not a pure copy, so leave
-			if(is_instruction_pure_copy(current_instruction) == FALSE){
-				current_instruction = current_instruction->next_statement;
+			if(is_instruction_pure_copy(current_instruction) == TRUE){
+				//Extract for convenience
+				live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
+				live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
+
+				//We have a pure copy, so we can delete
+				if(source_live_range->reg == destination_live_range->reg){
+					instruction_t* holder = current_instruction;
+
+					//Push this one up
+					current_instruction = current_instruction->next_statement;
+
+					//Delete the holder
+					delete_statement(holder);
+				} else {
+					current_instruction = current_instruction->next_statement;
+				}
+
 				continue;
 			}
 
-			//Extract for convenience
-			live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
-			live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
+			//If we have a jump instruction here
+			if(current_instruction->instruction_type == JMP){
+				//Extract where we're jumping to
+				basic_block_t* jumping_to_block = current_instruction->if_block;
 
-			//We have a pure copy, so we can delete
-			if(source_live_range->reg == destination_live_range->reg){
-				instruction_t* holder = current_instruction;
+				//If the direct sucessor is the jumping to block, there are a few actions
+				//that we may be able to take
+				if(current->direct_successor == jumping_to_block){
+					//We can combine the two blocks into one
+					if(jumping_to_block->predecessors->current_index == 1){
+						//Delete the jump statement
+						delete_statement(current_instruction);
 
-				//Push this one up
-				current_instruction = current_instruction->next_statement;
+						//Combine the two blocks here
+						current_instruction = combine_blocks(current, jumping_to_block);
 
-				//Delete the holder
-				delete_statement(holder);
+						//The jumping to block is no longer a place here
+						dynamic_array_delete(cfg->created_blocks, jumping_to_block);
+					
+					/**
+					 * Otherwise, we should still be able to just delete this jump instruction
+					 */
+					} else {
+						//Temp holder
+						instruction_t* temp = current_instruction;
 
-			//Just push it up
-			} else {
-				current_instruction = current_instruction->next_statement;
+						//Advance this
+						current_instruction = current_instruction->next_statement;
+
+						//Just delete the temp instruction
+						delete_statement(temp);
+					}
+
+					continue;
+				}
 			}
+
+			current_instruction = current_instruction->next_statement;
 		}
 
 		//Push it up
@@ -2563,8 +2684,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 * Due to the way OIR works, there is a chance that we could get instructions
 	 * like: movq %rax, %rax. These are now useless and we'll delete them in the cleanup pass
 	*/
-	cleanup_pass(cfg);
-
+	postprocess(cfg);
 
 	//One final print post allocation
 	if(print_irs == TRUE || print_post_allocation == TRUE){
