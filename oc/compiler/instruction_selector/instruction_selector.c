@@ -4940,7 +4940,6 @@ static void print_ordered_blocks(cfg_t* cfg, basic_block_t* head_block, instruct
  * of code that we print out
  */
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
-	exit(0);
 	//Grab these two general use types first
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64")->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32")->type;

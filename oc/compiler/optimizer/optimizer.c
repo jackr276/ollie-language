@@ -1786,10 +1786,7 @@ cfg_t* optimize(cfg_t* cfg){
 	//and see if we can optimize any of the compound logic associated with them. We will do this before
 	//we clean because it will generate more basic blocks/branches to look at
 	optimize_short_circuit_logic(cfg);
-
-	printf("=============== AFTER =================\n");
-	print_all_cfg_blocks(cfg);
-	printf("=============== AFTER =================\n");
+	
 	//PASS 5: Delete all unreachable blocks
 	//There is a chance that we have some blocks who are now unreachable. We will
 	//remove them now

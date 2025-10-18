@@ -1075,12 +1075,6 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 	//Destroy the queue
 	heap_queue_dealloc(queue);
 
-	if(ipdom == NULL){
-		printf("NO IMMEDIATE POSTDOMINATOR FOR: .L%d\n", B->block_id);
-		exit(1);
-
-	}
-
 	//Give it back
 	return ipdom;
 }
@@ -1270,11 +1264,8 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-		//If we don't have the RPO for this block, we'll make it now
-		if(current_function_block->reverse_post_order == NULL){
-			//We'll use false because we want the straightforward CFG, not the reverse one
-			current_function_block->reverse_post_order = compute_reverse_post_order_traversal(current_function_block, FALSE);
-		}
+		//We'll use false because we want the straightforward CFG, not the reverse one
+		current_function_block->reverse_post_order = compute_reverse_post_order_traversal(current_function_block, FALSE);
 
 		//Have we seen a change
 		u_int8_t changed;
