@@ -1074,6 +1074,12 @@ static void calculate_liveness_sets(cfg_t* cfg){
 			//Assume that we have not found a difference by default
 			difference_found = FALSE;
 
+			if(function_entry->reverse_post_order_reverse_cfg == NULL || function_entry->reverse_post_order_reverse_cfg->current_index == 0){
+				printf("ITS NULL\n\n\n");
+			} else {
+				printf("ITS NOT NULL\n\n\n");
+			}
+
 			//Now we can go through the entire RPO set
 			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg->current_index; _++){
 				//The current block is whichever we grab

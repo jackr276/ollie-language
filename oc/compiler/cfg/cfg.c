@@ -1264,8 +1264,9 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-		//We'll use false because we want the straightforward CFG, not the reverse one
-		current_function_block->reverse_post_order = compute_reverse_post_order_traversal(current_function_block, FALSE);
+		if(current_function_block->reverse_post_order == NULL){
+			current_function_block->reverse_post_order = compute_reverse_post_order_traversal(current_function_block, FALSE);
+		}
 
 		//Have we seen a change
 		u_int8_t changed;
