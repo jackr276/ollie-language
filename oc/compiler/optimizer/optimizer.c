@@ -1118,6 +1118,10 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 /**
  * Handle a compound and statement optimization
  *
+ * These statement will take what was once one block, and split it into 
+ * 2 successive blocks
+ *
+ * .L2
  * t5 <- x_0
  * t6 <- 3
  * t5 <- t5 < t6
@@ -1125,10 +1129,38 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
  * t8 <- 1
  * t7 <- t7 != t8
  * t5 <- t5 && t7
- * jnz .L12
- * jmp .L13
+ * cbranch_nz .L12 else .L13
+ *
+ *
+ * Turn this into:
+ *
+ * .L2:
+ * t5 <- x_0
+ * t6 <- 3
+ * t5 <- t5 < t6 <---- if this is false, we leave(to else case)
+ * cbranch_ge .L13 else .L3
+ *
+ * .L3 <----- The *only* way we get here is if the first condition is true
+ * t7 <- x_0
+ * t8 <- 1
+ * t7 <- t7 != t8 <------- If this is true, jump to if
+ * cbranch_ne .L12 else .L13
+ *
+ *
+ * t9 <- t5 && t7 <----------- if the *use count* of t9 is more than 1, we'll still need to keep it around. Otherwise we delete
  */
-static void optimize_compound_and_jump(cfg_t* cfg, basic_block_t* block, instruction_t* stmt, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_compound_and_jump(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+	//Grab out the block that we're using
+	basic_block_t* original_block = short_circuit_statment->block_contained_in;
+
+
+	//Extract the op1, we'll need to trave 
+	three_addr_var_t* op1 = short_circuit_statment->op1;
+
+
+
+
+
 	//Starting off-we're given the and stmt as a parameter, and our two jumps
 	//Let's look and see where the two variables that make up the and statement are defined. We know for a fact
 	//that op1 will always come before op2. As such, we will look for where op1 is last assigned
@@ -1286,6 +1318,10 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
  * statements have been pre-marked by the cfg constructor, so whichever survive until here are going to 
  * be optimized
  *
+ * KEY ASSUMPTION: The basic block that contains a branch will contain all of the necessary
+ * information for this to happen. This means that the actual branch must contain straight
+ * line code
+ *
  *
  * Here is a brief example:
  * t9 <- 0x2
@@ -1293,8 +1329,7 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
  * t11 <- 0x1
  * t12 <- x_0 != t11
  * t13 <- t10 && t12 <-------- COMPOUND JUMP
- * jnz .L8
- * jmp .L9
+ * cbranch_nz .L8 else .L9
  *
  * .L8():
  * t14 <- 0x2
@@ -1313,15 +1348,17 @@ static void optimize_compound_or_jump(cfg_t* cfg, basic_block_t* block, instruct
  *
  * TURNS INTO THIS:
  *  
+ *  .L1
  * t9 <- 0x2
  * t10 <- x_0 < t9
- * jz .L9 <--------------------- Optimized jump-to-else
+ * cbranch_ge .L8 else .L3 ---------------- If it's more than it can't work, so we leave
+ *
+ * .L33
  * t11 <- 0x1
  * t12 <- x_0 != t11
- * jnz .L8 <-------------------- Optimized jump-to-if
+ * cbranch_ne .L8 else .L9
  * --------------------------------t13 <- t10 && t12 <-------------------- No longer a need for this one
- * jnz .L8
- * jmp .L9
+ * -------------------------------- No longer a need for the original branch at all --------------------
  *
  * .L8():
  * t14 <- 0x2
@@ -1341,7 +1378,7 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
 
-		//If this is the global var block or it has no statements, bail out
+		//If it's empty then leave
 		if(block->leader_statement == NULL){
 			continue;
 		}
@@ -1357,7 +1394,7 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 		//Do we need to use the inverse jumping methodology?
 		u_int8_t use_inverse_jump = branch_statement->inverse_jump;
 
-		//Extract our two targets here
+		//Extract both of these values - we will need them
 		basic_block_t* if_target = branch_statement->if_block;
 		basic_block_t* else_target = branch_statement->else_block;
 
@@ -1390,28 +1427,28 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 		//Now we'll iterate over the array and process what we have
 		for(u_int16_t i = 0; eligible_statements != NULL && i < eligible_statements->current_index; i++){
 			//Grab the block out
-			instruction_t* stmt = dynamic_array_get_at(eligible_statements, i);
+			instruction_t* short_circuit_statement = dynamic_array_get_at(eligible_statements, i);
 
 			//Make the helper call. These are treated differently based on what their
 			//operators are, so we'll need to use the appropriate call
-			if(stmt->op == DOUBLE_AND){
+			if(short_circuit_statement->op == DOUBLE_AND){
 				//No inverse jump, this is the common case
 				if(use_inverse_jump == FALSE){
 					//Invoke the and helper
-					optimize_compound_and_jump(cfg, block, stmt, if_target, else_target);
+					optimize_compound_and_jump(short_circuit_statement, if_target, else_target);
 				} else {
 					//Invoke the inverse function
-					optimize_compound_and_jump_inverse(cfg, block, stmt, if_target, else_target);
+					optimize_compound_and_jump_inverse(cfg, block, short_circuit_statement, if_target, else_target);
 				}
 			//Otherwise we have the double or
 			} else {
 				//No inverse jump, this is the common case
 				if(use_inverse_jump == FALSE){
 					//Invoke the or helper
-					optimize_compound_or_jump(cfg, block, stmt, if_target, else_target);
+					optimize_compound_or_jump(cfg, block, short_circuit_statement, if_target, else_target);
 				} else {
 					//Use the inverse helper
-					optimize_compound_or_jump_inverse(cfg, block, stmt, if_target, else_target);
+					optimize_compound_or_jump_inverse(cfg, block, short_circuit_statement, if_target, else_target);
 				}
 			}
 		}
