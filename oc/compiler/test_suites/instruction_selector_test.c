@@ -1,12 +1,13 @@
 /**
  * Author: Jack Robbins
  *
- * This program tests the front end of the compiler only
+ * This program tests the front end(parser, cfg constructor) and middle end(optimizer) of the compiler and
+ * the beginning of the back-end(instruction selector)
 */
 
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -14,10 +15,14 @@
 #include "../parser/parser.h"
 //Link to cfg
 #include "../cfg/cfg.h"
+//Link to the ollie optimizer
+#include "../optimizer/optimizer.h"
+//Link to the instruction selector
+#include "../instruction_selector/instruction_selector.h"
 
 //For standardization across all modules
 #define TRUE 1
-#define FALSE 0 
+#define FALSE 0
 
 u_int32_t num_warnings;
 u_int32_t num_errors;
@@ -97,12 +102,12 @@ int main(int argc, char** argv){
 	num_errors = 0;
 	num_warnings = 0;
 
-	printf("==================================== FRONT END TEST ======================================\n");
+	printf("==================================== INSTRUCTION SELECTOR TEST ======================================\n");
 
-	//Grab all the options using the helper
+	//Parse and store the options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
-	//Do we want to time or not
+	//Do we want to time execution or not
 	u_int8_t time_execution = options->time_execution;
 
 	//Print out what we're testing
@@ -144,8 +149,11 @@ int main(int argc, char** argv){
 	//Now we'll invoke the cfg builder
 	cfg_t* cfg = build_cfg(parse_results, &num_errors, &num_warnings);
 
-	//And once we're done - for the front end test, we'll want all of this printed
-	print_all_cfg_blocks(cfg);
+	//Once we build the CFG, we'll pass this along to the optimizer
+	cfg = optimize(cfg);
+
+	//Run the instruction selector. This simplifies and selects instructions
+	select_all_instructions(options, cfg);
 
 	//Deallocate everything at the end
 	ast_dealloc();
@@ -165,13 +173,14 @@ int main(int argc, char** argv){
 	time_spent = (double)(end - begin)/CLOCKS_PER_SEC;
 
 	//Print out the summary now that we're done
-	printf("\n===================== FRONT END TEST SUMMARY ==========================\n");
+	printf("\n===================== INSTRUCTION SELECTOR TEST SUMMARY ==========================\n");
 	printf("Lexer processed %d lines\n", parse_results->lines_processed);
-	printf("Parsing succeeded ");
+	printf("Parsing and optimizing succeeded");
 	if(time_execution == TRUE){
-		printf("in %.8f seconds ", time_spent);
+		printf(" in %.8f seconds", time_spent);
 	}
-	printf("with %d warnings\n", num_warnings);
+	printf(" with %d warnings\n", num_warnings);
+
 	printf("=======================================================================\n\n");
 
 final_printout:
