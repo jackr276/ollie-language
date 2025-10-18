@@ -285,6 +285,9 @@ middle_end_test.o: $(TEST_SUITE_PATH)/middle_end_test.c
 instruction_selector_test.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
 	$(CC) $(CFLAGS) -o $(OUT_LOCAL)/instruction_selector_test.o $(TEST_SUITE_PATH)/instruction_selector_test.c
 
+instruction_selector_testd.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
+	$(CC) $(CFLAGS) -g -o $(OUT_LOCAL)/instruction_selector_test.o $(TEST_SUITE_PATH)/instruction_selector_test.c
+
 middle_end_testd.o: $(TEST_SUITE_PATH)/middle_end_test.c
 	$(CC) $(CFLAGS) -g -o $(OUT_LOCAL)/middle_end_testd.o $(TEST_SUITE_PATH)/middle_end_test.c
 

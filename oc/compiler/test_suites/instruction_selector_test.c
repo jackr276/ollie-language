@@ -155,9 +155,6 @@ int main(int argc, char** argv){
 	//Run the instruction selector. This simplifies and selects instructions
 	select_all_instructions(options, cfg);
 
-	//And once we're done - for the front end test, we'll want all of this printed
-	print_all_cfg_blocks(cfg);
-
 	//Deallocate everything at the end
 	ast_dealloc();
 	//Free the call graph holder
