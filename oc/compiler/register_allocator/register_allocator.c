@@ -2518,7 +2518,7 @@ static void postprocess(cfg_t* cfg){
 				//that we may be able to take
 				if(current->direct_successor == jumping_to_block){
 					//We can combine the two blocks into one
-					if(jumping_to_block->predecessors == NULL || jumping_to_block->predecessors->current_index == 1){
+					if(jumping_to_block->predecessors->current_index == 1){
 						//Delete the jump statement
 						delete_statement(current_instruction);
 
