@@ -3452,17 +3452,26 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
  * If not, we'll return null.
  */
 static basic_block_t* does_block_end_in_jump(basic_block_t* block){
-	//Initially we have a NULL here
-	basic_block_t* jumps_to = NULL;
-
-	//If we have an exit statement that is a direct jump, then we've hit our match
-	if(block->exit_statement != NULL && block->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT
-	 && block->exit_statement->jump_type == JUMP_TYPE_JMP){
-		jumps_to = block->exit_statement->if_block;
+	//If it's null then leave
+	if(block->exit_statement == NULL){
+		return NULL;
 	}
 
-	//Give back whatever we found
-	return jumps_to;
+	//Go based on our type here
+	switch(block->exit_statement->statement_type){
+		//Direct jump, just use the if block
+		case THREE_ADDR_CODE_JUMP_STMT:
+			return block->exit_statement->if_block;
+
+		//In a branch statement, the else block is
+		//the direct jump
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			return block->exit_statement->else_block;
+
+		//By default no
+		default:
+			return NULL;
+	}
 }
 
 
@@ -4765,7 +4774,7 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 				//delete the jump statement as it is now unnecessary
 				if(end_jumps_to == previous->direct_successor){
 					//Get rid of this jump as it's no longer needed
-					delete_statement(previous->exit_statement);
+					//delete_statement(previous->exit_statement);
 				}
 
 				//Add this in as well
@@ -4899,8 +4908,6 @@ static void print_ordered_blocks(cfg_t* cfg, basic_block_t* head_block, instruct
  * of code that we print out
  */
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
-	exit(0);
-
 	//Grab these two general use types first
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64")->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32")->type;
@@ -4921,6 +4928,8 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 		print_ordered_blocks(cfg, head_block, PRINT_THREE_ADDRESS_CODE);
 		printf("============================== AFTER SIMPLIFY ========================================\n");
 	}
+
+	exit(0);
 
 	//Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
 	//format that is used in the optimization phase. Now, we need to take that expanded IR and

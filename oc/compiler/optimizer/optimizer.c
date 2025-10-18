@@ -1647,9 +1647,8 @@ cfg_t* optimize(cfg_t* cfg){
 	//Now that we've cleaned up all irrelevant brances, we can look at the branches that are left
 	//and see if we can optimize any of the compound logic associated with them. We will do this before
 	//we clean because it will generate more basic blocks/branches to look at
+	//TODO NOT DONE
 	//optimize_short_circuit_logic(cfg);
-
-	//exit(0);
 
 	//Give back the CFG
 	return cfg;
