@@ -1149,13 +1149,24 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
  *
  * t9 <- t5 && t7 <----------- if the *use count* of t9 is more than 1, we'll still need to keep it around. Otherwise we delete
  */
-static void optimize_compound_and_jump(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 
-
 	//Extract the op1, we'll need to trave 
 	three_addr_var_t* op1 = short_circuit_statment->op1;
+
+	//The cursor for our first half
+	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;
+
+	//Trace our way up to where op1 was assigned
+	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
+		//Keep advancing backward
+		first_half_cursor = first_half_cursor->previous_statement;
+	}
+
+	//Now we have the assignment for the first half done
+
 
 
 
@@ -1435,7 +1446,7 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 				//No inverse jump, this is the common case
 				if(use_inverse_jump == FALSE){
 					//Invoke the and helper
-					optimize_compound_and_jump(short_circuit_statement, if_target, else_target);
+					optimize_logical_and_branch_logic(short_circuit_statement, if_target, else_target);
 				} else {
 					//Invoke the inverse function
 					optimize_compound_and_jump_inverse(cfg, block, short_circuit_statement, if_target, else_target);
