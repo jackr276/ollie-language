@@ -122,10 +122,11 @@ int main(int argc, char** argv){
 		//Calculate the final time
 		time_spent = (double)(end - begin)/CLOCKS_PER_SEC;
 
-		char info[500];
-		sprintf(info, "Parsing failed with %d errors and %d warnings", parse_results->num_errors, parse_results->num_warnings);
+		char info[2000];
 		if(time_execution == TRUE){
-			sprintf(info, " in %.8f seconds", time_spent);
+			sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", parse_results->num_errors, parse_results->num_warnings, time_spent);
+		} else {
+			sprintf(info, "Parsing failed with %d errors and %d warnings", parse_results->num_errors, parse_results->num_warnings);
 		}
 
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
