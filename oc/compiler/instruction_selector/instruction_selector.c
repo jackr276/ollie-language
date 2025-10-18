@@ -2399,12 +2399,24 @@ static void handle_branch_instruction(instruction_window_t* window){
 		case BRANCH_LE:
 			jump_to_if = emit_jump_instruction_directly(if_block, JLE);
 			break;
-
 		//We in reality should never reach here
 		default:
 			break;
 	}
 
+	//The else jump is always a direct jump no matter what
+	instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+	//The if must go after the branch statement before the else
+	insert_instruction_after_given(jump_to_if, branch_stmt);
+	//And the jump to else always goes after the if jump
+	insert_instruction_after_given(jump_to_else, jump_to_if);
+	
+	//Once this is all done, we can delete the branch
+	delete_statement(branch_stmt);
+
+	//And reset the window based on the last one
+	reconstruct_window(window, jump_to_else);
 }
 
 
@@ -4946,8 +4958,6 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 		printf("============================== AFTER SIMPLIFY ========================================\n");
 	}
 
-	exit(0);
-
 	//Once we've printed, we now need to simplify the operations. OIR already comes in an expanded
 	//format that is used in the optimization phase. Now, we need to take that expanded IR and
 	//recognize any redundant operations, dead values, unnecessary loads, etc.
@@ -4966,4 +4976,6 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	if(print_irs == TRUE){
 		print_ordered_blocks(cfg, head_block, PRINT_INSTRUCTION);
 	}
+	exit(0);
+
 }
