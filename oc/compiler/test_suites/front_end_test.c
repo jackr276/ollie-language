@@ -97,7 +97,7 @@ int main(int argc, char** argv){
 	num_errors = 0;
 	num_warnings = 0;
 
-	fprintf(stderr, "==================================== FRONT END TEST ======================================\n");
+	printf("==================================== FRONT END TEST ======================================\n");
 
 	//Grab all the options using the helper
 	compiler_options_t* options = parse_and_store_options(argc, argv);
@@ -163,5 +163,5 @@ int main(int argc, char** argv){
 	printf("=======================================================================\n\n");
 
 final_printout:
-	fprintf(stderr, "==================================== END  ================================================\n");
+	printf("==================================== END  ================================================\n");
 }

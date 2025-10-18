@@ -334,7 +334,7 @@ middle_test: middle_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/middle_end_test -i -d -f
 
 selector_test: instruction_selector_test
-	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -f -t
+	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -t -f 
 
 selector_test_non_timed: instruction_selector_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/instruction_selector_test -i -d -f
