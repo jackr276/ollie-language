@@ -3718,6 +3718,23 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_typ
 
 
 /**
+ * Emit a jump instruction directly
+ */
+instruction_t* emit_jump_instruction_directly(void* jumping_to_block, instruction_type_t jump_instruction_type){
+	//Allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Directly assign here
+	instruction->instruction_type = jump_instruction_type;
+
+	//Point to the jumping to block
+	instruction->if_block = jumping_to_block;
+
+	return instruction;
+}
+
+
+/**
  * Emit a branch statement
  */
 instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type){
