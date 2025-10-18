@@ -675,59 +675,6 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 
 
 /**
- * Jump instructions are basically already done for us. It's a very simple one-to-one
- * mapping that we need to do here
- */
-static void select_jump_instruction(instruction_t* instruction){
-	//We already know that we have a jump here, we'll just need to switch on
-	//what the type is
-	switch (instruction->jump_type) {
-		case JUMP_TYPE_JMP:
-			instruction->instruction_type = JMP;
-			break;
-		case JUMP_TYPE_JE:
-			instruction->instruction_type = JE;
-			break;
-		case JUMP_TYPE_JNE:
-			instruction->instruction_type = JNE;
-			break;
-		case JUMP_TYPE_JG:
-			instruction->instruction_type = JG;
-			break;
-		case JUMP_TYPE_JGE:
-			instruction->instruction_type = JGE;
-			break;
-		case JUMP_TYPE_JL:
-			instruction->instruction_type = JL;
-			break;
-		case JUMP_TYPE_JLE:
-			instruction->instruction_type = JLE;
-			break;
-		case JUMP_TYPE_JA:
-			instruction->instruction_type = JA;
-			break;
-		case JUMP_TYPE_JAE:
-			instruction->instruction_type = JAE;
-			break;
-		case JUMP_TYPE_JB:
-			instruction->instruction_type = JB;
-			break;
-		case JUMP_TYPE_JBE:
-			instruction->instruction_type = JBE;
-			break;
-		case JUMP_TYPE_JZ:
-			instruction->instruction_type = JZ;
-			break;
-		case JUMP_TYPE_JNZ:
-			instruction->instruction_type = JNZ;
-			break;
-		default:
-			break;
-	}
-}
-
-
-/**
  * A very simple helper function that selects the right move instruction based
  * solely on variable size. Done to avoid code duplication
  */
@@ -3348,8 +3295,10 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			//We'll still store this, just in a hidden way
 			instruction->source_register = instruction->op1;
 			break;
+		//These will always just be a JMP - the branch will have
+		//more complex rules
 		case THREE_ADDR_CODE_JUMP_STMT:
-			select_jump_instruction(instruction);
+			instruction->instruction_type = JMP;
 			break;
 		//Special case here - we don't change anything
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
