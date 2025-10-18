@@ -838,6 +838,9 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
 	stmt->op2 = op2;
 	stmt->lea_multiplicator = type_size;
 
+	//Mark the current function
+	stmt->function = current_function;
+
 	//And now we'll give it back
 	return stmt;
 }

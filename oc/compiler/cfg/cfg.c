@@ -5878,7 +5878,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, emit_temp_var(input_result_type), temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -6088,7 +6088,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, emit_temp_var(input_result_type), temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:

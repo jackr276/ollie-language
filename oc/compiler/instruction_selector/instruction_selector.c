@@ -4976,6 +4976,5 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	if(print_irs == TRUE){
 		print_ordered_blocks(cfg, head_block, PRINT_INSTRUCTION);
 	}
-	exit(0);
-
+	//exit(0);
 }
