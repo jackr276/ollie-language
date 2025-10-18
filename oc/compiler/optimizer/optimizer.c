@@ -6,6 +6,7 @@
 */
 #include "optimizer.h"
 #include "../utils/queue/heap_queue.h"
+#include <iso646.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -92,6 +93,98 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	
 	//We'll remove this from the list of created blocks
 	dynamic_array_delete(cfg->created_blocks, b);
+}
+
+
+/**
+ * Remove a statement from a block. This is more like a soft deletion, we are
+ * not actually deleting the statement, just moving it from once place to another
+ */
+void remove_statement(instruction_t* stmt){
+	//Grab the block out
+	basic_block_t* block = stmt->block_contained_in;
+
+	//If it's the leader statement, we'll just update the references
+	if(block->leader_statement == stmt){
+		//Special case - it's the only statement. We'll just delete it here
+		if(block->leader_statement->next_statement == NULL){
+			//Just remove it entirely
+			block->leader_statement = NULL;
+			block->exit_statement = NULL;
+		//Otherwise it is the leader, but we have more
+		} else {
+			//Update the reference
+			block->leader_statement = stmt->next_statement;
+			//Set this to NULL
+			block->leader_statement->previous_statement = NULL;
+		}
+
+	//What if it's the exit statement?
+	} else if(block->exit_statement == stmt){
+		instruction_t* previous = stmt->previous_statement;
+		//Nothing at the end
+		previous->next_statement = NULL;
+
+		//This now is the exit statement
+		block->exit_statement = previous;
+		
+	//Otherwise, we have one in the middle
+	} else {
+		//Regular middle deletion here
+		instruction_t* previous = stmt->previous_statement;
+		instruction_t* next = stmt->next_statement;
+		previous->next_statement = next;
+		next->previous_statement = previous;
+	}
+
+	//This statement is listless(for now)
+	stmt->previous_statement = NULL;
+	stmt->next_statement = NULL;
+	stmt->block_contained_in = NULL;
+}
+
+
+/**
+ * Split a block, taking all statements beginning at start(inclusive) until
+ * the end and putting them into the new block
+ *
+ * .L1
+ *   A
+ *   B
+ *   C <----- split start
+ *   D
+ *   E
+ *
+ *  .L1
+ *   A
+ *   B
+ *   
+ *  .L2
+ *   C
+ *   D
+ *   E
+ *
+ * NOTE: this rule does *no* successor management or branch insertion
+ *
+ */
+static void bisect_block(basic_block_t* original, basic_block_t* new, instruction_t* bisect_start){
+	//Grab a cursor to the start statement
+	instruction_t* cursor = bisect_start;
+
+	//So long as this is not NULL
+	while(cursor != NULL){
+		//What we'll actually use
+		instruction_t* holder = cursor;
+
+		//Push this one up
+		cursor = cursor->next_statement;
+
+		//Remove the holder from the original block
+		remove_statement(holder);
+
+		//Add it to the new block
+		add_statement(new, holder);
+	}
 }
 
 
@@ -1152,6 +1245,16 @@ static void optimize_compound_or_jump_inverse(cfg_t* cfg, basic_block_t* block, 
 static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
+	//The new block that we'll need for our second half
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+
+	//Some bookkeeping - all of the original blocks successors should no longer point to it
+	for(u_int16_t i = 0; i < original_block->successors->current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(original_block->successors, i);
+
+		//Remove the successor/predecessor link
+		delete_successor(original_block, successor);
+	}
 
 	//Extract the op1, we'll need to trave 
 	three_addr_var_t* op1 = short_circuit_statment->op1;
@@ -1165,7 +1268,10 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 		first_half_cursor = first_half_cursor->previous_statement;
 	}
 
-	//Now we have the assignment for the first half done
+	//Now we've found where we need to effectively split the block into 2 pieces
+	//Everything after this op1 assignment needs to be removed from this block
+	//and put into the new block
+	bisect_block()
 
 
 
@@ -1695,7 +1801,6 @@ cfg_t* optimize(cfg_t* cfg){
 	//Now that we've cleaned up all irrelevant brances, we can look at the branches that are left
 	//and see if we can optimize any of the compound logic associated with them. We will do this before
 	//we clean because it will generate more basic blocks/branches to look at
-	//TODO NOT DONE
 	//optimize_short_circuit_logic(cfg);
 
 	//Give back the CFG
