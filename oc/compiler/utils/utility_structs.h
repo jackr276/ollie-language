@@ -29,6 +29,8 @@ struct compiler_options_t {
 	u_int8_t skip_output;
 	//Enable all debug printing 
 	u_int8_t enable_debug_printing;
+	//Print only the post allocation results
+	u_int8_t print_post_allocation;
 	//Print out summary? 
 	u_int8_t show_summary;
 	//Only output assembly(no .o)

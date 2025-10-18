@@ -39,6 +39,7 @@ static void print_help(){
 	printf("-s: Show a summary at the end of compilation\n");
 	printf("-a: Generate an assembly code file with a .s extension\n");
 	printf("-d: Show all debug information printed. This includes compiler warnings, info statements\n");
+	printf("-r: Print the result of the register allocation. This is done by default in -i\n");
 	printf("-t: Time execution of compiler. Can be used for performance testing\n");
 	printf("-m: Time each module of the compiler. This is used for even more granular performance testing\n");
 	printf("-@: Should only be used for CI runs. Avoids generating any assembly files\n");
@@ -60,7 +61,7 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 	int opt;
 
 	//Run through all of our options
-	while((opt = getopt(argc, argv, "ima@tdhsf:o:?")) != -1){
+	while((opt = getopt(argc, argv, "rima@tdhsf:o:?")) != -1){
 		//Switch based on opt
 		switch(opt){
 			//Invalid option
@@ -79,6 +80,10 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 			//Flag that this is a test run
 			case '@':
 				options->is_test_run = TRUE;
+				break;
+			//Flag that this is a test run
+			case 'r':
+				options->print_post_allocation = TRUE;
 				break;
 			//Store the input file name
 			case 'f':

@@ -357,6 +357,14 @@ compiler_test_non_timed: oc
 		./oc/out/oc -disa -f $$input -o $$output; \
 	done
 
+# This test is both non-timed *and* only prints out register allocations
+compiler_test_allocation_only: oc
+	@for input in $(inputs); do \
+		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		echo "Running ./oc/out/oc -disa -f $$input -o $$output"; \
+		./oc/out/oc -dsra -f $$input -o $$output; \
+	done
+
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
 
