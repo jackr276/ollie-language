@@ -322,7 +322,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
  * 	 compute Postorder of CFG
  * 	 branch_reduce_postprocess()
  */
-static void clean(cfg_t* cfg){
+static void condense(cfg_t* cfg){
 	//For each function in the CFG
 	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Have we seen change(modification) at all?
@@ -379,7 +379,7 @@ static basic_block_t* does_block_end_in_jump_instruction(basic_block_t* block){
  * find a way to reorder the blocks since it is likely that the control flow
  * changed
  */
-static basic_block_t* order_blocks(cfg_t* cfg){
+static basic_block_t* reorder_blocks(cfg_t* cfg){
 	//We'll first wipe the visited status on this CFG
 	reset_visited_status(cfg, TRUE);
 	
@@ -501,83 +501,15 @@ void postprocess(cfg_t* cfg){
 	/**
 	 * PASS 1: remove any/all useless move operations from the CFG
 	 */
-	//remove_useless_moves(cfg);
+	remove_useless_moves(cfg);
 
+	/**
+	 * PASS 2: perform a modified branch reduction to condense the code
+	*/
+	//condense(cfg);
 
-
-	//Grab the head block
-	basic_block_t* current = cfg->head_block;
-
-	//Go until we hit the end
-	while(current != NULL){
-		//Grab a cursor
-		instruction_t* current_instruction = current->leader_statement;
-
-		//Run through all instructions
-		while(current_instruction != NULL){
-			//It's not a pure copy, so leave
-			if(is_instruction_pure_copy(current_instruction) == TRUE){
-				//Extract for convenience
-				live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
-				live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
-
-				//We have a pure copy, so we can delete
-				if(source_live_range->reg == destination_live_range->reg){
-					instruction_t* holder = current_instruction;
-
-					//Push this one up
-					current_instruction = current_instruction->next_statement;
-
-					//Delete the holder
-					delete_statement(holder);
-				} else {
-					current_instruction = current_instruction->next_statement;
-				}
-
-				continue;
-			}
-
-			//If we have a jump instruction here
-			if(current_instruction->instruction_type == JMP){
-				//Extract where we're jumping to
-				basic_block_t* jumping_to_block = current_instruction->if_block;
-
-				//If the direct sucessor is the jumping to block, there are a few actions
-				//that we may be able to take
-				if(current->direct_successor == jumping_to_block){
-					//We can combine the two blocks into one
-					if(jumping_to_block->predecessors->current_index == 1){
-						//Delete the jump statement
-						delete_statement(current_instruction);
-
-						//Combine the two blocks here
-						current_instruction = combine_blocks(current, jumping_to_block);
-
-						//The jumping to block is no longer a place here
-						dynamic_array_delete(cfg->created_blocks, jumping_to_block);
-					
-					/**
-					 * Otherwise, we should still be able to just delete this jump instruction
-					 */
-					} else {
-						//Temp holder
-						instruction_t* temp = current_instruction;
-
-						//Advance this
-						current_instruction = current_instruction->next_statement;
-
-						//Just delete the temp instruction
-						delete_statement(temp);
-					}
-
-					continue;
-				}
-			}
-
-			current_instruction = current_instruction->next_statement;
-		}
-
-		//Push it up
-		current = current->direct_successor;
-	}
+	/**
+	 * PASS 3: final reordering
+	*/
+	reorder_blocks(cfg);
 }
