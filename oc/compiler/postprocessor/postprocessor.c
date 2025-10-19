@@ -89,6 +89,59 @@ static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
+ * Post register allocation, it is possible that the register allocator
+ * could've given us something like: movq %rax, %rax. This is entirely
+ * useless, and as such we will eliminate instructions like these
+ *
+ * This is akin to mark & sweep in the optimizer, though much more simple
+ */
+static void remove_useless_moves(cfg_t* cfg){
+	//Grab the head block
+	basic_block_t* current = cfg->head_block;
+
+	//So long as we have blocks to traverse
+	while(current != NULL){
+		//Grab an instruction cursor
+		instruction_t* current_instruction = current->leader_statement;
+
+		//Run through all instructions
+		while(current_instruction != NULL){
+			//It's not a pure copy, so leave
+			if(is_instruction_pure_copy(current_instruction) == TRUE){
+				//Extract for convenience
+				live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
+				live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
+
+				//We have a pure copy, so we can delete
+				if(source_live_range->reg == destination_live_range->reg){
+					instruction_t* holder = current_instruction;
+
+					//Push this one up
+					current_instruction = current_instruction->next_statement;
+
+					//Delete the holder
+					delete_statement(holder);
+
+				//Otherwise push it up
+				} else {
+					current_instruction = current_instruction->next_statement;
+				}
+
+			//Otherwise push it up
+			} else {
+				current_instruction = current_instruction->next_statement;
+			}
+		}
+
+		//Push it up
+		current = current->direct_successor;
+	}
+}
+
+
+
+
+/**
  * The postprocess function performs all post-allocation cleanup/optimization 
  * tasks and returns the ordered CFG in file-ready form
  */
@@ -107,6 +160,13 @@ static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
  * 			about liveness information anymore, so this is all we'll need to do
  */
 void postprocess(cfg_t* cfg){
+	/**
+	 * PASS 1: remove any/all useless move operations from the CFG
+	 */
+	remove_useless_moves(cfg);
+
+
+
 	//Grab the head block
 	basic_block_t* current = cfg->head_block;
 
