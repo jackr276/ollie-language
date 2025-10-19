@@ -139,6 +139,206 @@ static void remove_useless_moves(cfg_t* cfg){
 }
 
 
+/**
+ * The branch reduce function is what we use on each pass of the function
+ * postorder
+ *
+ * NOTE: there is no long a consideration for branches here
+ *
+ * Procedure branch_reduce_postprocess():
+ * 	for each block in postorder
+ * 		if i ends in a jump to j then
+ * 			if i is empty then
+ * 				replace transfers to i with transfers to j
+ * 			if j has only one predecessor then
+ * 				merge i and j
+ * 			if j is empty and ends in a conditional branch then
+ * 				overwrite i's jump with a copy of j's branch
+ */
+static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder){
+	//Have we seen a change? By default we assume not
+	u_int8_t changed = FALSE;
+
+	//Our current block
+	basic_block_t* current;
+
+	/**
+	 * For each block in postorder
+	 */
+	for(u_int16_t _ = 0; _ < postorder->current_index; _++){
+		//Grab the current block out
+		current = dynamic_array_get_at(postorder, _);
+
+		/**
+		 * If block i ends in a conditional branch
+		 */
+		if(current->exit_statement != NULL 
+			&& current->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+			//Extract the branch statement
+			instruction_t* branch = current->exit_statement;
+
+			/**
+			 * If both targets are identical(j) then:
+			 * 	replace branch with a jump to j
+			 */
+			if(branch->if_block == branch->else_block){
+				//Remove these all
+				delete_all_branching_statements(current);
+
+				//Emit a jump here instead
+				emit_jump(current, branch->if_block, NULL, TRUE, FALSE);
+
+				//This counts as a change
+				changed = TRUE;
+			}
+		}
+
+
+		/**
+		 * If block i ends in a jump to j then..
+		 */
+		if(current->exit_statement != NULL
+			&& current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
+			//Extract the block(j) that we're going to
+			basic_block_t* jumping_to_block = current->exit_statement->if_block;
+
+			/**
+			 * If i is empty then
+			 * 	replace transfers to i with transfers to j
+			 */
+			//We know it's empty if these are the same
+			if(current->exit_statement == current->leader_statement
+				&& current->block_type != BLOCK_TYPE_FUNC_ENTRY){
+				//Replace all jumps to the current block with those to the jumping block
+				replace_all_branch_targets(current, jumping_to_block);
+
+				//Current is no longer in the picture
+				dynamic_array_delete(cfg->created_blocks, current);
+
+				//Counts as a change
+				changed = TRUE;
+
+				//We are done here, no need to continue on
+				continue;
+			}
+
+			/**
+			 * If j only has one predecessor then
+			 * 	merge i and j
+			 */
+			if(jumping_to_block->predecessors->current_index == 1){
+				//Delete the jump statement because it's now useless
+				delete_statement(current->exit_statement);
+
+				//Decouple these as predecessors/successors
+				delete_successor(current, jumping_to_block);
+
+				//Combine the two
+				combine(cfg, current, jumping_to_block);
+
+				//Counts as a change 
+				changed = TRUE;
+
+				//And we're done here
+				continue;
+			}
+
+			/**
+			 * If j is empty(except for the branch) and ends in a conditional branch then
+			 * 	overwrite i's jump with a copy of j's branch
+			 */
+			if(jumping_to_block->leader_statement->is_branch_ending == TRUE
+				&& jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+				//Delete the jump statement in i
+				delete_statement(current->exit_statement);
+
+				//These are also no longer successors
+				delete_successor(current, jumping_to_block);
+
+				//Run through every statement in the jumping to block and 
+				//copy them into current
+				instruction_t* current_stmt = jumping_to_block->leader_statement;
+
+				//So long as there is more to copy
+				while(current_stmt != NULL){
+					//Copy it
+					instruction_t* copy = copy_instruction(current_stmt);
+
+					//Add it to the current block
+					add_statement(current, copy);
+
+					//Add as assigned
+					if(copy->assignee != NULL){
+						add_assigned_variable(current, copy->assignee);
+					}
+
+					//Add these as used
+					add_used_variable(current, copy->op1);
+					add_used_variable(current, copy->op2);
+
+					//Add it over
+					current_stmt = current_stmt->next_statement;
+				}
+
+				//Once we get to the very end here, we'll need to do the bookkeeping
+				//from the branch
+				basic_block_t* if_destination = jumping_to_block->exit_statement->if_block;
+				basic_block_t* else_destination = jumping_to_block->exit_statement->else_block;
+				
+				//These both count as successor
+				add_successor(current, if_destination);
+				add_successor(current, else_destination);
+
+				//This counts as a change
+				changed = TRUE;
+			}
+		}
+	}
+
+	//Give back whether or not we changed
+	return changed;
+}
+
+
+/**
+ * The clean algorithm will remove all useless control flow structures, ideally
+ * resulting in a simplified CFG. This should be done after we use mark and sweep to get rid of useless code,
+ * because that may lead to empty blocks that we can clean up here
+ *
+ * Algorithm:
+ *
+ * Procedure condense():
+ * 	while changed
+ * 	 compute Postorder of CFG
+ * 	 branch_reduce_postprocess()
+ */
+static void clean(cfg_t* cfg){
+	//For each function in the CFG
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+		//Have we seen change(modification) at all?
+		u_int8_t changed;
+
+		//Grab the function block out
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, _);
+
+		//The postorder traversal array
+		dynamic_array_t* postorder;
+
+		//Now we'll do the actual clean algorithm
+		do {
+			//Compute the new postorder
+			postorder = compute_post_order_traversal(function_entry);
+
+			//Call onepass() for the reduction
+			changed = branch_reduce_postprocess(cfg, postorder);
+
+			//We can free up the old postorder now
+			dynamic_array_dealloc(postorder);
+			
+		//We keep going so long as branch_reduce changes something 
+		} while(changed == TRUE);
+	}
+}
 
 
 /**
