@@ -292,9 +292,6 @@ struct instruction_t{
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;
-	//Are we jumping to if?(Affirmative jump) Our if statements and do while blocks
-	//use this in the conditional. Otherwise, we're jumping to else, which is an inverse jump
-	u_int8_t inverse_jump;
 	//What is the indirection level?
 	u_int8_t indirection_level;
 	//Cannot be coalesced
@@ -303,6 +300,8 @@ struct instruction_t{
 	u_int8_t is_converting_move;
 	//Does this have a multiplicator
 	u_int8_t has_multiplicator;
+	//Is this a regular or inverse branch
+	u_int8_t inverse_branch;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?

@@ -241,7 +241,7 @@ void calculate_all_control_relations(cfg_t* cfg);
 /**
  * Emit a jump statement directly into a block
  */
-instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, three_addr_var_t* conditional_result, u_int8_t is_branch_ending, u_int8_t inverse_jump);
+instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* dest_block);
 
 /**
  * Emit a branch statement directly into a block

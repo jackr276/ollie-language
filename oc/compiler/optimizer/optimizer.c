@@ -789,7 +789,7 @@ static void sweep(cfg_t* cfg){
 					//Emit the jump statement to the nearest marked postdominator
 					//NOTE: the emit jump adds the successor in for us, so we don't need to
 					//do so here
-					stmt = emit_jump(block, nearest_marked_postdom, NULL, TRUE, FALSE);
+					stmt = emit_jump(block, nearest_marked_postdom);
 
 					//Break out of the switch
 					break;
@@ -898,7 +898,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				delete_all_branching_statements(current);
 
 				//Emit a jump here instead
-				emit_jump(current, branch->if_block, NULL, TRUE, FALSE);
+				emit_jump(current, branch->if_block);
 
 				//This counts as a change
 				changed = TRUE;
@@ -1042,6 +1042,34 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
  * t8 <- 1
  * t7 <- t7 != t8 <------- If this is true, jump to if
  * cbranch_ne .L12 else .L13
+ *
+ * ================= Or consider the inverse version =======================
+ *
+ * .L1
+ * t5 <- 0
+ * t6 <- b_1
+ * t7 <- t6 != t5
+ * t8 <- 33
+ * t9 <- a_1
+ * t10 <- t9 < t8
+ * t11 <- t7 || t10 <---- DeMorgan's Law: ~t7 && ~t10 is what the branch here is really after for the if condition
+ * cbranch_z .L9 else .L13 <----- Notice how it's opposite
+ *
+ *
+ * Turn this into:
+ *
+ * .L2
+ * t5 <- 0
+ * t6 <- b_1
+ * t7 <- t6 != t5
+ * cbranch_ne .L13 else .L3 <--if they're not equal, goto *else*
+ *
+ * .L3
+ * t8 <- 33
+ * t9 <- a_1
+ * t10 <- t9 < t8
+ * cbranch_ge .L9 else .L13
+ * 
  */
 static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
