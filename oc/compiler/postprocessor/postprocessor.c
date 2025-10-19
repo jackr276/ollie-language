@@ -21,7 +21,7 @@
  *
  * After this happens, B no longer exists
  */
-static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
+static instruction_t* combine_blocks(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	//What if a was never even assigned?
 	if(a->exit_statement == NULL){
 		a->leader_statement = b->leader_statement;
@@ -69,10 +69,6 @@ static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
 		a->jump_table = b->jump_table;
 	}
 
-
-	//A's direct successor is now b's direct successor
-	a->direct_successor = b->direct_successor;
-
 	//For each statement in b, all of it's old statements are now "defined" in a
 	instruction_t* b_stmt = b->leader_statement;
 
@@ -83,6 +79,9 @@ static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
 		//Push it up
 		b_stmt = b_stmt->next_statement;
 	}
+
+	//Block b no longer exists
+	dynamic_array_delete(cfg->created_blocks, b);
 
 	//Always return b's leader
 	return b->leader_statement;
@@ -294,7 +293,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 				delete_successor(current, jumping_to_block);
 
 				//Combine the two
-				combine_blocks(current, jumping_to_block);
+				combine_blocks(cfg, current, jumping_to_block);
 
 				//Counts as a change 
 				changed = TRUE;
@@ -506,7 +505,7 @@ void postprocess(cfg_t* cfg){
 	/**
 	 * PASS 2: perform a modified branch reduction to condense the code
 	*/
-	//condense(cfg);
+	condense(cfg);
 
 	/**
 	 * PASS 3: final reordering
