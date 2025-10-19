@@ -472,7 +472,7 @@ type_system-CI.o: $(TYPE_SYSTEM_PATH)/type_system.c
 	$(CC) $(CFLAGS) $(TYPE_SYSTEM_PATH)/type_system.c -o $(OUT_CI)/type_system.o
 
 postprocessor-CI.o: $(POSTPROCESSOR_PATH)/postprocessor.c
-	$(CC) $(CFLAGS) $(POSTPROCESSOR_PATH)/postprocessor.c -o $(OUT_LOCAL)/postprocessor.o
+	$(CC) $(CFLAGS) $(POSTPROCESSOR_PATH)/postprocessor.c -o $(OUT_CI)/postprocessor.o
 
 parser-CI.o: $(PARSER_PATH)/parser.c
 	$(CC) $(CFLAGS) $(PARSER_PATH)/parser.c -o $(OUT_CI)/parser.o
