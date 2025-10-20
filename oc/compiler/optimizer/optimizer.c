@@ -1273,7 +1273,7 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
  * t7 <- x_0
  * t8 <- 1
  * t7 <- t7 != t8 <------- Remember we're looking for a failure, so if this fails to go *if*, otherwise *else*
- * cbranch_e .L2 else .L13
+ * cbranch_e .L12 else .L13
  */
 static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
@@ -1336,6 +1336,53 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 		//isn't ever coming back
 		delete_statement(holder);
 	}
+
+	//Now we have 2 blocks, split nicely in half for us to work with
+	//The first block contains the first condition, and the second
+	//block contains the second condition and nothing else after it
+	//The old branch and the compound and condition is now gone
+	
+	/**
+	 * HANDLING THE FIRST BLOCK
+	 *
+	 * The first block will exploit the logical and property that if the
+	 * first condition fails, the second *should never execute*. We have
+	 * an inverse jump of sorts here
+	 */
+	//We need the operator
+	ollie_token_t first_condition_op = first_half_cursor->op;
+	//And if the type is signed
+	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
+
+	//Determine the appropriate branch using an inverse jump
+	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_INVERSE, first_half_signed);
+
+	//Now we'll emit our branch at the very end of the first block. Remember it's:
+	//if condition fails:
+	//	goto if 
+	//else
+	//	goto second_half_block 
+	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
+
+	/**
+	 * HANDLING THE SECOND BLOCK
+	 *
+	 * The second block is only reachable if the first condition is true. Therefore, if the second condition
+	 * is also true, we can jump to our if target. Otherwise, go to the else target
+	 */
+	ollie_token_t second_condition_op = second_half_cursor->op;
+	//And if the type is signed
+	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
+
+	//Determine the appropriate branch using an inverse jump
+	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
+
+	//Now we'll emit our final branch at the end of the first block. Remember it's:
+	//if condition fails:
+	// goto if_block
+	//else 
+	// goto else_block
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
 }
 
 
@@ -1603,8 +1650,13 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 			//Make the helper call. These are treated differently based on what their
 			//operators are, so we'll need to use the appropriate call
 			if(short_circuit_statement->op == DOUBLE_AND){
-				//Invoke the and helper
-				optimize_logical_and_branch_logic(short_circuit_statement, if_target, else_target);
+				//Most common case
+				if(inverse_branch == FALSE){
+					optimize_logical_and_branch_logic(short_circuit_statement, if_target, else_target);
+				} else {
+					optimize_logical_and_inverse_branch_logic(short_circuit_statement, if_target, else_target);
+				}
+
 			//Otherwise we have the double or
 			} else {
 				//Invoke the and helper
