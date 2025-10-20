@@ -8,9 +8,7 @@
 //Link to the namesake header
 #include "postprocessor.h"
 #include "../utils/queue/heap_queue.h"
-
-#define TRUE 1
-#define FALSE 0 
+#include "../utils/constants.h"
 
 /**
  * Combine two blocks into one. This is different than other combine methods,

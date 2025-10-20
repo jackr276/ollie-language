@@ -9,13 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include "../constants.h"
 
 //Our default stack size is 10 numbers
 #define DEFAULT_STACK_SIZE 10
-//Standard T/F definitions
-#define TRUE 1
-#define FALSE 0
-
 
 /**
  * Initialize a lightstack

@@ -14,10 +14,8 @@
 #include "../parser/parser.h"
 //Link to cfg
 #include "../cfg/cfg.h"
+#include "../utils/constants.h"
 
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0 
 
 u_int32_t num_warnings;
 u_int32_t num_errors;

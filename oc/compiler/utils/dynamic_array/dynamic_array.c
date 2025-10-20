@@ -11,14 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-
-//The default is 20 -- this can always be reupped
-#define DEFAULT_SIZE 20 
-
-//Standard booleans here
-#define TRUE 1
-#define FALSE 0
-
+#include "../constants.h"
 
 /**
  * Allocate an entire dynamic array
@@ -28,7 +21,7 @@ dynamic_array_t* dynamic_array_alloc(){
  	dynamic_array_t* array = calloc(sizeof(dynamic_array_t), 1);
 
 	//Set the max size using the sane default 
-	array->current_max_size = DEFAULT_SIZE;
+	array->current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
 
 	//Now we'll allocate the overall internal array
 	array->internal_array = calloc(array->current_max_size, sizeof(void*));

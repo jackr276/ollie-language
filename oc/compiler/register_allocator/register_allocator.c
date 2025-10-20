@@ -10,6 +10,7 @@
 #include "register_allocator.h"
 //For live ranges
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/constants.h"
 #include "../interference_graph/interference_graph.h"
 #include "../postprocessor/postprocessor.h"
 #include "../cfg/cfg.h"
@@ -17,17 +18,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-
-//For standardization
-#define TRUE 1
-#define FALSE 0
-
-//The number of colors that we have for general use registers
-#define K_COLORS_GEN_USE 15
-
-//A load and a store generate 2 instructions when we load
-//from the stack
-#define LOAD_AND_STORE_COST 2
 
 //The atomically increasing live range id
 u_int32_t live_range_id = 0;

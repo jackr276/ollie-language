@@ -19,10 +19,7 @@
 #include "../optimizer/optimizer.h"
 //Link to the instruction selector
 #include "../instruction_selector/instruction_selector.h"
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
+#include "../utils/constants.h"
 
 u_int32_t num_warnings;
 u_int32_t num_errors;

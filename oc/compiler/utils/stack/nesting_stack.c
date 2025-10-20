@@ -6,10 +6,7 @@
 #include "nesting_stack.h"
 #include <stdio.h>
 #include <stdlib.h>
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
+#include "../constants.h"
 
 /**
  * Create a stack
