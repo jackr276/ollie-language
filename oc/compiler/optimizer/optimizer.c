@@ -1098,6 +1098,54 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 		//isn't ever coming back
 		delete_statement(holder);
 	}
+
+	//Now we have 2 blocks, split nicely in half for us to work with
+	//The first block contains the first condition, and the second
+	//block contains the second condition and nothing else after it
+	//The old branch and the compound and condition is now gone
+	
+	/**
+	 * HANDLING THE FIRST BLOCK
+	 *
+	 * The first block will exploit the logical or property that if the
+	 * first condition works, the second *should never execute*. We have
+	 * a normal branch here
+	 */
+	//We need the operator
+	ollie_token_t first_condition_op = first_half_cursor->op;
+	//And if the type is signed
+	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
+
+	//Determine an appropriate branch. Remember, if this *fails* the if condition
+	//succeeds, so this is an *inverse* jump
+	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_NORMAL, first_half_signed);
+
+	//Now we'll emit our branch at the very end of the first block. Remember it's:
+	//if condition works:
+	//	goto else
+	//else
+	//	goto second_half_block
+	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
+
+	/**
+	 * HANDLING THE SECOND BLOCK
+	 *
+	 * The second block is only reachable if the first condition is false. Therefore, if the second condition
+	 * is true, we can jump to our if target. Otherwise, go to the else target
+	 */
+	ollie_token_t second_condition_op = second_half_cursor->op;
+	//And if the type is signed
+	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
+
+	//Determine the appropriate inverse jump here
+	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
+
+	//Now we'll emit our final branch at the end of the first block. Remember it's:
+	//if condition fails:
+	// goto if_block
+	//else 
+	// goto else_block
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_INVERSE);
 }
 
 
@@ -1659,8 +1707,12 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 
 			//Otherwise we have the double or
 			} else {
-				//Invoke the and helper
-				optimize_logical_or_branch_logic(short_circuit_statement, if_target, else_target);
+				//Most common case
+				if(inverse_branch == FALSE){
+					optimize_logical_or_branch_logic(short_circuit_statement, if_target, else_target);
+				} else {
+					optimize_logical_or_inverse_branch_logic(short_circuit_statement, if_target, else_target);
+				}
 			}
 		}
 
