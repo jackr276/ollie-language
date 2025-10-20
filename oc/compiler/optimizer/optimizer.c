@@ -1180,6 +1180,100 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 
 
 /**
+ * Handle an inverse-branching logical and condition
+ *
+ * These statement will take what was once one block, and split it into 
+ * 2 successive blocks
+ *
+ * .L2
+ * t5 <- x_0
+ * t6 <- 3
+ * t5 <- t5 < t6
+ * t7 <- x_0
+ * t8 <- 1
+ * t7 <- t7 != t8
+ * t5 <- t5 && t7
+ * cbranch_z .L12 else .L13 <--- notice how it's branch if zero, we go to if if this fails(hence inverse)
+ *
+ * Turn this into:
+ *
+ * .L2:
+ * t5 <- x_0
+ * t6 <- 3
+ * t5 <- t5 < t6 <---- if this doesn't work, we're done. We can go to *if case*
+ * cbranch_ge .L12 else .L3
+ *
+ * .L3 <----- The *only* way we get here is if the first condition is true
+ * t7 <- x_0
+ * t8 <- 1
+ * t7 <- t7 != t8 <------- Remember we're looking for a failure, so if this fails to go *if*, otherwise *else*
+ * cbranch_e .L2 else .L13
+ */
+static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+	//Grab out the block that we're using
+	basic_block_t* original_block = short_circuit_statment->block_contained_in;
+	//The new block that we'll need for our second half
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	//VERY important that we copy this on over
+	second_half_block->function_defined_in = original_block->function_defined_in;
+
+	//Some bookkeeping - all of the original blocks successors should no longer point to it
+	for(u_int16_t i = 0; i < original_block->successors->current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(original_block->successors, i);
+
+		//Remove the successor/predecessor link
+		delete_successor(original_block, successor);
+	}
+
+	//Extract the op1, we'll need to traverse
+	three_addr_var_t* op1 = short_circuit_statment->op1;
+	three_addr_var_t* op2 = short_circuit_statment->op2;
+
+	//The cursor for our first half
+	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;
+
+	//Trace our way up to where op1 was assigned
+	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
+		//Keep advancing backward
+		first_half_cursor = first_half_cursor->previous_statement;
+	}
+
+	//The cursor for our second half
+	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
+
+	//Trace our way up to where op2 was assigned
+	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
+		//Keep advancing backward
+		second_half_cursor = second_half_cursor->previous_statement;
+	}
+
+	//Now we've found where we need to effectively split the block into 2 pieces
+	//Everything after this op1 assignment needs to be removed from this block
+	//and put into the new block. The split starts at the first half cursor's *next statement*
+	bisect_block(second_half_block, first_half_cursor->next_statement);
+
+	/**
+	 * Now starting at the second half cursor's next statement, we'll *delete* everything
+	 * after it because we no longer need it
+	 */
+	instruction_t* delete_cursor = second_half_cursor->next_statement;
+	
+	//Delete until we run out
+	while(delete_cursor != NULL){
+		//Hold onto it
+		instruction_t* holder = delete_cursor;
+
+		//Move it along up
+		delete_cursor = delete_cursor->next_statement;
+
+		//Delete the holder. This is a full delete, this statement
+		//isn't ever coming back
+		delete_statement(holder);
+	}
+}
+
+
+/**
  * Handle a compound and statement optimization
  *
  * These statement will take what was once one block, and split it into 
@@ -1405,6 +1499,9 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 		//Extract both of these values - we will need them
 		basic_block_t* if_target = branch_statement->if_block;
 		basic_block_t* else_target = branch_statement->else_block;
+
+		//Is this an inverse jumping branch?
+		u_int8_t inverse_branch = branch_statement->inverse_branch;
 
 		//Grab a statement cursor
 		instruction_t* cursor = block->exit_statement->previous_statement;
