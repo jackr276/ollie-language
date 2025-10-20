@@ -5,11 +5,7 @@
  */
 #include <stdio.h>
 #include "file_builder.h"
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
-
+#include "../utils/constants.h"
 
 /**
  * Print an assembly block out

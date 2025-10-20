@@ -10,14 +10,11 @@
 
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
+#include "../utils/constants.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
 #include <sys/types.h>
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
 
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* u64;

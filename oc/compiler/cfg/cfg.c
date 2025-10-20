@@ -16,13 +16,7 @@
 #include <sys/types.h>
 #include "../utils/queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
-
-//For magic number removal
-#define TRUE 1
-#define FALSE 0
-
-//For loops, we estimate that they'll execute 10 times each
-#define LOOP_ESTIMATED_COST 10
+#include "../utils/constants.h"
 
 //Our atomically incrementing integer
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such

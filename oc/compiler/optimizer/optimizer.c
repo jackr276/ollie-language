@@ -6,14 +6,9 @@
 */
 #include "optimizer.h"
 #include "../utils/queue/heap_queue.h"
-#include <iso646.h>
+#include "../utils/constants.h"
 #include <sys/select.h>
 #include <sys/types.h>
-
-//Standard true and false definitions
-#define TRUE 1
-#define FALSE 0
-
 
 /**
  * Combine two blocks into one
