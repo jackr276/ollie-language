@@ -11,14 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-
-//The default is 20 -- this can always be reupped
-#define DEFAULT_SIZE 20 
-
-//Standard booleans here
-#define TRUE 1
-#define FALSE 0
-
+#include "../constants.h"
 
 /**
  * Allocate an entire dynamic array
@@ -28,7 +21,7 @@ dynamic_array_t* dynamic_array_alloc(){
  	dynamic_array_t* array = calloc(sizeof(dynamic_array_t), 1);
 
 	//Set the max size using the sane default 
-	array->current_max_size = DEFAULT_SIZE;
+	array->current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
 
 	//Now we'll allocate the overall internal array
 	array->internal_array = calloc(array->current_max_size, sizeof(void*));
@@ -151,6 +144,25 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr){
 	array->current_index++;
 
 	//And we're all set
+}
+
+
+/**
+ * Clear a dynamic array entirely - keeps the size unchanged, but
+ * sets the entire internal array to 0
+ */
+void clear_dynamic_array(dynamic_array_t* array){
+	//Just to be safe
+	if(array == NULL){
+		printf("ERROR: Attempting to clear a NULL dynamic array\n");
+		exit(1);
+	}
+
+	//Wipe the entire thing out
+	memset(array->internal_array, 0, sizeof(void*) * array->current_max_size);
+
+	//Our current index is now 0
+	array->current_index = 0;
 }
 
 

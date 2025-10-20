@@ -10,29 +10,20 @@
 #include "register_allocator.h"
 //For live ranges
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/constants.h"
 #include "../interference_graph/interference_graph.h"
+#include "../postprocessor/postprocessor.h"
 #include "../cfg/cfg.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 
-//For standardization
-#define TRUE 1
-#define FALSE 0
-
-//The number of colors that we have for general use registers
-#define K_COLORS_GEN_USE 15
-
-//A load and a store generate 2 instructions when we load
-//from the stack
-#define LOAD_AND_STORE_COST 2
-
 //The atomically increasing live range id
 u_int32_t live_range_id = 0;
 
 //The array that holds all of our parameter passing
-const register_holder_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
+const general_purpose_register_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 
 //Avoid need to rearrange
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges);
@@ -45,7 +36,6 @@ static live_range_t* instruction_pointer_lr;
 static three_addr_var_t* stack_pointer;
 //And the type symtab
 static type_symtab_t* type_symtab;
-
 
 /**
  * Priority queue insert a live range in here
@@ -735,6 +725,9 @@ static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, b
 
 /**
  * Construct the live ranges appropriate for a phi function
+ *
+ * Note that the phi function does not count as an actual assignment, we'll just want
+ * to ensure that the live range is ready for us when we need it
  */
 static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//Let's see if we can find this
@@ -742,9 +735,6 @@ static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basi
 
 	//Add this into the live range
 	add_variable_to_live_range(live_range, basic_block, instruction->assignee);
-
-	//This does count as an assignment
-	add_assigned_live_range(live_range, basic_block);
 }
 
 
@@ -797,7 +787,7 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
 	assign_live_range_to_source_variable(live_ranges, basic_block, instruction->source_register);
 
 	//Extract for us
-	dynamic_array_t* function_parameters = instruction->function_parameters;
+	dynamic_array_t* function_parameters = instruction->parameters;
 
 	//If these are NULL then there's nothing else for us here
 	if(function_parameters == NULL){
@@ -1248,7 +1238,7 @@ static void pre_color(instruction_t* instruction){
 			 */
 
 			//Grab the parameters out
-			dynamic_array_t* function_params = instruction->function_parameters;
+			dynamic_array_t* function_params = instruction->parameters;
 
 			//If we actually have function parameters
 			if(function_params != NULL){
@@ -1477,12 +1467,12 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				case CALL:
 				case INDIRECT_CALL:
 					//No point here
-					if(operation->function_parameters == NULL){
+					if(operation->parameters == NULL){
 						break;
 					}
 					
 					//Grab it out
-					dynamic_array_t* operation_function_parameters = operation->function_parameters;
+					dynamic_array_t* operation_function_parameters = operation->parameters;
 
 					//Let's go through all of these and add them to LIVE_NOW
 					for(u_int16_t i = 0; i < operation_function_parameters->current_index; i++){
@@ -2106,7 +2096,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		live_range_t* lr = dynamic_array_get_at(result_lr->neighbors, i);
 
 		//And grab it's register out
-		register_holder_t reg = lr->reg;
+		general_purpose_register_t reg = lr->reg;
 
 		//If it isn't caller saved, we don't care
 		if(is_register_caller_saved(reg) == FALSE){
@@ -2173,7 +2163,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		live_range_t* interferee = dynamic_array_get_at(result_live_range->neighbors, i);
 
 		//And we'll extract the interfering register
-		register_holder_t interfering_register = interferee->reg;
+		general_purpose_register_t interfering_register = interferee->reg;
 
 		//If this is not caller saved, then we don't care about it
 		if(is_register_caller_saved(interfering_register) == FALSE){
@@ -2278,7 +2268,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 
 		//Otherwise if we get here, we know that we use it. Remember
 		//the register value is always offset by one
-		register_holder_t used_reg = i + 1;
+		general_purpose_register_t used_reg = i + 1;
 
 		//If this isn't callee saved, then we know to move on
 		if(is_register_callee_saved(used_reg) == FALSE){
@@ -2347,7 +2337,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 
 			//Remember that our positional coding is off by 1(0 is NO_REG value), so we'll
 			//add 1 to make the value correct
-			register_holder_t used_reg = j + 1;
+			general_purpose_register_t used_reg = j + 1;
 
 			//If it's not callee saved then we don't care
 			if(is_register_callee_saved(used_reg) == FALSE){
@@ -2382,54 +2372,6 @@ static void insert_saving_logic(cfg_t* cfg){
 
 		//And now we'll let the helper insert all of the caller-saved register logic
 		insert_caller_saved_register_logic(current_function_entry);
-	}
-}
-
-
-/**
- * One final order of business is to clean out any
- * operations that look like: movq %rax, %rax that are
- * leftover artifacts from our simplifcation & allocation
- */
-static void cleanup_pass(cfg_t* cfg){
-	//Grab the head block
-	basic_block_t* current = cfg->head_block;
-
-	//Go until we hit the end
-	while(current != NULL){
-		//Grab a cursor
-		instruction_t* current_instruction = current->leader_statement;
-
-		//Run through all instructions
-		while(current_instruction != NULL){
-			//It's not a pure copy, so leave
-			if(is_instruction_pure_copy(current_instruction) == FALSE){
-				current_instruction = current_instruction->next_statement;
-				continue;
-			}
-
-			//Extract for convenience
-			live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
-			live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
-
-			//We have a pure copy, so we can delete
-			if(source_live_range->reg == destination_live_range->reg){
-				instruction_t* holder = current_instruction;
-
-				//Push this one up
-				current_instruction = current_instruction->next_statement;
-
-				//Delete the holder
-				delete_statement(holder);
-
-			//Just push it up
-			} else {
-				current_instruction = current_instruction->next_statement;
-			}
-		}
-
-		//Push it up
-		current = current->direct_successor;
 	}
 }
 
@@ -2560,11 +2502,10 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	/**
 	 * STEP 7: final cleanup pass
 	 *
-	 * Due to the way OIR works, there is a chance that we could get instructions
-	 * like: movq %rax, %rax. These are now useless and we'll delete them in the cleanup pass
+	 * This is detailed more in the postprocessor.c file that we're invoking
+	 * here
 	*/
-	cleanup_pass(cfg);
-
+	postprocess(cfg);
 
 	//One final print post allocation
 	if(print_irs == TRUE || print_post_allocation == TRUE){

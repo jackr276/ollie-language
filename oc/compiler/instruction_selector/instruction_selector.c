@@ -10,14 +10,11 @@
 
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
+#include "../utils/constants.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
 #include <sys/types.h>
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
 
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* u64;
@@ -671,59 +668,6 @@ static instruction_window_t* slide_window(instruction_window_t* window){
 
 	//Give it back
 	return window;
-}
-
-
-/**
- * Jump instructions are basically already done for us. It's a very simple one-to-one
- * mapping that we need to do here
- */
-static void select_jump_instruction(instruction_t* instruction){
-	//We already know that we have a jump here, we'll just need to switch on
-	//what the type is
-	switch (instruction->jump_type) {
-		case JUMP_TYPE_JMP:
-			instruction->instruction_type = JMP;
-			break;
-		case JUMP_TYPE_JE:
-			instruction->instruction_type = JE;
-			break;
-		case JUMP_TYPE_JNE:
-			instruction->instruction_type = JNE;
-			break;
-		case JUMP_TYPE_JG:
-			instruction->instruction_type = JG;
-			break;
-		case JUMP_TYPE_JGE:
-			instruction->instruction_type = JGE;
-			break;
-		case JUMP_TYPE_JL:
-			instruction->instruction_type = JL;
-			break;
-		case JUMP_TYPE_JLE:
-			instruction->instruction_type = JLE;
-			break;
-		case JUMP_TYPE_JA:
-			instruction->instruction_type = JA;
-			break;
-		case JUMP_TYPE_JAE:
-			instruction->instruction_type = JAE;
-			break;
-		case JUMP_TYPE_JB:
-			instruction->instruction_type = JB;
-			break;
-		case JUMP_TYPE_JBE:
-			instruction->instruction_type = JBE;
-			break;
-		case JUMP_TYPE_JZ:
-			instruction->instruction_type = JZ;
-			break;
-		case JUMP_TYPE_JNZ:
-			instruction->instruction_type = JNZ;
-			break;
-		default:
-			break;
-	}
 }
 
 
@@ -2399,6 +2343,84 @@ static void handle_lea_statement(instruction_t* instruction){
 
 
 /**
+ * A branch statement always selects 2 instructions, the conditional
+ * jump-to-if and the unconditional else jump
+ *
+ * NOTE: we know that the branch instruction here is always instruction 1
+ */
+static void handle_branch_instruction(instruction_window_t* window){
+	//Add it in here
+	instruction_t* branch_stmt = window->instruction1;
+
+	//Grab out the if and else blocks
+	basic_block_t* if_block = branch_stmt->if_block;
+	basic_block_t* else_block = branch_stmt->else_block;
+
+	//Placeholder for the jump to if instruction
+	instruction_t* jump_to_if;
+
+	switch(branch_stmt->branch_type){
+		case BRANCH_A:
+			jump_to_if = emit_jump_instruction_directly(if_block, JA);
+			break;
+		case BRANCH_AE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+			break;
+		case BRANCH_B:
+			jump_to_if = emit_jump_instruction_directly(if_block, JB);
+			break;
+		case BRANCH_BE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+			break;
+		case BRANCH_E:
+			jump_to_if = emit_jump_instruction_directly(if_block, JE);
+			break;
+		case BRANCH_NE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+			break;
+		case BRANCH_Z:
+			jump_to_if = emit_jump_instruction_directly(if_block, JZ);
+			break;
+		case BRANCH_NZ:
+			jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
+			break;
+		case BRANCH_G:
+			jump_to_if = emit_jump_instruction_directly(if_block, JG);
+			break;
+		case BRANCH_GE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JGE);
+			break;
+		case BRANCH_L:
+			jump_to_if = emit_jump_instruction_directly(if_block, JL);
+			break;
+		case BRANCH_LE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JLE);
+			break;
+		//We in reality should never reach here
+		default:
+			break;
+	}
+
+	//The else jump is always a direct jump no matter what
+	instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+	//Grab the block our
+	basic_block_t* block = branch_stmt->block_contained_in;
+
+	//The if must go after the branch statement before the else
+	add_statement(block, jump_to_if);
+	//And the jump to else always goes after the if jump
+	add_statement(block, jump_to_else);
+
+	//Once this is all done, we can delete the branch
+	delete_statement(branch_stmt);
+
+	//And reset the window based on the last one
+	reconstruct_window(window, jump_to_else);
+}
+
+
+/**
  *	//=========================== Logical Notting =============================
  * Although it may not seem like it, logical not is actually a multiple instruction
  * pattern
@@ -3305,7 +3327,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		window->instruction2->source_register = true_source;
 
 		//Store the jumping to block where the jump table is
-		window->instruction2->jumping_to_block = window->instruction1->jumping_to_block;
+		window->instruction2->if_block = window->instruction1->if_block;
 
 		//We also have an "S" multiplicator factor that will always be a power of 2 stored in the lea_multiplicator
 		window->instruction2->lea_multiplicator = window->instruction1->lea_multiplicator;
@@ -3348,8 +3370,15 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			//We'll still store this, just in a hidden way
 			instruction->source_register = instruction->op1;
 			break;
+		//These will always just be a JMP - the branch will have
+		//more complex rules
 		case THREE_ADDR_CODE_JUMP_STMT:
-			select_jump_instruction(instruction);
+			instruction->instruction_type = JMP;
+			break;
+		//A branch statement will have more complex
+		//selection rules, so we'll use a helper function
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			handle_branch_instruction(window);
 			break;
 		//Special case here - we don't change anything
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
@@ -3452,17 +3481,26 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
  * If not, we'll return null.
  */
 static basic_block_t* does_block_end_in_jump(basic_block_t* block){
-	//Initially we have a NULL here
-	basic_block_t* jumps_to = NULL;
-
-	//If we have an exit statement that is a direct jump, then we've hit our match
-	if(block->exit_statement != NULL && block->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT
-	 && block->exit_statement->jump_type == JUMP_TYPE_JMP){
-		jumps_to = block->exit_statement->jumping_to_block;
+	//If it's null then leave
+	if(block->exit_statement == NULL){
+		return NULL;
 	}
 
-	//Give back whatever we found
-	return jumps_to;
+	//Go based on our type here
+	switch(block->exit_statement->statement_type){
+		//Direct jump, just use the if block
+		case THREE_ADDR_CODE_JUMP_STMT:
+			return block->exit_statement->if_block;
+
+		//In a branch statement, the else block is
+		//the direct jump
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			return block->exit_statement->else_block;
+
+		//By default no
+		default:
+			return NULL;
+	}
 }
 
 
@@ -4765,7 +4803,7 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 				//delete the jump statement as it is now unnecessary
 				if(end_jumps_to == previous->direct_successor){
 					//Get rid of this jump as it's no longer needed
-					delete_statement(previous->exit_statement);
+					//delete_statement(previous->exit_statement);
 				}
 
 				//Add this in as well

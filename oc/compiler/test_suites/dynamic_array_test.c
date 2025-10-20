@@ -6,12 +6,10 @@
 
 //Link to dynamic array
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/constants.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
-
-#define TRUE 1
-#define FALSE 0
 
 /**
  * Run the test for the entire dynamic array

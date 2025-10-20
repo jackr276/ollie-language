@@ -10,8 +10,6 @@
 
 #include <sys/types.h>
 
-//Default length of the string is 60 characters
-#define DEFAULT_STRING_LENGTH 60
 
 typedef struct dynamic_string_t dynamic_string_t;
 

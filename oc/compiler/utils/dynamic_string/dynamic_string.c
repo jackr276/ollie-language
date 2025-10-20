@@ -7,13 +7,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include "../constants.h"
 
 /**
  * Allocate a dynamic string on the heap
  */
 void dynamic_string_alloc(dynamic_string_t* dynamic_string){
 	//Set the length to be the default length
-	dynamic_string->length = DEFAULT_STRING_LENGTH;
+	dynamic_string->length = DEFAULT_DYNAMIC_STRING_LENGTH;
 
 	//Now we'll allocate this using the default strategy
 	dynamic_string->string = calloc(dynamic_string->length, sizeof(char));

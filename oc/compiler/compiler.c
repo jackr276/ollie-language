@@ -17,10 +17,7 @@
 #include "instruction_selector/instruction_selector.h"
 #include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
+#include "utils/constants.h"
 
 //The number of errors and warnings
 u_int32_t num_errors;

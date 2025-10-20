@@ -9,11 +9,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include "../instruction/instruction.h"
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
-
+#include "../utils/constants.h"
 
 /**
  * Allocate the internal dynamic array in the data area

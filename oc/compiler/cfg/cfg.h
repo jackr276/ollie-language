@@ -170,6 +170,13 @@ void reset_block_variable_tracking(basic_block_t* block);
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 /**
+ * A simple helper function that allows us to add an assigned-to variable into the block's
+ * header. It is important to note that only actual variables(not temp variables) count
+ * as live
+ */
+void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var);
+
+/**
  * A simple helper function that allows us to add a used variable into the block's
  * header. It is important to note that only actual variables(not temp variables) count
  * as live
@@ -185,6 +192,21 @@ void add_statement(basic_block_t* target, instruction_t* statement_node);
  * Delete a statement from the CFG - handling any/all edge cases that may arise
  */
 void delete_statement(instruction_t* stmt);
+
+/**
+ * Delete a successor from a block
+ */
+void delete_successor_only(basic_block_t* target, basic_block_t* successor);
+
+/**
+ * Delete a predecessor from a block
+ */
+void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor);
+
+/**
+ * Delete a successor from a block
+ */
+void delete_successor(basic_block_t* target, basic_block_t* deleted_successor);
 
 /**
  * Add a successor to the block
@@ -214,12 +236,17 @@ void cleanup_all_control_relations(cfg_t* cfg);
 /**
  * Calculate(or recalculate) all control relations in the CFG
  */
-void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo);
+void calculate_all_control_relations(cfg_t* cfg);
 
 /**
  * Emit a jump statement directly into a block
  */
-void emit_jump(basic_block_t* basic_block, basic_block_t* dest_block, three_addr_var_t* conditional_result, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump);
+instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* dest_block);
+
+/**
+ * Emit a branch statement directly into a block
+ */
+void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category);
 
 /**
  * For DEBUGGING purposes - we will print all of the blocks in the control
@@ -234,6 +261,12 @@ void print_all_cfg_blocks(cfg_t* cfg);
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor);
 
 /**
+ * Allocate a basic block using calloc. NO data assignment
+ * happens in this function
+*/
+basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
+
+/**
  * Deallocate a block
  */
 void basic_block_dealloc(basic_block_t* block);
@@ -246,7 +279,7 @@ dynamic_array_t* compute_post_order_traversal(basic_block_t* entry);
 /**
  * Get and return a reverse post order traversal for the CFG
  */
-dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_int8_t use_reverse_cfg);
+dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry);
 
 /**
  * Reset all reverse post order sets

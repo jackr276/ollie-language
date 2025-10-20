@@ -8,13 +8,7 @@
 #include <sys/types.h>
 //Link to the symtab for variable storage
 #include "../symtab/symtab.h"
-
-//For standardization across modules
-#define SUCCESS 1
-#define FAILURE 0
-#define TRUE 1
-#define FALSE 0 
-
+#include "../utils/constants.h"
 
 /**
  * Is this a stack memory region variable or not? Stack memory

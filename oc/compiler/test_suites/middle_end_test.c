@@ -16,10 +16,7 @@
 #include "../cfg/cfg.h"
 //Link to the ollie optimizer
 #include "../optimizer/optimizer.h"
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
+#include "../utils/constants.h"
 
 u_int32_t num_warnings;
 u_int32_t num_errors;
@@ -104,6 +101,9 @@ int main(int argc, char** argv){
 	//Parse and store the options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
+	//Do we want to time execution or not
+	u_int8_t time_execution = options->time_execution;
+
 	//Print out what we're testing
 	printf("TESTING FILE: %s\n\n", options->file_name);
 
@@ -121,8 +121,13 @@ int main(int argc, char** argv){
 		//Calculate the final time
 		time_spent = (double)(end - begin)/CLOCKS_PER_SEC;
 
-		char info[500];
-		sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", parse_results->num_errors, parse_results->num_warnings, time_spent);
+		char info[2000];
+		if(time_execution == TRUE){
+			sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", parse_results->num_errors, parse_results->num_warnings, time_spent);
+		} else {
+			sprintf(info, "Parsing failed with %d errors and %d warnings", parse_results->num_errors, parse_results->num_warnings);
+		}
+
 		printf("\n===================== Ollie Compiler Summary ==========================\n");
 		printf("Lexer processed %d lines\n", parse_results->lines_processed);
 		printf("%s\n", info);
@@ -164,7 +169,12 @@ int main(int argc, char** argv){
 	//Print out the summary now that we're done
 	printf("\n===================== MIDDLE END TEST SUMMARY ==========================\n");
 	printf("Lexer processed %d lines\n", parse_results->lines_processed);
-	printf("Parsing and optimizing succeeded in %.8f seconds with %d warnings\n", time_spent, num_warnings);
+	printf("Parsing and optimizing succeeded");
+	if(time_execution == TRUE){
+		printf(" in %.8f seconds", time_spent);
+	}
+	printf(" with %d warnings\n", num_warnings);
+
 	printf("=======================================================================\n\n");
 
 final_printout:

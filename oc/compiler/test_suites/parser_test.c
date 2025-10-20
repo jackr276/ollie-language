@@ -4,12 +4,10 @@
 
 //Link to the parser
 #include "../parser/parser.h"
+#include "../utils/constants.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
-
-#define TRUE 1
-#define FALSE 0 
 
 
 /**

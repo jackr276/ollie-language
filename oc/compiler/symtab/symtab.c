@@ -9,14 +9,7 @@
 #include <sys/types.h>
 #include "../ast/ast.h"
 #include "../call_graph/call_graph.h"
-
-#define LARGE_PRIME 611593
-//For standardization
-#define TRUE 1
-#define FALSE 0
-
-#define SUCCESS 1
-#define FAILURE 0
+#include "../utils/constants.h"
 
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;

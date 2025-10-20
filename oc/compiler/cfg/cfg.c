@@ -1,4 +1,4 @@
-/*
+/**
  * The implementation file for all CFG related operations
  *
  * The CFG will translate the higher level code into something referred to as 
@@ -16,13 +16,7 @@
 #include <sys/types.h>
 #include "../utils/queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
-
-//For magic number removal
-#define TRUE 1
-#define FALSE 0
-
-//For loops, we estimate that they'll execute 10 times each
-#define LOOP_ESTIMATED_COST 10
+#include "../utils/constants.h"
 
 //Our atomically incrementing integer
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
@@ -120,7 +114,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 static cfg_result_package_t emit_initialization(basic_block_t* current_block, three_addr_var_t* assignee, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer, u_int8_t is_branch_ending);
-static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
+basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
  * Let's determine if a value is a positive power of 2.
@@ -219,12 +213,11 @@ static three_addr_var_t* handle_conditional_identifier_copy_if_needed(basic_bloc
 }
 
 
-
 /**
  * We'll go through in the regular traversal, pushing each node onto the stack in
  * postorder. 
  */
-static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t* entry, u_int8_t use_reverse_cfg){
+static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, basic_block_t* entry){
 	//If we've already seen this then we're done
 	if(entry->visited == TRUE){
 		return;
@@ -233,22 +226,11 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
 	//Mark it as visited
 	entry->visited = TRUE;
 
-	//Dependending on what we're doing here, we may be using reverse mode
-	if(use_reverse_cfg == TRUE){
-		//For every child(predecessor-it's reverse), we visit it as well
-		for(u_int16_t _ = 0; entry->predecessors != NULL && _ < entry->predecessors->current_index; _++){
-			//Visit each of the blocks
-			reverse_post_order_traversal_rec(stack, dynamic_array_get_at(entry->predecessors, _), use_reverse_cfg);
-		}
-	} else {
-		//We'll go in regular order
-		//For every child(successor), we visit it as well
-		for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
-			//Visit each of the blocks
-			reverse_post_order_traversal_rec(stack, dynamic_array_get_at(entry->successors, _), use_reverse_cfg);
-		}
+	//For every child(predecessor-it's reverse), we visit it as well
+	for(u_int16_t _ = 0; entry->predecessors != NULL && _ < entry->predecessors->current_index; _++){
+		//Visit each of the blocks
+		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(entry->predecessors, _));
 	}
-
 
 	//Now we can push entry onto the stack
 	push(stack, entry);
@@ -256,27 +238,73 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
 
 
 /**
- * Get and return a reverse post order traversal of a function-level CFG
- * 
- * NOTE: for data liveness problems, we have the option to compute this on the reverse cfg. This will
- * treat every successor like a predecessor, and vice versa
+ * Get and return a reverse post order traversal of a function-level CFG where
+ * we are going in reverse order. This is used mainly for data flow(liveness)
  */
-dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry, u_int8_t use_reverse_cfg){
+dynamic_array_t* compute_reverse_post_order_traversal_reverse_cfg(basic_block_t* entry){
 	//For our postorder traversal
 	heap_stack_t* stack = heap_stack_alloc();
 	//We'll need this eventually for postorder
 	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
 
-	//If we are using the reverse tree, we'll need to reformulate entry to be exit
-	if(use_reverse_cfg == TRUE){
-		//Go all the way to the bottom
-		while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
-			entry = entry->direct_successor;
-		}
+	//Go all the way to the bottom
+	while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
+		entry = entry->direct_successor;
 	}
 
 	//Invoke the recursive helper
-	reverse_post_order_traversal_rec(stack, entry, use_reverse_cfg);
+	reverse_post_order_traversal_reverse_cfg_rec(stack, entry);
+
+	//Now we'll pop everything off of the stack, and put it onto the RPO 
+	//array in backwards order
+	while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
+		dynamic_array_add(reverse_post_order_traversal, pop(stack));
+	}
+
+	//And when we're done, get rid of the stack
+	heap_stack_dealloc(stack);
+
+	//Give back the reverse post order traversal
+	return reverse_post_order_traversal;
+}
+
+
+/**
+ * We'll go through in the regular traversal, pushing each node onto the stack in
+ * postorder. 
+ */
+static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t* entry){
+	//If we've already seen this then we're done
+	if(entry->visited == TRUE){
+		return;
+	}
+
+	//Mark it as visited
+	entry->visited = TRUE;
+
+	//We'll go in regular order
+	//For every child(successor), we visit it as well
+	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
+		//Visit each of the blocks
+		reverse_post_order_traversal_rec(stack, dynamic_array_get_at(entry->successors, _));
+	}
+
+	//Now we can push entry onto the stack
+	push(stack, entry);
+}
+
+
+/**
+ * Get and return a reverse-post order traversal for a function level CFG
+ */
+dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry){
+	//For our postorder traversal
+	heap_stack_t* stack = heap_stack_alloc();
+	//We'll need this eventually for postorder
+	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
+
+	//Invoke the recursive helper
+	reverse_post_order_traversal_rec(stack, entry);
 
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
@@ -425,7 +453,12 @@ void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
  * header. It is important to note that only actual variables(not temp variables) count
  * as live
  */
-static void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
+void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
+	//If it's temp just don't add it
+	if(var->is_temporary == TRUE){
+		return;
+	}
+
 	//If the assigned variable dynamic array is NULL, we'll allocate it here
 	if(basic_block->assigned_variables == NULL){
 		basic_block->assigned_variables = dynamic_array_alloc();
@@ -636,44 +669,45 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Only if this is false - global var blocks don't have any of these
 	printf("Dominator set: {");
+	if(block->dominator_set != NULL){
+		//Run through and print them all out
+		for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
+			basic_block_t* printing_block = block->dominator_set->internal_array[i];
 
-	//Run through and print them all out
-	for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
-		basic_block_t* printing_block = block->dominator_set->internal_array[i];
+			//Print the block's ID or the function name
+			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", printing_block->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", printing_block->block_id);
+			}
+			//If it isn't the very last one, we need a comma
+			if(i != block->dominator_set->current_index - 1){
+				printf(", ");
+			}
+		}
 
-		//Print the block's ID or the function name
-		if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", printing_block->function_defined_in->func_name.string);
-		} else {
-			printf(".L%d", printing_block->block_id);
-		}
-		//If it isn't the very last one, we need a comma
-		if(i != block->dominator_set->current_index - 1){
-			printf(", ");
-		}
 	}
-
 	//And close it out
 	printf("}\n");
 
 	printf("Postdominator(reverse dominator) Set: {");
+	if(block->postdominator_set != NULL){
+		//Run through and print them all out
+		for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
+			basic_block_t* postdominator = block->postdominator_set->internal_array[i];
 
-	//Run through and print them all out
-	for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
-		basic_block_t* postdominator = block->postdominator_set->internal_array[i];
-
-		//Print the block's ID or the function name
-		if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", postdominator->function_defined_in->func_name.string);
-		} else {
-			printf(".L%d", postdominator->block_id);
-		}
-		//If it isn't the very last one, we need a comma
-		if(i != block->postdominator_set->current_index - 1){
-			printf(", ");
+			//Print the block's ID or the function name
+			if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", postdominator->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", postdominator->block_id);
+			}
+			//If it isn't the very last one, we need a comma
+			if(i != block->postdominator_set->current_index - 1){
+				printf(", ");
+			}
 		}
 	}
-
 	//And close it out
 	printf("}\n");
 
@@ -755,13 +789,13 @@ static void add_phi_statement(basic_block_t* target, instruction_t* phi_statemen
  */
 static void add_phi_parameter(instruction_t* phi_statement, three_addr_var_t* var){
 	//If we've not yet given the dynamic array
-	if(phi_statement->phi_function_parameters == NULL){
+	if(phi_statement->parameters == NULL){
 		//Take care of allocation then
-		phi_statement->phi_function_parameters = dynamic_array_alloc();
+		phi_statement->parameters = dynamic_array_alloc();
 	}
 
 	//Add this to the phi statement parameters
-	dynamic_array_add(phi_statement->phi_function_parameters, var);
+	dynamic_array_add(phi_statement->parameters, var);
 }
 
 
@@ -932,7 +966,6 @@ static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable
  * Grab the immediate dominator of the block
  * A IDOM B if A SDOM B and there does not exist a node C 
  * such that C ≠ A, C ≠ B, A dom C, and C dom B
- *
  */
 static basic_block_t* immediate_dominator(basic_block_t* B){
 	//If we've already found the immediate dominator, why find it again?
@@ -1011,10 +1044,8 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 
 
 /**
- * Grab the immediate postdominator dominator of the block
- * A IPDOM B if A SPDOM B and there does not exist a node C 
- * such that C ≠ A, C ≠ B, A pdom C, and C pdom B
- *
+ * The immediate postdominator is the first breadth-first 
+ * successor that post dominates a node
  */
 static basic_block_t* immediate_postdominator(basic_block_t* B){
 	//If we've already found the immediate dominator, why find it again?
@@ -1023,72 +1054,57 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 		return B->immediate_postdominator;
 	}
 
-	//Regular variable declarations
-	basic_block_t* A; 
-	basic_block_t* C;
-	u_int8_t A_is_IPDOM;
-	
-	//For each node in B's PostDominantor set(we call this node A)
-	//These nodes are our candidates for immediate postdominator
-	for(u_int16_t i = 0; B->postdominator_set != NULL && i < B->postdominator_set->current_index; i++){
-		//By default we assume A is a IPDOM
-		A_is_IPDOM = TRUE;
+	//Create the queue
+	heap_queue_t* queue = heap_queue_alloc();
 
-		//A is our "candidate" for possibly being an immediate postdominator
-		A = dynamic_array_get_at(B->postdominator_set, i);
+	//The visited array
+	dynamic_array_t* visited = dynamic_array_alloc();
 
-		//If A == B, that means that A does NOT strictly postdominate(PDOM)
-		//B, so it's disqualified
-		if(A == B){
-			continue;
+	//Save this for when we find it
+	basic_block_t* ipdom = NULL;
+
+	//Extract the postdominator set
+	dynamic_array_t* postdominator_set = B->postdominator_set;
+
+	//Seed the search with B
+	enqueue(queue, B);
+
+	//So long as the queue isn't empty
+	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		//Pop off of the queue
+		basic_block_t* current = dequeue(queue);
+
+		/**
+		 * If we have found the first breadth-first successor that postdominates B,
+		 * we are done
+		 */
+		if(current != B && dynamic_array_contains(postdominator_set, current) != NOT_FOUND){
+			ipdom = current;
+			break;
 		}
 
-		//If we get here, we know that A SPDOM B
-		//Now we must check, is there any "C" in the way.
-		//We can tell if this is the case by checking every other
-		//node in the dominance frontier of B, and seeing if that
-		//node is also dominated by A
-		
-		//For everything in B's dominator set that IS NOT A, we need
-		//to check if this is an intermediary. As in, does C get in-between
-		//A and B in the dominance chain
-		for(u_int16_t j = 0; j < B->postdominator_set->current_index; j++){
-			//Skip this case
-			if(i == j){
-				continue;
+		//Add to the visited set
+		dynamic_array_add(visited, current);
+
+		//And finally we'll add all of these onto the queue
+		for(u_int16_t j = 0; current->successors != NULL && j < current->successors->current_index; j++){
+			//Add the successor into the queue, if it has not yet been visited
+			basic_block_t* successor = current->successors->internal_array[j];
+
+			if(dynamic_array_contains(visited, successor) == NOT_FOUND){
+				enqueue(queue, successor);
 			}
-
-			//If it's aleady B or A, we're skipping
-			C = dynamic_array_get_at(B->postdominator_set, j);
-
-			//If this is the case, disqualified
-			if(C == B || C == A){
-				continue;
-			}
-
-			//We can now see that C dominates B. The true test now is
-			//if C is dominated by A. If that's the case, then we do NOT
-			//have an immediate dominator in A.
-			//
-			//This would look like A -PDoms> C -PDoms> B, so A is not an immediate postdominator
-			if(dynamic_array_contains(C->postdominator_set, A) != NOT_FOUND){
-				//A is disqualified, it's not an IDOM
-				A_is_IPDOM = FALSE;
-				break;
-			}
-		}
-
-		//If we survived, then we're done here
-		if(A_is_IPDOM == TRUE){
-			//Mark this for any future runs...we won't waste any time doing this
-			//calculation over again
-			B->immediate_postdominator = A;
-			return A;
 		}
 	}
 
-	//Otherwise we didn't find it, so there is no immediate postdominator
-	return NULL;
+	//Destroy visited
+	dynamic_array_dealloc(visited);
+
+	//Destroy the queue
+	heap_queue_dealloc(queue);
+
+	//Give it back
+	return ipdom;
 }
 
 
@@ -1198,7 +1214,7 @@ static void calculate_reverse_dominance_frontiers(cfg_t* cfg){
 			//Grab it out
 			cursor = block->successors->internal_array[i];
 
-			//While cursor is not the immediate dominator of block
+			//While cursor is not the immediate postdominator of block
 			while(cursor != immediate_postdominator(block)){
 				//Add block to cursor's reverse dominance frontier set
 				add_block_to_reverse_dominance_frontier(cursor, block);
@@ -1275,12 +1291,6 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 	//For each and every function
 	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
-
-		//If we don't have the RPO for this block, we'll make it now
-		if(current_function_block->reverse_post_order == NULL){
-			//We'll use false because we want the straightforward CFG, not the reverse one
-			current_function_block->reverse_post_order = compute_reverse_post_order_traversal(current_function_block, FALSE);
-		}
 
 		//Have we seen a change
 		u_int8_t changed;
@@ -1657,9 +1667,6 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		//Extract it
 		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
-
-		//Calculate the reverse-post-order traversal so that we can make this converge quicker
-		function_entry->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(function_entry, TRUE);
 
 		//Run the algorithm until we have no difference found
 		do{
@@ -2062,7 +2069,7 @@ static void rename_block(basic_block_t* entry){
 			//Special case - do we have a function call?
 			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL){
 				//Grab it out
-				dynamic_array_t* func_params = cursor->function_parameters;
+				dynamic_array_t* func_params = cursor->parameters;
 				//Run through them all
 				for(u_int16_t k = 0; func_params != NULL && k < func_params->current_index; k++){
 					//Grab it out
@@ -2459,7 +2466,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
 
 		//If we hit a ternary here, we'll need to reassign what our current block is
-		if(expression_package.final_block != NULL && expression_package.final_block != current){
+		if(expression_package.final_block != current){
 			//Assign current to be the new end
 			current = expression_package.final_block;
 
@@ -2502,58 +2509,89 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 /**
  * Emit a jump statement jumping to the destination block, using the jump type that we
  * provide
+ *
+ * Returns the jump that is emitted
  */
-void emit_jump(basic_block_t* basic_block, basic_block_t* destination_block, three_addr_var_t* conditional_result, jump_type_t type, u_int8_t is_branch_ending, u_int8_t inverse_jump){
+instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_block){
 	//Use the helper function to emit the statement
-	instruction_t* stmt = emit_jmp_instruction(destination_block, type);
-
-	//We'll store the conditional as the op1 here. It may be null for direct jumps which is ok, 
-	//but for a conditional jump this cannot be null
-	stmt->op1 = conditional_result;
-
-	//Is this branch ending?
-	stmt->is_branch_ending = is_branch_ending;
+	instruction_t* stmt = emit_jmp_instruction(destination_block);
 
 	//Mark where we came from
 	stmt->block_contained_in = basic_block;
 
-	//Is this an inverse jump? Important for optimization down the line
-	stmt->inverse_jump = inverse_jump;
-
 	//Add this into the first block
 	add_statement(basic_block, stmt);
 
-	//This conditional result now counts as a variable that has been used, because this jump relies on it
-	if(conditional_result != NULL){
-		add_used_variable(basic_block, conditional_result);
+	//The destination block is by definition a successor here
+	add_successor(basic_block, destination_block);
+
+	//And we give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a branch statement with an if destination, else destination, conditional result and branch type
+ *
+ * This rule also handles all successor management required for the rule
+ */
+void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category){
+	//Emit the actual instruction here
+	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
+
+	//By definitiona, this is true
+	branch_instruction->is_branch_ending = TRUE;
+
+	//Mark this as the op1 so that we can track in the optimizer
+	branch_instruction->op1 = conditional_result;
+
+	//This counts as a use for the result variable
+	add_used_variable(basic_block, conditional_result);
+
+	//Add the statement into the block
+	add_statement(basic_block, branch_instruction);
+
+	/**
+	 * Based on what the category is, we can add the successors in a different
+	 * order just so that the IRs look somewhat nicer. This has no effect on
+	 * functionality, purely visual
+	 */
+	if(branch_category == BRANCH_CATEGORY_NORMAL){
+		//The if and else destinations are now both successors
+		add_successor(basic_block, if_destination);
+		add_successor(basic_block, else_destination);
+		//Not an inverse branch
+		branch_instruction->inverse_branch = FALSE;
+	} else {
+		//The if and else destinations are now both successors
+		add_successor(basic_block, else_destination);
+		add_successor(basic_block, if_destination);
+		//An inverse branch
+		branch_instruction->inverse_branch = TRUE;
 	}
 }
 
 
 /**
  * Emit a user defined jump statement that points to a label, not to a block
+ *
+ * We'll leave out all of the successor logic here as well, until we reach the end
  */
-static void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_record_t* label, three_addr_var_t* conditional_decider, jump_type_t type, u_int8_t is_branch_ending){
-	//Use the helper function to emit the statement
-	instruction_t* stmt = emit_incomplete_jmp_instruction(conditional_decider, type);
-
-	//Is this branch ending?
-	stmt->is_branch_ending = is_branch_ending;
+static void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable_record_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_decider, branch_type_t branch_type){
+	//Emit the branch, purposefully leaving the if area NULL
+	instruction_t* branch = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
 
 	//We'll need to store the label in here for later on down the line
-	stmt->var_record = label;
+	branch->var_record = if_destination;
 
 	//Mark where we came from
-	stmt->block_contained_in = basic_block;
-
-	//These will never be basic blocks
-	stmt->inverse_jump = FALSE;
+	branch->block_contained_in = basic_block;
 
 	//Add this to the array of user defined jumps
-	dynamic_array_add(current_function_user_defined_jump_statements, stmt);
+	dynamic_array_add(current_function_user_defined_jump_statements, branch);
 
 	//Add this into the first block
-	add_statement(basic_block, stmt);
+	add_statement(basic_block, branch);
 }
 
 
@@ -2563,9 +2601,9 @@ static void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_r
  * Indirect jumps are written in the form:
  * 	jump *__var__, where var holds the address that we need
  */
-void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr, jump_type_t type, u_int8_t is_branch_ending){
+void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr, u_int8_t is_branch_ending){
 	//Use the helper function to create it
-	instruction_t* indirect_jump = emit_indirect_jmp_instruction(dest_addr, type);
+	instruction_t* indirect_jump = emit_indirect_jmp_instruction(dest_addr);
 
 	//Is it branch ending?
 	indirect_jump->is_branch_ending = is_branch_ending;
@@ -2722,9 +2760,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 	instruction_t* inc_code = emit_inc_instruction(incrementee);
 
 	//This will count as live if we read from it
-	if(incrementee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, inc_code->assignee);
-	}
+	add_assigned_variable(basic_block, inc_code->assignee);
 
 	//This is a rare case were we're assigning to AND using
 	add_used_variable(basic_block, incrementee);
@@ -2748,9 +2784,7 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 	instruction_t* dec_code = emit_dec_instruction(decrementee);
 
 	//This will count as live if we read from it
-	if(decrementee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, dec_code->assignee);
-	}
+	add_assigned_variable(basic_block, dec_code->assignee);
 
 	//This is a rare case were we're assigning to AND using
 	add_used_variable(basic_block, decrementee);
@@ -2844,9 +2878,7 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
 	not_stmt->op1 = var;
 
 	//The assignee was assigned
-	if(var->is_temporary == FALSE){
-		add_assigned_variable(basic_block, assignee);
-	}
+	add_assigned_variable(basic_block, assignee);
 
 	//Regardless this is still used here
 	add_used_variable(basic_block, var);
@@ -2867,9 +2899,7 @@ static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, 
  */
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant, u_int8_t is_branch_ending){
 	//Assigned variables need to be non-constant
-	if(assignee->is_temporary == FALSE){
-		add_assigned_variable(basic_block, assignee);
-	}
+	add_assigned_variable(basic_block, assignee);
 
 	//Add op1 as a used variable
 	add_used_variable(basic_block, op1);
@@ -2984,7 +3014,7 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child, is_branch_ending, FALSE);
 
 	//If there is a difference in current and the final block, we'll reassign here
-	if(expression_package.final_block != NULL && current_block != expression_package.final_block){
+	if(current_block != expression_package.final_block){
 		//Set this to be at the end
 		current_block = expression_package.final_block;
 	}
@@ -3169,7 +3199,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, is_branch_ending);
 
 	//Reassign the current block if need be
-	if(first_child_results.final_block != NULL && first_child_results.final_block != current_block){
+	if(first_child_results.final_block != current_block){
 		current_block = first_child_results.final_block;
 	}
 
@@ -3292,7 +3322,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, is_branch_ending);
 
 	//If this is now different, which it could be, we'll change what current is
-	if(postfix_expression_results.final_block != NULL && postfix_expression_results.final_block != current_block){
+	if(postfix_expression_results.final_block != current_block){
 		current_block = postfix_expression_results.final_block;
 	}
 
@@ -3360,7 +3390,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, is_branch_ending);
 
 		//If this is now different, which it could be, we'll change what current is
-		if(copied_package.final_block != NULL && copied_package.final_block != current_block){
+		if(copied_package.final_block != current_block){
 			current_block = copied_package.final_block;
 		}
 
@@ -3416,7 +3446,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3479,7 +3509,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, is_branch_ending);
 
 				//If this is now different, which it could be, we'll change what current is
-				if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+				if(unary_package.final_block != current_block){
 					current_block = unary_package.final_block;
 				}
 
@@ -3507,7 +3537,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3545,7 +3575,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3563,7 +3593,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3589,7 +3619,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			assignee = unary_package.assignee;
 
 			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				current_block = unary_package.final_block;
 			}
 
@@ -3752,33 +3782,25 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t expression_package = emit_binary_expression(current_block, cursor, is_branch_ending);
 
 	//Let's see if we need to reassign
-	if(expression_package.final_block != NULL && expression_package.final_block != current_block){
+	if(expression_package.final_block != current_block){
 		//Reassign this to be at the true end
 		current_block = expression_package.final_block;
 	}
 
-	//The package's assignee is what we base all conditional moves on
-	u_int8_t is_signed = is_type_signed(expression_package.assignee->type); 
-	
 	//Store for later
 	three_addr_var_t* conditional_decider = expression_package.assignee;
-
-	//Select the jump type for our conditional
-	jump_type_t jump = select_appropriate_jump_stmt(expression_package.operator, JUMP_CATEGORY_NORMAL, is_signed);
 
 	//If this is blank, we need a test instruction
 	if(expression_package.operator == BLANK){
 		conditional_decider = emit_test_code(current_block, expression_package.assignee, expression_package.assignee, TRUE);
 	}
+
+	//Select the jump type for our conditional. This is a normal branch, we aren't doing any inverting
+	branch_type_t branch_type = select_appropriate_branch_statement(expression_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
+	//emit the branch statement
+	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 	
-	//Now we'll emit a jump to the if block and else block
-	emit_jump(current_block, if_block, conditional_decider, jump, is_branch_ending, FALSE);
-	emit_jump(current_block, else_block, NULL, JUMP_TYPE_JMP, is_branch_ending, FALSE);
-
-	//These are both now successors to the if block
-	add_successor(current_block, if_block);
-	add_successor(current_block, else_block);
-
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
 
@@ -3786,7 +3808,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t if_branch = emit_expression(if_block, cursor, is_branch_ending, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
-	if(if_branch.final_block != NULL && if_branch.final_block != if_block){
+	if(if_branch.final_block != if_block){
 		if_block = if_branch.final_block;
 	}
 
@@ -3803,7 +3825,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	add_used_variable(if_block, if_branch.assignee);
 
 	//Now add a direct jump to the end
-	emit_jump(if_block, end_block, NULL, JUMP_TYPE_JMP, is_branch_ending, FALSE);
+	emit_jump(if_block, end_block);
 
 	//Process the else branch
 	cursor = cursor->next_sibling;
@@ -3812,7 +3834,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t else_branch = emit_expression(else_block, cursor, is_branch_ending, TRUE);
 
 	//Again here we could have multiple blocks, so we'll need to account for this and reassign if necessary
-	if(else_branch.final_block != NULL && else_branch.final_block != else_block){
+	if(else_branch.final_block != else_block){
 		else_block = else_branch.final_block;
 	}
 
@@ -3829,14 +3851,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	add_used_variable(else_block, else_branch.assignee);
 
 	//Now add a direct jump to the end
-	emit_jump(else_block, end_block, NULL, JUMP_TYPE_JMP, is_branch_ending, FALSE);
-
-	//The end block is a successor to both the if and else blocks
-	add_successor(if_block, end_block);
-	add_successor(else_block, end_block);
-
-	//The direct successor of the starting block is the ending block
-	starting_block->direct_successor = end_block;
+	emit_jump(else_block, end_block);
 
 	//Add the final things in here
 	return_package.starting_block = starting_block;
@@ -3894,7 +3909,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	cfg_result_package_t left_side = emit_binary_expression(current_block, cursor, is_branch_ending);
 
 	//If these are different, then we'll need to reassign current
-	if(left_side.final_block != NULL && left_side.final_block != current_block){
+	if(left_side.final_block != current_block){
 		//Reassign current
 		current_block = left_side.final_block;
 
@@ -3909,7 +3924,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	cfg_result_package_t right_side = emit_binary_expression(current_block, cursor, is_branch_ending);
 
 	//If these are different, then we'll need to reassign current
-	if(right_side.final_block != NULL && right_side.final_block != current_block){
+	if(right_side.final_block != current_block){
 		//Reassign current
 		current_block = right_side.final_block;
 
@@ -3970,9 +3985,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	instruction_t* binary_operation = emit_binary_operation_instruction(assignee, op1, binary_operator, op2);
 
 	//If this isn't temporary, it's being assigned
-	if(assignee->is_temporary == FALSE){
-		add_assigned_variable(current_block, assignee);
-	}
+	add_assigned_variable(current_block, assignee);
 
 	//If these are not temporary, they're being used
 	add_used_variable(current_block, op1);
@@ -4018,7 +4031,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			cfg_result_package_t unary_package = emit_unary_expression(current_block, cursor, is_branch_ending);
 
 			//If this is different(which it could be), we'll reassign current
-			if(unary_package.final_block != NULL && unary_package.final_block != current_block){
+			if(unary_package.final_block != current_block){
 				//Reassign current to be at the end
 				current_block = unary_package.final_block;
 
@@ -4036,7 +4049,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 			cfg_result_package_t expression_package = emit_expression(current_block, cursor, is_branch_ending, FALSE);
 
 			//Again, if this is different(which it could be), we'll reassign current
-			if(expression_package.final_block != NULL && expression_package.final_block != current_block){
+			if(expression_package.final_block != current_block){
 				//Reassign current to be at the end
 				current_block = expression_package.final_block;
 
@@ -4079,9 +4092,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
 				//If this is not a temp var, then we can flag it as being assigned
-				if(left_hand_var->is_temporary == FALSE){
-					add_assigned_variable(current_block, left_hand_var);
-				}
+				add_assigned_variable(current_block, left_hand_var);
 
 				//This counts as a use
 				add_used_variable(current_block, final_op1);
@@ -4099,9 +4110,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				instruction_t* final_assignment = emit_store_ir_code(left_hand_var, final_op1);
 
 				//If this is not a temp var, then we can flag it as being assigned
-				if(left_hand_var->is_temporary == FALSE){
-					add_assigned_variable(current_block, left_hand_var);
-				}
+				add_assigned_variable(current_block, left_hand_var);
 
 				//This counts as a use
 				add_used_variable(current_block, final_op1);
@@ -4199,7 +4208,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//If this isn't NULL, we have parameters
 	if(param_cursor != NULL){
 		//Create this
-		func_call_stmt->function_parameters = dynamic_array_alloc();
+		func_call_stmt->parameters = dynamic_array_alloc();
 	}
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
@@ -4212,7 +4221,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
 		//to reassign
-		if(package.final_block != NULL && package.final_block != current){
+		if(package.final_block != current){
 			//We've seen a ternary, reassign current
 			current = package.final_block;
 
@@ -4234,7 +4243,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		assignment->assignee->parameter_number = current_func_param_idx;
 		
 		//Add the parameter in
-		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
 
 		//The assignment's assignee is also used
 		add_used_variable(current, assignment->assignee);
@@ -4317,7 +4326,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//If this isn't NULL, we have parameters
 	if(param_cursor != NULL){
 		//Create this
-		func_call_stmt->function_parameters = dynamic_array_alloc();
+		func_call_stmt->parameters = dynamic_array_alloc();
 	}
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
@@ -4330,7 +4339,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
 		//to reassign
-		if(package.final_block != NULL && package.final_block != current){
+		if(package.final_block != current){
 			//We've seen a ternary, reassign current
 			current = package.final_block;
 
@@ -4352,7 +4361,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		assignment->assignee->parameter_number = current_func_param_idx;
 		
 		//Add the parameter in
-		dynamic_array_add(func_call_stmt->function_parameters, assignment->assignee);
+		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
 
 		//The assignment here is used implicitly by the function call
 		add_used_variable(current, assignment->assignee);
@@ -4406,7 +4415,7 @@ static int32_t increment_and_get(){
  * Allocate a basic block using calloc. NO data assignment
  * happens in this function
 */
-static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
+basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
@@ -4701,11 +4710,6 @@ void dealloc_cfg(cfg_t* cfg){
  * Exclusively add a successor to target. The predecessors of successor will not be touched
  */
 void add_successor_only(basic_block_t* target, basic_block_t* successor){
-	//If we ever find this - don't add it
-	if(target == successor){
-		return;
-	}
-
 	//If this is null, we'll perform the initial allocation
 	if(target->successors == NULL){
 		target->successors = dynamic_array_alloc();
@@ -4715,11 +4719,6 @@ void add_successor_only(basic_block_t* target, basic_block_t* successor){
 	if(dynamic_array_contains(target->successors, successor) != NOT_FOUND){
 		//We DID find it, so we won't add
 		return;
-	}
-
-	//TODO DEPRECATE
-	if(target->successors->current_index == 0){
-		target->direct_successor = successor;
 	}
 
 	//Otherwise we're set to add it in
@@ -4732,11 +4731,6 @@ void add_successor_only(basic_block_t* target, basic_block_t* successor){
  * will be touched
  */
 void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
-	//If we ever find this - don't add it
-	if(target == predecessor){
-		return;
-	}
-
 	//If this is NULL, we'll allocate here
 	if(target->predecessors == NULL){
 		target->predecessors = dynamic_array_alloc();
@@ -4760,11 +4754,61 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
  * then use the "only" methods
  */
  void add_successor(basic_block_t* target, basic_block_t* successor){
+	//This is possible, and if it happens we just leave
+	if(successor == NULL){
+		return;
+	}
+
 	//First we'll add successor as a successor of target
 	add_successor_only(target, successor);
 
 	//And then for completeness, we'll add target as a predecessor of successor
 	add_predecessor_only(successor, target);
+}
+
+
+/**
+ * Delete a successor from a block
+ *
+ * This is mainly just a wrapper for a dynamic_array_delete, for readability
+ *
+ * Target: the block that has the successor
+ * Successor: the successor itself
+ */
+void delete_successor_only(basic_block_t* target, basic_block_t* successor){
+	dynamic_array_delete(target->successors, successor);
+}
+
+
+/**
+ * Delete a predecessor from a block
+ *
+ * This is mainly just a wrapper for a dynamic_array_delete, for readability
+ *
+ * Target: the block that has the predecessor
+ * Predecessor: the predecessor itself
+ */
+void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
+	dynamic_array_delete(target->predecessors, predecessor);
+}
+
+
+/**
+ * Delete a successor from the target block's list. This function is
+ * entirely comprehensive. Since target used to be a predecessor
+ * of the deleted successor, that will also be deleted
+ */
+void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
+	//Bail out if this happens
+	if(deleted_successor == NULL){
+		return;
+	}
+
+	//The target is no longer a predecessor of said successor
+	delete_predecessor_only(deleted_successor, target);
+
+	//The said successor is no longer a successor of the target
+	delete_successor_only(target, deleted_successor);
 }
 
 
@@ -4829,8 +4873,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		}
 	}
 
-	//Also make note of any direct succession
-	a->direct_successor = b->direct_successor;
 	//Copy over the block type and terminal type
 	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
 		a->block_type = b->block_type;
@@ -4886,8 +4928,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 
 /**
- * A for-statement is another kind of control flow construct. As always the direct successor is the path that reliably
- * leads us down and out
+ * A for-statement is another kind of control flow construct
  */
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Initialize the return package
@@ -4901,6 +4942,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	for_stmt_exit_block->block_type = BLOCK_TYPE_FOR_STMT_END;
 
 	//All breaks will go to the exit block
+	//Hold off on the continue block for now
 	push(break_stack, for_stmt_exit_block);
 
 	//Once we get here, we already know what the start and exit are for this statement
@@ -4912,9 +4954,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//Grab a cursor for walking the sub-tree
 	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
-
-	//We will always see 3 nodes here to start out with, of the type for_loop_cond_ast_node_t. These
-	//nodes contain an "is_blank" field that will alert us if this is just a placeholder. 
 
 	//If the very first one is not blank
 	if(ast_cursor->first_child != NULL){
@@ -4942,7 +4981,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 				first_child_result_package = emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
 
 				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
-				if(first_child_result_package.final_block != NULL && first_child_result_package.final_block != for_stmt_entry_block){
+				if(first_child_result_package.final_block != for_stmt_entry_block){
 				//Make this the new end
 					for_stmt_entry_block = first_child_result_package.final_block;
 				}
@@ -4956,11 +4995,8 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//always executes at the end of each iteration
 	basic_block_t* condition_block = basic_block_alloc(LOOP_ESTIMATED_COST);
 
-	//The condition block is always a successor to the entry block
-	add_successor(for_stmt_entry_block, condition_block);
-
 	//We will now emit a jump from the entry block, to the condition block
-	emit_jump(for_stmt_entry_block, condition_block, NULL, JUMP_TYPE_JMP ,TRUE, FALSE);
+	emit_jump(for_stmt_entry_block, condition_block);
 
 	//Move along to the next node
 	ast_cursor = ast_cursor->next_sibling;
@@ -4970,9 +5006,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//Store this for later
 	three_addr_var_t* conditional_decider = condition_block_vals.assignee;
-
-	//We'll use our inverse jumping("jump out") strategy here. We'll need this jump for later
-	jump_type_t jump_type = select_appropriate_jump_stmt(condition_block_vals.operator, JUMP_CATEGORY_INVERSE, is_type_signed(condition_block_vals.assignee->type));
 
 	//If this is blank, we need to change this
 	if(condition_block_vals.operator == BLANK){
@@ -4993,10 +5026,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	}
 	
 	//Unconditional jump to condition block
-	emit_jump(for_stmt_update_block, condition_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-	//This node will always jump right back to the start
-	add_successor(for_stmt_update_block, condition_block);
+	emit_jump(for_stmt_update_block, condition_block);
 
 	//All continues will go to the update block
 	push(continue_stack, for_stmt_update_block);
@@ -5008,38 +5038,25 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//because that is what repeats on continue
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
-	//If it's null, that's actually ok here
+	//If we have an empty interior just emit a dummy block. It will be optimized away 
+	//regardless
 	if(compound_statement_results.starting_block == NULL){
-		//We'll make sure that the start points to this block
-		add_successor(condition_block, for_stmt_update_block);
-
-		//And also make sure that the condition block can point to the
-		//exit
-		add_successor(condition_block, for_stmt_exit_block);
-
-		//Make the condition block jump to the exit. This is an inverse jump
-		emit_jump(condition_block, for_stmt_exit_block, conditional_decider, jump_type, TRUE, TRUE);
-
-		//Pop both values off of the stack
-		pop(continue_stack);
-		pop(break_stack);
-
-		//And we're done
-		return result_package;
+		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
-	//This will always be a successor to the conditional statement
-	add_successor(condition_block, compound_statement_results.starting_block);
+	//Determine the kind of branch that we'll need here
+	branch_type_t branch_type = select_appropriate_branch_statement(condition_block_vals.operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
 
-	//We must also remember that the condition block can point to the ending block, because
-	//if the condition fails, we will be jumping here
-	add_successor(condition_block, for_stmt_exit_block);
-
-	//Make the condition block jump to the exit. This is an inverse jump
-	emit_jump(condition_block, for_stmt_exit_block, conditional_decider, jump_type, TRUE, TRUE);
-
-	//Emit a direct jump from the condition block to the compound stmt start
-	emit_jump(condition_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+	/**
+	 * Inverse jumping logic so
+	 *
+	 * if not condition 
+	 * 	goto exit
+	 * else
+	 * 	goto update
+	 */
+	emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
 
 	//This is a loop ending block
 	condition_block->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
@@ -5050,14 +5067,8 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//If it ends in a return statement, there is no point in continuing this
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
 		//We also need an uncoditional jump right to the update block
-		emit_jump(compound_stmt_end, for_stmt_update_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		emit_jump(compound_stmt_end, for_stmt_update_block);
 	}
-
-	//We'll add the successor either way for control flow reasons
-	add_successor(compound_stmt_end, for_stmt_update_block);
-
-	//The direct successor to the entry block is the exit block, for efficiency reasons
-	for_stmt_entry_block->direct_successor = for_stmt_exit_block;
 
 	//Now that we're done, we'll need to remove these both from the stack
 	pop(continue_stack);
@@ -5102,16 +5113,14 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//We go right into the compound statement here
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
-	//If this is NULL, it means that we really don't have a compound statement there
+	//It being NULL is ok, we'll just insert a dummy
 	if(compound_statement_results.starting_block == NULL){
-		print_parse_message(PARSE_ERROR, "Do-while statement has empty clause, statement has no effect", do_while_stmt_node->line_number);
-		(*num_warnings_ref)++;
+		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
-	//No matter what, this will get merged into the top statement
-	add_successor(do_while_stmt_entry_block, compound_statement_results.starting_block);
 	//Now we'll jump to it
-	emit_jump(do_while_stmt_entry_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+	emit_jump(do_while_stmt_entry_block, compound_statement_results.starting_block);
 
 	//We will drill to the bottom of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
@@ -5127,33 +5136,27 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//Add the conditional check into the end here
 	cfg_result_package_t package = emit_expression(compound_stmt_end, ast_cursor->next_sibling, TRUE, TRUE);
 
-	//Now we'll make do our necessary connnections. The direct successor of this end block is the true
-	//exit block
-	add_successor(compound_stmt_end, do_while_stmt_entry_block);
-	//It's other successor though is the loop entry. This is for flow analysis
-	add_successor(compound_stmt_end, do_while_stmt_exit_block);
-
-	//Make sure it's the direct successor
-	compound_stmt_end->direct_successor = do_while_stmt_exit_block;
-
-	//We'll set the entry block's direct successor to be the exit block for efficiency
-	do_while_stmt_entry_block->direct_successor = do_while_stmt_exit_block;
-
 	//Store for later
 	three_addr_var_t* conditional_decider = package.assignee;
-
-	//Discern the jump type here--This is a direct jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
 
 	//If this is blank, we'll need to emit the test code here
 	if(package.operator == BLANK){
 		conditional_decider = emit_test_code(compound_stmt_end, package.assignee, package.assignee, TRUE);
 	}
+
+	//Select the appropriate branch type
+	branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 		
-	//We'll need a jump statement here to the entrance block
-	emit_jump(compound_stmt_end, do_while_stmt_entry_block, conditional_decider, jump_type, TRUE, FALSE);
-	//Also emit a jump statement to the ending block
-	emit_jump(compound_stmt_end, do_while_stmt_exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+	/**
+	 * Branch works in a regular way
+	 *
+	 * If condition 
+	 * 	goto entry
+	 * else
+	 * 	exit
+	 */
+	emit_branch(compound_stmt_end, do_while_stmt_entry_block, do_while_stmt_exit_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+
 	//This is our condition block here, so we'll add the estimated cost
 	compound_stmt_end->estimated_execution_frequency = LOOP_ESTIMATED_COST;
 
@@ -5196,13 +5199,6 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	result_package.starting_block = while_statement_entry_block;
 	result_package.final_block = while_statement_end_block;
 
-	//This has no assignee/operator
-	result_package.assignee = NULL;
-	result_package.operator = BLANK;
-
-	//For drilling efficiency reasons, we'll want the entry block's direct successor to be the end block
-	while_statement_entry_block->direct_successor = while_statement_end_block;
-
 	//Grab this for convenience
 	generic_ast_node_t* while_stmt_node = root_node;
 
@@ -5218,21 +5214,16 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
-	//If it's null, that means that we were given an empty while loop here
+	//If it's null, that means that we were given an empty while loop here.
+	//We'll just allocate our own and use that
 	if(compound_statement_results.starting_block == NULL){
-		//We do still need to have our successor be the ending block
-		add_successor(while_statement_entry_block, while_statement_end_block);
-
-		//We'll just return now
-		return result_package;
+		//Just give a dummy here
+		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
 	//What does the conditional jump rely on?
 	three_addr_var_t* conditional_decider = package.assignee;
-
-	//We'll now determine what kind of jump statement that we have here. We want to jump to the exit if
-	//we're bad, so we'll do an inverse jump
-	jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_INVERSE, is_type_signed(package.assignee->type));
 
 	//If the operator is blank, we need to emit a test instruction
 	if(package.operator == BLANK){
@@ -5240,33 +5231,25 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 	conditional_decider = emit_test_code(while_statement_entry_block, package.assignee, package.assignee, TRUE);
 	}
 
-	//"Jump over" the body if it's bad
-	emit_jump(while_statement_entry_block, while_statement_end_block, conditional_decider, jump_type, TRUE, TRUE);
+	//The branch type here will be an inverse branch
+	branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
 
-	//Otherwise it isn't null, so we can add it as a successor
-	add_successor(while_statement_entry_block, compound_statement_results.starting_block);
-
-	//We want to have a direct jump to the body too
-	emit_jump(while_statement_entry_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-	//The exit block is also a successor to the entry block
-	add_successor(while_statement_entry_block, while_statement_end_block);
+	/**
+	 * Inverse jump out of the while loop to the end if bad
+	 *
+	 * If destination -> end of loop
+	 * Else destination -> loop body
+	 */
+	emit_branch(while_statement_entry_block, while_statement_end_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If it's not a return statement, we can add all of these in
 	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
-		//A successor to the end block is the block at the top of the loop
-		add_successor(compound_stmt_end, while_statement_entry_block);
-		//His direct successor is the end block
-		compound_stmt_end->direct_successor = while_statement_end_block;
 		//The compound statement end will jump right back up to the entry block
-		emit_jump(compound_stmt_end, while_statement_entry_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		emit_jump(compound_stmt_end, while_statement_entry_block);
 	}
-
-	//Set this to make sure
-	compound_stmt_end->direct_successor = while_statement_end_block;
 
 	//Set the termination type of this block
 	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
@@ -5309,93 +5292,73 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Add whatever our conditional is into the starting block
 	cfg_result_package_t package = emit_expression(entry_block, cursor, TRUE, TRUE);
 
+	//Variable for down the road
+	three_addr_var_t* conditional_decider = package.assignee;
+
+	//If the operator is blank, we need to emit a test instruction
+	if(package.operator == BLANK){
+		//Emit the testing instruction
+		conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
+	}
+
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
 
 	//Visit the compound statement that we're required to have here
 	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
 
-	//Variable for down the road
-	three_addr_var_t* conditional_decider = package.assignee;
-
-	if(if_compound_statement_results.starting_block != NULL){
-		//Add the if statement node in as a direct successor
-		add_successor(entry_block, if_compound_statement_results.starting_block);
-
-		//We will perform a normal jump to this one
-		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
-		//If the operator is blank, we need to emit a test instruction
-		if(package.operator == BLANK){
-			//Emit the testing instruction
-	 		conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
-		}
-
-		//Emit a jummp with the conditional decider marked as important
-		emit_jump(entry_block, if_compound_statement_results.starting_block, conditional_decider, jump_to_if, TRUE, FALSE);
-
-		//Now we'll find the end of this statement
-		basic_block_t* if_compound_stmt_end = if_compound_statement_results.final_block;
-
-		//If this is not a return block, we will add these
-		if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
-			//The successor to the if-stmt end path is the if statement end block
-			emit_jump(if_compound_stmt_end, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-			//If this is the case, the end block is a successor of the if_stmt end
-			add_successor(if_compound_stmt_end, exit_block);
-		} else {
-			//If this is the case, the end block is a successor of the if_stmt end
-			add_successor(if_compound_stmt_end, function_exit_block);
-		}
-
-	//If this is null, it's fine, but we should throw a warning
-	} else {
-		//We'll just set this to jump out of here
-		//We will perform a normal jump to this one
-		jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
-		//If the operator is blank, we need to emit a test instruction
-		if(package.operator == BLANK){
-			//Emit the testing instruction
-	 		conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
-		}
-
-		//Jump based on the decider
-		emit_jump(entry_block, exit_block, conditional_decider, jump_to_if, TRUE, FALSE);
-		add_successor(entry_block, exit_block);
+	//If the starting block is null, create a dummy one
+	if(if_compound_statement_results.starting_block == NULL){
+		if_compound_statement_results.starting_block = basic_block_alloc(1);
+		if_compound_statement_results.final_block = if_compound_statement_results.starting_block;
 	}
+
+	//Extract this for convenience
+	basic_block_t* if_compound_stmt_end = if_compound_statement_results.final_block;
+
+	//If this is not a return block, we will add these
+	if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+		//The successor to the if-stmt end path is the if statement end block
+		emit_jump(if_compound_stmt_end, exit_block);
+	}
+
+	//Select an appropriate branch for the entry block
+	branch_type_t entry_block_branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
+	//Emit the branch from the entry block out to the starting block. We will *intentionally* leave the else case NULL
+	//because we may have else-if cases that we need to add down the road
+	emit_branch(entry_block, if_compound_statement_results.starting_block, NULL, entry_block_branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+
+	//From our perspective, the previous entry block
+	//is now the one we've just made
+	basic_block_t* previous_entry_block = entry_block;
 
 	//Advance the cursor up to it's next sibling
 	cursor = cursor->next_sibling;
 
-	//We'll need to keep track of the current entry block
-	basic_block_t* current_entry_block = entry_block;
-	//And we'll have a temp for when we switch over
-	basic_block_t* temp;
-
-	//For traversing the else-if tree
-	generic_ast_node_t* else_if_cursor;
-
 	//So long as we keep seeing else-if clauses
 	while(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_ELSE_IF_STMT){
-		//This will be the expression
-		else_if_cursor = cursor->first_child;
+		//Grab a cursor to traverse the else-if block
+		generic_ast_node_t* else_if_cursor = cursor->first_child;
 
-		//Since we're already in the else-if region, we know that we'll
-		//need a new temp block. This means that we'll need to jump from the old
-		//entry block to a new one
-		
-		//Save the old one
-		temp = current_entry_block;
 		//Make a new one
-		current_entry_block = basic_block_alloc(1);
-		//The new one is a successor of the old one
-		add_successor(temp, current_entry_block);
-		//And we'll emit a direct jump from the old one to the new one
-		emit_jump(temp, current_entry_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		basic_block_t* new_entry_block = basic_block_alloc(1);
+
+		//Extract the old branch statement from the previous entry block
+		instruction_t* branch_statement = previous_entry_block->exit_statement;
+
+		/**
+		 * For our bookeeping, we'll need to force the old branch statement to
+		 * point here to the current entry block. We'll also need
+		 * to add a successor
+		 */
+		branch_statement->else_block = new_entry_block;
+		//The current entry block is the else branch for the conditional
+		//branch in the previous one
+		add_successor(previous_entry_block, new_entry_block);
 
 		//So we've seen the else-if clause. Let's grab the expression first
-		package = emit_expression(current_entry_block, else_if_cursor, TRUE, TRUE);
+		package = emit_expression(new_entry_block, else_if_cursor, TRUE, TRUE);
 
 		//Advance it up -- we should now have a compound statement
 		else_if_cursor = else_if_cursor->next_sibling;
@@ -5403,53 +5366,40 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//Let this handle the compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
 
+		//If this is NULL, then we need to emit dummy blocks
+		if(else_if_compound_statement_results.starting_block == NULL){
+			else_if_compound_statement_results.starting_block = basic_block_alloc(1);
+			else_if_compound_statement_results.final_block = else_if_compound_statement_results.starting_block;
+		}
+
 		//This is the package's assignee
 		conditional_decider = package.assignee;
 
-		//If it's not null, we'll process fully
-		if(else_if_compound_statement_results.starting_block != NULL){
-			//Add the if statement node in as a direct successor
-			add_successor(current_entry_block, else_if_compound_statement_results.starting_block);
-			//We will perform a normal jump to this one
-			jump_type_t jump_to_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
-			//If the operator is blank, we need to emit a test instruction
-			if(package.operator == BLANK){
-				//Emit the testing instruction
-	 			conditional_decider = emit_test_code(current_entry_block, package.assignee, package.assignee, TRUE);
-			}
-
-			//Emit a jump based on the decider
-			emit_jump(current_entry_block, else_if_compound_statement_results.starting_block, conditional_decider, jump_to_if, TRUE, FALSE);
-
-			//Now we'll find the end of this statement
-			basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
-
-			//If this is not a return block, we will add these
-			if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
-				//The successor to the if-stmt end path is the if statement end block
-				emit_jump(else_if_compound_stmt_exit, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-				//If this is the case, the end block is a successor of the if_stmt end
-				add_successor(else_if_compound_stmt_exit, exit_block);
-			} else {
-				add_successor(else_if_compound_stmt_exit, function_exit_block);
-			}
-
-		//If this is NULL, it's fine, but we should warn
-		} else {
-			//We'll just set this to jump out of here
-			//We will perform a normal jump to this one
-			jump_type_t jump_to_else_if = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
-			//If the operator is blank, we need to emit a test instruction
-			if(package.operator == BLANK){
-				//Emit the testing instruction
-	 			conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
-			}
-
-			emit_jump(current_entry_block, exit_block, conditional_decider, jump_to_else_if, TRUE, FALSE);
-			add_successor(current_entry_block, exit_block);
+		//If the operator is blank, we need to emit a test instruction
+		if(package.operator == BLANK){
+			//Emit the testing instruction
+			conditional_decider = emit_test_code(new_entry_block, package.assignee, package.assignee, TRUE);
 		}
+
+		//Select the branch here as well
+		branch_type_t else_if_branch = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
+		//Now we'll emit the branch statement into the current entry block. Again we intentionally
+		//leave the else area null for later use
+		emit_branch(new_entry_block, else_if_compound_statement_results.starting_block, NULL, else_if_branch, conditional_decider, BRANCH_CATEGORY_NORMAL);
+
+		//Now we'll find the end of this statement
+		basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
+
+		//If this is not a return block, we will add these
+		if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			//The successor to the if-stmt end path is the if statement end block
+			emit_jump(else_if_compound_stmt_exit, exit_block);
+		}
+
+		//Now for our bookkeeping, the current entry block here now also counts as the previous
+		//entry block
+		previous_entry_block = new_entry_block;
 
 		//Advance this up to the next one
 		cursor = cursor->next_sibling;
@@ -5457,43 +5407,47 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 	//Now that we're out of here - we may have an else statement on our hands
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_COMPOUND_STMT){
-		//Let's handle the compound statement
-		
 		//Grab the compound statement
 		cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
 
-		//If it's NULL, that's fine, we'll just throw a warning
-		if(else_compound_statement_values.starting_block == NULL){
-			//We'll jump to the end here
-			add_successor(current_entry_block, exit_block);
-			//Emit a direct jump here
-			emit_jump(current_entry_block, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-		} else {
-			//Add the if statement node in as a direct successor
-			add_successor(current_entry_block, else_compound_statement_values.starting_block);
-			//We will perform a normal jump to this one
-			emit_jump(current_entry_block, else_compound_statement_values.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		//Extract for convenience
+		instruction_t* branch_statement = previous_entry_block->exit_statement;
 
-			//Now we'll find the end of this statement
+		//This very well could be NULL, in which case we can just go to the end
+		if(else_compound_statement_values.starting_block != NULL){
+			//The else block here now points to the else's start
+			branch_statement->else_block = else_compound_statement_values.starting_block;
+
+			//It is also now a successor as well
+			add_successor(previous_entry_block, else_compound_statement_values.starting_block);
+
+			//More bookeeping based on the exit type
 			basic_block_t* else_compound_statement_exit = else_compound_statement_values.final_block;
 
 			//If this is not a return block, we will add these
 			if(else_compound_statement_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
 				//The successor to the if-stmt end path is the if statement end block
-				emit_jump(else_compound_statement_exit, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-				//If this is the case, the end block is a successor of the if_stmt end
-				add_successor(else_compound_statement_exit, exit_block);
-			} else {
-				add_successor(else_compound_statement_exit, function_exit_block);
+				emit_jump(else_compound_statement_exit, exit_block);
 			}
+
+		} else {
+			//The else block here is just the exit block
+			branch_statement->else_block = exit_block;
+
+			//And it's a successor as well
+			add_successor(previous_entry_block, exit_block);
 		}
 
 	//Otherwise the if statement will need to jump directly to the end
 	} else {
-		//We'll jump to the end here
-		add_successor(current_entry_block, exit_block);
-		//Emit a direct jump here
-		emit_jump(current_entry_block, exit_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		//Extract the branch for convenience
+		instruction_t* branch_statement = previous_entry_block->exit_statement;
+
+		//The else scenario here is just the exit block
+		branch_statement->else_block = exit_block;
+
+		//The exit block is now a successor as well
+		add_successor(previous_entry_block, exit_block);
 	}
 
 	//If we have an exit block that has no predecessors, that means that we return through every
@@ -5501,10 +5455,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//exit block
 	if(exit_block->predecessors == NULL || exit_block->predecessors->current_index == 0){
 		result_package.final_block = function_exit_block;
-		//Also set the direct successor here
-		entry_block->direct_successor = function_exit_block;
-	} else {
-		entry_block->direct_successor = exit_block;
 	}
 
 	//Give back the result package
@@ -5680,7 +5630,11 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Th starting and ending blocks for the switch statements
-	basic_block_t* starting_block = basic_block_alloc(1);
+	basic_block_t* root_level_block = basic_block_alloc(1);
+	//The upper bound check block
+	basic_block_t* upper_bound_check_block = basic_block_alloc(1);
+	//The jump calculation block
+	basic_block_t* jump_calculation_block = basic_block_alloc(1);
 	//Since C-style switches support break statements, we'll need
 	//this as well
 	basic_block_t* ending_block = basic_block_alloc(1);
@@ -5689,28 +5643,25 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	push(break_stack, ending_block);
 
 	//We already know what these will be, so populate them
-	result_package.starting_block = starting_block;
+	result_package.starting_block = root_level_block;
 	result_package.final_block = ending_block;
 
 	//We'll grab a cursor to the first child and begin crawling through
 	generic_ast_node_t* cursor = root_node->first_child;
 
-	//We'll also have a cursor to the top level block to avoid confusion
-	basic_block_t* root_level_block = starting_block;
-
 	//We'll first need to emit the expression node
 	cfg_result_package_t input_results = emit_expression(root_level_block, cursor, TRUE, TRUE);
 
 	//Check for ternary expansion
-	if(input_results.final_block != NULL && input_results.final_block != root_level_block){
-		root_level_block = starting_block;
+	if(input_results.final_block != root_level_block){
+		root_level_block = input_results.final_block;
 	}
 
 	//This is a switch type block
-	root_level_block->block_type = BLOCK_TYPE_SWITCH;
+	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 
 	//We'll now allocate this one's jump table
-	root_level_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
+	jump_calculation_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
 
 	//The offset(amount that we'll need to knock down any case values by) is always the 
 	//case statement's value subtracted by the lower bound. We'll call it offset here
@@ -5741,7 +5692,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 				case_default_results = visit_c_style_case_statement(cursor);
 
 				//Add this in as an entry to the jump table
-				add_jump_table_entry(root_level_block->jump_table, cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
+				add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 
 				break;
 
@@ -5762,7 +5713,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		}
 
 		//This block counts as a successor to the root level block
-		add_successor(root_level_block, case_default_results.starting_block);
+		add_successor(jump_calculation_block, case_default_results.starting_block);
 
 		//Reassign current block
 		current_block = case_default_results.final_block;
@@ -5774,14 +5725,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 			if(previous_block->exit_statement != NULL){
 				//Switch based on what is in here
 				switch(previous_block->exit_statement->statement_type){
-					//If we already have an ending that's a hard jump, we don't
-					//need to go on
+					//And of course a return/branch statement means we can't add anything afterwards
+					case THREE_ADDR_CODE_BRANCH_STMT:
 					case THREE_ADDR_CODE_JUMP_STMT:
-						if(previous_block->exit_statement->jump_type == JUMP_TYPE_JMP){
-							break;
-						}
-
-					//And of course a return statement means we can't add anything afterwards
 					case THREE_ADDR_CODE_RET_STMT:
 						break;
 
@@ -5789,24 +5735,18 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 					//In this case, to guarantee the fallthrough property, we must
 					//add a jump here
 					default:
-						//Fallthrough the block
-						add_successor(previous_block, case_default_results.starting_block);
-
 						//Emit the direct jump. This may be optimized away in the optimizer, but we
 						//need to guarantee behavior
-						emit_jump(previous_block, case_default_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+						emit_jump(previous_block, case_default_results.starting_block);
 						
 						break;
 				}
 
 			//If it is null, then we definitiely need a jump here
 			} else {
-				//Fallthrough the block
-				add_successor(previous_block, case_default_results.starting_block);
-
 				//Emit the direct jump. This may be optimized away in the optimizer, but we
 				//need to guarantee behavior
-				emit_jump(previous_block, case_default_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(previous_block, case_default_results.starting_block);
 			}
 		}
 
@@ -5827,37 +5767,26 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	if(current_block->exit_statement != NULL){
 		//Switch based on what the end of the current block is
 		switch(current_block->exit_statement->statement_type){
-			//If it's a jump statement, we don't need to add one
-			case THREE_ADDR_CODE_JUMP_STMT:
-				if(current_block->exit_statement->jump_type == JUMP_TYPE_JMP){
-					break;
-				}
-
-			//And if it's a return statement, we also don't need to add anything
+			//If it's a jump or ret statement, we don't need to add one
 			case THREE_ADDR_CODE_RET_STMT:
+			case THREE_ADDR_CODE_JUMP_STMT:
 				break;
 
 			//However if we have this, we need to ensure that we go from this final block
 			//directly to the end
 			default:
-				//This one's successor is the end block
-				add_successor(current_block, ending_block);
-
 				//Emit the direct jump. This may be optimized away in the optimizer, but we
 				//need to guarantee behavior
-				emit_jump(current_block, ending_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+				emit_jump(current_block, ending_block);
 
 				break;
 		}
 
 	//Otherwise it is null, so we definitely need a jump to the end here
 	} else {
-		//This one's successor is the end block
-		add_successor(current_block, ending_block);
-
 		//Emit the direct jump. This may be optimized away in the optimizer, but we
 		//need to guarantee behavior
-		emit_jump(current_block, ending_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+		emit_jump(current_block, ending_block);
 	}
 
 	//If the ending block has no successors at all, that means that we've returned through every control path. Instead
@@ -5868,10 +5797,10 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	//will be set to point to the default block
-	for(u_int16_t i = 0; i < root_level_block->jump_table->num_nodes; i++){
+	for(u_int16_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		//If it's null, we'll make it the default
-		if(dynamic_array_get_at(root_level_block->jump_table->nodes, i) == NULL){
-			dynamic_array_set_at(root_level_block->jump_table->nodes, default_block, i);
+		if(dynamic_array_get_at(jump_calculation_block->jump_table->nodes, i) == NULL){
+			dynamic_array_set_at(jump_calculation_block->jump_table->nodes, default_block, i);
 		}
 	}
 
@@ -5880,6 +5809,9 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//We'll need both of these as constants for our computation
 	three_addr_const_t* lower_bound = emit_direct_integer_or_char_constant(root_node->lower_bound, i32);
 	three_addr_const_t* upper_bound = emit_direct_integer_or_char_constant(root_node->upper_bound, i32);
+
+	//Now that we have our expression, we'll want to speed things up by seeing if our value is either below the lower
+	//range or above the upper range. If it is, we jump to the very end
 
 	/**
 	 * Jumping(conditional or indirect), does not affect condition codes. As such, we can rely 
@@ -5892,24 +5824,46 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	generic_type_t* input_result_type = input_results.assignee->type;
 
 	//Grab the signedness of the result
-	u_int8_t is_signed = is_type_signed(input_results.assignee->type);
+	u_int8_t is_signed = is_type_signed(input_result_type);
+
+	//This will be used for tracking
+	three_addr_var_t* lower_than_decider = emit_temp_var(input_result_type);
 
 	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, L_THAN, lower_bound, TRUE);
+	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_results.assignee, L_THAN, lower_bound, TRUE);
 
-	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
-	//Now we'll emit our jump
-	emit_jump(root_level_block, default_block, input_results.assignee, jump_lower_than, TRUE, FALSE);
+	//Select a branch for the lower type
+	branch_type_t branch_lower_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
 
-	//Next step -> if we're above the maximum, jump to default
-	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
+	/**
+	 * Now we'll emit the branch like this:
+	 *
+	 * if lower than:
+	 * 	goto default block 
+	 * else:
+	 * 	goto upper_bound_check
+	 */
+	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL);
 
-	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
-	//Now we'll emit our jump
-	emit_jump(root_level_block, default_block, input_results.assignee, jump_greater_than, TRUE, FALSE);
+	//This will be used for tracking
+	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
+
+	//Now we handle the case where we're above the upper bound
+	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_results.assignee, G_THAN, upper_bound, TRUE);
+
+	//Select a branch for the higher type
+	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
+
+	/**
+	 * Now we'll emit the branch like this
+	 *
+	 * if greater than:
+	 * 	goto default block
+	 * else:
+	 *  goto jump block calculation
+	 */
+	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
@@ -5918,11 +5872,11 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	add_used_variable(root_level_block, input_results.assignee);
 
 	//Add it into the block
-	add_statement(root_level_block, temporary_variable_assignent);
+	add_statement(jump_calculation_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -5932,16 +5886,10 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * 	
 	 */
 	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, root_level_block->jump_table, input, TRUE);
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(jump_calculation_block, jump_calculation_block->jump_table, input, TRUE);
 
 	//Now we'll emit the indirect jump to the address
-	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);
-
-	//Ensure that we wire this in properly
-	result_package.starting_block->direct_successor = result_package.final_block;
-
-	//Remove the exit statement from the breaking stack
-	pop(break_stack);
+	emit_indirect_jump(jump_calculation_block, address, TRUE);
 
 	//Give back the starting block
 	return result_package;
@@ -5959,12 +5907,16 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//The starting block for the switch statement - we'll want this in a new
 	//block
-	basic_block_t* starting_block = basic_block_alloc(1);
+	basic_block_t* root_level_block = basic_block_alloc(1);
+	//We will need to new blocks to check the bounds
+	basic_block_t* upper_bound_check_block = basic_block_alloc(1);
+	//This is the block where the actual jump calculation happens
+	basic_block_t* jump_calculation_block = basic_block_alloc(1);
 	//We also need to know the ending block here
 	basic_block_t* ending_block = basic_block_alloc(1);
 
 	//We can already fill in the result package
-	result_package.starting_block = starting_block;
+	result_package.starting_block = root_level_block;
 	result_package.final_block = ending_block;
 
 	//Grab a cursor to the case statements
@@ -5974,25 +5926,22 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	basic_block_t* current_block;
 	basic_block_t* default_block;
 	
-	//The current block, relative to the starting block
-	basic_block_t* root_level_block = starting_block;
-	
 	//Let's first emit the expression. This will at least give us an assignee to work with
 	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE, TRUE);
 
 	//We could have had a ternary here, so we'll need to account for that possibility
-	if(input_results.final_block != NULL && root_level_block != input_results.final_block){
+	if(root_level_block != input_results.final_block){
 		//Just reassign what current is
 		root_level_block = input_results.final_block;
 	}
 
 	//IMPORTANT - we'll also mark this as a block type switch, because this is where any/all switching logic
 	//will be happening
-	root_level_block->block_type = BLOCK_TYPE_SWITCH;
+	jump_calculation_block->block_type = BLOCK_TYPE_SWITCH;
 	
 	//Let's also allocate our jump table. We know how large the jump table needs to be from
 	//data passed in by the parser
-	root_level_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
+	jump_calculation_block->jump_table = jump_table_alloc(root_node->upper_bound - root_node->lower_bound + 1);
 
 	//We'll also have some adjustment amount, since we always want the lowest value in the jump table to be 0. This
 	//adjustment will be subtracted from every value at the top to "knock it down" to be within the jump table
@@ -6016,7 +5965,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 				//We'll now need to add this into the jump table. We always subtract the adjustment to ensure
 				//that we start down at 0 as the lowest value
-				add_jump_table_entry(root_level_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
+				add_jump_table_entry(jump_calculation_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 				break;
 
 			//Handle a default statement
@@ -6035,18 +5984,15 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		}
 
 		//The starting block is a successor to the root block
-		add_successor(root_level_block, case_default_results.starting_block);
+		add_successor(jump_calculation_block, case_default_results.starting_block);
 
 		//Now we'll drill down to the bottom to prime the next pass
 		current_block = case_default_results.final_block;
 
 		//If we don't have a return terminal type, we can add the ending block as a successor
 		if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
-			//Since there is no concept of falling through in Ollie, these case statements all branch right to the end
-			add_successor(current_block, ending_block);
-
 			//We will always emit a direct jump from this block to the ending block
-			emit_jump(current_block, ending_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+			emit_jump(current_block, ending_block);
 		}
 		
 		//Move the cursor up
@@ -6055,10 +6001,10 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
 	//with the default value
-	for(u_int16_t _ = 0; _ < root_level_block->jump_table->num_nodes; _++){
+	for(u_int16_t _ = 0; _ < jump_calculation_block->jump_table->num_nodes; _++){
 		//If it's null, we'll make it the default
-		if(dynamic_array_get_at(root_level_block->jump_table->nodes, _) == NULL){
-			dynamic_array_set_at(root_level_block->jump_table->nodes, default_block, _);
+		if(dynamic_array_get_at(jump_calculation_block->jump_table->nodes, _) == NULL){
+			dynamic_array_set_at(jump_calculation_block->jump_table->nodes, default_block, _);
 		}
 	}
 
@@ -6088,24 +6034,46 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	generic_type_t* input_result_type = input_results.assignee->type;
 
 	//Grab the signedness of the result
-	u_int8_t is_signed = is_type_signed(input_results.assignee->type);
+	u_int8_t is_signed = is_type_signed(input_result_type);
+
+	//This will be used for tracking
+	three_addr_var_t* lower_than_decider = emit_temp_var(input_result_type);
 
 	//Let's first do our lower than comparison
 	//First step -> if we're below the minimum, we jump to default 
-	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, L_THAN, lower_bound, TRUE);
+	emit_binary_operation_with_constant(root_level_block, lower_than_decider, input_results.assignee, L_THAN, lower_bound, TRUE);
 
-	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_lower_than = select_appropriate_jump_stmt(L_THAN, JUMP_CATEGORY_NORMAL, is_signed);
-	//Now we'll emit our jump
-	emit_jump(root_level_block, default_block, input_results.assignee, jump_lower_than, TRUE, FALSE);
+	//Select a branch for the lower type
+	branch_type_t branch_lower_than = select_appropriate_branch_statement(L_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
 
-	//Next step -> if we're above the maximum, jump to default
-	emit_binary_operation_with_constant(root_level_block, emit_temp_var(input_result_type), input_results.assignee, G_THAN, upper_bound, TRUE);
+	/**
+	 * Now we'll emit the branch like this:
+	 *
+	 * if lower than:
+	 * 	goto default block 
+	 * else:
+	 * 	goto upper_bound_check
+	 */
+	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL);
 
-	//If we are lower than this(regular jump), we will go to the default block
-	jump_type_t jump_greater_than = select_appropriate_jump_stmt(G_THAN, JUMP_CATEGORY_NORMAL, is_signed);
-	//Now we'll emit our jump
-	emit_jump(root_level_block, default_block, input_results.assignee, jump_greater_than, TRUE, FALSE);
+	//This will be used for tracking
+	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
+
+	//Now we handle the case where we're above the upper bound
+	emit_binary_operation_with_constant(upper_bound_check_block, higher_than_decider, input_results.assignee, G_THAN, upper_bound, TRUE);
+
+	//Select a branch for the higher type
+	branch_type_t branch_greater_than = select_appropriate_branch_statement(G_THAN, BRANCH_CATEGORY_NORMAL, is_signed);
+
+	/**
+	 * Now we'll emit the branch like this
+	 *
+	 * if greater than:
+	 * 	goto default block
+	 * else:
+	 *  goto jump block calculation
+	 */
+	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
@@ -6114,11 +6082,11 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	add_used_variable(root_level_block, input_results.assignee);
 
 	//Add it into the block
-	add_statement(root_level_block, temporary_variable_assignent);
+	add_statement(jump_calculation_block, temporary_variable_assignent);
 
 	//Now that all this is done, we can use our jump table for the rest
 	//We'll now need to cut the value down by whatever our offset was	
-	three_addr_var_t* input = emit_binary_operation_with_constant(root_level_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
+	three_addr_var_t* input = emit_binary_operation_with_constant(jump_calculation_block, temporary_variable_assignent->assignee, temporary_variable_assignent->assignee, MINUS, emit_direct_integer_or_char_constant(offset, i32), TRUE);
 
 	/**
 	 * Now that we've subtracted, we'll need to do the address calculation. The address calculation is as follows:
@@ -6128,10 +6096,10 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * 	
 	 */
 	//Emit the address first
-	three_addr_var_t* address = emit_indirect_jump_address_calculation(root_level_block, root_level_block->jump_table, input, TRUE);
+	three_addr_var_t* address = emit_indirect_jump_address_calculation(jump_calculation_block, jump_calculation_block->jump_table, input, TRUE);
 
 	//Now we'll emit the indirect jump to the address
-	emit_indirect_jump(root_level_block, address, JUMP_TYPE_JMP, TRUE);
+	emit_indirect_jump(jump_calculation_block, address, TRUE);
 
 	//Give back the starting block
 	return result_package;
@@ -6203,15 +6171,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				//If this is the case, it means that we've hit a ternary at some point and need
 				//to reassign this final block
-				if(generic_results.final_block != NULL && generic_results.final_block != current_block){
+				if(generic_results.final_block != current_block){
 					current_block = generic_results.final_block;
-				}
-
-				//Destroy any/all successors of the current block. Once you have a return statement in a block, there
-				//can be no other successors
-				if(current_block->successors != NULL){
-					dynamic_array_dealloc(current_block->successors);
-					current_block->successors = NULL;
 				}
 
 				//A successor to this block is the exit block
@@ -6246,10 +6207,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//And the final block is the end
 					current_block = generic_results.final_block;
 				} else {
-					//Add a successor to the current block
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a jump from current to the start
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 					//The current block is just whatever is at the end
 					current_block = generic_results.final_block;
 				}
@@ -6266,10 +6225,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = generic_results.final_block;
 				//We never merge these
 				} else {
-					//Add as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a direct jump to it
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 					//And the current block is just the end block
 					current_block = generic_results.final_block;
 				}
@@ -6286,10 +6243,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = generic_results.final_block;
 				//We never merge do-while's, they are strictly successors
 				} else {
-					//Add this in as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a jump from the current block to this
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 					//And we now know that the current block is just the end block
 					current_block = generic_results.final_block;
 				}
@@ -6306,10 +6261,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block = generic_results.final_block;
 				//We don't merge, we'll add successors
 				} else {
-					//Add the start as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//We go right to the exit block here
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 					//Go right to the final block here
 					current_block = generic_results.final_block;
 				}
@@ -6333,10 +6286,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
 
-					//We'll now add a successor for this block
-					add_successor(current_block, continuing_to);
 					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, continuing_to, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, continuing_to);
 
 					//Package and return
 					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
@@ -6353,9 +6304,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Store for later
 					three_addr_var_t* conditional_decider = package.assignee;
 
-					//Decide the appropriate jump statement -- direct path here
-					jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
 					//If this is blank, we'll need a test instruction
 					if(package.operator == BLANK){
 						conditional_decider = emit_test_code(current_block, package.assignee, package.assignee, TRUE);
@@ -6366,27 +6314,26 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
-					
-					//Otherwise we are in a loop, so this means that we need to point the continue statement to
-					//the loop entry block
-					//Add the successor in
-					add_successor(current_block, continuing_to);
-					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, continuing_to, conditional_decider, jump_type, TRUE, FALSE);
 
-					//Add this new block in as a successor
-					add_successor(current_block, new_block);
-					//The other end of the conditional continue will be jumping to this new block
-					emit_jump(current_block, new_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					//Select the appropriate branch type using
+					//a normal jump
+					branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
-					//Restore the direct successor
-					current_block->direct_successor = new_block;
+					/**
+					 * Now we will emit the branch like so
+					 *
+					 * if condition:
+					 * 	goto continue_block
+					 * else:
+					 * 	goto new block
+					 */
+					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
 				}
 
-					break;
+				break;
 
 			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
@@ -6404,10 +6351,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
 
-					//We'll need to break out of the loop
-					add_successor(current_block, breaking_to);
 					//We will jump to it -- this is always an uncoditional jump
-					emit_jump(current_block, breaking_to, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, breaking_to);
 
 					//Package and return
 					generic_results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
@@ -6427,29 +6372,26 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Store this for later
 					three_addr_var_t* conditional_decider = ret_package.assignee;
 
-					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
-
 					//If this is blank, we'll need a test instruction
 					if(ret_package.operator == BLANK){
 						conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
 					}
 
+					//First we'll select the appropriate branch type. We are using a regular branch type here
+					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
 
-					//Add a successor to the end
-					add_successor(current_block, breaking_to);
-					//We will jump to it -- this jump is decided above
-					emit_jump(current_block, breaking_to, conditional_decider, jump_type, TRUE, FALSE);
-
-					//Add the new block as a successor as well
-					add_successor(current_block, new_block);
-					//Emit a jump to the new block
-					emit_jump(current_block, new_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-					//Make sure we mark this properly
-					current_block->direct_successor = new_block;
+					/**
+					 * Now we'll emit the branch like so:
+					 *
+					 * if conditional
+					 * 	goto end block
+					 * else 
+					 * 	goto new block
+					 */
+					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -6472,10 +6414,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					if(starting_block == NULL){
 						starting_block = compound_statement_results.starting_block;
 					} else {
-						//Otherwise it's a successor
-						add_successor(current_block, compound_statement_results.starting_block);
 						//Jump to it - important for optimizer
-						emit_jump(current_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+						emit_jump(current_block, compound_statement_results.starting_block);
 					}
 
 					//Current is now the end of the compound statement
@@ -6502,8 +6442,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Otherwise we'll need to emit a jump to it
 				} else {
 					//Add it in as a successor
-					add_successor(current_block, labeled_block);
-					emit_jump(current_block, labeled_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, labeled_block);
 				}
 
 				//The current block now is this labeled block
@@ -6527,18 +6466,15 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
 
 				//We'll now update the current block accordingly
-				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
+				if(ret_package.final_block != current_block){
 					current_block = ret_package.final_block;
 				}
 
 				//We'll need a block at the very end which we'll hit after we jump
-				basic_block_t* jumping_to_block = basic_block_alloc(1);
+				basic_block_t* else_block = basic_block_alloc(1);
 
 				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
-
-				//Now that we're here, we can begin to emit the jumps
-				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
 				//If the return package's operator is blank,
 				//then we'll need to emit a test instruction here
@@ -6546,17 +6482,15 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
 				}
 
-				//Emit the user defined jump now. The ast cursor's variable contains the label variable that we jump to
-				emit_user_defined_jump(current_block, ast_cursor->variable, conditional_decider, type, TRUE);
+				//Select the needed branch statement
+				branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
-				//And we'll also emit the direct jump at the end
-				emit_jump(current_block, jumping_to_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-				//Add the jumping to block as one of the successors(we'll add the other successor in later)
-				add_successor(current_block, jumping_to_block);
+				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
+				//method for each function that handles filling the rest in
+				emit_user_defined_branch(current_block, ast_cursor->variable, else_block, conditional_decider, branch_type);
 
 				//The current block now is said jumping to block
-				current_block = jumping_to_block;
+				current_block = else_block;
 
 				break;
 
@@ -6569,10 +6503,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					//Otherwise this is a direct successor
-					add_successor(current_block, generic_results.starting_block);
 					//We will also emit a jump from the current block to the entry
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 				}
 
 				//The current block is always what's directly at the end
@@ -6589,10 +6521,8 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					//Otherwise this is a direct successor
-					add_successor(current_block, generic_results.starting_block);
 					//We will also emit a jump from the current block to the entry
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 				}
 
 				//The current block is always what's directly at the end
@@ -6754,15 +6684,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//If this is the case, it means that we've hit a ternary at some point and need
 				//to reassign this final block
-				if(generic_results.final_block != NULL && generic_results.final_block != current_block){
+				if(generic_results.final_block != current_block){
 					current_block = generic_results.final_block;
-				}
-
-				//Destroy any/all successors of the current block. Once you have a return statement in a block, there
-				//can be no other successors
-				if(current_block->successors != NULL){
-					dynamic_array_dealloc(current_block->successors);
-					current_block->successors = NULL;
 				}
 
 				//A successor to this block is the exit block
@@ -6797,10 +6720,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//And the final block is the end
 					current_block = generic_results.final_block;
 				} else {
-					//Add a successor to the current block
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a jump from current to the start
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 					//The current block is just whatever is at the end
 					current_block = generic_results.final_block;
 				}
@@ -6817,10 +6738,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = generic_results.final_block;
 				//We never merge these
 				} else {
-					//Add as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a direct jump to it
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 					//And the current block is just the end block
 					current_block = generic_results.final_block;
 				}
@@ -6837,10 +6756,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = generic_results.final_block;
 				//We never merge do-while's, they are strictly successors
 				} else {
-					//Add this in as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//Emit a jump from the current block to this
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 					//And we now know that the current block is just the end block
 					current_block = generic_results.final_block;
 				}
@@ -6857,10 +6774,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block = generic_results.final_block;
 				//We don't merge, we'll add successors
 				} else {
-					//Add the start as a successor
-					add_successor(current_block, generic_results.starting_block);
 					//We go right to the exit block here
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 					//Go right to the final block here
 					current_block = generic_results.final_block;
 				}
@@ -6884,10 +6799,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
 
-					//We'll now add a successor for this block
-					add_successor(current_block, continuing_to);
 					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, continuing_to, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, continuing_to);
 
 					//Package and return
 					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
@@ -6904,9 +6817,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Store for later
 					three_addr_var_t* conditional_decider = package.assignee;
 
-					//Decide the appropriate jump statement -- direct path here
-					jump_type_t jump_type = select_appropriate_jump_stmt(package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(package.assignee->type));
-
 					//If this is blank, we'll need a test instruction
 					if(package.operator == BLANK){
 						conditional_decider = emit_test_code(current_block, package.assignee, package.assignee, TRUE);
@@ -6917,27 +6827,25 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
-					
-					//Otherwise we are in a loop, so this means that we need to point the continue statement to
-					//the loop entry block
-					//Add the successor in
-					add_successor(current_block, continuing_to);
-					//We always jump to the start of the loop statement unconditionally
-					emit_jump(current_block, continuing_to, conditional_decider, jump_type, TRUE, FALSE);
 
-					//Add this new block in as a successor
-					add_successor(current_block, new_block);
-					//The other end of the conditional continue will be jumping to this new block
-					emit_jump(current_block, new_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					//Select the appropriate branch type, we will not use an inverse jump here
+					branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
-					//Restore the direct successor
-					current_block->direct_successor = new_block;
+					/**
+					 * Now we will emit the branch like so
+					 *
+					 * if condition:
+					 * 	goto continue_block
+					 * else:
+					 * 	goto new block
+					 */
+					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
 				}
 
-					break;
+				break;
 
 			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
@@ -6955,10 +6863,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
 
-					//We'll need to break out of the loop
-					add_successor(current_block, breaking_to);
 					//We will jump to it -- this is always an uncoditional jump
-					emit_jump(current_block, breaking_to, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, breaking_to);
 
 					//Package and return
 					results = (cfg_result_package_t){starting_block, current_block, NULL, BLANK};
@@ -6975,32 +6881,29 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//First let's emit the conditional code
 					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
 
-					//Store for later
+					//Store this for later
 					three_addr_var_t* conditional_decider = ret_package.assignee;
-
-					//Now based on whatever we have in here, we'll emit the appropriate jump type(direct jump)
-					jump_type_t jump_type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
 					//If this is blank, we'll need a test instruction
 					if(ret_package.operator == BLANK){
 						conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
 					}
 
+					//First we'll select the appropriate branch type. We are using a regular branch type here
+					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(break_stack);
 
-					//Add a successor to the end
-					add_successor(current_block, breaking_to);
-					//We will jump to it -- this jump is decided above
-					emit_jump(current_block, breaking_to, conditional_decider, jump_type, TRUE, FALSE);
-
-					//Add the new block as a successor as well
-					add_successor(current_block, new_block);
-					//Emit a jump to the new block
-					emit_jump(current_block, new_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-					//Make sure we mark this properly
-					current_block->direct_successor = new_block;
+					/**
+					 * Now we'll emit the branch like so:
+					 *
+					 * if conditional
+					 * 	goto end block
+					 * else 
+					 * 	goto new block
+					 */
+					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -7023,10 +6926,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					if(starting_block == NULL){
 						starting_block = compound_statement_results.starting_block;
 					} else {
-						//Otherwise it's a successor
-						add_successor(current_block, compound_statement_results.starting_block);
 						//Jump to it - important for optimizer
-						emit_jump(current_block, compound_statement_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+						emit_jump(current_block, compound_statement_results.starting_block);
 					}
 
 					//Current is now the end of the compound statement
@@ -7057,9 +6958,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					starting_block = labeled_block;
 				//Otherwise we'll need to emit a jump to it
 				} else {
-					//Add it in as a successor
-					add_successor(current_block, labeled_block);
-					emit_jump(current_block, labeled_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, labeled_block);
 				}
 
 				//The current block now is this labeled block
@@ -7083,18 +6982,15 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				cfg_result_package_t ret_package = emit_expression(current_block, cursor, TRUE, TRUE);
 
 				//We'll now update the current block accordingly
-				if(ret_package.final_block != NULL && ret_package.final_block != current_block){
+				if(ret_package.final_block != current_block){
 					current_block = ret_package.final_block;
 				}
 
 				//We'll need a block at the very end which we'll hit after we jump
-				basic_block_t* jumping_to_block = basic_block_alloc(1);
+				basic_block_t* else_block = basic_block_alloc(1);
 
-				//Store this in here for later
+				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
-
-				//Now that we're here, we can begin to emit the jumps
-				jump_type_t type = select_appropriate_jump_stmt(ret_package.operator, JUMP_CATEGORY_NORMAL, is_type_signed(ret_package.assignee->type));
 
 				//If the return package's operator is blank,
 				//then we'll need to emit a test instruction here
@@ -7102,17 +6998,15 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
 				}
 
-				//Emit the user defined jump now. The ast cursor's variable contains the label we're jumping to
-				emit_user_defined_jump(current_block, ast_cursor->variable, conditional_decider, type, TRUE);
+				//Select the needed branch statement
+				branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
-				//And we'll also emit the direct jump at the end
-				emit_jump(current_block, jumping_to_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
-
-				//Add the jumping to block as one of the successors(we'll add the other successor in later)
-				add_successor(current_block, jumping_to_block);
+				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
+				//method for each function that handles filling the rest in
+				emit_user_defined_branch(current_block, ast_cursor->variable, else_block, conditional_decider, branch_type);
 
 				//The current block now is said jumping to block
-				current_block = jumping_to_block;
+				current_block = else_block;
 
 				break;
 
@@ -7125,10 +7019,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					//Otherwise this is a direct successor
-					add_successor(current_block, generic_results.starting_block);
 					//We will also emit a jump from the current block to the entry
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 				}
 
 				//The current block is always what's directly at the end
@@ -7145,10 +7037,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					//Otherwise this is a direct successor
-					add_successor(current_block, generic_results.starting_block);
 					//We will also emit a jump from the current block to the entry
-					emit_jump(current_block, generic_results.starting_block, NULL, JUMP_TYPE_JMP, TRUE, FALSE);
+					emit_jump(current_block, generic_results.starting_block);
 				}
 
 				//The current block is always what's directly at the end
@@ -7282,7 +7172,7 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
 	//Run through every jump statement
 	while(dynamic_array_is_empty(user_defined_jumps) == FALSE){
 		//Delete from the back
-		instruction_t* jump_instruction = dynamic_array_delete_from_back(user_defined_jumps);
+		instruction_t* branch_instruction = dynamic_array_delete_from_back(user_defined_jumps);
 
 		//We'll now need to scan through the labeled blocks to find who this should point to
 		for(u_int16_t i = 0; i < labeled_blocks->current_index; i++){
@@ -7290,15 +7180,16 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
 			basic_block_t* labeled_block = dynamic_array_get_at(labeled_blocks, i);
 
 			//If this labeled block doesn't have the same variable, we're out
-			if(labeled_block->label != jump_instruction->var_record){
+			if(labeled_block->label != branch_instruction->var_record){
 				continue;
 			}
 
 			//Otherwise if we get here we know that we found the correct label
-			jump_instruction->jumping_to_block = labeled_block;
+			branch_instruction->if_block = labeled_block;
 
-			//Add this in as a successor
-			add_successor(jump_instruction->block_contained_in, labeled_block);
+			//Add both of the successors so that we can maintain a nice order
+			add_successor(branch_instruction->block_contained_in, labeled_block);
+			add_successor(branch_instruction->block_contained_in, branch_instruction->else_block);
 			
 			//Break out of the for loop
 			break;
@@ -7336,6 +7227,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	function_exit_block->block_type = BLOCK_TYPE_FUNC_EXIT;
 	//Store this in the entry block
 	function_starting_block->function_defined_in = func_record;
+
+	//These will always be direct successors here
+	function_starting_block->direct_successor = function_exit_block;
 
 	/**
 	 * If we have function parameters that are *also* stack variables(meaning the user will
@@ -7386,15 +7280,15 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 			compound_statement_exit_block = compound_statement_results.final_block;
 		}
 
-		//We will mark that this end here has a direct successor in the function exit block
-		add_successor(compound_statement_exit_block, function_exit_block);
-		//Ensure that it's the direct successor
-		compound_statement_exit_block->direct_successor = function_exit_block;
+		//If these 2 are not the same, then ensure this works by adding a successor
+		if(compound_statement_exit_block != function_exit_block){
+			add_successor(compound_statement_exit_block, function_exit_block);
+		}
 	
-	//Otherwise we'll just connect the exit and entry
+	//Otherwise, we have an empty function definition. If this is the case, then the only
+	//predecessor to the exit block is the entry block
 	} else {
 		add_successor(function_starting_block, function_exit_block);
-		function_starting_block->direct_successor = function_exit_block;
 	}
 
 	//Determine and insert any needed ret statements
@@ -7510,7 +7404,7 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		}
 
 		//Change the current block if there is a change. This is possible with ternary expressions
-		if(initializer_results.final_block != NULL && initializer_results.final_block != current_block){
+		if(initializer_results.final_block != current_block){
 			current_block = initializer_results.final_block;
 		}
 
@@ -7631,7 +7525,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 		}
 
 		//Change the current block if there is a change. This is possible with ternary expressions
-		if(initializer_results.final_block != NULL && initializer_results.final_block != current_block){
+		if(initializer_results.final_block != current_block){
 			current_block = initializer_results.final_block;
 		}
 
@@ -7687,7 +7581,7 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 			intermediary_results = emit_expression(current_block, initializer_root, is_branch_ending, FALSE);
 
 			//The current block here is whatever the final block in the package is 
-			if(intermediary_results.final_block != NULL && intermediary_results.final_block != current_block){
+			if(intermediary_results.final_block != current_block){
 				//We'll reassign this to be the final block. If this does happen, it means that
 				//at some point we had a ternary expression
 				current_block = intermediary_results.final_block;
@@ -7732,17 +7626,6 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 			//Give back the package
 			return package;
 	}
-}
-
-
-/**
- * Visit a global variable let statement(declaration + initialization)
- */
-static void visit_global_let_statement(generic_ast_node_t* node){
-
-	printf("NOT IMPLEMENTED\n");
-	exit(0);
-
 }
 
 
@@ -7858,9 +7741,8 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			 * are global variables
 			 */
 			case AST_NODE_TYPE_LET_STMT:
-				//We'll visit the block here
-				visit_global_let_statement(ast_cursor);
-				
+				printf("NOT IMPLEMENTED\n");
+				exit(0);
 				//And we'll move along here
 				break;
 		
@@ -7927,6 +7809,35 @@ void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
 
 
 /**
+ * Recalculate the reverse-post-order traversals
+ * and the reverse-post-order-reverse-cfg traversals
+ */
+void calculate_all_reverse_traversals(cfg_t* cfg){
+	//Clear all of these old values out
+	reset_reverse_post_order_sets(cfg);
+
+	//For each function entry block, recompute all reverse post order
+	//CFG work
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Grab the block out
+		basic_block_t* block = dynamic_array_get_at(cfg->function_entry_blocks, i);
+
+		//Reset the visited status
+		reset_visited_status(cfg, FALSE);
+
+		//Compute the reverse post order traversal
+		block->reverse_post_order = compute_reverse_post_order_traversal(block);
+
+		//Reset once more
+		reset_visited_status(cfg, FALSE);
+
+		//Now use the reverse CFG(successors are predecessors, and vice versa)
+		block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal_reverse_cfg(block);
+	}
+}
+
+
+/**
  * We will calculate:
  *  1.) Dominator Sets
  *  2.) Dominator Trees
@@ -7937,7 +7848,10 @@ void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
  *
  * For every block in the CFG
  */
-void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo){
+void calculate_all_control_relations(cfg_t* cfg){
+	//Calculate all reverse traversals
+	calculate_all_reverse_traversals(cfg);
+
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
 	
@@ -7954,25 +7868,6 @@ void calculate_all_control_relations(cfg_t* cfg, u_int8_t recalculate_rpo){
 	//We'll also now calculate the reverse dominance frontier that will be used
 	//in later analysis by the optimizer
 	calculate_reverse_dominance_frontiers(cfg);
-
-	if(recalculate_rpo == TRUE){
-		//Clear all of these old values out
-		reset_reverse_post_order_sets(cfg);
-
-		//For each function entry block, recompute all reverse post order
-		//CFG work
-		for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-			//Grab the block out
-			basic_block_t* block = dynamic_array_get_at(cfg->function_entry_blocks, i);
-
-			//Recompute the reverse post order cfg
-			block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal(block, TRUE);
-
-			for(u_int16_t a = 0; a < block->reverse_post_order_reverse_cfg->current_index; a++){
-				basic_block_t* internal_block = dynamic_array_get_at(block->reverse_post_order_reverse_cfg, a);
-			}
-		}
-	}
 }
 
 
@@ -8040,7 +7935,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	}
 
 	//Let the helper deal with this
-	calculate_all_control_relations(cfg, FALSE);
+	calculate_all_control_relations(cfg);
 
 	//now we calculate the liveness sets
 	calculate_liveness_sets(cfg);

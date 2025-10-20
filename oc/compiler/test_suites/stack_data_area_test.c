@@ -10,14 +10,10 @@
 #include "../instruction/instruction.h"
 #include "../parser/parser.h"
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/constants.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
-
 
 /**
  * We'll use this helper function to process the compiler flags and return a structure that

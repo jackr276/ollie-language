@@ -12,10 +12,7 @@
 #include "../cfg/cfg.h"
 #include "../jump_table/jump_table.h"
 #include "../utils/dynamic_string/dynamic_string.h"
-
-//For standardization and convenience
-#define TRUE 1
-#define FALSE 0
+#include "../utils/constants.h"
 
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
@@ -187,22 +184,6 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
 void set_new_function(symtab_function_record_t* func){
 	//We'll save this up top
 	current_function = func;
-}
-
-
-/**
- * Determine the signedness of a jump type
- */
-u_int8_t is_jump_type_signed(jump_type_t type){
-	switch(type){
-		case JUMP_TYPE_JG:
-		case JUMP_TYPE_JGE:
-		case JUMP_TYPE_JLE:
-		case JUMP_TYPE_JL:
-			return TRUE;
-		default:
-			return FALSE;
-	}
 }
 
 
@@ -648,7 +629,7 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee){
  * by directly emitting a push instruction with the register in it. This
  * saves us allocation overhead
  */
-instruction_t* emit_direct_register_push_instruction(register_holder_t reg){
+instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -725,7 +706,7 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee){
  * by directly emitting a pop instruction with the register in it. This
  * saves us allocation overhead
  */
-instruction_t* emit_direct_register_pop_instruction(register_holder_t reg){
+instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -834,9 +815,12 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
 	stmt->statement_type = THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT;
 	stmt->assignee = assignee;
 	//We store the jumping to block as our operand. It's really a jump table
-	stmt->jumping_to_block = op1;
+	stmt->if_block = op1;
 	stmt->op2 = op2;
 	stmt->lea_multiplicator = type_size;
+
+	//Mark the current function
+	stmt->function = current_function;
 
 	//And now we'll give it back
 	return stmt;
@@ -900,7 +884,7 @@ instruction_t* emit_setne_code(three_addr_var_t* assignee){
  * 64 bits because 8, 16, 32 and 64 bit uses can't occupy the same register at the 
  * same time
  */
-static void print_8_bit_register_name(FILE* fl, register_holder_t reg){
+static void print_8_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
 		case NO_REG:
@@ -968,7 +952,7 @@ static void print_8_bit_register_name(FILE* fl, register_holder_t reg){
  * 64 bits because 32 and 64 bit uses can't occupy the same register at the 
  * same time
  */
-static void print_16_bit_register_name(FILE* fl, register_holder_t reg){
+static void print_16_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
 		case NO_REG:
@@ -1035,7 +1019,7 @@ static void print_16_bit_register_name(FILE* fl, register_holder_t reg){
  * 64 bits because 32 and 64 bit uses can't occupy the same register at the 
  * same time
  */
-static void print_32_bit_register_name(FILE* fl, register_holder_t reg){
+static void print_32_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
 		case NO_REG:
@@ -1100,7 +1084,7 @@ static void print_32_bit_register_name(FILE* fl, register_holder_t reg){
 /**
  * Print a 64 bit register name out
  */
-static void print_64_bit_register_name(FILE* fl, register_holder_t reg){
+static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
 		case NO_REG:
@@ -1363,36 +1347,36 @@ static char* op_to_string(ollie_token_t op){
 /**
  * Convert a jump type to a string
  */
-static char* jump_type_to_string(jump_type_t jump_type){
-	switch(jump_type){
-		case JUMP_TYPE_JE:
-			return "je";
-		case JUMP_TYPE_JNE:
-			return "jne";
-		case JUMP_TYPE_JG:
-			return "jg";
-		case JUMP_TYPE_JL:
-			return "jl";
-		case JUMP_TYPE_JNZ:
-			return "jnz";
-		case JUMP_TYPE_JZ:
-			return "jz";
-		case JUMP_TYPE_JMP:
-			return "jmp";
-		case JUMP_TYPE_JGE:
-			return "jge";
-		case JUMP_TYPE_JLE:
-			return "jle";
-		case JUMP_TYPE_JAE:
-			return "jae";
-		case JUMP_TYPE_JBE:
-			return "jbe";
-		case JUMP_TYPE_JA:
-			return "ja";
-		case JUMP_TYPE_JB:
-			return "jb";
+static char* branch_type_to_string(branch_type_t branch_type){
+	switch(branch_type){
+		case BRANCH_A:
+			return "cbranch_a";
+		case BRANCH_AE:
+			return "cbranch_ae";
+		case BRANCH_B:
+			return "cbranch_b";
+		case BRANCH_BE:
+			return "cbranch_be";
+		case BRANCH_E:
+			return "cbranch_e";
+		case BRANCH_NE:
+			return "cbranch_ne";
+		case BRANCH_Z:
+			return "cbranch_z";
+		case BRANCH_NZ:
+			return "cbranch_nz";
+		case BRANCH_GE:
+			return "cbranch_ge";
+		case BRANCH_G:
+			return "cbranch_g";
+		case BRANCH_LE:
+			return "cbranch_le";
+		case BRANCH_L:
+			return "cbranch_l";
+		//SHould never get here
 		default:
-			return "jmp";
+			fprintf(stderr, "Fatal internal compiler error: Invalid branch type detected");
+			exit(1);
 	}
 }
 
@@ -1507,7 +1491,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_JUMP_STMT:
 			//Then print out the block label
-			fprintf(fl, "%s .L%d\n", jump_type_to_string(stmt->jump_type), ((basic_block_t*)(stmt->jumping_to_block))->block_id);
+			fprintf(fl, "jmp .L%d\n", ((basic_block_t*)(stmt->if_block))->block_id);
+			break;
+
+		//Branch statements represent the ends of blocks
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			fprintf(fl, "%s .L%d else .L%d\n", branch_type_to_string(stmt->branch_type), ((basic_block_t*)(stmt->if_block))->block_id, ((basic_block_t*)(stmt->else_block))->block_id);
 			break;
 
 		case THREE_ADDR_CODE_FUNC_CALL:
@@ -1523,7 +1512,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "call %s(", stmt->called_function->func_name.string);
 
 			//Grab this out
-			func_params = stmt->function_parameters;
+			func_params = stmt->parameters;
 
 			//Now we can go through and print out all of our parameters here
 			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
@@ -1561,7 +1550,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "(");
 
 			//Grab this out
-			func_params = stmt->function_parameters;
+			func_params = stmt->parameters;
 
 			//Now we can go through and print out all of our parameters here
 			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
@@ -1689,7 +1678,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- PHI(");
 
 			//For convenience
-			dynamic_array_t* phi_func_params = stmt->phi_function_parameters;
+			dynamic_array_t* phi_func_params = stmt->parameters;
 
 			//Now run through all of the parameters
 			for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
@@ -1709,7 +1698,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 
 			//Print out the jump block ID
-			fprintf(fl, " <- .JT%d + ", ((jump_table_t*)(stmt->jumping_to_block))->jump_table_id);
+			fprintf(fl, " <- .JT%d + ", ((jump_table_t*)(stmt->if_block))->jump_table_id);
 			
 			//Now print out the variable
 			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
@@ -1720,7 +1709,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 			//Indirection
-			fprintf(fl, "%s *", jump_type_to_string(stmt->jump_type));
+			fprintf(fl, "jmp *");
 
 			//Now the variable
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
@@ -2807,7 +2796,7 @@ static void print_xor_instruction(FILE* fl, instruction_t* instruction, variable
  */
 void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//This will be null often, but if we need it it'll be here
-	basic_block_t* jumping_to_block = instruction->jumping_to_block;
+	basic_block_t* jumping_to_block = instruction->if_block;
 
 	//Switch based on what type we have
 	switch (instruction->instruction_type) {
@@ -3119,7 +3108,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "jmp *");
 
 			//Grab this out for convenience
-			jump_table_t* jumping_to_block = instruction->jumping_to_block;
+			jump_table_t* jumping_to_block = instruction->if_block;
 
 			//We first print out the jumping to block
 			fprintf(fl, ".JT%d(,", jumping_to_block->jump_table_id);
@@ -3140,7 +3129,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, " <- PHI(");
 
 			//For convenience
-			dynamic_array_t* phi_func_params = instruction->phi_function_parameters;
+			dynamic_array_t* phi_func_params = instruction->parameters;
 
 			//Now run through all of the parameters
 			for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
@@ -3436,11 +3425,6 @@ instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, thr
 	//What function are we in
 	stmt->function = current_function;
 
-	//If the operator is a || or && operator, then this statement is eligible for short circuiting
-	if(op == DOUBLE_AND || op == DOUBLE_OR){
-		stmt->is_short_circuit_eligible = TRUE;
-	}
-
 	//Give back the newly allocated statement
 	return stmt;
 }
@@ -3482,137 +3466,6 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 	//What function are we in
 	stmt->function = current_function;
 	//And that's it, we'll just leave our now
-	return stmt;
-}
-
-
-/**
- * Emit a conditional assignment instruction
- */
-instruction_t* emit_conditional_assignment_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t prior_operator, u_int8_t is_signed, u_int8_t inverse_assignment){
-	//First we'll allocate the instruction
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Now define the class
-	stmt->statement_type = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
-
-	//Now we'll populate with values
-	stmt->assignee = assignee;
-	stmt->op1 = op1;
-
-	//What function are we in
-	stmt->function = current_function;
-
-	//Now let's see what kind of conditional move we have
-	if(inverse_assignment == FALSE){
-		switch(prior_operator){
-			case G_THAN:
-				if(is_signed == TRUE){
-					stmt->move_type = CONDITIONAL_MOVE_G;
-				} else {
-					stmt->move_type = CONDITIONAL_MOVE_A;
-				}
-
-				break;
-
-			case L_THAN:
-				if(is_signed == TRUE){
-					stmt->move_type = CONDITIONAL_MOVE_L;
-				} else {
-					stmt->move_type = CONDITIONAL_MOVE_B;
-				}
-
-				break;
-			case G_THAN_OR_EQ:
-				if(is_signed == TRUE){
-					stmt->move_type = CONDITIONAL_MOVE_GE;
-				} else {
-					stmt->move_type = CONDITIONAL_MOVE_AE;
-				}
-
-				break;
-
-			case L_THAN_OR_EQ:
-				if(is_signed == TRUE){
-					stmt->move_type = CONDITIONAL_MOVE_LE;
-				} else {
-					stmt->move_type = CONDITIONAL_MOVE_BE;
-				}
-
-				break;
-
-			case NOT_EQUALS:
-				//Move if not zero
-				stmt->move_type = CONDITIONAL_MOVE_NE;
-				break;		
-
-			case DOUBLE_EQUALS:
-				//Move if equal
-				stmt->move_type = CONDITIONAL_MOVE_E;
-				break;		
-
-			//By default it's just a not zero move
-			default:
-				stmt->move_type = CONDITIONAL_MOVE_NZ;
-				break;
-		}
-	
-	//Otherwise we're in so called "inverse" mode, where we do everything in reverse
-	} else {
-		switch(prior_operator){
-			case G_THAN:
-				if(is_signed == TRUE){
-					stmt->move_type = CONDITIONAL_MOVE_LE;
-				} else {
-					stmt->move_type = CONDITIONAL_MOVE_BE;
-				}
-
-				break;
-
-			case L_THAN:
-				if(is_signed == TRUE){
-					stmt->move_type = CONDITIONAL_MOVE_GE;
-				} else {
-					stmt->move_type = CONDITIONAL_MOVE_AE;
-				}
-
-				break;
-			case G_THAN_OR_EQ:
-				if(is_signed == TRUE){
-					stmt->move_type = CONDITIONAL_MOVE_L;
-				} else {
-					stmt->move_type = CONDITIONAL_MOVE_B;
-				}
-
-				break;
-
-			case L_THAN_OR_EQ:
-				if(is_signed == TRUE){
-					stmt->move_type = CONDITIONAL_MOVE_G;
-				} else {
-					stmt->move_type = CONDITIONAL_MOVE_A;
-				}
-
-				break;
-
-			case NOT_EQUALS:
-				//Move if not zero
-				stmt->move_type = CONDITIONAL_MOVE_E;
-				break;		
-
-			case DOUBLE_EQUALS:
-				//Move if equal
-				stmt->move_type = CONDITIONAL_MOVE_NE;
-				break;		
-
-			//By default it's just a not zero move
-			default:
-				stmt->move_type = CONDITIONAL_MOVE_Z;
-				break;
-		}
-	}
-	
-	//Give back the statement
 	return stmt;
 }
 
@@ -3796,14 +3649,13 @@ instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_c
 /**
  * Emit a jump statement where we jump to the block with the ID provided
  */
-instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_type){
+instruction_t* emit_jmp_instruction(void* jumping_to_block){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_JUMP_STMT;
-	stmt->jumping_to_block = jumping_to_block;
-	stmt->jump_type = jump_type;
+	stmt->if_block = jumping_to_block;
 	//What function are we in
 	stmt->function = current_function;
 	//Give the statement back
@@ -3812,23 +3664,45 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block, jump_type_t jump_typ
 
 
 /**
- * Emit a purposefully incomplete jump statement that does NOT have its block attacted yet.
- * These statements are intended for when we create user-defined jumps
+ * Emit a jump instruction directly
  */
-instruction_t* emit_incomplete_jmp_instruction(three_addr_var_t* relies_on, jump_type_t jump_type){
+instruction_t* emit_jump_instruction_directly(void* jumping_to_block, instruction_type_t jump_instruction_type){
+	//Allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Directly assign here
+	instruction->instruction_type = jump_instruction_type;
+
+	//Point to the jumping to block
+	instruction->if_block = jumping_to_block;
+
+	return instruction;
+}
+
+
+/**
+ * Emit a branch statement
+ */
+instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Let's now populate it with values
-	stmt->statement_type = THREE_ADDR_CODE_JUMP_STMT;
-	stmt->jump_type = jump_type;
+	stmt->statement_type = THREE_ADDR_CODE_BRANCH_STMT;
+	
+	//If and else block storage
+	stmt->if_block = if_block;
+	stmt->else_block = else_block;
 
-	//Store the variable that this relies on. This will be NULL for direct jumps,
-	//and occupied for conditional jumps
+	//Branch type
+	stmt->branch_type = branch_type;
+
+	//And we'll store the variable that we're making a decision based on here
 	stmt->op1 = relies_on;
 
 	//What function are we in
 	stmt->function = current_function;
+
 	//Give the statement back
 	return stmt;
 }
@@ -3837,7 +3711,7 @@ instruction_t* emit_incomplete_jmp_instruction(three_addr_var_t* relies_on, jump
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
  */
-instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_type_t jump_type){
+instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -3845,7 +3719,6 @@ instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address, jump_typ
 	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
 	//The address we're jumping to is in op1
 	stmt->op1 = address;
-	stmt->jump_type = jump_type;
 	//What function we're in
 	stmt->function = current_function;
 	//And give it back
@@ -4104,14 +3977,14 @@ instruction_t* copy_instruction(instruction_t* copied){
 	//function calls
 	
 	//Null these out, better safe than sorry
-	copy->phi_function_parameters = NULL;
+	copy->parameters = NULL;
 	copy->inlined_assembly = copied->inlined_assembly;
 	copy->next_statement = NULL;
 	copy->previous_statement = NULL;
 	
 	//If we have function call parameters, emit a copy of them
-	if(copied->function_parameters != NULL){
-		copy->function_parameters = clone_dynamic_array(copied->function_parameters);
+	if(copied->parameters != NULL){
+		copy->parameters = clone_dynamic_array(copied->parameters);
 	}
 
 	//Give back the copied one
@@ -4174,104 +4047,103 @@ three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_cons
 
 
 /**
- * Select the appropriate jump type to use. We can either use
- * inverse jumps or direct jumps
+ * select the appropriate branch statement given the circumstances, including operand and signedness
  */
-jump_type_t select_appropriate_jump_stmt(ollie_token_t op, jump_category_t jump_type, u_int8_t is_signed){
+branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_category_t branch_type, u_int8_t is_signed){
 	//Let's see what we have here
 	switch(op){
 		case G_THAN:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
 				if(is_signed == TRUE){
 					//Signed version
-					return JUMP_TYPE_JLE;
+					return BRANCH_LE;
 				} else {
 					//Unsigned version
-					return JUMP_TYPE_JBE;
+					return BRANCH_BE;
 				}
 			} else {
 				if(is_signed == TRUE){
 					//Signed version
-					return JUMP_TYPE_JG;
+					return BRANCH_G;
 				} else {
 					//Unsigned version
-					return JUMP_TYPE_JA;
+					return BRANCH_A;
 				}
 			}
 		case L_THAN:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
 				if(is_signed == TRUE){
 					//Signed version
-					return JUMP_TYPE_JGE;
+					return BRANCH_GE;
 				} else {
 					//Unsigned version
-					return JUMP_TYPE_JAE;
+					return BRANCH_AE;
 				}
 			} else {
 				if(is_signed == TRUE){
 					//Signed version
-					return JUMP_TYPE_JL;
+					return BRANCH_L;
 				} else {
 					//Unsigned version
-					return JUMP_TYPE_JB;
+					return BRANCH_B;
 				}
 			}
 		case L_THAN_OR_EQ:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
 				if(is_signed == TRUE){
 					//Signed version
-					return JUMP_TYPE_JG;
+					return BRANCH_G;
 				} else {
 					//Unsigned version
-					return JUMP_TYPE_JA;
+					return BRANCH_A;
 				}
 			} else {
 				if(is_signed == TRUE){
 					//Signed version
-					return JUMP_TYPE_JLE;
+					return BRANCH_LE;
 				} else {
 					//Unsigned version
-					return JUMP_TYPE_JBE;
+					return BRANCH_BE;
 				}
 			}
 		case G_THAN_OR_EQ:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
 				if(is_signed == TRUE){
 					//Signed version
-					return JUMP_TYPE_JL;
+					return BRANCH_L;
 				} else {
 					//Unsigned version
-					return JUMP_TYPE_JB;
+					return BRANCH_B;
 				}
 			} else {
 				if(is_signed == TRUE){
 					//Signed version
-					return JUMP_TYPE_JGE;
+					return BRANCH_GE;
 				} else {
 					//Unsigned version
-					return JUMP_TYPE_JAE;
+					return BRANCH_AE;
 				}
 			}
 		case DOUBLE_EQUALS:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JNE;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				return BRANCH_NE;
 			} else {
-				return JUMP_TYPE_JE;
+				return BRANCH_E;
 			}
 		case NOT_EQUALS:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JE;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				return BRANCH_E;
 			} else {
-				return JUMP_TYPE_JNE;
+				return BRANCH_NE;
 			}
 		//If we get here, it was some kind of
 		//non relational operator. In this case,
 		//we default to 0 = false non zero = true
 		default:
-			if(jump_type == JUMP_CATEGORY_INVERSE){
-				return JUMP_TYPE_JZ;
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				return BRANCH_Z;
 			} else {
-				return JUMP_TYPE_JNZ;
+				return BRANCH_NZ;
 			}
 	}
 }
@@ -4321,7 +4193,7 @@ instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_sig
 /**
  * Is the given register caller saved?
  */
-u_int8_t is_register_caller_saved(register_holder_t reg){
+u_int8_t is_register_caller_saved(general_purpose_register_t reg){
 	switch(reg){
 		case RDI:
 		case RSI:
@@ -4341,7 +4213,7 @@ u_int8_t is_register_caller_saved(register_holder_t reg){
 /**
  * Is the given register callee saved?
  */
-u_int8_t is_register_callee_saved(register_holder_t reg){
+u_int8_t is_register_callee_saved(general_purpose_register_t reg){
 	//This is all determined based on the register type
 	switch(reg){
 		case RBX:
@@ -4468,13 +4340,8 @@ void instruction_dealloc(instruction_t* stmt){
 	}
 
 	//If we have a phi function, deallocate the dynamic array
-	if(stmt->phi_function_parameters != NULL){
-		dynamic_array_dealloc(stmt->phi_function_parameters);
-	}
-
-	//If we have function parameters get rid of them
-	if(stmt->function_parameters != NULL){
-		dynamic_array_dealloc(stmt->function_parameters);
+	if(stmt->parameters != NULL){
+		dynamic_array_dealloc(stmt->parameters);
 	}
 	
 	//Free the overall stmt -- variables handled elsewhere

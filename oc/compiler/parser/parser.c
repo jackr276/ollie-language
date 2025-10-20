@@ -22,19 +22,7 @@
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/stack/lightstack.h"
-
-//For code clarity
-#define SUCCESS 1
-#define FAILURE 0
-
-#define TRUE 1
-#define FALSE 0
-
-//The max switch/case range is 1024
-#define MAX_SWITCH_RANGE 1024
-
-//All error sizes are 2000
-#define ERROR_SIZE 2000
+#include "../utils/constants.h"
 
 //Define a generic error array global variable
 char info[ERROR_SIZE];

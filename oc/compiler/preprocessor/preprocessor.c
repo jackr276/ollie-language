@@ -15,17 +15,11 @@
 #include "../lexer/lexer.h"
 //We'll make use of this too
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/constants.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <string.h>
-
-//Default error size
-#define DEFAULT_ERROR_SIZE 1000
-
-//For standardization across all modules
-#define TRUE 1
-#define FALSE 0
 
 /**
  * This dictates any errors that we print out
@@ -94,7 +88,7 @@ static dependency_tree_node_t* create_and_return_error_node(){
  */
 static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	//For any/all error printing
-	char info[DEFAULT_ERROR_SIZE];
+	char info[ERROR_SIZE];
 	//The parser line number -- largely unused in this module, but there is a chance
 	//that we'll need it for errors if for some reason we run into an error preprocessing
 	u_int16_t parser_line_num = 0;
