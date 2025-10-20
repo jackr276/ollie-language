@@ -725,6 +725,9 @@ static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, b
 
 /**
  * Construct the live ranges appropriate for a phi function
+ *
+ * Note that the phi function does not count as an actual assignment, we'll just want
+ * to ensure that the live range is ready for us when we need it
  */
 static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//Let's see if we can find this
@@ -732,9 +735,6 @@ static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basi
 
 	//Add this into the live range
 	add_variable_to_live_range(live_range, basic_block, instruction->assignee);
-
-	//This does count as an assignment
-	add_assigned_live_range(live_range, basic_block);
 }
 
 
