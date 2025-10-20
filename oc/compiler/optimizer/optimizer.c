@@ -1008,65 +1008,36 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 
 /**
- * Handle a compound or statement optimization
+ * Handle a logical or inverse branch statement optimization
  *
  * These statement will take what was once one block, and split it into 
  * 2 successive blocks
  *
  * .L2
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8
- * t5 <- t5 || t7
- * cbranch_nz .L12 else .L13
- *
+ * t5 <- 0
+ * t6 <- b_1
+ * t7 <- t6 != t5
+ * t8 <- 33
+ * t9 <- a_1
+ * t10 <- t9 < t8
+ * t11 <- t7 || t10
+ * cbranch_z .L9 else .L13 <-- Notice how it goes to if on failure
  *
  * Turn this into:
  *
  * .L2:
- * t5 <- x_0
- * t6 <- 3
- * t5 <- t5 < t6 <---- if this is true, we leave(to if case)
- * cbranch_l .L13 else .L3
- *
- * .L3 <----- The *only* way we get here is if the first condition is false 
- * t7 <- x_0
- * t8 <- 1
- * t7 <- t7 != t8 <------- If this is true, jump to if
- * cbranch_ne .L12 else .L13
- *
- * ================= Or consider the inverse version =======================
- *
- * .L1
  * t5 <- 0
  * t6 <- b_1
- * t7 <- t6 != t5
+ * t7 <- t6 != t5 <--- If this does work, we know that t11 will *not* be zero, so jump to else
+ * cbranch_ne .L13 else .L3
+ *
+ * .L3: <----- We only get here if the first one is false
  * t8 <- 33
  * t9 <- a_1
  * t10 <- t9 < t8
- * t11 <- t7 || t10 <---- DeMorgan's Law: ~t7 && ~t10 is what the branch here is really after for the if condition
- * cbranch_z .L9 else .L13 <----- Notice how it's opposite
- *
- *
- * Turn this into:
- *
- * .L2
- * t5 <- 0
- * t6 <- b_1
- * t7 <- t6 != t5
- * cbranch_ne .L13 else .L3 <--if they're not equal, goto *else*
- *
- * .L3
- * t8 <- 33
- * t9 <- a_1
- * t10 <- t9 < t8
- * cbranch_ge .L9 else .L13
- * 
+ * cbranch_ge .L9 else .L13 <-- If this also fails, we've satisfied the initial condition
  */
-static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
@@ -1176,6 +1147,101 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 	//else 
 	// goto else_block
 	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
+}
+
+
+/**
+ * Handle a compound or statement optimization
+ *
+ * These statement will take what was once one block, and split it into 
+ * 2 successive blocks
+ *
+ * .L2
+ * t5 <- x_0
+ * t6 <- 3
+ * t5 <- t5 < t6
+ * t7 <- x_0
+ * t8 <- 1
+ * t7 <- t7 != t8
+ * t5 <- t5 || t7
+ * cbranch_nz .L12 else .L13
+ *
+ *
+ * Turn this into:
+ *
+ * .L2:
+ * t5 <- x_0
+ * t6 <- 3
+ * t5 <- t5 < t6 <---- if this is true, we leave(to if case)
+ * cbranch_l .L13 else .L3
+ *
+ * .L3 <----- The *only* way we get here is if the first condition is false 
+ * t7 <- x_0
+ * t8 <- 1
+ * t7 <- t7 != t8 <------- If this is true, jump to if
+ * cbranch_ne .L12 else .L13
+ */
+static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+	//Grab out the block that we're using
+	basic_block_t* original_block = short_circuit_statment->block_contained_in;
+	//The new block that we'll need for our second half
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	//VERY important that we copy this on over
+	second_half_block->function_defined_in = original_block->function_defined_in;
+
+	//Some bookkeeping - all of the original blocks successors should no longer point to it
+	for(u_int16_t i = 0; i < original_block->successors->current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(original_block->successors, i);
+
+		//Remove the successor/predecessor link
+		delete_successor(original_block, successor);
+	}
+
+	//Extract the op1, we'll need to traverse
+	three_addr_var_t* op1 = short_circuit_statment->op1;
+	three_addr_var_t* op2 = short_circuit_statment->op2;
+
+	//The cursor for our first half
+	instruction_t* first_half_cursor = short_circuit_statment->previous_statement;
+
+	//Trace our way up to where op1 was assigned
+	while(variables_equal(op1, first_half_cursor->assignee, FALSE) == FALSE){
+		//Keep advancing backward
+		first_half_cursor = first_half_cursor->previous_statement;
+	}
+
+	//The cursor for our second half
+	instruction_t* second_half_cursor = short_circuit_statment->previous_statement;
+
+	//Trace our way up to where op2 was assigned
+	while(variables_equal(op2, second_half_cursor->assignee, FALSE) == FALSE){
+		//Keep advancing backward
+		second_half_cursor = second_half_cursor->previous_statement;
+	}
+
+	//Now we've found where we need to effectively split the block into 2 pieces
+	//Everything after this op1 assignment needs to be removed from this block
+	//and put into the new block. The split starts at the first half cursor's *next statement*
+	bisect_block(second_half_block, first_half_cursor->next_statement);
+
+	/**
+	 * Now starting at the second half cursor's next statement, we'll *delete* everything
+	 * after it because we no longer need it
+	 */
+	instruction_t* delete_cursor = second_half_cursor->next_statement;
+	
+	//Delete until we run out
+	while(delete_cursor != NULL){
+		//Hold onto it
+		instruction_t* holder = delete_cursor;
+
+		//Move it along up
+		delete_cursor = delete_cursor->next_statement;
+
+		//Delete the holder. This is a full delete, this statement
+		//isn't ever coming back
+		delete_statement(holder);
+	}
 }
 
 
