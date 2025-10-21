@@ -2480,8 +2480,8 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		 */
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), expression_package.assignee);
 
-		//Add this in as a used variable
-		add_used_variable(basic_block, expression_package.assignee);
+		//Add this in as a used variable - make sure we're using the "current" block
+		add_used_variable(current, expression_package.assignee);
 
 		//Add it into the block
 		add_statement(current, assignment);
@@ -3853,16 +3853,11 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block);
 
-	//One final assignment
- 	instruction_t* assignment = emit_assignment_instruction(emit_temp_var(final_result->type), final_result);
-	add_used_variable(end_block, final_result);
-	add_statement(end_block, assignment);
-
 	//Add the final things in here
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
 	//The final assignee is the temp var that we assigned to
-	return_package.assignee =  assignment->assignee;
+	return_package.assignee =  final_result;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
 
