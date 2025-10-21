@@ -3896,8 +3896,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  We need to recognize opportunities for assignment folding. And ideal optimization would transform
 	 *  this into:
 	 *   
-	 *   t3 <- x_0
-	 *   t5 <- x_0 && t4 
+	 *   t5 <- x_0 && y_0
+	 *
+	 *   This rule will do the first part of that
 	 *
 	 *  We will seek to do that in this optimization
 	 *
