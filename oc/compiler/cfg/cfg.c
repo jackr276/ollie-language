@@ -3853,11 +3853,16 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block);
 
+	//One final assignment
+ 	instruction_t* assignment = emit_assignment_instruction(emit_temp_var(final_result->type), final_result);
+	add_used_variable(end_block, final_result);
+	add_statement(end_block, assignment);
+
 	//Add the final things in here
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
 	//The final assignee is the temp var that we assigned to
-	return_package.assignee =  final_result;
+	return_package.assignee =  assignment->assignee;
 	//Mark that we had a ternary here
 	return_package.operator = QUESTION;
 
