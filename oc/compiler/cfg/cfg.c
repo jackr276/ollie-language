@@ -2480,8 +2480,8 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		 */
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), expression_package.assignee);
 
-		//Add this in as a used variable
-		add_used_variable(basic_block, expression_package.assignee);
+		//Add this in as a used variable - make sure we're using the "current" block
+		add_used_variable(current, expression_package.assignee);
 
 		//Add it into the block
 		add_statement(current, assignment);
