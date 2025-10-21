@@ -343,7 +343,7 @@ u_int8_t is_operator_relational_operator(ollie_token_t op);
 /**
  * Helper function to determine if an operator is can be constant folded
  */
-u_int8_t is_operator_valid_for_constant_folding(ollie_token_t op);
+u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op);
 
 /**
  * Helper function to determine if an instruction is a binary operation

@@ -3887,20 +3887,29 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 
 	/**
-	 * ==================== Comparison expressions with unnecessary preceeding temp assignment ======================
-	 *	If we have something like this:
-	 *	t33 <- x_2;
-	 *	t34 <- t33 < 2
+	 * ==================== Op1 Assignment Folding for expressions ======================
+	 * If we have expressions like:
+	 *   t3 <- x_0
+	 *   t4 <- y_0
+	 *   t5 <- t3 && t4
 	 *
-	 * 	Because cmp instructions do not alter any register values, we're fine to ditch the preceeding assignment
-	 * 	and rewrite like this:
-	 * 	t34 <- x_2 < 2
+	 *  We need to recognize opportunities for assignment folding. And ideal optimization would transform
+	 *  this into:
+	 *   
+	 *   t3 <- x_0
+	 *   t5 <- x_0 && t4 
 	 *
+	 *  We will seek to do that in this optimization
+	 *
+	 *
+	 *  Note that this is just for op1 assignment folding. It is generall much more restrictive
+	 *  because so many operations overwrite their op1(think add, subtract), and those would therefore
+	 *  be *invalid* for this
 	 */
 	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
 	if(is_instruction_binary_operation(window->instruction2) == TRUE
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& is_operator_valid_for_constant_folding(window->instruction2->op) == TRUE){
+		&& is_operation_valid_for_op1_assignment_folding(window->instruction2->op) == TRUE){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
 		if(window->instruction1->assignee->is_temporary == TRUE 
