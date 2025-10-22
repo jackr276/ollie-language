@@ -16,6 +16,18 @@ fn test_function2(arg:i32) -> i32 {
 	ret x;
 }
 
+
+fn test_while(arg:i32) -> i32 {
+	let mut x:i32 = 55;
+
+	//Will trigger inverse
+	while(x && arg) {
+		x--;
+	}
+
+	ret x;
+}
+
 pub fn main(arg:i32, argv:char**) -> i32{
 	let mut x:u32 = 232;
 	
