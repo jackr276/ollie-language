@@ -3961,14 +3961,34 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Switch based on whatever operator that we have
 	switch(binary_operator){
+		//Because of the way that logical operator short circuiting works, we
+		//will require a temp assignment for op2 if we don't have one
+		case DOUBLE_OR:
+		case DOUBLE_AND:
+			//If this is not temporary, emit the temp assignment
+			if(op2->is_temporary == FALSE){
+				instruction_t* right_side_assignment = emit_assignment_instruction(emit_temp_var(op2->type), op2);
+
+				//Add to the block
+				add_statement(current_block, right_side_assignment);
+
+				//This counts as a use
+				add_used_variable(current_block, op2);
+
+				//Be sure to reassign what op2 is
+				op2 = right_side_assignment->assignee;
+			}
+
+			//Emit an assignee based on the inferred type
+			assignee = emit_temp_var(logical_or_expr->inferred_type);
+			break;
+
 		case L_THAN:
 		case G_THAN:
 		case G_THAN_OR_EQ:
 		case L_THAN_OR_EQ:
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
-		case DOUBLE_OR:
-		case DOUBLE_AND:
 			//Emit an assignee based on the inferred type
 			assignee = emit_temp_var(logical_or_expr->inferred_type);
 			break;

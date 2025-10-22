@@ -1396,7 +1396,11 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 				 * *not* delete this after we add our interference
 				 */
 				if(is_destination_also_operand(operation) == TRUE){
+					//This counts as interference
 					add_destination_interference(graph, live_now, operation->destination_register->associated_live_range);
+					//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any
+					//other way
+					add_live_now_live_range(operation->destination_register->associated_live_range, live_now);
 
 				/**
 				 * If the indirection level is more than 0, this means that we're moving into a memory
