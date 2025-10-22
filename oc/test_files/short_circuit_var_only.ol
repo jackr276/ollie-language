@@ -21,7 +21,7 @@ fn test_while_or(arg:i32) -> i32 {
 	let mut x:i32 = 55;
 
 	//Will trigger inverse
-	while(x && arg) {
+	while(x || arg) {
 		x--;
 	}
 
@@ -43,7 +43,7 @@ fn test_while_and(arg:i32) -> i32 {
 pub fn test_if_and(arg:i32) -> i32 {
 	let mut x:u32 = 232;
 
-	if(x || arg){
+	if(x && arg){
 		x = x - 3;
 	} else {
 	 	x = x + 3;
