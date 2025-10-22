@@ -17,12 +17,37 @@ fn test_function2(arg:i32) -> i32 {
 }
 
 
-fn test_while(arg:i32) -> i32 {
+fn test_while_or(arg:i32) -> i32 {
 	let mut x:i32 = 55;
 
 	//Will trigger inverse
 	while(x && arg) {
 		x--;
+	}
+
+	ret x;
+}
+
+
+fn test_while_and(arg:i32) -> i32 {
+	let mut x:i32 = 55;
+
+	//Will trigger inverse
+	while(x && arg) {
+		x--;
+	}
+
+	ret x;
+}
+
+pub fn test_if_and(arg:i32) -> i32 {
+	let mut x:u32 = 232;
+
+	if(x || arg){
+		x = x - 3;
+	} else {
+	 	x = x + 3;
+		ret x;
 	}
 
 	ret x;
