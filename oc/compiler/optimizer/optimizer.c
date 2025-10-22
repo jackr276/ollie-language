@@ -1120,12 +1120,30 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	//succeeds, so this is an *inverse* jump
 	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_NORMAL, first_half_signed);
 
+	//The conditional decider is by default the assignee
+	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
+
+	//This is possible - if it happens we need to emit test code
+	if(first_half_cursor->op == BLANK){
+		//This is now the first half's conditional decider
+		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
+
+		//Test instruction, we're just testing against ourselves here
+		instruction_t* test = emit_test_statement(first_branch_conditional_decider, first_half_cursor->assignee, first_half_cursor->assignee);
+
+		//Throw it into the block
+		add_statement(original_block, test);
+
+		//This now counts as a use
+		add_used_variable(original_block, first_half_cursor->assignee);
+	}
+
 	//Now we'll emit our branch at the very end of the first block. Remember it's:
 	//if condition works:
 	//	goto else
 	//else
 	//	goto second_half_block
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
+	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -1140,12 +1158,30 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	//Determine the appropriate inverse jump here
 	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
 
+	//The conditional decider is by default the assignee
+	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
+
+	//This is possible - if it happens we need to emit test code
+	if(second_half_cursor->op == BLANK){
+		//This is now the first half's conditional decider
+		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
+
+		//Test instruction, we're just testing against ourselves here
+		instruction_t* test = emit_test_statement(second_branch_conditional_decider, second_half_cursor->assignee, second_half_cursor->assignee);
+
+		//Throw it into the block
+		add_statement(second_half_block, test);
+
+		//This now counts as a use
+		add_used_variable(original_block, second_half_cursor->assignee);
+	}
+
 	//Now we'll emit our final branch at the end of the first block. Remember it's:
 	//if condition fails:
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_INVERSE);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE);
 }
 
 
