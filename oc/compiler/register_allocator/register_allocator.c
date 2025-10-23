@@ -1604,13 +1604,8 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 	switch(source->reg){
 		//If the source has no reg, this will work
 		case NO_REG:
-			if(destination->reg == NO_REG){
-				//No interference
-				return FALSE;
-			}
-
-			//Interference
-			return TRUE;
+			//No interference
+			return FALSE;
 		
 		//This means the source has a register already assigned
 		default:
