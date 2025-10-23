@@ -870,21 +870,6 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				current = current->next_statement;
 				continue;
 
-			/**
-			 * The trouble with RET is that if we count the source register
-			 * as a use, we will mess up the liveness calculation for the entire
-			 * function-level CFG because it will be considered LIVE_IN at the exit
-			 * block and therefore LIVE_OUT at all other blocks. Since we always
-			 * have an ending assignment this isn't necessary and we can leave out
-			 * counting this as a use
-			 */
-			//case RET:
-				//assign_live_range_to_ret_variable(live_ranges, basic_block, current->source_register);
-
-				//And we're done - no need to go further
-				//current = current->next_statement;
-				//continue;
-
 			//Call and indirect call have hidden parameters that need to be accounted for
 			case CALL:
 			case INDIRECT_CALL:
