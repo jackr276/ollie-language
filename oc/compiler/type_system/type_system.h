@@ -163,11 +163,6 @@ u_int8_t is_memory_region(generic_type_t* type);
 u_int8_t is_memory_address_type(generic_type_t* type);
 
 /**
- * Does assigning from source to destination require a converting move
- */
-u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_type_t* source_type);
-
-/**
  * Get the type that we need to align for. On structs, it's the largest
  * primitive member and on arrays, it's the member size
  */
