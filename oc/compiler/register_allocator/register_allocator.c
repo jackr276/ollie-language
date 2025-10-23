@@ -1071,7 +1071,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
  */
-static void pre_color(instruction_t* instruction){
+static void pre_color_instruction(instruction_t* instruction){
 	/**
 	 * The first thing will check for here is after-call function parameters. These
 	 * need to be allocated appropriately
@@ -1364,9 +1364,6 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 		//We will crawl our way up backwards through the CFG
 		instruction_t* operation = current->exit_statement;
 		while(operation != NULL){
-			//Hitch a ride on this traversal to do pre-coloring
-			pre_color(operation);
-
 			//If we have an exact copy operation, we can
 			//skip it as it won't create any interference
 			if(operation->instruction_type == PHI_FUNCTION){
@@ -1507,6 +1504,19 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 
 	//And finally give the graph back
 	return graph;
+}
+
+
+/**
+ * Crawl the entire CFG and pre-color all registers.
+ *
+ * If we encounter a case where 2 registers are attempting to be pre-colored
+ * with the same register, then we have a case where we must spill
+ *
+ * This function returns TRUE if pre-coloring worked, FALSE if not
+ */
+static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
+	return FALSE;
 }
 
 
@@ -2455,6 +2465,19 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 			print_blocks_with_live_ranges(cfg);
 			printf("============= After Live Range Determination ==============\n");
 		}
+
+
+		/**
+		 * STEP 5: Pre-coloring registers
+		 *
+		 * Now that we have the interference calculated, we will "pre-color" live ranges
+		 * whose color is known before allocation. This includes things like:
+		 * return values being in %rax, function parameter 1 being in %rdi, etc.
+		 *
+		 * This has the potential to cause spills
+		 */
+		pre_color(cfg, live_ranges);
+
 
 		/**
 		 * STEP 4: Live range coalescence optimization
