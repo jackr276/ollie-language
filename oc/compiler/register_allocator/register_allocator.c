@@ -1067,6 +1067,10 @@ static void calculate_liveness_sets(cfg_t* cfg){
 }
 
 
+
+
+
+
 /**
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
@@ -1275,7 +1279,6 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		//Grab the live range out
 		live_range_t* current = dynamic_array_get_at(live_ranges, i);
 
-		//We'll reset the register if it's not pre-colored
 		if(current->is_precolored == FALSE){
 			current->reg = NO_REG;
 		}
@@ -1554,7 +1557,7 @@ static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
  * that we're going to move into those exact registers long in advance, we need to keep the movements
  * for precoloring around
  */
-static u_int8_t does_precoloring_interference_exist(live_range_t* source, live_range_t* destination){
+static u_int8_t does_register_allocation_interference_exist(live_range_t* source, live_range_t* destination){
 	/**
 	 * Cases here:
 	 *
@@ -1656,7 +1659,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 			//	destination register is %rdi because it's a function parameter, we can't just change the register
 			//	it's in
 			if(do_live_ranges_interfere(graph, destination_live_range, source_live_range) == FALSE
-				&& does_precoloring_interference_exist(source_live_range, destination_live_range) == FALSE){
+				&& does_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
 
 				//DEBUG LOGS
 				if(debug_printing == TRUE){
