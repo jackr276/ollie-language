@@ -1516,7 +1516,31 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
  * This function returns TRUE if pre-coloring worked, FALSE if not
  */
 static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
-	return FALSE;
+	//By default assume that we can precolor it
+	u_int8_t could_be_precolored = TRUE;
+
+	//Grab a cursor to the head block
+	basic_block_t* cursor = cfg->head_block;
+
+	//Crawl the entire CFG
+	while(cursor != NULL){
+		//Grab a cursor to each statement
+		instruction_t* instruction_cursor = cursor->leader_statement;
+
+		//Crawl all statements in the block
+		while(instruction_cursor != NULL){
+			//Invoke the helper to pre-color it
+			pre_color_instruction(instruction_cursor);
+
+			//Push along to the next statement
+			instruction_cursor = instruction_cursor->next_statement;
+		}
+
+		//Push onto the next statement
+		cursor = cursor->direct_successor;
+	}
+
+	return could_be_precolored;
 }
 
 
@@ -2468,7 +2492,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 
 
 		/**
-		 * STEP 5: Pre-coloring registers
+		 * STEP 4: Pre-coloring registers
 		 *
 		 * Now that we have the interference calculated, we will "pre-color" live ranges
 		 * whose color is known before allocation. This includes things like:
@@ -2480,7 +2504,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 
 
 		/**
-		 * STEP 4: Live range coalescence optimization
+		 * STEP 5: Live range coalescence optimization
 		 *
 		 * One small optimization that we can make is to perform live-range coalescence
 		 * on our given live ranges. We are able to coalesce live ranges if they do
@@ -2502,7 +2526,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		}
 		
 		/**
-		 * STEP 5: Invoke the actual allocator
+		 * STEP 6: Invoke the actual allocator
 		 *
 		 * The allocator will attempt to color the graph. If the graph is not k-colorable, 
 		 * then the allocator will spill the least costly LR and return FALSE, and we will go through
