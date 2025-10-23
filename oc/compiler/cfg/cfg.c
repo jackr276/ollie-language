@@ -2474,25 +2474,14 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 			return_package.final_block = current;
 		}
 
-		/**
-		 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
-		 * the function is returning the type as promised, and not what is done through type coercion
-		 */
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), expression_package.assignee);
-
-		//Add this in as a used variable - make sure we're using the "current" block
-		add_used_variable(current, expression_package.assignee);
-
-		//Add it into the block
-		add_statement(current, assignment);
 		//The return variable is now what was assigned
-		return_variable	= assignment->assignee;
+		return_variable	= expression_package.assignee;
 	}
 
 	//We'll use the ret stmt feature here
 	instruction_t* ret_stmt = emit_ret_instruction(return_variable);
 
-	//This variable is now used
+	//This variable counts as a use
 	add_used_variable(current, return_variable);
 
 	//Mark this with whatever was passed through
