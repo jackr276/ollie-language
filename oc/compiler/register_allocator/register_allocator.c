@@ -1362,6 +1362,7 @@ static u_int8_t precolor_live_range(live_range_t* coloree, general_purpose_regis
 	//Does nothing for now
 	if(does_precoloring_interference_exist(coloree, reg) == TRUE){
 		printf("Interference detected\n");
+		//return FALSE;
 	}
 
 	//Assign the register over
@@ -1379,7 +1380,7 @@ static u_int8_t precolor_live_range(live_range_t* coloree, general_purpose_regis
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
  */
-static void precolor_instruction(instruction_t* instruction){
+static void precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, instruction_t* instruction){
 	/**
 	 * The first thing will check for here is after-call function parameters. These
 	 * need to be allocated appropriately
@@ -1566,7 +1567,7 @@ static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
 		while(instruction_cursor != NULL){
 			//TODO LINK INTO SPILLER
 			//Invoke the helper to pre-color it
-			precolor_instruction(instruction_cursor);
+			precolor_instruction(cfg, live_ranges, instruction_cursor);
 
 			//Push along to the next statement
 			instruction_cursor = instruction_cursor->next_statement;
@@ -1603,8 +1604,13 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 	switch(source->reg){
 		//If the source has no reg, this will work
 		case NO_REG:
-			//Not interference
-			return FALSE;
+			if(destination->reg == NO_REG){
+				//No interference
+				return FALSE;
+			}
+
+			//Interference
+			return TRUE;
 		
 		//This means the source has a register already assigned
 		default:
