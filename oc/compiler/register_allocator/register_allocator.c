@@ -725,6 +725,21 @@ static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, b
 
 
 /**
+ * Handle the live range that comes from the source of an instruction
+ */
+static void assign_live_range_to_ret_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
+	//Just leave if it's NULL
+	if(source_variable == NULL){
+		return;
+	}
+
+	//Let the helper deal with this
+	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, source_variable);
+
+}
+
+
+/**
  * Construct the live ranges appropriate for a phi function
  *
  * Note that the phi function does not count as an actual assignment, we'll just want
@@ -854,6 +869,21 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				//And we're done - no need to go further
 				current = current->next_statement;
 				continue;
+
+			/**
+			 * The trouble with RET is that if we count the source register
+			 * as a use, we will mess up the liveness calculation for the entire
+			 * function-level CFG because it will be considered LIVE_IN at the exit
+			 * block and therefore LIVE_OUT at all other blocks. Since we always
+			 * have an ending assignment this isn't necessary and we can leave out
+			 * counting this as a use
+			 */
+			//case RET:
+				//assign_live_range_to_ret_variable(live_ranges, basic_block, current->source_register);
+
+				//And we're done - no need to go further
+				//current = current->next_statement;
+				//continue;
 
 			//Call and indirect call have hidden parameters that need to be accounted for
 			case CALL:
