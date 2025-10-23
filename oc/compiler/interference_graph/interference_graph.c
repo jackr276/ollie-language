@@ -124,6 +124,16 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 		add_interference(graph, target, neighbor);
 	}
 
+	/**
+	 * If the target has no register, we will be taking the coalescee's register
+	 *
+	 * If the target has a register and the source has no/the same register, no
+	 * action is needed
+	 */
+	if(target->reg == NO_REG){
+		target->reg = coalescee->reg;
+	}
+
 	//We now add the spill cost of the one that was coalesced to the target
 	target->spill_cost += coalescee->spill_cost;
 }

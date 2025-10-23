@@ -1595,21 +1595,16 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 	 * Cases here:
 	 *
 	 * Case 1: Source has no reg, and destination has no reg -> TRUE
-	 * Case 2: Source has no reg, and destination has reg -> FALSE(we can't overwrite the destination)
-	 * Case 3: Source has reg, and destination has no reg -> TRUE
+	 * Case 2: Source has no reg, and destination has reg -> TRUE (take the destination register)
+	 * Case 3: Source has reg, and destination has no reg -> TRUE (take the source register)
 	 * Case 4: Source has reg, and destination has reg *and* source->reg == destination->reg -> TRUE
 	 * Case 5: Source has reg, and destination has reg *and* source->reg != destination->reg -> FALSE
 	 */
 	switch(source->reg){
-		//If the source is NO_REG, the destination must also be NO_REG
+		//If the source has no reg, this will work
 		case NO_REG:
-			if(destination->reg == NO_REG){
-				//No interference
-				return FALSE;
-			}
-
-			//Interference
-			return TRUE;
+			//Not interference
+			return FALSE;
 		
 		//This means the source has a register already assigned
 		default:
