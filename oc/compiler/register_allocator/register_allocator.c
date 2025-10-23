@@ -1649,7 +1649,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ran
 		//Now run through all of these
 		while(instruction != NULL){
 			//If it's not a pure copy *or* it's marked as non-combinable, just move along
-			if(is_instruction_pure_copy(instruction) == FALSE 
+			if(is_instruction_pure_copy(instruction) == FALSE
 				|| instruction->cannot_be_combined == TRUE){
 				instruction = instruction->next_statement;
 				continue;
