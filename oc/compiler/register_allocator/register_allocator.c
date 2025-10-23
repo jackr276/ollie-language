@@ -1067,8 +1067,30 @@ static void calculate_liveness_sets(cfg_t* cfg){
 }
 
 
+/**
+ * Does precoloring interference exist?
+ *
+ * Precoloring interference exists if:
+ *  An LR wants to be colored with Register R
+ *  But one of it's neighbors *is already* colored with Register R
+ *
+ * Takes in the register that we want to color(coloree) and the register we want to color it with
+ */
+static void does_precoloring_interference_exist(live_range_t* coloree, general_purpose_register_t reg){
+	//Extract for convenience
+	dynamic_array_t* neighbors = coloree->neighbors;
 
+	//Run through all of the neighbors
+	for(u_int16_t i = 0; i < neighbors->current_index; i++){
+		//Grab the given neighbor out
+		live_range_t* neighbor = dynamic_array_get_at(neighbors, i);
 
+		if(neighbor->reg == reg){
+			printf("FOUND PRECOLORING INTERFERENCE BETWEEN: LR%d and LR%d", coloree->live_range_id, neighbor->live_range_id);
+		}
+
+	}
+}
 
 
 /**
