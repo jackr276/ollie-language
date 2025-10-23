@@ -27,6 +27,7 @@ const general_purpose_register_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8
 
 //Avoid need to rearrange
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges);
+static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range);
 
 //Just hold the stack pointer live range
 static live_range_t* stack_pointer_lr;
@@ -1316,7 +1317,7 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
  *
  * Takes in the register that we want to color(coloree) and the register we want to color it with
  */
-static void does_precoloring_interference_exist(live_range_t* coloree, general_purpose_register_t reg){
+static u_int8_t does_precoloring_interference_exist(live_range_t* coloree, general_purpose_register_t reg){
 	//Extract for convenience
 	dynamic_array_t* neighbors = coloree->neighbors;
 
@@ -1325,19 +1326,45 @@ static void does_precoloring_interference_exist(live_range_t* coloree, general_p
 		//Grab the given neighbor out
 		live_range_t* neighbor = dynamic_array_get_at(neighbors, i);
 
+		//This collision means we do have interference
 		if(neighbor->reg == reg){
-			printf("FOUND PRECOLORING INTERFERENCE BETWEEN: LR%d and LR%d", coloree->live_range_id, neighbor->live_range_id);
+			printf("FOUND PRECOLORING INTERFERENCE BETWEEN: LR%d and LR%d\n", coloree->live_range_id, neighbor->live_range_id);
+			return TRUE;
 		}
 
 	}
+
+	//If we get here then no
+	return FALSE;
 }
+
+
+/**
+ * Perform the precoloring. Return TRUE if we can precolor, FALSE if we cannot and had to spill
+ */
+static u_int8_t precolor_live_range(live_range_t* coloree, general_purpose_register_t reg){
+	//TODO FIXME
+	//Does nothing for now
+	if(does_precoloring_interference_exist(coloree, reg) == TRUE){
+		printf("Interference detected\n");
+	}
+
+	//Assign the register over
+	coloree->reg = reg;
+
+	//And mark that it's pre-colored
+	coloree->is_precolored = TRUE;
+
+	return TRUE;
+}
+
 
 
 /**
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
  */
-static void pre_color_instruction(instruction_t* instruction){
+static void precolor_instruction(instruction_t* instruction){
 	/**
 	 * The first thing will check for here is after-call function parameters. These
 	 * need to be allocated appropriately
@@ -1346,41 +1373,36 @@ static void pre_color_instruction(instruction_t* instruction){
 	//One thing to check for - function parameter passing
 	if(instruction->destination_register != NULL && instruction->destination_register->linked_var != NULL
 		&& instruction->destination_register->linked_var->function_parameter_order > 0){
-		//Allocate accordingly
-		instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->linked_var->function_parameter_order - 1];
-		instruction->destination_register->associated_live_range->is_precolored = TRUE;
+		//Let the helper deal with it
+		precolor_live_range(instruction->destination_register->associated_live_range, parameter_registers[instruction->destination_register->linked_var->function_parameter_order - 1]);
 	}
 
 	//One thing to check for - function parameter passing
 	if(instruction->source_register != NULL && instruction->source_register->linked_var != NULL
 		&& instruction->source_register->linked_var->function_parameter_order > 0){
-		//Allocate accordingly
-		instruction->source_register->associated_live_range->reg = parameter_registers[instruction->source_register->linked_var->function_parameter_order - 1];
-		instruction->source_register->associated_live_range->is_precolored = TRUE;
+		//Let the helper deal with it
+		precolor_live_range(instruction->source_register->associated_live_range, parameter_registers[instruction->source_register->linked_var->function_parameter_order - 1]);
 	}
 
 	//Check source 2 as well
 	if(instruction->source_register2 != NULL && instruction->source_register2->linked_var != NULL
 		&& instruction->source_register2->linked_var->function_parameter_order > 0){
-		//Allocate accordingly
-		instruction->source_register2->associated_live_range->reg = parameter_registers[instruction->source_register2->linked_var->function_parameter_order - 1];
-		instruction->source_register2->associated_live_range->is_precolored = TRUE;
+		//Let the helper deal with it
+		precolor_live_range(instruction->source_register2->associated_live_range, parameter_registers[instruction->source_register2->linked_var->function_parameter_order - 1]);
 	}
 
 	//Check address calc 1 as well
 	if(instruction->address_calc_reg1 != NULL && instruction->address_calc_reg1->linked_var != NULL
 		&& instruction->address_calc_reg1->linked_var->function_parameter_order > 0){
-		//Allocate accordingly
-		instruction->address_calc_reg1->associated_live_range->reg = parameter_registers[instruction->address_calc_reg1->linked_var->function_parameter_order - 1];
-		instruction->address_calc_reg1->associated_live_range->is_precolored = TRUE;
+		//Let the helper deal with it
+		precolor_live_range(instruction->address_calc_reg1->associated_live_range, parameter_registers[instruction->address_calc_reg1->linked_var->function_parameter_order - 1]);
 	}
 
 	//Check address calc 2 as well
 	if(instruction->address_calc_reg2 != NULL && instruction->address_calc_reg2->linked_var != NULL
 		&& instruction->address_calc_reg2->linked_var->function_parameter_order > 0){
-		//Allocate accordingly
-		instruction->address_calc_reg2->associated_live_range->reg = parameter_registers[instruction->address_calc_reg2->linked_var->function_parameter_order - 1];
-		instruction->address_calc_reg2->associated_live_range->is_precolored = TRUE;
+		//Let the helper deal with it
+		precolor_live_range(instruction->address_calc_reg2->associated_live_range, parameter_registers[instruction->address_calc_reg2->linked_var->function_parameter_order - 1]);
 	}
 
 	//Pre-color based on what kind of instruction it is
@@ -1554,8 +1576,9 @@ static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
 
 		//Crawl all statements in the block
 		while(instruction_cursor != NULL){
+			//TODO LINK INTO SPILLER
 			//Invoke the helper to pre-color it
-			pre_color_instruction(instruction_cursor);
+			precolor_instruction(instruction_cursor);
 
 			//Push along to the next statement
 			instruction_cursor = instruction_cursor->next_statement;
