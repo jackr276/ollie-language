@@ -1413,23 +1413,8 @@ static void precolor_instruction(instruction_t* instruction){
 		case RET:
 			//If it has one, assign it
 			if(instruction->source_register != NULL){
-				instruction->source_register->associated_live_range->reg = RAX;
-				instruction->source_register->associated_live_range->is_precolored = TRUE;
+				precolor_live_range(instruction->source_register->associated_live_range, RAX);
 			}
-			break;
-		case MOVB:
-		case MOVL:
-		case MOVQ:
-		case MOVW:
-		case MOVSX:
-		case MOVZX:
-			//Let's check for any kind of parameter passing here
-			if(instruction->destination_register->parameter_number > 0){
-				instruction->destination_register->associated_live_range->reg = parameter_registers[instruction->destination_register->parameter_number - 1];
-				instruction->destination_register->associated_live_range->carries_function_param = TRUE;
-				instruction->destination_register->associated_live_range->is_precolored = TRUE;
-			}
-
 			break;
 
 		case MULB:
@@ -1437,12 +1422,10 @@ static void precolor_instruction(instruction_t* instruction){
 		case MULL:
 		case MULQ:
 			//When we do an unsigned multiplication, the implicit source register must be in RAX
-			instruction->source_register2->associated_live_range->reg = RAX;
-			instruction->source_register2->associated_live_range->is_precolored = TRUE; 
+			precolor_live_range(instruction->source_register2->associated_live_range, RAX);
 
-			//The destination must be in RAX here
-			instruction->destination_register->associated_live_range->reg = RAX;
-			instruction->destination_register->associated_live_range->is_precolored = TRUE;
+			//The destination must also be in RAX here
+			precolor_live_range(instruction->destination_register->associated_live_range, RAX);
 			break;
 
 		/**
@@ -1467,10 +1450,8 @@ static void precolor_instruction(instruction_t* instruction){
 		case SHRQ:
 			//Do we have a register source?
 			if(instruction->source_register != NULL){
-				//Pre-color to RCX
-				instruction->source_register->associated_live_range->reg = RCX;
-				//Mark that it is precolored
-				instruction->source_register->associated_live_range->is_precolored = TRUE;
+				//Due to a quirk in old x86, shift instructions must have their source in RCX
+				precolor_live_range(instruction->source_register->associated_live_range, RCX);
 			}
 		
 			break;
@@ -1479,14 +1460,13 @@ static void precolor_instruction(instruction_t* instruction){
 		case CLTD:
 		case CWTL:
 		case CBTW:
-			//This is always RAX
-			instruction->source_register->associated_live_range->reg = RAX;
-
+			//Source is always %RAX
+			precolor_live_range(instruction->source_register->associated_live_range, RAX);
 			//The results are always RDX and RAX 
 			//Lower order bits
-			instruction->destination_register->associated_live_range->reg = RAX;
+			precolor_live_range(instruction->destination_register->associated_live_range, RAX);
 			//Higher order bits
-			instruction->destination_register2->associated_live_range->reg = RDX;
+			precolor_live_range(instruction->destination_register2->associated_live_range, RDX);
 			break;
 
 		case DIVB:
@@ -1498,16 +1478,13 @@ static void precolor_instruction(instruction_t* instruction){
 		case IDIVL:
 		case IDIVQ:
 			//The source register for a division must be in RAX
-			instruction->source_register2->associated_live_range->reg = RAX;
-			instruction->source_register2->associated_live_range->is_precolored = TRUE;
+			precolor_live_range(instruction->source_register2->associated_live_range, RAX);
 
 			//The first destination register is the quotient, and is in RAX
-			instruction->destination_register->associated_live_range->reg = RAX;
-			instruction->destination_register->associated_live_range->is_precolored = TRUE;
+			precolor_live_range(instruction->destination_register->associated_live_range, RAX);
 
-			//The second destination register is the results, and is in RDX
-			instruction->destination_register2->associated_live_range->reg = RDX;
-			instruction->destination_register2->associated_live_range->is_precolored = TRUE;
+			//The second destination register is the remainder, and is in RDX
+			precolor_live_range(instruction->destination_register2->associated_live_range, RDX);
 			break;
 
 		//Function calls always return through rax
@@ -1515,8 +1492,7 @@ static void precolor_instruction(instruction_t* instruction){
 		case INDIRECT_CALL:
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
-				instruction->destination_register->associated_live_range->reg = RAX;
-				instruction->destination_register->associated_live_range->is_precolored = TRUE;
+				precolor_live_range(instruction->destination_register->associated_live_range, RAX);
 			}
 
 			/**
@@ -1537,11 +1513,8 @@ static void precolor_instruction(instruction_t* instruction){
 					//Now that we have it, we'll grab it's live range
  					live_range_t* param_live_range = param->associated_live_range;
 
-					//This is precolored
-					param_live_range->is_precolored = TRUE;
-
 					//And we'll use the function param list to precolor appropriately
-					param_live_range->reg = parameter_registers[i];
+					precolor_live_range(param_live_range, parameter_registers[i]);
 				}
 			}
 
