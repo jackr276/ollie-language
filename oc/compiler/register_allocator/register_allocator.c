@@ -483,6 +483,9 @@ static void add_assigned_live_range(live_range_t* live_range, basic_block_t* blo
 	if(dynamic_array_contains(block->assigned_variables, live_range) == NOT_FOUND){
 		dynamic_array_add(block->assigned_variables, live_range);
 	}
+
+	//This counts as an assigned live range - save for tracking
+	live_range->assigned_to = TRUE;
 }
 
 

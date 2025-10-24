@@ -158,6 +158,8 @@ struct live_range_t{
 	u_int8_t carries_function_param;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
+	//Is this live range ever assigned to?
+	u_int8_t assigned_to;
 	//What register is this live range in?
 	general_purpose_register_t reg; 
 	//The size of the variable in the live range
