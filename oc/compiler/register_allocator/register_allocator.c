@@ -183,7 +183,7 @@ static live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, bas
 	}
 
 	//Otherwise if we get here, we'll need to make it ourselves
-	live_range = live_range_alloc(block->function_defined_in, variable->type->type_size);
+	live_range = live_range_alloc(block->function_defined_in, get_type_size(variable->type));
 
 	//Add it into the live range
 	dynamic_array_add(live_ranges, live_range);
