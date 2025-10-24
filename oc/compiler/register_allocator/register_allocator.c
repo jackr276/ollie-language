@@ -1581,8 +1581,23 @@ static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
 }
 
 
-static u_int8_t does_neighbor_precoloring_interference_exist(){
+/**
+ * Does any neighbor of the target already use "reg"?
+ */
+static u_int8_t does_neighbor_precoloring_interference_exist(live_range_t* target, general_purpose_register_t reg){
+	//Run through all neighbors
+	for(u_int16_t i = 0; i < target->neighbors->current_index; i++){
+		//Extract this one out
+		live_range_t* neighbor = dynamic_array_get_at(target->neighbors, i);
 
+		//Counts as interference
+		if(neighbor->reg == reg){
+			return TRUE;
+		}
+	}
+
+	//By the time we get here it's a no
+	return FALSE;
 }
 
 
@@ -1613,16 +1628,24 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 	switch(source->reg){
 		//If the source has no reg, this will work
 		case NO_REG:
+			//If the destination has a register, we need
+			//to check if any *neighbors* of the source
+			//are colored the same. If they are, that would
+			//lead to interference
+			if(destination->reg != NO_REG){
+				//Whatever this is is our answer
+				return does_neighbor_precoloring_interference_exist(source, destination->reg);
+			}
+
 			//No interference
 			return FALSE;
 		
 		//This means the source has a register already assigned
 		default:
-			//We're fine overwriting the destination with the source if it has
-			//no reg
+			//Even if the destination has no register, it's neighbors 
+			//could. We'll use the helper to get our answer
 			if(destination->reg == NO_REG){
-				//No interference
-				return FALSE;
+				return does_neighbor_precoloring_interference_exist(destination, source->reg);
 			}
 
 			//If they're the exact same, then this is also fine
