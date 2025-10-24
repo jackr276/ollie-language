@@ -735,7 +735,6 @@ static void assign_live_range_to_ret_variable(dynamic_array_t* live_ranges, basi
 
 	//Let the helper deal with this
 	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, source_variable);
-
 }
 
 
@@ -848,6 +847,12 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				construct_phi_function_live_range(live_ranges, basic_block, current);
 			
 				//And we're done - no need to go further
+				current = current->next_statement;
+				continue;
+
+			case RET:
+				assign_live_range_to_ret_variable(live_ranges, basic_block, current->source_register);
+				
 				current = current->next_statement;
 				continue;
 
