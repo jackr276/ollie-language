@@ -148,6 +148,8 @@ struct live_range_t{
 	u_int32_t stack_offset;
 	//Store the id of the live range
 	u_int32_t live_range_id;
+	//Store the assignment count - used for stack pointer fixing
+	u_int16_t assignment_count;
 	//The degree of this live range
 	u_int16_t degree;
 	//The interference graph index of it
@@ -158,8 +160,6 @@ struct live_range_t{
 	u_int8_t carries_function_param;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
-	//Is this live range ever assigned to?
-	u_int8_t assigned_to;
 	//What register is this live range in?
 	general_purpose_register_t reg; 
 	//The size of the variable in the live range

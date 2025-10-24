@@ -1647,7 +1647,36 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 
 			//No interference
 			return FALSE;
-		
+
+		/**
+		 * Special case - if the source register is RSP, we need to ensure
+		 * that the destination that we're moving to is never assigned to
+		 *
+		 * If it is, that means that we'd be overwriting the stack pointer which
+		 * is a big issue
+		 */
+		case RSP:
+			//We *cannot* combine these two
+			if(destination->assigned_to == TRUE){
+				printf("HERE with LR%d\n", destination->live_range_id);
+				return TRUE;
+			}
+
+			//Even if the destination has no register, it's neighbors 
+			//could. We'll use the helper to get our answer
+			if(destination->reg == NO_REG){
+				return does_neighbor_precoloring_interference_exist(destination, source->reg);
+			}
+
+			//If they're the exact same, then this is also fine
+			if(destination->reg == source->reg){
+				//No interference
+				return FALSE;
+			}
+
+			//Otherwise we have interference
+			return TRUE;
+
 		//This means the source has a register already assigned
 		default:
 			//Even if the destination has no register, it's neighbors 
