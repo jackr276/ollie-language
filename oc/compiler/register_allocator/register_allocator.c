@@ -1100,9 +1100,12 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		//Grab the live range out
 		live_range_t* current = dynamic_array_get_at(live_ranges, i);
 
-		if(current->is_precolored == FALSE){
-			current->reg = NO_REG;
-		}
+		//Wipe out the register coloring
+		current->is_precolored = FALSE;
+		current->reg = NO_REG;
+
+		//Reset the assignment count
+		current->assignment_count = 0;
 
 		//And we'll also reset all of the neighbors
 		reset_dynamic_array(current->neighbors);
@@ -1161,9 +1164,6 @@ static void add_destination_interference(interference_graph_t* graph, dynamic_ar
  * because it hadn't been written to yet.
  */
 static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges){
-	//First thing that we'll do is reset all live ranges
-	reset_all_live_ranges(live_ranges);
-
 	//It starts off as null
 	interference_graph_t* graph = NULL;
 
@@ -1387,8 +1387,10 @@ static u_int8_t precolor_live_range(live_range_t* coloree, general_purpose_regis
 /**
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
+ *
+ * Returns TRUE if we could color, false if not
  */
-static void precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, instruction_t* instruction){
+static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, instruction_t* instruction){
 	/**
 	 * The first thing will check for here is after-call function parameters. These
 	 * need to be allocated appropriately
@@ -1548,6 +1550,9 @@ static void precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, instr
 		default:
 			break;
 	}
+
+	//TODO hardcoded for now
+	return TRUE;
 }
 
 
@@ -1575,7 +1580,7 @@ static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
 		while(instruction_cursor != NULL){
 			//TODO LINK INTO SPILLER
 			//Invoke the helper to pre-color it
-			precolor_instruction(cfg, live_ranges, instruction_cursor);
+			u_int8_t colorable = precolor_instruction(cfg, live_ranges, instruction_cursor);
 
 			//Push along to the next statement
 			instruction_cursor = instruction_cursor->next_statement;
@@ -2601,6 +2606,22 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 colorable = pre_color(cfg, live_ranges);
 
 		/**
+		 * If we were not able to color, we'll have spilled
+		 * a given live range and as such need to redo the entire
+		 * process
+		 */
+		if(colorable == FALSE){
+			//If we were not colorable, then we need to reset everything here
+			reset_all_live_ranges(live_ranges);
+			
+			//One more iteration
+			iterations++;
+
+			//Onto the next iteration
+			continue;
+		}
+
+		/**
 		 * STEP 5: Live range coalescence optimization
 		 *
 		 * One small optimization that we can make is to perform live-range coalescence
@@ -2630,6 +2651,11 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 * this whol process again
 		*/
 		colorable = graph_color_and_allocate(cfg, live_ranges);
+
+		//If we were not colorable, then we need to reset everything here
+		if(colorable == FALSE){
+			reset_all_live_ranges(live_ranges);
+		}
 
 		//One more iteration
 		iterations++;
