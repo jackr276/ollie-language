@@ -485,7 +485,7 @@ static void add_assigned_live_range(live_range_t* live_range, basic_block_t* blo
 	}
 
 	//This counts as an assigned live range - save for tracking
-	live_range->assigned_to = TRUE;
+	live_range->assignment_count++;
 }
 
 
@@ -1650,14 +1650,15 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 
 		/**
 		 * Special case - if the source register is RSP, we need to ensure
-		 * that the destination that we're moving to is never assigned to
+		 * that the destination that we're moving to is only ever
+		 * assigned to one(that would be the assignment between it and %rsp)
 		 *
 		 * If it is, that means that we'd be overwriting the stack pointer which
 		 * is a big issue
 		 */
 		case RSP:
 			//We *cannot* combine these two
-			if(destination->assigned_to == TRUE){
+			if(destination->assignment_count > 1){
 				printf("HERE with LR%d\n", destination->live_range_id);
 				return TRUE;
 			}
