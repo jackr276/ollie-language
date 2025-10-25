@@ -1404,8 +1404,7 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
  * Returns TRUE if we could color, false if not
  */
 static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, instruction_t* instruction){
-	//Holds the status after each color
-	u_int8_t status;
+	u_int8_t colorable;
 
 	/**
 	 * The first thing will check for here is after-call function parameters. These
@@ -1415,36 +1414,76 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 	//One thing to check for - function parameter passing
 	if(instruction->destination_register != NULL
 		&& instruction->destination_register->associated_live_range->function_parameter_order > 0){
+		//Extract the register
+		general_purpose_register_t reg = parameter_registers[instruction->destination_register->associated_live_range->function_parameter_order - 1];
+
 		//Let the helper deal with it
-		precolor_live_range(instruction->destination_register->associated_live_range, parameter_registers[instruction->destination_register->associated_live_range->function_parameter_order - 1]);
+		colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, reg);
+
+		//We had a spill - so we'll need to jump out immediately
+		if(colorable == FALSE){
+			return FALSE;
+		}
 	}
 
 	//One thing to check for - function parameter passing
 	if(instruction->source_register != NULL
 		&& instruction->source_register->associated_live_range->function_parameter_order > 0){
+		//Extract the register
+		general_purpose_register_t reg = parameter_registers[instruction->source_register->associated_live_range->function_parameter_order - 1];
+
 		//Let the helper deal with it
-		precolor_live_range(instruction->source_register->associated_live_range, parameter_registers[instruction->source_register->associated_live_range->function_parameter_order - 1]);
+		colorable = precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, reg);
+
+		//We had a spill - so we'll need to jump out immediately
+		if(colorable == FALSE){
+			return FALSE;
+		}
 	}
 
 	//Check source 2 as well
 	if(instruction->source_register2 != NULL
 		&& instruction->source_register2->associated_live_range->function_parameter_order > 0){
+		//Extract the register
+		general_purpose_register_t reg = parameter_registers[instruction->source_register2->associated_live_range->function_parameter_order - 1];
+
 		//Let the helper deal with it
-		precolor_live_range(instruction->source_register2->associated_live_range, parameter_registers[instruction->source_register2->associated_live_range->function_parameter_order - 1]);
+		colorable = precolor_live_range(cfg, live_ranges, instruction->source_register2->associated_live_range, reg);
+
+		//We had a spill - so we'll need to jump out immediately
+		if(colorable == FALSE){
+			return FALSE;
+		}
 	}
 
 	//Check address calc 1 as well
 	if(instruction->address_calc_reg1 != NULL
 		&& instruction->address_calc_reg1->associated_live_range->function_parameter_order > 0){
+		//Extract the register
+		general_purpose_register_t reg = parameter_registers[instruction->address_calc_reg1->associated_live_range->function_parameter_order - 1];
+
 		//Let the helper deal with it
-		precolor_live_range(instruction->address_calc_reg1->associated_live_range, parameter_registers[instruction->address_calc_reg1->associated_live_range->function_parameter_order - 1]);
+		colorable = precolor_live_range(cfg, live_ranges, instruction->address_calc_reg1->associated_live_range, reg);
+
+		//We had a spill - so we'll need to jump out immediately
+		if(colorable == FALSE){
+			return FALSE;
+		}
 	}
 
 	//Check address calc 2 as well
 	if(instruction->address_calc_reg2 != NULL
 		&& instruction->address_calc_reg2->associated_live_range->function_parameter_order > 0){
+		//Extract the register
+		general_purpose_register_t reg = parameter_registers[instruction->address_calc_reg2->associated_live_range->function_parameter_order - 1];
+		
 		//Let the helper deal with it
-		precolor_live_range(instruction->address_calc_reg2->associated_live_range, parameter_registers[instruction->address_calc_reg2->associated_live_range->function_parameter_order - 1]);
+		colorable = precolor_live_range(cfg, live_ranges, instruction->address_calc_reg2->associated_live_range, reg);
+
+		//We had a spill - so we'll need to jump out immediately
+		if(colorable == FALSE){
+			return FALSE;
+		}
 	}
 
 	//Pre-color based on what kind of instruction it is
@@ -1455,7 +1494,13 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		case RET:
 			//If it has one, assign it
 			if(instruction->source_register != NULL){
-				precolor_live_range(instruction->source_register->associated_live_range, RAX);
+				//Let the helper do it
+				colorable = precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, RAX);
+
+				//We had to spill here - jump out
+				if(colorable == FALSE){
+					return FALSE;
+				}
 			}
 			break;
 
@@ -1464,10 +1509,21 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		case MULL:
 		case MULQ:
 			//When we do an unsigned multiplication, the implicit source register must be in RAX
-			precolor_live_range(instruction->source_register2->associated_live_range, RAX);
+			colorable = precolor_live_range(cfg, live_ranges, instruction->source_register2->associated_live_range, RAX);
+
+			//We had to spill here - jump out
+			if(colorable == FALSE){
+				return FALSE;
+			}
 
 			//The destination must also be in RAX here
-			precolor_live_range(instruction->destination_register->associated_live_range, RAX);
+			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+
+			//We had to spill here - jump out
+			if(colorable == FALSE){
+				return FALSE;
+			}
+
 			break;
 
 		/**
@@ -1567,7 +1623,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 			break;
 	}
 
-	//TODO hardcoded for now
+	//If we make it down here, then it worked
 	return TRUE;
 }
 
