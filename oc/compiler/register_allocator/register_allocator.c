@@ -528,6 +528,9 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 		live_range->function_parameter_order = variable->linked_var->function_parameter_order;
 	}
 
+	//Link this live range to the variable
+	variable->associated_live_range = live_range;
+
 	//Otherwise we'll add this in here
 	dynamic_array_add(live_range->variables, variable);
 
@@ -556,10 +559,6 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 		if(variable->linked_var != NULL && variable->linked_var->membership == FUNCTION_PARAMETER){
 			//Create it. Since this is a function parameter, we start at line 0
 			live_range = live_range_alloc(block->function_defined_in, variable->variable_size);
-			//Add it in
-			dynamic_array_add(live_range->variables, variable);
-			//Update the variable too
-			variable->associated_live_range = live_range;
 
 			//Finally add this into all of our live ranges
 			dynamic_array_add(live_ranges, live_range);
@@ -573,9 +572,6 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 
 	//We now add this variable back into the live range
 	add_variable_to_live_range(live_range, block, variable);
-
-	//Otherwise we just assign it
-	variable->associated_live_range = live_range;
 
 	//Update the spill cost
 	update_spill_cost(live_range, block, variable);
@@ -669,9 +665,6 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 	//Add this into the live range
 	add_variable_to_live_range(live_range, block, destination_register);
 
-	//Link the variable into this as well
-	destination_register->associated_live_range = live_range;
-
 	//There are a few things that could happen here in terms of a variable use:
 	//If this is the case, then we need to set this new LR as both used and assigned
 	if(is_destination_also_operand(instruction) == TRUE){
@@ -706,9 +699,6 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 
 	//Add this into the live range
 	add_variable_to_live_range(live_range, block, destination_register2);
-
-	//Link the variable into this as well
-	destination_register2->associated_live_range = live_range;
 
 	//This will *always* be a purely assigned live range
 	add_assigned_live_range(live_range, block);
@@ -1411,35 +1401,35 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 	if(instruction->destination_register != NULL
 		&& instruction->destination_register->associated_live_range->function_parameter_order > 0){
 		//Let the helper deal with it
-		precolor_live_range(instruction->destination_register->associated_live_range, parameter_registers[instruction->destination_register->linked_var->function_parameter_order - 1]);
+		precolor_live_range(instruction->destination_register->associated_live_range, parameter_registers[instruction->destination_register->associated_live_range->function_parameter_order - 1]);
 	}
 
 	//One thing to check for - function parameter passing
-	if(instruction->source_register != NULL && instruction->source_register->linked_var != NULL
-		&& instruction->source_register->linked_var->function_parameter_order > 0){
+	if(instruction->source_register != NULL
+		&& instruction->source_register->associated_live_range->function_parameter_order > 0){
 		//Let the helper deal with it
-		precolor_live_range(instruction->source_register->associated_live_range, parameter_registers[instruction->source_register->linked_var->function_parameter_order - 1]);
+		precolor_live_range(instruction->source_register->associated_live_range, parameter_registers[instruction->source_register->associated_live_range->function_parameter_order - 1]);
 	}
 
 	//Check source 2 as well
-	if(instruction->source_register2 != NULL && instruction->source_register2->linked_var != NULL
-		&& instruction->source_register2->linked_var->function_parameter_order > 0){
+	if(instruction->source_register2 != NULL
+		&& instruction->source_register2->associated_live_range->function_parameter_order > 0){
 		//Let the helper deal with it
-		precolor_live_range(instruction->source_register2->associated_live_range, parameter_registers[instruction->source_register2->linked_var->function_parameter_order - 1]);
+		precolor_live_range(instruction->source_register2->associated_live_range, parameter_registers[instruction->source_register2->associated_live_range->function_parameter_order - 1]);
 	}
 
 	//Check address calc 1 as well
-	if(instruction->address_calc_reg1 != NULL && instruction->address_calc_reg1->linked_var != NULL
-		&& instruction->address_calc_reg1->linked_var->function_parameter_order > 0){
+	if(instruction->address_calc_reg1 != NULL
+		&& instruction->address_calc_reg1->associated_live_range->function_parameter_order > 0){
 		//Let the helper deal with it
-		precolor_live_range(instruction->address_calc_reg1->associated_live_range, parameter_registers[instruction->address_calc_reg1->linked_var->function_parameter_order - 1]);
+		precolor_live_range(instruction->address_calc_reg1->associated_live_range, parameter_registers[instruction->address_calc_reg1->associated_live_range->function_parameter_order - 1]);
 	}
 
 	//Check address calc 2 as well
-	if(instruction->address_calc_reg2 != NULL && instruction->address_calc_reg2->linked_var != NULL
-		&& instruction->address_calc_reg2->linked_var->function_parameter_order > 0){
+	if(instruction->address_calc_reg2 != NULL
+		&& instruction->address_calc_reg2->associated_live_range->function_parameter_order > 0){
 		//Let the helper deal with it
-		precolor_live_range(instruction->address_calc_reg2->associated_live_range, parameter_registers[instruction->address_calc_reg2->linked_var->function_parameter_order - 1]);
+		precolor_live_range(instruction->address_calc_reg2->associated_live_range, parameter_registers[instruction->address_calc_reg2->associated_live_range->function_parameter_order - 1]);
 	}
 
 	//Pre-color based on what kind of instruction it is
@@ -1675,7 +1665,6 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 		case RSP:
 			//We *cannot* combine these two
 			if(destination->assignment_count > 1){
-				printf("HERE with LR%d\n", destination->live_range_id);
 				return TRUE;
 			}
 
