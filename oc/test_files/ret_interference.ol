@@ -10,7 +10,7 @@ pub fn main() -> i32 {
 
 	do {
 		b = a + 3;
-		c = c + b;
+		c = a + b;
 
 	} while(a < 9);
 
