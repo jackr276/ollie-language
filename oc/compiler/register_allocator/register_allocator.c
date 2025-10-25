@@ -1340,8 +1340,11 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
  *  But one of it's neighbors *is already* colored with Register R
  *
  * Takes in the register that we want to color(coloree) and the register we want to color it with
+ *
+ * This function will return the value of the neighbor that we interfere with. This will be needed
+ * for spilling
  */
-static u_int8_t does_precoloring_interference_exist(live_range_t* coloree, general_purpose_register_t reg){
+static live_range_t* does_precoloring_interference_exist(live_range_t* coloree, general_purpose_register_t reg){
 	//Extract for convenience
 	dynamic_array_t* neighbors = coloree->neighbors;
 
@@ -1353,26 +1356,35 @@ static u_int8_t does_precoloring_interference_exist(live_range_t* coloree, gener
 		//This collision means we do have interference
 		if(neighbor->reg == reg){
 			printf("FOUND PRECOLORING INTERFERENCE BETWEEN: LR%d and LR%d\n", coloree->live_range_id, neighbor->live_range_id);
-			return TRUE;
+			return neighbor;
 		}
-
 	}
 
 	//If we get here then no
-	return FALSE;
+	return NULL;
 }
 
 
 /**
  * Perform the precoloring. Return TRUE if we can precolor, FALSE if we cannot and had to spill
  */
-static u_int8_t precolor_live_range(live_range_t* coloree, general_purpose_register_t reg){
-	//TODO FIXME
+static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* coloree, general_purpose_register_t reg){
+	//Returns NULL if there's no interference, the interferee if there is one
+	live_range_t* interferee = does_precoloring_interference_exist(coloree, reg);
+
 	//Does nothing for now
-	if(does_precoloring_interference_exist(coloree, reg) == TRUE){
-		printf("Interference detected\n");
-		//return FALSE;
+	if(interferee != NULL){
+		if(coloree->spill_cost > interferee->spill_cost){
+			spill(cfg, live_ranges, coloree);
+		} else {
+			spill(cfg, live_ranges, interferee);
+		}
+
+		//Whatever we spill the return value here is false
+		return FALSE;
 	}
+
+	//Otherwise it was NULL, so we're all set here
 
 	//Assign the register over
 	coloree->reg = reg;
@@ -1392,6 +1404,9 @@ static u_int8_t precolor_live_range(live_range_t* coloree, general_purpose_regis
  * Returns TRUE if we could color, false if not
  */
 static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, instruction_t* instruction){
+	//Holds the status after each color
+	u_int8_t status;
+
 	/**
 	 * The first thing will check for here is after-call function parameters. These
 	 * need to be allocated appropriately
