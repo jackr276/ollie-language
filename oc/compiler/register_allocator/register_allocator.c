@@ -1549,7 +1549,12 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 			//Do we have a register source?
 			if(instruction->source_register != NULL){
 				//Due to a quirk in old x86, shift instructions must have their source in RCX
-				precolor_live_range(instruction->source_register->associated_live_range, RCX);
+				colorable = precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, RCX);
+
+				//We had to spill here - jump out
+				if(colorable == FALSE){
+					return FALSE;
+				}
 			}
 		
 			break;
@@ -1559,12 +1564,30 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		case CWTL:
 		case CBTW:
 			//Source is always %RAX
-			precolor_live_range(instruction->source_register->associated_live_range, RAX);
+			colorable =  precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, RAX);
+
+			//We had to spill here - jump out
+			if(colorable == FALSE){
+				return FALSE;
+			}
+
 			//The results are always RDX and RAX 
 			//Lower order bits
-			precolor_live_range(instruction->destination_register->associated_live_range, RAX);
+			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+
+			//We had to spill here - jump out
+			if(colorable == FALSE){
+				return FALSE;
+			}
+
 			//Higher order bits
-			precolor_live_range(instruction->destination_register2->associated_live_range, RDX);
+			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register2->associated_live_range, RDX);
+
+			//We had to spill here - jump out
+			if(colorable == FALSE){
+				return FALSE;
+			}
+
 			break;
 
 		case DIVB:
@@ -1576,13 +1599,29 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		case IDIVL:
 		case IDIVQ:
 			//The source register for a division must be in RAX
-			precolor_live_range(instruction->source_register2->associated_live_range, RAX);
+			colorable = precolor_live_range(cfg, live_ranges, instruction->source_register2->associated_live_range, RAX);
+
+			//We had to spill here - jump out
+			if(colorable == FALSE){
+				return FALSE;
+			}
 
 			//The first destination register is the quotient, and is in RAX
-			precolor_live_range(instruction->destination_register->associated_live_range, RAX);
+			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+
+			//We had to spill here - jump out
+			if(colorable == FALSE){
+				return FALSE;
+			}
 
 			//The second destination register is the remainder, and is in RDX
-			precolor_live_range(instruction->destination_register2->associated_live_range, RDX);
+			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register2->associated_live_range, RDX);
+
+			//We had to spill here - jump out
+			if(colorable == FALSE){
+				return FALSE;
+			}
+
 			break;
 
 		//Function calls always return through rax
@@ -1590,7 +1629,12 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		case INDIRECT_CALL:
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
-				precolor_live_range(instruction->destination_register->associated_live_range, RAX);
+				colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+
+				//We had to spill here - jump out
+				if(colorable == FALSE){
+					return FALSE;
+				}
 			}
 
 			/**
@@ -1612,7 +1656,12 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
  					live_range_t* param_live_range = param->associated_live_range;
 
 					//And we'll use the function param list to precolor appropriately
-					precolor_live_range(param_live_range, parameter_registers[i]);
+					colorable = precolor_live_range(cfg, live_ranges, param_live_range, parameter_registers[i]);
+
+					//We had to spill here - jump out
+					if(colorable == FALSE){
+						return FALSE;
+					}
 				}
 			}
 
