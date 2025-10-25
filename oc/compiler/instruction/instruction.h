@@ -156,8 +156,8 @@ struct live_range_t{
 	u_int16_t interference_graph_index;
 	//Store the heuristic spill cost
 	int16_t spill_cost;
-	//Does this carry a function parameter?
-	u_int8_t carries_function_param;
+	//What is the function parameter order here?
+	u_int8_t function_parameter_order;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
 	//What register is this live range in?

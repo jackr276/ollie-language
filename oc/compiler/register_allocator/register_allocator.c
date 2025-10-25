@@ -523,6 +523,11 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 		return;
 	}
 
+	//Most of the time this will just be 0, but when it isn't we'll have it here
+	if(variable->linked_var != NULL){
+		live_range->function_parameter_order = variable->linked_var->function_parameter_order;
+	}
+
 	//Otherwise we'll add this in here
 	dynamic_array_add(live_range->variables, variable);
 
@@ -1100,12 +1105,18 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		//Grab the live range out
 		live_range_t* current = dynamic_array_get_at(live_ranges, i);
 
-		//Wipe out the register coloring
-		current->is_precolored = FALSE;
-		current->reg = NO_REG;
+		//Unless we have the stack or instruction pointer, wipe out the coloring
+		if(current != stack_pointer_lr && current != instruction_pointer_lr){
+			//Wipe out the register coloring
+			current->is_precolored = FALSE;
+			current->reg = NO_REG;
+		}
 
 		//Reset the assignment count
 		current->assignment_count = 0;
+
+		//Set the degree to be 0 as well
+		current->degree = 0;
 
 		//And we'll also reset all of the neighbors
 		reset_dynamic_array(current->neighbors);
@@ -1397,8 +1408,8 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 	 */
 
 	//One thing to check for - function parameter passing
-	if(instruction->destination_register != NULL && instruction->destination_register->linked_var != NULL
-		&& instruction->destination_register->linked_var->function_parameter_order > 0){
+	if(instruction->destination_register != NULL
+		&& instruction->destination_register->associated_live_range->function_parameter_order > 0){
 		//Let the helper deal with it
 		precolor_live_range(instruction->destination_register->associated_live_range, parameter_registers[instruction->destination_register->linked_var->function_parameter_order - 1]);
 	}
@@ -1580,7 +1591,7 @@ static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
 		while(instruction_cursor != NULL){
 			//TODO LINK INTO SPILLER
 			//Invoke the helper to pre-color it
-			u_int8_t colorable = precolor_instruction(cfg, live_ranges, instruction_cursor);
+			could_be_precolored = precolor_instruction(cfg, live_ranges, instruction_cursor);
 
 			//Push along to the next statement
 			instruction_cursor = instruction_cursor->next_statement;
