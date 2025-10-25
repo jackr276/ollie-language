@@ -112,16 +112,35 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 		new_var->associated_live_range = target;
 	}
 
-	//So long as this isn't empty
-	while(dynamic_array_is_empty(coalescee->neighbors) == FALSE){
-		//Grab the neighbor out
-		live_range_t* neighbor = dynamic_array_delete_from_back(coalescee->neighbors);
+	//Clone this because we will be messing with it
+	dynamic_array_t* clone = clone_dynamic_array(coalescee->neighbors);
 
-		//This neighbor no longer interferes with the coalescee
+	//Go through all neighbors of the coalescee
+	for(u_int16_t i = 0; i < clone->current_index; i++){
+		//Extract the neighbor out
+		live_range_t* neighbor = dynamic_array_get_at(clone, i);
+
+		//The neighbor and the coalescee no longer count
 		remove_interference(graph, neighbor, coalescee);
 
-		//But it does now interfere with the target
+		//The target and the neighbor are now interfering
 		add_interference(graph, target, neighbor);
+	}
+
+	/**
+	 * If the target has no register, we will be taking the coalescee's register
+	 *
+	 * If the target has a register and the source has no/the same register, no
+	 * action is needed
+	 */
+	if(target->reg == NO_REG){
+		target->reg = coalescee->reg;
+	}
+
+	//If the target already has no function parameter order,
+	//we can copy over the coalescee's
+	if(target->function_parameter_order == 0){
+		target->function_parameter_order = coalescee->function_parameter_order;
 	}
 
 	//We now add the spill cost of the one that was coalesced to the target
