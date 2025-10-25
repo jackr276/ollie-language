@@ -1355,8 +1355,8 @@ static live_range_t* does_precoloring_interference_exist(live_range_t* coloree, 
 
 		//This collision means we do have interference
 		if(neighbor->reg == reg){
-			printf("FOUND PRECOLORING INTERFERENCE BETWEEN: LR%d and LR%d\n", coloree->live_range_id, neighbor->live_range_id);
-			return neighbor;
+			//printf("FOUND PRECOLORING INTERFERENCE BETWEEN: LR%d and LR%d\n", coloree->live_range_id, neighbor->live_range_id);
+			return NULL;
 		}
 	}
 
@@ -1373,8 +1373,10 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
 	live_range_t* interferee = does_precoloring_interference_exist(coloree, reg);
 
 	//Does nothing for now
+	//This is turned off - until we have a better
+	//scheme for it
 	if(interferee != NULL){
-		if(coloree->spill_cost > interferee->spill_cost){
+		if(coloree->spill_cost < interferee->spill_cost){
 			spill(cfg, live_ranges, coloree);
 		} else {
 			spill(cfg, live_ranges, interferee);
@@ -1830,7 +1832,7 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
  * We coalesce source to destination. When we're done, the *source* should
  * survive, the destination should NOT
  */
-static void perform_live_range_coalescence(cfg_t* cfg, dynamic_array_t* live_ranges, interference_graph_t* graph, u_int8_t debug_printing){
+static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* graph, u_int8_t debug_printing){
 	//Run through every single block in here
 	basic_block_t* current = cfg->head_block;
 	while(current != NULL){
@@ -2774,7 +2776,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 * allow for even more coalescence. We will use this to our advantage
 		 * by letting this rule run every time
 		*/
-		perform_live_range_coalescence(cfg, live_ranges, graph, debug_printing);
+		perform_live_range_coalescence(cfg, graph, debug_printing);
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE && iterations == 0){
