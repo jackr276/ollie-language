@@ -1963,6 +1963,9 @@ static live_range_t* handle_use_spill(dynamic_array_t* live_ranges, three_addr_v
 	//Add this variable to this live range
 	add_variable_to_live_range(new_var->associated_live_range, block, new_var);
 
+	//Copy the function parameter order over to preserve these details
+	new_var->associated_live_range->function_parameter_order = affected_var->associated_live_range->function_parameter_order;
+
 	//Add this in to our current list of live ranges
 	dynamic_array_add(live_ranges, new_var->associated_live_range);
 
@@ -2067,6 +2070,24 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 			handle_source_spill(live_ranges, current->source_register2, &currently_spilled, spill_range, current);
 			handle_source_spill(live_ranges, current->address_calc_reg1, &currently_spilled, spill_range, current);
 			handle_source_spill(live_ranges, current->address_calc_reg2, &currently_spilled, spill_range, current);
+
+			/**
+			 * We also need to handle source spills for function calls and 
+			 * all of their parameters
+			 */
+			if(current->parameters != NULL && current->instruction_type != PHI_FUNCTION){
+				//Extract for convenience
+				dynamic_array_t* function_parameters = current->parameters;
+
+				//Run through
+				for(u_int16_t i = 0; i < function_parameters->current_index; i++){
+					//Extract it
+					three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
+
+					//This counts as a source
+					handle_source_spill(live_ranges, parameter, &currently_spilled, spill_range, current);
+				}
+			}
 
 			/**
 			 * Destination registers are a unique case because they could be source registers
