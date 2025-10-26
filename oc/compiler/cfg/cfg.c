@@ -3658,9 +3658,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * mechanism that is not stack related
 					 */
 					if(second_child->variable->membership != GLOBAL_VARIABLE
-						&& does_stack_contain_symtab_variable(&(current_function->data_area), second_child->variable) == FALSE){
-						//Add this variable onto the stack now, since we know it is not already on it
-						add_variable_to_stack(&(current_function->data_area), emit_var(second_child->variable));
+						//Is it not on the stack already?
+						&& second_child->variable->stack_region == NULL) {
+						//Create the stack region and store it in the variable
+						second_child->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), second_child->variable->type_defined_as);
 					}
 
 					//Add the memory address statement in
@@ -7266,9 +7267,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		}
 
 		//However if it is a stack variable, we need to add it to the stack and emit an initial store of it
-		if(does_stack_contain_symtab_variable(&(current_function->data_area), parameter) == FALSE){
+		if(parameter->stack_region == NULL){
 			//Add this variable onto the stack now, since we know it is not already on it
-			add_variable_to_stack(&(current_function->data_area), emit_var(parameter));
+			parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
 		}	
 
 		//A special case here - if this variable is a function parameter, it will not naturally
@@ -7348,10 +7349,6 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 static void visit_declaration_statement(generic_ast_node_t* node){
 	//The base address. We may or may not need this
 	three_addr_var_t* address = emit_var(node->variable);
-
-	//Add this variable into the current function's stack. This is what we'll use
-	//to store the address
-	add_variable_to_stack(&(current_function->data_area), address);
 
 	//Create a stack region for this variable
 	node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), node->inferred_type);
@@ -7686,15 +7683,11 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 		//Arrays or structs require stack allocation
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
-			//Emit the variable. This will act as our base address
-			assignee = emit_var(node->variable);
-
-			//Add this variable into the current function's stack. This is what we'll use
-			//to store the address
-			add_variable_to_stack(&(current_function->data_area), assignee);
-
 			//Create a stack region for this variable and store it in the associated region
 			node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), node->inferred_type);
+
+			//Emit the variable. This will act as our base address
+			assignee = emit_var(node->variable);
 
 			//Emit the statement here to get the base address
 			instruction_t* mem_addr = emit_memory_address_assignment(emit_temp_var(assignee->type), assignee);

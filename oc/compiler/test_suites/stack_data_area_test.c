@@ -147,8 +147,10 @@ int main(int argc, char** argv){
 
 	//Now let's run through and remove everything to test that
 	for(u_int16_t i = 0; i < array_of_vars->current_index; i++){
+		//Extract the variable
+		three_addr_var_t* variable = dynamic_array_get_at(array_of_vars, i);
 		//Delete it
-		remove_variable_from_stack(&(main_function->data_area), dynamic_array_get_at(array_of_vars, i));
+		remove_region_from_stack(&(main_function->data_area), variable->stack_region);
 		//Reprint the whole thing
 		print_stack_data_area(&(main_function->data_area));
 	}
