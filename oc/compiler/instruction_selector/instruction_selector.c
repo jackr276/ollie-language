@@ -2753,7 +2753,7 @@ static void handle_load_instruction(cfg_t* cfg, instruction_t* instruction){
 		symtab_variable_record_t* variable = instruction->op1->linked_var;
 
 		//We need to grab this variable's stack offset
-		u_int32_t stack_offset = variable->stack_offset;
+		u_int32_t stack_offset = variable->stack_region->base_address;
 
 		//Once we have that, we can emit our offset constant
 		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
@@ -2826,7 +2826,7 @@ static void handle_store_const_instruction(cfg_t* cfg, instruction_t* instructio
 		symtab_variable_record_t* variable = stored_variable->linked_var;
 
 		//We need to grab this variable's stack offset
-		u_int32_t stack_offset = variable->stack_offset;
+		u_int32_t stack_offset = variable->stack_region->base_address;
 
 		//Once we have that, we can emit our offset constant
 		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
@@ -2895,7 +2895,7 @@ static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
 		symtab_variable_record_t* variable = stored_variable->linked_var;
 
 		//We need to grab this variable's stack offset
-		u_int32_t stack_offset = variable->stack_offset;
+		u_int32_t stack_offset = variable->stack_region->base_address;
 
 		//Once we have that, we can emit our offset constant
 		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
@@ -2950,7 +2950,7 @@ static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stac
 	//Is this a stack variable(most common case)
 	if(variable->membership != GLOBAL_VARIABLE){
 		//We need to grab this variable's stack offset
-		u_int32_t stack_offset = variable->stack_offset;
+		u_int32_t stack_offset = variable->stack_region->base_address;
 
 		//Once we have that, we can emit our offset constant
 		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
@@ -2990,7 +2990,7 @@ static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* inst
 	symtab_variable_record_t* var = instruction->op1->linked_var;
 
 	//Extract the stack offset for our use
-	u_int32_t stack_offset = var->stack_offset;
+	u_int32_t stack_offset = var->stack_region->base_address;
 
 	if(var->membership != GLOBAL_VARIABLE){
 		//If this offset is not 0, then we have an operation in the form of

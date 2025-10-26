@@ -145,8 +145,6 @@ struct live_range_t{
 	dynamic_array_t* neighbors;
 	//What function does this come from?
 	symtab_function_record_t* function_defined_in;
-	//What is the stack offset of this live range?
-	u_int32_t stack_offset;
 	//Store the id of the live range
 	u_int32_t live_range_id;
 	//Store the assignment count - used for stack pointer fixing

@@ -523,9 +523,6 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//And store the symtab record
 	emitted_var->linked_var = var;
 
-	//Copy the offsets over
-	emitted_var->stack_offset = var->stack_offset;
-
 	//Store the associate stack region(this is usually null)
 	emitted_var->stack_region = var->stack_region;
 
