@@ -291,6 +291,8 @@ struct instruction_t{
 	u_int8_t is_jump_table;
 	//Is this operation critical?
 	u_int8_t mark;
+	//Does this return void or not?
+	u_int8_t returns_void;
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;
@@ -633,12 +635,12 @@ instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address);
 /**
  * Emit a function call statement. Once emitted, no paramters will have been added in
  */
-instruction_t* emit_function_call_instruction(symtab_function_record_t* func_record, three_addr_var_t* assigned_to);
+instruction_t* emit_function_call_instruction(symtab_function_record_t* func_record, three_addr_var_t* assigned_to, u_int8_t returns_void);
 
 /**
  * Emit an indirect function call statement. Once emitted, no paramters will have been added in
  */
-instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to);
+instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to, u_int8_t returns_void);
 
 /**
  * Emit an assembly inline statement. Once emitted, these statements are final and are ignored
