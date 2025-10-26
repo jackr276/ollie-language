@@ -108,47 +108,6 @@ static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t siz
 
 
 /**
- * Add a node into the stack data area
- *
- * We'll need to guarantee that the base and ending address of each
- * variable in here is a multiple of their alignment requirement K
- */
-void add_variable_to_stack(stack_data_area_t* area, void* variable){
-	//We already know it's one of these
-	three_addr_var_t* var = variable;
-	//Get the type that we need to align by for the new var
-	generic_type_t* base_alignment = get_base_alignment_type(var->type);
-
-	//Get the alignment size
-	u_int32_t alignable_size = base_alignment->type_size;
-
-	//How much padding do we need? Initially we assume none
-	u_int32_t needed_padding = 0;
-
-	//We can just use the overall data area size for this
-	if(area->total_size % alignable_size != 0){
-		//Grab the needed padding
-		needed_padding = area->total_size % alignable_size;
-	}
-
-	//This one's stack offset is the original total size plus whatever padding we need
-	var->stack_offset = area->total_size + needed_padding;
-	
-	//Update the total size of the stack too. The new size is the original size
-	//with the needed padding and the new type's size added onto it
-	area->total_size = area->total_size + needed_padding + var->type->type_size;
-
-	//Copy this over to the variable itself if it's there
-	if(var->linked_var != NULL){
-		var->linked_var->stack_offset = var->stack_offset;
-	}
-
-	//Finally add this to the array
-	dynamic_array_add(area->variables, var);
-}
-
-
-/**
  * Create a stack region for the type provided. This will handle alignment and addition
  * of this stack region
  */
@@ -240,16 +199,13 @@ static void realign_data_area(stack_data_area_t* area){
 
 
 /**
- * Remove a node from the stack if it is deemed useless
- *
- * Once we're done removing, we'll need to completely redo the data area's alignment
- *
+ * Remove a given region from the stack
  */
-void remove_variable_from_stack(stack_data_area_t* area, void* variable){
+void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region){
 	//Delete this variable
-	dynamic_array_delete(area->variables, variable);
+	dynamic_array_delete(area->stack_regions, region);
 
-	//Realign the whole thing
+	//Realign the entire thing now
 	realign_data_area(area);
 }
 

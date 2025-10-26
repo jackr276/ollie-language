@@ -121,17 +121,17 @@ int main(int argc, char** argv){
 
 			//We could have chaining here, so run through just in case
 			while(record != NULL){
-					//Emit the variable
-					three_addr_var_t* var = emit_var(record);
-				
-					//Store for later
-					dynamic_array_add(array_of_vars, var);
+				//Add it into the stack
+				record->stack_region = create_stack_region_for_type(&(main_function->data_area), record->type_defined_as);
+			
+				//Emit the variable
+				three_addr_var_t* var = emit_var(record);
+			
+				//Store for later
+				dynamic_array_add(array_of_vars, var);
 
-					//Add it into the stack
-					add_variable_to_stack(&(main_function->data_area), var);
-
-					//Let's print it out to see what we have
-					print_stack_data_area(&(main_function->data_area));
+				//Let's print it out to see what we have
+				print_stack_data_area(&(main_function->data_area));
 
 				temp = record;
 				record = record->next;
