@@ -18,8 +18,15 @@ void stack_data_area_alloc(stack_data_area_t* area){
 	//Just allocate the dynamic array
 	area->variables = dynamic_array_alloc();
 
+	//Dynamically allocate the regions array
+	area->regions = calloc(DEFAULT_STACK_REGION_SIZE, sizeof(stack_region_t));
+
 	//Currently the size is 0
 	area->total_size = 0;
+	//Total region size
+	area->region_max_size = 5;
+	//Index of the next region
+	area->next_region = 0;
 }
 
 
