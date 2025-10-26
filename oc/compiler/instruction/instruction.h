@@ -180,12 +180,10 @@ struct three_addr_var_t{
 	symtab_function_record_t* linked_function;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
-	//For memory management
-	three_addr_var_t* next_created;
 	//What live range is this variable associate with
 	live_range_t* associated_live_range;
 	//What is the stack region associated with this variable?
-	stack_region_t* region;
+	stack_region_t* stack_region;
 	//What is the stack offset(i.e. %rsp + __) of this variable?
 	u_int32_t stack_offset;
 	//What is the ssa generation level?
@@ -216,8 +214,6 @@ struct three_addr_var_t{
  * A three address constant always holds the value of the constant
  */
 struct three_addr_const_t{
-	//For memory management
-	three_addr_const_t* next_created;
 	//This is for string constants
 	local_constant_t* local_constant;
 	//We hold the type info
@@ -313,6 +309,11 @@ struct instruction_t{
 	//The register that we're popping or pushing
 	general_purpose_register_t push_or_pop_reg;
 };
+
+/**
+ * Initialize the memory management system
+ */
+void initialize_varible_and_constant_system();
 
 /**
  * A helper function for our atomically increasing temp id

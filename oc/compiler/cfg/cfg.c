@@ -7895,6 +7895,9 @@ void calculate_all_control_relations(cfg_t* cfg){
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
+	//Initialize the variable system
+	initialize_varible_and_constant_system();
+
 	//Store our references here
 	num_errors_ref = num_errors;
 	num_warnings_ref = num_warnings;
