@@ -182,8 +182,6 @@ struct three_addr_var_t{
 	live_range_t* associated_live_range;
 	//What is the stack region associated with this variable?
 	stack_region_t* stack_region;
-	//What is the stack offset(i.e. %rsp + __) of this variable?
-	u_int32_t stack_offset;
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
 	//What's the temp var number

@@ -4672,12 +4672,16 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 
-	//TODO ADD DOCS
+	/**
+	 * If we have a memory address statement where the stack address is 0, we can
+	 * simply make this into an assignment instruction. We don't need the normal lea
+	 * that others have
+	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT
 		// Ignore global vars, they don't have stack addresses
 		&& window->instruction1->op1->linked_var->membership != GLOBAL_VARIABLE){
 		//We can reorgnaize this into an assignment instruction
-		if(window->instruction1->op1->stack_offset == 0){
+		if(window->instruction1->op1->stack_region->base_address == 0){
 			//Reset the type
 			window->instruction1->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 			//The op1 is now the stack pointer
