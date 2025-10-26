@@ -2437,6 +2437,25 @@ static void handle_function_call(instruction_t* instruction){
 
 
 /**
+ * Handle a function call instruction
+ */
+static void handle_indirect_function_call(instruction_t* instruction){
+	//This will be an indirect call instruction
+	instruction->instruction_type = INDIRECT_CALL;
+
+	//In this case, the source register is the function name
+	instruction->source_register = instruction->op1;
+
+	//If we do not return void, we'll have a destination
+	//register here
+	if(instruction->returns_void == FALSE){
+		//The destination register is itself the assignee
+		instruction->destination_register = instruction->assignee;
+	}
+}
+
+
+/**
  *	//=========================== Logical Notting =============================
  * Although it may not seem like it, logical not is actually a multiple instruction
  * pattern
@@ -3407,13 +3426,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Similarly, an indirect function call also has it's own kind of
 		//instruction
 		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
-			instruction->instruction_type = INDIRECT_CALL;
-			//In this case, the source register is the function name
-			instruction->source_register = instruction->op1;
-			//The destination register is itself the assignee
-			instruction->destination_register = instruction->assignee;
+			handle_indirect_function_call(instruction);
 			break;
-			
 		case THREE_ADDR_CODE_INC_STMT:
 			handle_inc_instruction(instruction);
 			break;
