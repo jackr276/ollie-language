@@ -2450,10 +2450,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
  * at the time that the function is called
  */
 static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t* instruction){
-	//For this given instruction, we'll need to first see what currently interferes with it by looking at what interferes with the result
-	//register
-	basic_block_t* block = instruction->block_contained_in;
-
 	//Set a flag array to keep track of what we've already saved
 	u_int8_t saved_registers[K_COLORS_GEN_USE];
 	memset(saved_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
