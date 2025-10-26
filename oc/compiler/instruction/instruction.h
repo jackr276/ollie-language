@@ -18,6 +18,7 @@
 #include "../utils/ollie_intermediary_representation.h"
 #include "../utils/x86_assembly_instruction.h"
 #include "../utils/x86_genpurpose_registers.h"
+#include "../utils/stack_management_structs.h"
 #include <stdint.h>
 #include <sys/types.h>
 
