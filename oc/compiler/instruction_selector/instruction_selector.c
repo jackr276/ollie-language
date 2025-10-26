@@ -2989,10 +2989,11 @@ static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* inst
 	//Grab this out
 	symtab_variable_record_t* var = instruction->op1->linked_var;
 
-	//Extract the stack offset for our use
-	u_int32_t stack_offset = var->stack_region->base_address;
-
+	//Our most common case - global variables for obvious reasons do not have a stack address
 	if(var->membership != GLOBAL_VARIABLE){
+		//Extract the stack offset for our use
+		u_int32_t stack_offset = var->stack_region->base_address;
+
 		//If this offset is not 0, then we have an operation in the form of
 		//"stack_pointer" + stack offset
 		if(stack_offset != 0){
