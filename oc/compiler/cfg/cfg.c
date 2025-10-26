@@ -4217,7 +4217,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	three_addr_var_t* function_pointer_var = emit_var(indirect_function_call_node->variable);
 
 	//Emit the final call here
-	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
+	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee, signature->returns_void);
 
 	//Mark this with whatever we have
 	func_call_stmt->is_branch_ending = is_branch_ending;
@@ -4335,7 +4335,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	}
 
 	//Emit the final call here
-	instruction_t* func_call_stmt = emit_function_call_instruction(func_record, assignee);
+	instruction_t* func_call_stmt = emit_function_call_instruction(func_record, assignee, signature->returns_void);
 
 	//Mark this with whatever we have
 	func_call_stmt->is_branch_ending = is_branch_ending;

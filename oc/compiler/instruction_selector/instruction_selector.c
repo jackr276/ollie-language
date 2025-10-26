@@ -2421,6 +2421,22 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 
 /**
+ * Handle a function call instruction
+ */
+static void handle_function_call(instruction_t* instruction){
+	//This will be a call instruction
+	instruction->instruction_type = CALL;
+
+	//If we do not return void, we'll have a destination
+	//register here
+	if(instruction->returns_void == FALSE){
+		//The destination register is itself the assignee
+		instruction->destination_register = instruction->assignee;
+	}
+}
+
+
+/**
  *	//=========================== Logical Notting =============================
  * Although it may not seem like it, logical not is actually a multiple instruction
  * pattern
@@ -3386,9 +3402,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		//The translation here takes the form of a call instruction
 		case THREE_ADDR_CODE_FUNC_CALL:
-			instruction->instruction_type = CALL;
-			//The destination register is itself the assignee
-			instruction->destination_register = instruction->assignee;
+			handle_function_call(instruction);
 			break;
 		//Similarly, an indirect function call also has it's own kind of
 		//instruction

@@ -2863,11 +2863,18 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 		case CALL:
 			fprintf(fl, "call %s", instruction->called_function->func_name.string);
+
+			//This could be NULL
 			if(instruction->destination_register != NULL){
 				fprintf(fl, " /* --> ");
 				print_variable(fl, instruction->destination_register, mode);
+				fprintf(fl, " */");
+			} else {
+				fprintf(fl, " /* --> void */");
 			}
-			fprintf(fl, " */\n");
+
+			//Final newline
+			fprintf(fl, "\n");
 			break;
 		case INDIRECT_CALL:
 			//Indirect function calls store the location of the call in op1
@@ -2877,9 +2884,13 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			if(instruction->destination_register != NULL){
 				fprintf(fl, " /* --> ");
 				print_variable(fl, instruction->destination_register, mode);
+				fprintf(fl, " */");
+			} else {
+				fprintf(fl, " /* --> void */");
 			}
 
-			fprintf(fl, " */\n");
+			//Final newline
+			fprintf(fl, "\n");
 			break;
 
 		case PUSH:
