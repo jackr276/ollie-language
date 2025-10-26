@@ -1137,156 +1137,6 @@ static void add_destination_interference(interference_graph_t* graph, dynamic_ar
 
 
 /**
- * Calculate the LIVE_NOW set in a given block, up to a certain instruction
- */
-static dynamic_array_t* calculate_live_now_set(basic_block_t* block, instruction_t* stopper){
-	/**
-	 * As you can see in the algorithm, the LIVE_NOW set initially starts
-	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
-	 * set by a different name for our calculation
-	 */
-	dynamic_array_t* live_now = block->live_out;
-
-	//If this is null, we'll just make one for us
-	if(live_now == NULL){
-		live_now = dynamic_array_alloc();
-	}
-	
-	//We will crawl our way up backwards through the CFG
-	instruction_t* operation = block->exit_statement;
-
-	//So long as we haven't hit the start *and* we haven't hit
-	//the stopper instruction
-	while(operation != NULL && operation != stopper){
-		//If we have an exact copy operation, we can
-		//skip it as it won't create any interference
-		if(operation->instruction_type == PHI_FUNCTION){
-			//Skip it
-			operation = operation->previous_statement;
-			continue;
-		}
-
-		/**
-		 * Step from algorithm:
-		 *
-		 * for each LRi in LIVENOW:
-		 * 	add(DEST, LRi) to Interference Graph E 
-		 * remove LC from LIVENOW
-		 *
-		 * 	Mark that the destination interferes with every LIVE_NOW range
-		 *
-		 * 	This is straightforward in the algorithm, but for us it's not so
-		 * 	straightforward. There are several cases where the destination
-		 * 	register may be present but this step in the algorithm will not 
-		 * 	apply or may apply in a different way
-		 */
-		if(operation->destination_register != NULL){
-			/**
-			 * This is if we have something like add LRa, LRb. LRb
-			 * is a destination but it's also a value. As such, we will
-			 * *not* delete this after we add our interference
-			 */
-			if(is_destination_also_operand(operation) == TRUE){
-				//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any
-				//other way
-				add_live_now_live_range(operation->destination_register->associated_live_range, live_now);
-
-			/**
-			 * If the indirection level is more than 0, this means that we're moving into a memory
-			 * region. Since this is the case, we're not really assigning to the register here. In
-			 * fact, we're using it, so we'll need to add this to LIVE_NOW
-			 */
-			} else if(operation->destination_register->indirection_level > 0){
-				//Add it to live now and we're done
-				add_live_now_live_range(operation->destination_register->associated_live_range, live_now);
-
-			/**
-			 * The final case here is the ideal case in the algorithm, where we have a simple
-			 * assignment at the end. To satisfy the algorithm, we'll add all of the interference
-			 * between the destination and LIVE_NOW and then delete the destination from live_now
-			 */
-			} else {
-				//And then scrap it from live_now
-				dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
-			}
-		}
-
-		/**
-		 * Some instructions like CXXX and division instructions have 2 destinations. The second destination,
-		 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
-		 */
-		if(operation->destination_register2 != NULL){
-			//And then scrap it from live_now
-			dynamic_array_delete(live_now, operation->destination_register2->associated_live_range);
-		}
-
-		/**
-		 * STEP:
-		 *  Add LA an LB to LIVENOW
-		 *
-		 * This really means add any non-destination variables to LIVENOW. We will take
-		 * into account every special case here, including function calls and INC/DEC instructions
-		 *
-		 * These first few are the obvious cases
-		 */
-		if(operation->source_register != NULL){
-			add_live_now_live_range(operation->source_register->associated_live_range, live_now);
-		}
-
-		if(operation->source_register2 != NULL){
-			add_live_now_live_range(operation->source_register2->associated_live_range, live_now);
-		}
-
-		if(operation->address_calc_reg1 != NULL){
-			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, live_now);
-		}
-
-		if(operation->address_calc_reg2 != NULL){
-			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, live_now);
-		}
-
-		/**
-		 * SPECIAL CASES:
-		 *
-		 * Function calls(direct/indirect) have function parameters that are being used
-		 */
-		switch(operation->instruction_type){
-			case CALL:
-			case INDIRECT_CALL:
-				//No point here
-				if(operation->parameters == NULL){
-					break;
-				}
-				
-				//Grab it out
-				dynamic_array_t* operation_function_parameters = operation->parameters;
-
-				//Let's go through all of these and add them to LIVE_NOW
-				for(u_int16_t i = 0; i < operation_function_parameters->current_index; i++){
-					//Extract the variable
-					three_addr_var_t* variable = dynamic_array_get_at(operation_function_parameters, i);
-
-					//Add it to live_now
-					add_live_now_live_range(variable->associated_live_range, live_now);
-				}
-
-				break;
-
-			//By default do nothing
-			default:
-				break;
-		}
-
-		//Crawl back up by 1
-		operation = operation->previous_statement;
-	}
-
-	//Give back the live_now set
-	return live_now;
-}
-
-
-/**
  * NOTE: We must walk the block from bottom to top
  *
  * Algorithm:
@@ -1314,7 +1164,7 @@ static dynamic_array_t* calculate_live_now_set(basic_block_t* block, instruction
  * We have a stopper parameter that can be used to halt the execution at a certain point. This is used for
  * function call caller/callee saving calculations
  */
-static void calculate_interference_in_block(interference_graph_t* graph, dynamic_array_t* live_ranges, basic_block_t* block){
+static void calculate_interference_in_block(interference_graph_t* graph, basic_block_t* block){
 	/**
 	 * As you can see in the algorithm, the LIVE_NOW set initially starts
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
@@ -1481,7 +1331,7 @@ static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_ar
 	while(current != NULL){
 		//Use the helper. Set stopper to be NULL because we aren't trying to halt
 		//anything here
-		calculate_interference_in_block(graph, live_ranges, current);
+		calculate_interference_in_block(graph, current);
 		
 		//Advance this up
 		current = current->direct_successor;
@@ -2538,25 +2388,18 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//whereas in an indirect call we are not
 	symtab_function_record_t* callee = instruction->called_function;
 
-	//Grab out what block it's in
-	basic_block_t* block = instruction->block_contained_in;
-
-	//Calculate LIVE_NOW up to but now including the function call
-	//itself. We want to see what needs to survive post function call
-	dynamic_array_t* live_now = calculate_live_now_set(block, instruction->previous_statement);
+	//Grab out this LR
+	live_range_t* destination_lr = instruction->destination_register->associated_live_range;
 
 	//Start off with this as the last instruction
 	instruction_t* last_instruction = instruction;
 
-	printf("For instruction:\n");
-	print_instruction(stdout, instruction, PRINTING_REGISTERS);
-
 	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
 	//we know what is interfering, we can see which registers they use and compare that 
 	//with the register array
-	for(u_int16_t i = 0; live_now != NULL && i < live_now->current_index; i++){
+	for(u_int16_t i = 0; destination_lr->neighbors != NULL && i < destination_lr->neighbors->current_index; i++){
 		//Grab the neighbor out
-		live_range_t* lr = dynamic_array_get_at(live_now, i);
+		live_range_t* lr = dynamic_array_get_at(destination_lr->neighbors, i);
 
 		//And grab it's register out
 		general_purpose_register_t reg = lr->reg;
@@ -2565,8 +2408,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		if(is_register_caller_saved(reg) == FALSE){
 			continue;
 		}
-
-		printf("HERE WITH LR%d\n", lr->live_range_id);
 
 		//If we get a live range like this, we know for a fact that
 		//this register needs to be saved because it's live at the time
@@ -2613,26 +2454,12 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 	u_int8_t saved_registers[K_COLORS_GEN_USE];
 	memset(saved_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
-	//Construct the LIVE_NOW set up to but now including the function call's previous statement.
-	//We need to see what has to survive after this function is called
-	dynamic_array_t* live_now = calculate_live_now_set(block, instruction->previous_statement);
-
-	//Source register does not count
-	//dynamic_array_delete(live_now, instruction->source_register->associated_live_range);
-
-	//We can also delete all of the function parameters from live_now, those don't count
-	dynamic_array_t* function_params = instruction->parameters;
-	for(u_int16_t i = 0; i < function_params->current_index; i++){
-		//Extract it
-		three_addr_var_t* function_parameter = dynamic_array_get_at(function_params, i);
-
-		//Remove it's LR
-		dynamic_array_delete(live_now, function_parameter->associated_live_range);
-	} 
+	//Extract this out
+	live_range_t* destination_lr = instruction->destination_register->associated_live_range;
 
 	//This really rarely happens, but we still must account for it. If the neighbors array is NULL
 	//or empty, we leave
-	if(live_now == NULL || live_now->current_index == 0){
+	if(destination_lr->neighbors == NULL || destination_lr->neighbors->current_index == 0){
 		return instruction;
 	}
 
@@ -2641,9 +2468,9 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 	instruction_t* last_instruction = instruction;
 
 	//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
-	for(u_int16_t i = 0; i < live_now->current_index; i++){
+	for(u_int16_t i = 0; i < destination_lr->neighbors->current_index; i++){
 		//Grab the given live range out
-		live_range_t* interferee = dynamic_array_get_at(live_now, i);
+		live_range_t* interferee = dynamic_array_get_at(destination_lr->neighbors, i);
 
 		//And we'll extract the interfering register
 		general_purpose_register_t interfering_register = interferee->reg;

@@ -3740,7 +3740,7 @@ instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address){
 /**
  * Emit a function call statement where we're calling the function record provided
  */
-instruction_t* emit_function_call_instruction(symtab_function_record_t* func_record, three_addr_var_t* assigned_to, u_int8_t returns_void){
+instruction_t* emit_function_call_instruction(symtab_function_record_t* func_record, three_addr_var_t* assigned_to){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -3751,9 +3751,6 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 	//What function are we in
 	stmt->function = current_function;
 
-	//Store if it returns void or not
-	stmt->returns_void = returns_void;
-
 	//We do NOT add parameters here, instead we had them in the CFG function
 	//Just give back the result
 	return stmt;
@@ -3763,7 +3760,7 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 /**
  * Emit an indirect function call statement. Once emitted, no paramters will have been added in
  */
-instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to, u_int8_t returns_void){
+instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* function_pointer, three_addr_var_t* assigned_to){
 	//First allocate the statement
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -3775,9 +3772,6 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 	stmt->assignee = assigned_to;
 	//Mark what function we're in
 	stmt->function = current_function;
-
-	//Store if it returns void or not
-	stmt->returns_void = returns_void;
 
 	return stmt;
 }

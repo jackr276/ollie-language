@@ -2427,12 +2427,8 @@ static void handle_function_call(instruction_t* instruction){
 	//This will be a call instruction
 	instruction->instruction_type = CALL;
 
-	//If we do not return void, we'll have a destination
-	//register here
-	if(instruction->returns_void == FALSE){
-		//The destination register is itself the assignee
-		instruction->destination_register = instruction->assignee;
-	}
+	//The destination register is itself the assignee
+	instruction->destination_register = instruction->assignee;
 }
 
 
@@ -2446,12 +2442,8 @@ static void handle_indirect_function_call(instruction_t* instruction){
 	//In this case, the source register is the function name
 	instruction->source_register = instruction->op1;
 
-	//If we do not return void, we'll have a destination
-	//register here
-	if(instruction->returns_void == FALSE){
-		//The destination register is itself the assignee
-		instruction->destination_register = instruction->assignee;
-	}
+	//The destination register is itself the assignee
+	instruction->destination_register = instruction->assignee;
 }
 
 
