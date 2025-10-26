@@ -1286,7 +1286,7 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 			fprintf(fl, "%f", constant->constant_value.double_constant);
 			break;
 		case FUNC_CONST:
-			fprintf(fl, "%s", constant->function_name->func_name.string);
+			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
 		//To stop compiler warnings
 		default:
@@ -1744,7 +1744,7 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 			fprintf(fl, "$%f", constant->constant_value.double_constant);
 			break;
 		case FUNC_CONST:
-			fprintf(fl, "%s", constant->function_name->func_name.string);
+			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
 		//String constants are a special case because they are represented by
 		//local constants, not immediate values
@@ -1785,7 +1785,7 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 			fprintf(fl, "%f", constant->constant_value.double_constant);
 			break;
 		case FUNC_CONST:
-			fprintf(fl, "%s", constant->function_name->func_name.string);
+			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
 		//String constants are a special case because they are represented by
 		//local constants, not immediate values
@@ -3355,7 +3355,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 		//as a value
 		case FUNC_CONST:
 			//Store the function name
-			constant->function_name = const_node->func_record;
+			constant->constant_value.function_name = const_node->func_record;
 			break;
 
 		//Some very weird error here

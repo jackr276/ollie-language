@@ -13,10 +13,6 @@
 #ifndef STACK_DATA_AREA_H
 #define STACK_DATA_AREA_H
 
-//By default we only have 5 here. The region array will dynamically resize
-//if need be
-#define DEFAULT_STACK_REGION_SIZE 5
-
 #include <sys/types.h>
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/stack_management_structs.h"

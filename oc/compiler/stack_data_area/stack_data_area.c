@@ -24,7 +24,7 @@ void stack_data_area_alloc(stack_data_area_t* area){
 	//Currently the size is 0
 	area->total_size = 0;
 	//Total region size
-	area->region_max_size = 5;
+	area->region_max_size = DEFAULT_STACK_REGION_SIZE;
 	//Index of the next region
 	area->next_region = 0;
 }
@@ -252,4 +252,7 @@ void print_stack_data_area(stack_data_area_t* area){
 void stack_data_area_dealloc(stack_data_area_t* stack_data_area){
 	//All we need to do here is deallocate the dynamic array
 	dynamic_array_dealloc(stack_data_area->variables);
+
+	//Free the regions array as well
+	free(stack_data_area->regions);
 }

@@ -184,6 +184,8 @@ struct three_addr_var_t{
 	three_addr_var_t* next_created;
 	//What live range is this variable associate with
 	live_range_t* associated_live_range;
+	//What is the stack region associated with this variable?
+	stack_region_t* region;
 	//What is the stack offset(i.e. %rsp + __) of this variable?
 	u_int32_t stack_offset;
 	//What is the ssa generation level?
@@ -216,14 +218,13 @@ struct three_addr_var_t{
 struct three_addr_const_t{
 	//For memory management
 	three_addr_const_t* next_created;
-	//The constant's function record
-	symtab_function_record_t* function_name;
 	//This is for string constants
 	local_constant_t* local_constant;
 	//We hold the type info
 	generic_type_t* type;
 	//Store the constant value in a union
 	union {
+		symtab_function_record_t* function_name;
 		int64_t long_constant;
 		double double_constant;
 		float float_constant;
