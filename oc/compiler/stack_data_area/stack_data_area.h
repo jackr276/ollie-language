@@ -16,7 +16,6 @@
 #include <sys/types.h>
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/stack_management_structs.h"
-#include "../type_system/type_system.h"
 
 /**
  * Allocate the internal dynamic array in the data area

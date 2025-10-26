@@ -14,6 +14,7 @@
 
 #include <sys/types.h>
 #include "./dynamic_array/dynamic_array.h"
+#include "../type_system/type_system.h"
 
 //An overall structure that holds our stack data area
 typedef struct stack_data_area_t stack_data_area_t;
@@ -33,6 +34,8 @@ typedef struct stack_region_t stack_region_t;
  * so there's no need to store those
  */
 struct stack_region_t {
+	//What type are we storing?
+	generic_type_t* type;
 	//The unique ID for this region
 	u_int32_t stack_region_id;
 	//The base address
@@ -49,8 +52,6 @@ struct stack_region_t {
  * list. This linked list contains all of our data
  */
 struct stack_data_area_t{
-	//The array of all variables in the stack currently
-	dynamic_array_t* variables;
 	//Heap array for the regions
 	dynamic_array_t* stack_regions;
 	//The total size of the data area
