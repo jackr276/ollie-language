@@ -50,13 +50,9 @@ struct stack_data_area_t{
 	//The array of all variables in the stack currently
 	dynamic_array_t* variables;
 	//Heap array for the regions
-	stack_region_t* regions;
+	dynamic_array_t* stack_regions;
 	//The total size of the data area
 	u_int32_t total_size;
-	//The next region size
-	u_int16_t next_region;
-	//The region max size
-	u_int16_t region_max_size;
 };
 
 

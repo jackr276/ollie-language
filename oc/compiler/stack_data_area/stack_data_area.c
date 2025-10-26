@@ -16,34 +16,11 @@
  */
 void stack_data_area_alloc(stack_data_area_t* area){
 	//Just allocate the dynamic array
+	//TODO deprecate
 	area->variables = dynamic_array_alloc();
 
-	//Dynamically allocate the regions array
-	area->regions = calloc(DEFAULT_STACK_REGION_SIZE, sizeof(stack_region_t));
-
-	//Currently the size is 0
-	area->total_size = 0;
-	//Total region size
-	area->region_max_size = DEFAULT_STACK_REGION_SIZE;
-	//Index of the next region
-	area->next_region = 0;
-}
-
-
-/**
- * Does the stack already contain this variable? This is important for types like
- * constructs and arrays
- */
-static u_int8_t does_stack_contain_variable(stack_data_area_t* area, three_addr_var_t* var){
-	//Run through and try to find this
-	for(u_int16_t i = 0; i < area->variables->current_index; i++){
-		if(dynamic_array_get_at(area->variables, i) == var){
-			return TRUE;
-		}
-	}
-
-	//Return false if we get here
-	return FALSE;
+	//Allocate the regions array
+	area->stack_regions = dynamic_array_alloc();
 }
 
 
@@ -98,17 +75,28 @@ void align_stack_data_area(stack_data_area_t* area){
 
 
 /**
+ * Create a stack region with a given size and base address in the stack 
+ */
+static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t size){
+	//Calloc it
+	stack_region_t* region = calloc(1, sizeof(stack_region_t));
+
+	//Populate
+	region->size = size;
+	region->base_address = base_address;
+
+	//Throw back
+	return region;
+}
+
+
+/**
  * Add a node into the stack data area
  *
  * We'll need to guarantee that the base and ending address of each
  * variable in here is a multiple of their alignment requirement K
  */
 void add_variable_to_stack(stack_data_area_t* area, void* variable){
-	//If we already have the variable in here then leave
-	if(does_stack_contain_variable(area, variable) == TRUE){
-		return;
-	}
-
 	//We already know it's one of these
 	three_addr_var_t* var = variable;
 
@@ -245,7 +233,6 @@ void print_stack_data_area(stack_data_area_t* area){
 }
 
 
-
 /**
  * Deallocate the internal linked list of the stack data area
  */
@@ -253,6 +240,15 @@ void stack_data_area_dealloc(stack_data_area_t* stack_data_area){
 	//All we need to do here is deallocate the dynamic array
 	dynamic_array_dealloc(stack_data_area->variables);
 
-	//Free the regions array as well
-	free(stack_data_area->regions);
+	//Run through all regions
+	for(u_int16_t i = 0; i < stack_data_area->stack_regions->current_index; i++){
+		//Grab it out
+		stack_region_t* region = dynamic_array_get_at(stack_data_area->stack_regions, i);
+
+		//Delete it
+		free(region);
+	}
+
+	//Finally deallocate the region here
+	dynamic_array_dealloc(stack_data_area->stack_regions);
 }
