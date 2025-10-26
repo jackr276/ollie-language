@@ -85,6 +85,9 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
  * We'll just have one big run through here
 */
 int main(int argc, char** argv){
+	//Initialze the var/const system
+	initialize_varible_and_constant_system();
+
 	//Grab the compiler options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
@@ -155,4 +158,8 @@ int main(int argc, char** argv){
 
 	//Ensure that we can fully deallocate
 	stack_data_area_dealloc(&(main_function->data_area));
+
+	//Cleanup at the end
+	deallocate_all_consts();
+	deallocate_all_vars();
 }
