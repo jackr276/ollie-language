@@ -7347,9 +7347,6 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
  * has to be allocated and placed onto the stack
  */
 static void visit_declaration_statement(generic_ast_node_t* node){
-	//The base address. We may or may not need this
-	three_addr_var_t* address = emit_var(node->variable);
-
 	//Create a stack region for this variable
 	node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), node->inferred_type);
 }

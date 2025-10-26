@@ -106,7 +106,6 @@ int main(int argc, char** argv){
 	//Run through the entire variable symtab and add what would be immediately eligible(arrays, constructs)
 	symtab_variable_sheaf_t* cursor;
 	symtab_variable_record_t* record;
-	symtab_variable_record_t* temp;
 
 	//Create a dynamic array to hold all of the vars we make
 	dynamic_array_t* array_of_vars = dynamic_array_alloc();
@@ -133,7 +132,6 @@ int main(int argc, char** argv){
 				//Let's print it out to see what we have
 				print_stack_data_area(&(main_function->data_area));
 
-				temp = record;
 				record = record->next;
 			}
 		}
