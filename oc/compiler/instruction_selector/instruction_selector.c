@@ -2354,7 +2354,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 	//Grab out the if and else blocks
 	basic_block_t* if_block = branch_stmt->if_block;
-	basic_block_t* else_block = branch_stmt->else_or_live_now.else_block;
+	basic_block_t* else_block = branch_stmt->else_block;
 
 	//Placeholder for the jump to if instruction
 	instruction_t* jump_to_if;
@@ -3523,7 +3523,7 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 		//In a branch statement, the else block is
 		//the direct jump
 		case THREE_ADDR_CODE_BRANCH_STMT:
-			return block->exit_statement->else_or_live_now.else_block;
+			return block->exit_statement->else_block;
 
 		//By default no
 		default:

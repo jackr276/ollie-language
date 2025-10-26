@@ -628,8 +628,8 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 				}
 
 				//Same for the else block
-				if(exit_statement->else_or_live_now.else_block == empty_block){
-					exit_statement->else_or_live_now.else_block = replacement;
+				if(exit_statement->else_block == empty_block){
+					exit_statement->else_block = replacement;
 					//Counts as a successor
 					add_successor(predecessor, replacement);
 				}
@@ -888,7 +888,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * If both targets are identical(j) then:
 			 * 	replace branch with a jump to j
 			 */
-			if(branch->if_block == branch->else_or_live_now.else_block){
+			if(branch->if_block == branch->else_block){
 				//Remove these all
 				delete_all_branching_statements(current);
 
@@ -990,7 +990,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//Once we get to the very end here, we'll need to do the bookkeeping
 				//from the branch
 				basic_block_t* if_destination = jumping_to_block->exit_statement->if_block;
-				basic_block_t* else_destination = jumping_to_block->exit_statement->else_or_live_now.else_block;
+				basic_block_t* else_destination = jumping_to_block->exit_statement->else_block;
 				
 				//These both count as successor
 				add_successor(current, if_destination);
@@ -1803,7 +1803,7 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 
 		//Extract both of these values - we will need them
 		basic_block_t* if_target = branch_statement->if_block;
-		basic_block_t* else_target = branch_statement->else_or_live_now.else_block;
+		basic_block_t* else_target = branch_statement->else_block;
 
 		//Is this an inverse jumping branch?
 		u_int8_t inverse_branch = branch_statement->inverse_branch;

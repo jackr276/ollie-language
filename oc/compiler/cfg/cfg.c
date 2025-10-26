@@ -5372,7 +5372,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		 * point here to the current entry block. We'll also need
 		 * to add a successor
 		 */
-		branch_statement->else_or_live_now.else_block = new_entry_block;
+		branch_statement->else_block = new_entry_block;
 		//The current entry block is the else branch for the conditional
 		//branch in the previous one
 		add_successor(previous_entry_block, new_entry_block);
@@ -5436,7 +5436,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//This very well could be NULL, in which case we can just go to the end
 		if(else_compound_statement_values.starting_block != NULL){
 			//The else block here now points to the else's start
-			branch_statement->else_or_live_now.else_block = else_compound_statement_values.starting_block;
+			branch_statement->else_block = else_compound_statement_values.starting_block;
 
 			//It is also now a successor as well
 			add_successor(previous_entry_block, else_compound_statement_values.starting_block);
@@ -5452,7 +5452,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 		} else {
 			//The else block here is just the exit block
-			branch_statement->else_or_live_now.else_block = exit_block;
+			branch_statement->else_block = exit_block;
 
 			//And it's a successor as well
 			add_successor(previous_entry_block, exit_block);
@@ -5464,7 +5464,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		instruction_t* branch_statement = previous_entry_block->exit_statement;
 
 		//The else scenario here is just the exit block
-		branch_statement->else_or_live_now.else_block = exit_block;
+		branch_statement->else_block = exit_block;
 
 		//The exit block is now a successor as well
 		add_successor(previous_entry_block, exit_block);
@@ -7209,7 +7209,7 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
 
 			//Add both of the successors so that we can maintain a nice order
 			add_successor(branch_instruction->block_contained_in, labeled_block);
-			add_successor(branch_instruction->block_contained_in, branch_instruction->else_or_live_now.else_block);
+			add_successor(branch_instruction->block_contained_in, branch_instruction->else_block);
 			
 			//Break out of the for loop
 			break;
