@@ -33,6 +33,8 @@ typedef struct stack_region_t stack_region_t;
  * so there's no need to store those
  */
 struct stack_region_t {
+	//The unique ID for this region
+	u_int32_t stack_region_id;
 	//The base address
 	u_int32_t base_address;
 	//The size

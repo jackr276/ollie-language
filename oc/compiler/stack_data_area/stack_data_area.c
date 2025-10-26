@@ -11,6 +11,20 @@
 #include "../instruction/instruction.h"
 #include "../utils/constants.h"
 
+//Atomically increasing stack region ID
+static u_int32_t current_stack_region_id = 0;
+
+
+/**
+ * Returns the current region Id, then increments
+ * holder
+ */
+static u_int32_t increment_and_get_stack_region_id(){
+	//Get the old value and then increment
+	return current_stack_region_id++;
+}
+
+
 /**
  * Allocate the internal dynamic array in the data area
  */
@@ -84,6 +98,9 @@ static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t siz
 	//Populate
 	region->size = size;
 	region->base_address = base_address;
+
+	//Assign it a unique ID
+	region->stack_region_id = increment_and_get_stack_region_id();
 
 	//Throw back
 	return region;
@@ -227,6 +244,15 @@ void print_stack_data_area(stack_data_area_t* area){
 		} else {
 			printf("temp %d\t%8d\t%8d\n", variable->temp_var_number, variable->type->type_size, variable->stack_offset);
 		}
+	}
+
+	//Run through all of the regions backwards and print
+	for(int16_t i = area->stack_regions->current_index - 1; i >= 0; i--){
+		//Extract it
+		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
+
+		//Print it
+		printf("Region #%d\t%8d\t%8d\n", region->stack_region_id, region->size, region->base_address);
 	}
 
 	printf("======== Stack Layout ============\n");
