@@ -1518,7 +1518,6 @@ static live_range_t* does_precoloring_interference_exist(live_range_t* coloree, 
 
 		//This collision means we do have interference
 		if(neighbor->reg == reg){
-			//printf("FOUND PRECOLORING INTERFERENCE BETWEEN: LR%d and LR%d\n", coloree->live_range_id, neighbor->live_range_id);
 			return NULL;
 		}
 	}
@@ -2059,6 +2058,15 @@ static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* gra
 				//Perform the actual coalescence
 				coalesce_live_ranges(graph, source_live_range, destination_live_range);
 
+				//If this is in any of these sets, it shouldn't be anymore
+				dynamic_array_delete(current->used_variables, destination_live_range);
+				dynamic_array_delete(current->assigned_variables, destination_live_range);
+				dynamic_array_delete(current->live_out, destination_live_range);
+				dynamic_array_delete(current->live_in, destination_live_range);
+
+				//No more assignments to this one
+				destination_live_range->assignment_count = 0;
+
 				//Grab a holder to this 
 				instruction_t* holder = instruction;
 
@@ -2535,10 +2543,13 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 
 	//Calculate LIVE_NOW up to but now including the function call
 	//itself. We want to see what needs to survive post function call
-	dynamic_array_t* live_now = calculate_live_now_set(block, instruction);
+	dynamic_array_t* live_now = calculate_live_now_set(block, instruction->previous_statement);
 
 	//Start off with this as the last instruction
 	instruction_t* last_instruction = instruction;
+
+	printf("For instruction:\n");
+	print_instruction(stdout, instruction, PRINTING_REGISTERS);
 
 	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
 	//we know what is interfering, we can see which registers they use and compare that 
@@ -2554,6 +2565,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		if(is_register_caller_saved(reg) == FALSE){
 			continue;
 		}
+
+		printf("HERE WITH LR%d\n", lr->live_range_id);
 
 		//If we get a live range like this, we know for a fact that
 		//this register needs to be saved because it's live at the time
@@ -2596,9 +2609,26 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 	//register
 	basic_block_t* block = instruction->block_contained_in;
 
+	//Set a flag array to keep track of what we've already saved
+	u_int8_t saved_registers[K_COLORS_GEN_USE];
+	memset(saved_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+
 	//Construct the LIVE_NOW set up to but now including the function call's previous statement.
 	//We need to see what has to survive after this function is called
 	dynamic_array_t* live_now = calculate_live_now_set(block, instruction->previous_statement);
+
+	//Source register does not count
+	//dynamic_array_delete(live_now, instruction->source_register->associated_live_range);
+
+	//We can also delete all of the function parameters from live_now, those don't count
+	dynamic_array_t* function_params = instruction->parameters;
+	for(u_int16_t i = 0; i < function_params->current_index; i++){
+		//Extract it
+		three_addr_var_t* function_parameter = dynamic_array_get_at(function_params, i);
+
+		//Remove it's LR
+		dynamic_array_delete(live_now, function_parameter->associated_live_range);
+	} 
 
 	//This really rarely happens, but we still must account for it. If the neighbors array is NULL
 	//or empty, we leave
@@ -2610,7 +2640,6 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 	//have, but will change to be the first pop instruction that we make 
 	instruction_t* last_instruction = instruction;
 
-
 	//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
 	for(u_int16_t i = 0; i < live_now->current_index; i++){
 		//Grab the given live range out
@@ -2621,6 +2650,9 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 
 		//If this is not caller saved, then we don't care about it
 		if(is_register_caller_saved(interfering_register) == FALSE){
+			continue;
+		//We already saved it - no point in going forward
+		} else if(saved_registers[interfering_register - 1] == TRUE){
 			continue;
 		}
 
@@ -2639,6 +2671,9 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		if(last_instruction == instruction){
 			last_instruction = pop_instruction;
 		}
+
+		//Flag that we did already save this
+		saved_registers[interferee->reg - 1] = TRUE;
 	}
 
 	//Return the last instruction to save time when drilling
