@@ -4213,6 +4213,7 @@ instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_sig
  */
 u_int8_t is_register_caller_saved(general_purpose_register_t reg){
 	switch(reg){
+		case RAX:
 		case RDI:
 		case RSI:
 		case RDX:

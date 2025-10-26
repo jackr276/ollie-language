@@ -2533,8 +2533,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//Grab out what block it's in
 	basic_block_t* block = instruction->block_contained_in;
 
-	//Every function is guaranteed to have a return value/result
-	live_range_t* result_lr = instruction->destination_register->associated_live_range; 
+	//Calculate LIVE_NOW up to but now including the function call
+	//itself. We want to see what needs to survive post function call
+	dynamic_array_t* live_now = calculate_live_now_set(block, instruction);
 
 	//Start off with this as the last instruction
 	instruction_t* last_instruction = instruction;
@@ -2542,9 +2543,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
 	//we know what is interfering, we can see which registers they use and compare that 
 	//with the register array
-	for(u_int16_t i = 0; result_lr->neighbors != NULL && i < result_lr->neighbors->current_index; i++){
+	for(u_int16_t i = 0; live_now != NULL && i < live_now->current_index; i++){
 		//Grab the neighbor out
-		live_range_t* lr = dynamic_array_get_at(result_lr->neighbors, i);
+		live_range_t* lr = dynamic_array_get_at(live_now, i);
 
 		//And grab it's register out
 		general_purpose_register_t reg = lr->reg;
@@ -2593,13 +2594,15 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t* instruction){
 	//For this given instruction, we'll need to first see what currently interferes with it by looking at what interferes with the result
 	//register
-	
-	//Extract this out
-	live_range_t* result_live_range = instruction->destination_register->associated_live_range;
+	basic_block_t* block = instruction->block_contained_in;
+
+	//Construct the LIVE_NOW set up to but now including the function call's previous statement.
+	//We need to see what has to survive after this function is called
+	dynamic_array_t* live_now = calculate_live_now_set(block, instruction->previous_statement);
 
 	//This really rarely happens, but we still must account for it. If the neighbors array is NULL
 	//or empty, we leave
-	if(result_live_range->neighbors == NULL || result_live_range->neighbors->current_index == 0){
+	if(live_now == NULL || live_now->current_index == 0){
 		return instruction;
 	}
 
@@ -2609,9 +2612,9 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 
 
 	//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
-	for(u_int16_t i = 0; i < result_live_range->neighbors->current_index; i++){
+	for(u_int16_t i = 0; i < live_now->current_index; i++){
 		//Grab the given live range out
-		live_range_t* interferee = dynamic_array_get_at(result_live_range->neighbors, i);
+		live_range_t* interferee = dynamic_array_get_at(live_now, i);
 
 		//And we'll extract the interfering register
 		general_purpose_register_t interfering_register = interferee->reg;
