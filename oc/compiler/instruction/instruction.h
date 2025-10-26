@@ -245,7 +245,11 @@ struct instruction_t{
 	//We have 2 ways to jump. The if jump is our affirmative jump,
 	//else is our alternative
 	void* if_block;
-	void* else_block;
+	//Union for efficiency sake
+	union {
+		void* else_block;
+		dynamic_array_t* live_now_set;
+	} else_or_live_now;
 	//For linked list properties -- the next statement
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
