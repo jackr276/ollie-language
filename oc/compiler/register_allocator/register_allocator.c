@@ -2408,6 +2408,11 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 			continue;
 		}
 
+		//If these are the same register - skip pushing it
+		if(destination_lr->reg == reg){
+			continue;
+		}
+
 		//If we get a live range like this, we know for a fact that
 		//this register needs to be saved because it's live at the time
 		//of the function call and the function that we're calling uses it
@@ -2479,6 +2484,11 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 			continue;
 		//We already saved it - no point in going forward
 		} else if(saved_registers[interfering_register - 1] == TRUE){
+			continue;
+		}
+
+		//If these are the same register - skip pushing it
+		if(destination_lr->reg == interfering_register){
 			continue;
 		}
 
