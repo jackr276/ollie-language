@@ -87,9 +87,8 @@ struct local_constant_t{
 struct symtab_function_record_t{
 	//The parameters for the function
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
-	//Won't be important until the register allocator. Remember- the actual enum value
-	//of the register is one more than the index here
-	u_int8_t used_registers[15];
+	//What registers does the function assign to in its body
+	u_int8_t assigned_regsiters[15];
 	//The name of the function
 	dynamic_string_t func_name;
 	//The data area for the whole function

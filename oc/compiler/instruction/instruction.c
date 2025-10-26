@@ -2863,11 +2863,18 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 		case CALL:
 			fprintf(fl, "call %s", instruction->called_function->func_name.string);
+
+			//This could be NULL
 			if(instruction->destination_register != NULL){
 				fprintf(fl, " /* --> ");
 				print_variable(fl, instruction->destination_register, mode);
+				fprintf(fl, " */");
+			} else {
+				fprintf(fl, " /* --> void */");
 			}
-			fprintf(fl, " */\n");
+
+			//Final newline
+			fprintf(fl, "\n");
 			break;
 		case INDIRECT_CALL:
 			//Indirect function calls store the location of the call in op1
@@ -2877,9 +2884,13 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			if(instruction->destination_register != NULL){
 				fprintf(fl, " /* --> ");
 				print_variable(fl, instruction->destination_register, mode);
+				fprintf(fl, " */");
+			} else {
+				fprintf(fl, " /* --> void */");
 			}
 
-			fprintf(fl, " */\n");
+			//Final newline
+			fprintf(fl, "\n");
 			break;
 
 		case PUSH:
@@ -3739,6 +3750,7 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 	stmt->assignee = assigned_to;
 	//What function are we in
 	stmt->function = current_function;
+
 	//We do NOT add parameters here, instead we had them in the CFG function
 	//Just give back the result
 	return stmt;
@@ -4195,6 +4207,7 @@ instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_sig
  */
 u_int8_t is_register_caller_saved(general_purpose_register_t reg){
 	switch(reg){
+		case RAX:
 		case RDI:
 		case RSI:
 		case RDX:
