@@ -116,13 +116,6 @@ static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t siz
 void add_variable_to_stack(stack_data_area_t* area, void* variable){
 	//We already know it's one of these
 	three_addr_var_t* var = variable;
-
-	/**
-	 * To align new variables that are added onto the stack, we will pad
-	 * their starting addresses as needed to ensure that the starting
-	 * address of the variable is a multiple of alignable type size
-	 */
-
 	//Get the type that we need to align by for the new var
 	generic_type_t* base_alignment = get_base_alignment_type(var->type);
 
@@ -152,6 +145,47 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 
 	//Finally add this to the array
 	dynamic_array_add(area->variables, var);
+}
+
+
+/**
+ * Create a stack region for the type provided. This will handle alignment and addition
+ * of this stack region
+ */
+stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_type_t* type){
+	/**
+	 * To align new variables that are added onto the stack, we will pad
+	 * their starting addresses as needed to ensure that the starting
+	 * address of the variable is a multiple of alignable type size
+	 */
+
+	//First we'll need the type that we can align by
+	generic_type_t* base_alignment_type = get_base_alignment_type(type);
+
+	//Get the alignment size
+	u_int32_t alignable_size = base_alignment_type->type_size;
+
+	//How much padding do we need? Initially we assume none
+	u_int32_t needed_padding = 0;
+
+	//We can just use the overall data area size for this
+	if(area->total_size % alignable_size != 0){
+		//Grab the needed padding
+		needed_padding = area->total_size % alignable_size;
+	}
+
+	//Create a new stack region. The base address of this stack region must be the total area plus
+	//the needed padding
+	stack_region_t* region = create_stack_region(area->total_size + needed_padding, type->type_size);
+
+	//The new size has the needed padding and the new region's size on top of it
+	area->total_size = area->total_size + needed_padding + type->type_size;
+
+	//Add the region into the stack data area
+	dynamic_array_add(area->stack_regions, region);
+
+	//Give back the allocated region
+	return region;
 }
 
 
@@ -244,6 +278,13 @@ void print_stack_data_area(stack_data_area_t* area){
 		} else {
 			printf("temp %d\t%8d\t%8d\n", variable->temp_var_number, variable->type->type_size, variable->stack_offset);
 		}
+	}
+
+	//If it's empty we'll leave
+	if(area->stack_regions->current_index == 0){
+		printf("EMPTY\n");
+		printf("======== Stack Layout ============\n");
+		return;
 	}
 
 	//Run through all of the regions backwards and print
