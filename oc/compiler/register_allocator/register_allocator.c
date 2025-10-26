@@ -485,7 +485,7 @@ static void add_assigned_live_range(live_range_t* live_range, basic_block_t* blo
 	}
 
 	//This counts as an assigned live range - save for tracking
-	live_range->assignment_count++;
+	(live_range->assignment_count)++;
 }
 
 
@@ -998,9 +998,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 		//Grab the entry block
 		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-		//We'll reset the used_registers array here because we have not used any registers at this
+		//We'll reset the assigned registers array here because we have not assigned any registers at this
 		//point
-		memset(function_entry->function_defined_in->used_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+		memset(function_entry->function_defined_in->assigned_regsiters, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
 		//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
 		do{
@@ -1101,9 +1101,6 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 			current->is_precolored = FALSE;
 			current->reg = NO_REG;
 		}
-
-		//Reset the assignment count
-		current->assignment_count = 0;
 
 		//Set the degree to be 0 as well
 		current->degree = 0;
@@ -2286,7 +2283,9 @@ static u_int8_t allocate_register(live_range_t* live_range){
 		live_range->reg = i + 1;
 
 		//Flag this as used in the function
-		live_range->function_defined_in->used_registers[i] = TRUE;
+		if(live_range->assignment_count > 0){
+			live_range->function_defined_in->assigned_regsiters[i] = TRUE;
+		}
 
 		//Return true here
 		return TRUE;
@@ -2412,7 +2411,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		//If we get a live range like this, we know for a fact that
 		//this register needs to be saved because it's live at the time
 		//of the function call and the function that we're calling uses it
-		if(callee->used_registers[reg - 1] == TRUE){
+		if(callee->assigned_regsiters[reg - 1] == TRUE){
 			//Emit a direct push with this live range's register
 			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
 
@@ -2578,7 +2577,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//We don't use this register, so move on
-		if(function->used_registers[i] == FALSE){
+		if(function->assigned_regsiters[i] == FALSE){
 			continue;
 		}
 
@@ -2647,7 +2646,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		//Run through all the registers backwards
 		for(int16_t j = K_COLORS_GEN_USE - 1; j >= 0; j--){
 			//If we haven't used this register, then skip it
-			if(function->used_registers[j] == FALSE){
+			if(function->assigned_regsiters[j] == FALSE){
 				continue;
 			}
 
