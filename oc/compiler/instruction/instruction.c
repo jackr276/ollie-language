@@ -526,6 +526,9 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//Copy the offsets over
 	emitted_var->stack_offset = var->stack_offset;
 
+	//Store the associate stack region(this is usually null)
+	emitted_var->stack_region = var->stack_region;
+
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);
 

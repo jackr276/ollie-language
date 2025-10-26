@@ -7352,6 +7352,9 @@ static void visit_declaration_statement(generic_ast_node_t* node){
 	//Add this variable into the current function's stack. This is what we'll use
 	//to store the address
 	add_variable_to_stack(&(current_function->data_area), address);
+
+	//Create a stack region for this variable
+	node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), node->inferred_type);
 }
 
 
@@ -7689,6 +7692,9 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			//Add this variable into the current function's stack. This is what we'll use
 			//to store the address
 			add_variable_to_stack(&(current_function->data_area), assignee);
+
+			//Create a stack region for this variable and store it in the associated region
+			node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), node->inferred_type);
 
 			//Emit the statement here to get the base address
 			instruction_t* mem_addr = emit_memory_address_assignment(emit_temp_var(assignee->type), assignee);
