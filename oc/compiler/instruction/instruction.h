@@ -267,6 +267,8 @@ struct instruction_t{
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
+	//What stack region do we write to or read from
+	stack_region_t* linked_stack_region;
 	//The LEA addition
 	u_int64_t lea_multiplicator;
 	//The function called

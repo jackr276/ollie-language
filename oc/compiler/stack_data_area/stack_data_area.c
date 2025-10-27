@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
+#include "../utils/constants.h"
 
 //Atomically increasing stack region ID
 static u_int32_t current_stack_region_id = 0;
@@ -200,7 +201,7 @@ void print_stack_data_area(stack_data_area_t* area){
 		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
 
 		//Print it
-		printf("Region #%d\t%8d\t%8d\t%3d\n", region->stack_region_id, region->size, region->base_address, region->read_count);
+		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->base_address, region->mark == TRUE ? "marked" : "unmarked");
 	}
 
 	printf("================== Stack Layout ===================\n");

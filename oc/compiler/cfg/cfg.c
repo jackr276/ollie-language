@@ -2734,11 +2734,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
 		load_instruction->is_branch_ending = is_branch_ending;
 
-		//Update the read count here
-		if(load_instruction->op1->stack_region != NULL){
-			load_instruction->op1->stack_region->read_count++;
-		}
-
 		//Add it to the block
 		add_statement(basic_block, load_instruction);
 
@@ -3269,11 +3264,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 			//Right side, this is a read operations
 			case SIDE_TYPE_RIGHT:
-				//Mark down that we are reading from this memory region
-				if(base_address->stack_region != NULL){
-					base_address->stack_region->read_count++;
-				}
-
 				//Still emit the memory code
 				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
 
@@ -3559,11 +3549,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//If we're on the right hand side, we need to have a temp assignment
 			if(first_child->side == SIDE_TYPE_RIGHT){
-				//This counts as an additional read
-				if(assignee->stack_region != NULL){
-					assignee->stack_region->read_count++;
-				}
-
 				//Emit the temp assignment
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
@@ -4268,14 +4253,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			result_package.final_block = current;
 		}
 
-		//If the package's assignee is a memory variable of some kind, we'll need to mark it down
-		//as one
-		if(package.assignee->stack_region != NULL){
-			//This will count as a read because it's going in as a function parameter
-			package.assignee->stack_region->read_count++;
-		}
-
-		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
 		//registers before a function call
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
 
@@ -4391,13 +4368,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//Reassign this as well, so that we stay current
 			result_package.final_block = current;
-		}
-
-		//If the package's assignee is a memory variable of some kind, we'll need to mark it down
-		//as one
-		if(package.assignee->stack_region != NULL){
-			//This will count as a read because it's going in as a function parameter
-			package.assignee->stack_region->read_count++;
 		}
 
 		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
