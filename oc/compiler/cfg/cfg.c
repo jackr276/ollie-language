@@ -4258,6 +4258,13 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			result_package.final_block = current;
 		}
 
+		//If the package's assignee is a memory variable of some kind, we'll need to mark it down
+		//as one
+		if(package.assignee->stack_region != NULL){
+			//This will count as a read because it's going in as a function parameter
+			package.assignee->stack_region->read_count++;
+		}
+
 		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
 		//registers before a function call
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
@@ -4374,6 +4381,13 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 			//Reassign this as well, so that we stay current
 			result_package.final_block = current;
+		}
+
+		//If the package's assignee is a memory variable of some kind, we'll need to mark it down
+		//as one
+		if(package.assignee->stack_region != NULL){
+			//This will count as a read because it's going in as a function parameter
+			package.assignee->stack_region->read_count++;
 		}
 
 		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
