@@ -143,6 +143,8 @@ struct live_range_t{
 	dynamic_array_t* variables;
 	//And we'll hold an adjacency list for interference
 	dynamic_array_t* neighbors;
+	//Hold the stack region as well
+	stack_region_t* stack_region;
 	//What function does this come from?
 	symtab_function_record_t* function_defined_in;
 	//Store the id of the live range

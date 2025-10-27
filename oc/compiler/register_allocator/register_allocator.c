@@ -1949,7 +1949,7 @@ static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* gra
  */
 static void handle_assignment_spill(three_addr_var_t* var, live_range_t* spill_range, instruction_t* instruction){
 	//Let the helper do this for us
-	instruction_t* store = emit_store_instruction(var, stack_pointer, type_symtab, spill_range->stack_offset);
+	instruction_t* store = emit_store_instruction(var, stack_pointer, type_symtab, spill_range->stack_region->base_address);
 
 	//Grab the block out too
 	basic_block_t* block = instruction->block_contained_in;
@@ -1990,7 +1990,7 @@ static live_range_t* handle_use_spill(dynamic_array_t* live_ranges, three_addr_v
 	dynamic_array_add(live_ranges, new_var->associated_live_range);
 
 	//Now we'll want to load from memory
-	instruction_t* load = emit_load_instruction(new_var, stack_pointer, type_symtab, spill_range->stack_offset);
+	instruction_t* load = emit_load_instruction(new_var, stack_pointer, type_symtab, spill_range->stack_region->base_address);
 	
 	//Add this as a used variable
 	add_assigned_live_range(new_var->associated_live_range, instruction->block_contained_in);
@@ -2042,18 +2042,11 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
  * Every use must be preceeded by a load
  */
 static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
-	//Since we are spilling to the stack, we'll need to get the stack_data_area structure
-	//out from whichever function this is from
-
-	//We'll need this for the stack offset
+	//We just need this for the type
 	three_addr_var_t* var = dynamic_array_get_at(spill_range->variables, 0);
 
-	//Now that we have the data area, we'll need to add enough space for the new variable
-	//in the stack data area
-	add_variable_to_stack(&(spill_range->function_defined_in->data_area), var);
-
-	//Just store the offset in the spill range's offset
-	spill_range->stack_offset = var->stack_offset;
+	//Update the spill range to now have a stack region
+	spill_range->stack_region = create_stack_region_for_type(&(spill_range->function_defined_in->data_area), var->type);
 
 	//Now that we've added this in, we'll need to go through and add 
 	//the loads and stores
