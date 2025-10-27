@@ -2708,6 +2708,9 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Emit this
 		instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(ident_node->variable->type_defined_as), emit_var(ident_node->variable));
 
+		//These will have the same memory regions
+		memory_address_of_stmt->assignee->stack_region = ident_node->variable->stack_region;
+
 		//This counts as a use
 		add_used_variable(basic_block, memory_address_of_stmt->op1);
 
@@ -3261,6 +3264,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 			//Right side, this is a read operations
 			case SIDE_TYPE_RIGHT:
+				//Mark down that we are reading from this memory region
+				if(base_address->stack_region != NULL){
+					base_address->stack_region->read_count++;
+				}
+
 				//Still emit the memory code
 				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
 
