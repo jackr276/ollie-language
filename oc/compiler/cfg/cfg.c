@@ -32,8 +32,6 @@ cfg_t* cfg_ref;
 symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
 basic_block_t* function_exit_block = NULL;
-//Keep a variable for it too
-three_addr_var_t* stack_pointer_var = NULL;
 //Keep a varaible/record for the instruction pointer(rip)
 three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
@@ -7936,7 +7934,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	//Create the stack pointer
 	symtab_variable_record_t* stack_pointer = initialize_stack_pointer(results->type_symtab);
 	//Initialize the variable too
-	stack_pointer_var = emit_var(stack_pointer);
+	three_addr_var_t* stack_pointer_var = emit_var(stack_pointer);
 	//Mark it
 	stack_pointer_var->is_stack_pointer = TRUE;
 	//Store the stack pointer

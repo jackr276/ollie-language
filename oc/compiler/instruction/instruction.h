@@ -193,7 +193,10 @@ struct three_addr_var_t{
 	//the instruction selector
 	u_int32_t use_count;
 	//What is the indirection level
+	
+	//TODO DEPRECATE - SHOULD NOT BE USED IN IR
 	u_int16_t indirection_level;
+
 	//Is this a temp variable?
 	u_int8_t is_temporary;
 	//Is this a stack pointer?
@@ -541,6 +544,18 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
  * using stack memory here
  */
 instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
+
+/**
+ * Emit a load with offset ir code. We take in a base address(op1), 
+ * an offset(op2), and the value we're loading into(assignee)
+ */
+instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset);
+
+/**
+ * Emit a load with constant offset ir code. We take in a base address(op1), 
+ * an offset(op1_const), and the value we're loading into(assignee)
+ */
+instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset);
 
 /**
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
