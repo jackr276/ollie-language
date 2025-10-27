@@ -3626,6 +3626,32 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 
 
 /**
+ * Emit a store with offset ir code. We take in a base address(assignee), 
+ * an offset(either op1 or op1_const), and the value we're storing(op2)
+ */
+instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee){
+	//First allocate
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now populate with values
+	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_OFFSET;
+	//The base address that we're assigning to
+	stmt->assignee = base_address;
+	//The op1 is our varia
+	stmt->op1 = offset;
+
+	//What we're storing
+	stmt->op2 = storee;
+
+	//Save our current function
+	stmt->function = current_function;
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
  * Emit a load statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
