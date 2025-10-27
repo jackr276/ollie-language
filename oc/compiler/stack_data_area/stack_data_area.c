@@ -185,12 +185,12 @@ void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region){
  * Print the stack data area out in its entirety
  */
 void print_stack_data_area(stack_data_area_t* area){
-	printf("======== Stack Layout ============\n");
+	printf("================== Stack Layout ===================\n");
 
 	//If it's empty we'll leave
 	if(area->stack_regions->current_index == 0){
 		printf("EMPTY\n");
-		printf("======== Stack Layout ============\n");
+		printf("================== Stack Layout ===================\n");
 		return;
 	}
 
@@ -200,10 +200,10 @@ void print_stack_data_area(stack_data_area_t* area){
 		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
 
 		//Print it
-		printf("Region #%d\t%8d\t%8d\n", region->stack_region_id, region->size, region->base_address);
+		printf("Region #%d\t%8d\t%8d\t%3d\n", region->stack_region_id, region->size, region->base_address, region->read_count);
 	}
 
-	printf("======== Stack Layout ============\n");
+	printf("================== Stack Layout ===================\n");
 }
 
 
