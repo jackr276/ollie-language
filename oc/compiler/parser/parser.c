@@ -2505,6 +2505,8 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			//Let's first determine if they're compatible
 			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
+			printf("Return type is %s\n", return_type->type_name.string);
+
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
 				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));

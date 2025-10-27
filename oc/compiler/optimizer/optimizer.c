@@ -483,6 +483,9 @@ static void mark(cfg_t* cfg){
 				/**
 				 * If we have an assignee that is being dereferenced, it's not truly an assignee. We'll
 				 * need to go through and handle the appropriate memory optimizations for this
+				 *
+				 *
+				 * TODO currently we add all writes, we'll need to update this with the readcounts
 				 */
 				if(stmt->assignee != NULL && stmt->assignee->indirection_level > 0){
 					mark_and_add_definition(cfg, stmt->assignee, stmt->function, worklist);
