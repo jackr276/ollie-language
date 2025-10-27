@@ -18,6 +18,7 @@
 #include "../utils/ollie_intermediary_representation.h"
 #include "../utils/x86_assembly_instruction.h"
 #include "../utils/x86_genpurpose_registers.h"
+#include "../utils/stack_management_structs.h"
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -142,10 +143,10 @@ struct live_range_t{
 	dynamic_array_t* variables;
 	//And we'll hold an adjacency list for interference
 	dynamic_array_t* neighbors;
+	//Hold the stack region as well
+	stack_region_t* stack_region;
 	//What function does this come from?
 	symtab_function_record_t* function_defined_in;
-	//What is the stack offset of this live range?
-	u_int32_t stack_offset;
 	//Store the id of the live range
 	u_int32_t live_range_id;
 	//Store the assignment count - used for stack pointer fixing
@@ -179,12 +180,10 @@ struct three_addr_var_t{
 	symtab_function_record_t* linked_function;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
-	//For memory management
-	three_addr_var_t* next_created;
 	//What live range is this variable associate with
 	live_range_t* associated_live_range;
-	//What is the stack offset(i.e. %rsp + __) of this variable?
-	u_int32_t stack_offset;
+	//What is the stack region associated with this variable?
+	stack_region_t* stack_region;
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
 	//What's the temp var number
@@ -213,16 +212,13 @@ struct three_addr_var_t{
  * A three address constant always holds the value of the constant
  */
 struct three_addr_const_t{
-	//For memory management
-	three_addr_const_t* next_created;
-	//The constant's function record
-	symtab_function_record_t* function_name;
 	//This is for string constants
 	local_constant_t* local_constant;
 	//We hold the type info
 	generic_type_t* type;
 	//Store the constant value in a union
 	union {
+		symtab_function_record_t* function_name;
 		int64_t long_constant;
 		double double_constant;
 		float float_constant;
@@ -311,6 +307,11 @@ struct instruction_t{
 	//The register that we're popping or pushing
 	general_purpose_register_t push_or_pop_reg;
 };
+
+/**
+ * Initialize the memory management system
+ */
+void initialize_varible_and_constant_system();
 
 /**
  * A helper function for our atomically increasing temp id

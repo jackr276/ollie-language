@@ -85,6 +85,9 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
  * We'll just have one big run through here
 */
 int main(int argc, char** argv){
+	//Initialze the var/const system
+	initialize_varible_and_constant_system();
+
 	//Grab the compiler options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
@@ -103,7 +106,6 @@ int main(int argc, char** argv){
 	//Run through the entire variable symtab and add what would be immediately eligible(arrays, constructs)
 	symtab_variable_sheaf_t* cursor;
 	symtab_variable_record_t* record;
-	symtab_variable_record_t* temp;
 
 	//Create a dynamic array to hold all of the vars we make
 	dynamic_array_t* array_of_vars = dynamic_array_alloc();
@@ -118,19 +120,18 @@ int main(int argc, char** argv){
 
 			//We could have chaining here, so run through just in case
 			while(record != NULL){
-					//Emit the variable
-					three_addr_var_t* var = emit_var(record);
-				
-					//Store for later
-					dynamic_array_add(array_of_vars, var);
+				//Add it into the stack
+				record->stack_region = create_stack_region_for_type(&(main_function->data_area), record->type_defined_as);
+			
+				//Emit the variable
+				three_addr_var_t* var = emit_var(record);
+			
+				//Store for later
+				dynamic_array_add(array_of_vars, var);
 
-					//Add it into the stack
-					add_variable_to_stack(&(main_function->data_area), var);
+				//Let's print it out to see what we have
+				print_stack_data_area(&(main_function->data_area));
 
-					//Let's print it out to see what we have
-					print_stack_data_area(&(main_function->data_area));
-
-				temp = record;
 				record = record->next;
 			}
 		}
@@ -144,8 +145,10 @@ int main(int argc, char** argv){
 
 	//Now let's run through and remove everything to test that
 	for(u_int16_t i = 0; i < array_of_vars->current_index; i++){
+		//Extract the variable
+		three_addr_var_t* variable = dynamic_array_get_at(array_of_vars, i);
 		//Delete it
-		remove_variable_from_stack(&(main_function->data_area), dynamic_array_get_at(array_of_vars, i));
+		remove_region_from_stack(&(main_function->data_area), variable->stack_region);
 		//Reprint the whole thing
 		print_stack_data_area(&(main_function->data_area));
 	}
@@ -155,4 +158,8 @@ int main(int argc, char** argv){
 
 	//Ensure that we can fully deallocate
 	stack_data_area_dealloc(&(main_function->data_area));
+
+	//Cleanup at the end
+	deallocate_all_consts();
+	deallocate_all_vars();
 }

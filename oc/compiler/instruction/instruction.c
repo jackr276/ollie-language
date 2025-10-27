@@ -20,9 +20,19 @@ static int32_t current_temp_id = 0;
 static symtab_function_record_t* current_function = NULL;
 
 //All created vars
-three_addr_var_t* emitted_vars = NULL;
+dynamic_array_t* emitted_vars;
 //All created constants
-three_addr_const_t* emitted_consts = NULL;
+dynamic_array_t* emitted_consts;
+
+
+/**
+ * Initialize the memory management system
+ */
+void initialize_varible_and_constant_system(){
+	emitted_consts = dynamic_array_alloc();
+	emitted_vars = dynamic_array_alloc();
+}
+
 
 /**
  * A helper function for our atomically increasing temp id
@@ -39,6 +49,9 @@ int32_t increment_and_get_temp_id(){
 global_variable_t* create_global_variable(symtab_variable_record_t* variable, three_addr_const_t* value){
 	//Allocate it
 	global_variable_t* var = calloc(1, sizeof(global_variable_t));
+
+	//Add into here for memory management
+	dynamic_array_add(emitted_vars, var);
 
 	//Copy these over
 	var->variable = variable;
@@ -471,9 +484,8 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	//Let's first create the temporary variable
 	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
 
-	//Attach this for memory management
-	var->next_created = emitted_vars;
-	emitted_vars = var;
+	//Add into here for memory management
+	dynamic_array_add(emitted_vars, var);
 
 	//Mark this as temporary
 	var->is_temporary = TRUE;
@@ -501,9 +513,8 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//Attach it for memory management
-	emitted_var->next_created = emitted_vars;
-	emitted_vars = emitted_var;
+	//Add into here for memory management
+	dynamic_array_add(emitted_vars, emitted_var);
 
 	//This is not temporary
 	emitted_var->is_temporary = FALSE;
@@ -512,8 +523,8 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//And store the symtab record
 	emitted_var->linked_var = var;
 
-	//Copy the offsets over
-	emitted_var->stack_offset = var->stack_offset;
+	//Store the associate stack region(this is usually null)
+	emitted_var->stack_region = var->stack_region;
 
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);
@@ -532,9 +543,8 @@ three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generi
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//Attach it for memory management
-	emitted_var->next_created = emitted_vars;
-	emitted_vars = emitted_var;
+	//Add into here for memory management
+	dynamic_array_add(emitted_vars, emitted_var);
 
 	//This is not temporary
 	emitted_var->is_temporary = FALSE;
@@ -559,9 +569,8 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//Attach it for memory management
-	emitted_var->next_created = emitted_vars;
-	emitted_vars = emitted_var;
+	//Add into here for memory management
+	dynamic_array_add(emitted_vars, emitted_var);
 
 	//This is temporary
 	emitted_var->is_temporary = TRUE;
@@ -585,13 +594,12 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
+	//Add into here for memory management
+	dynamic_array_add(emitted_vars, emitted_var);
+
 	//Copy the memory
 	memcpy(emitted_var, var, sizeof(three_addr_var_t));
 	
-	//Attach it for memory management
-	emitted_var->next_created = emitted_vars;
-	emitted_vars = emitted_var;
-
 	//Transfer this status over
 	emitted_var->is_temporary = var->is_temporary;
 
@@ -1286,7 +1294,7 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 			fprintf(fl, "%f", constant->constant_value.double_constant);
 			break;
 		case FUNC_CONST:
-			fprintf(fl, "%s", constant->function_name->func_name.string);
+			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
 		//To stop compiler warnings
 		default:
@@ -1744,7 +1752,7 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 			fprintf(fl, "$%f", constant->constant_value.double_constant);
 			break;
 		case FUNC_CONST:
-			fprintf(fl, "%s", constant->function_name->func_name.string);
+			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
 		//String constants are a special case because they are represented by
 		//local constants, not immediate values
@@ -1785,7 +1793,7 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 			fprintf(fl, "%f", constant->constant_value.double_constant);
 			break;
 		case FUNC_CONST:
-			fprintf(fl, "%s", constant->function_name->func_name.string);
+			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
 		//String constants are a special case because they are represented by
 		//local constants, not immediate values
@@ -3315,9 +3323,8 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	//First we'll dynamically allocate the constant
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
+	//Add into here for memory management
+	dynamic_array_add(emitted_consts, constant);
 
 	//Now we'll assign the appropriate values
 	constant->const_type = const_node->constant_type; 
@@ -3355,7 +3362,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 		//as a value
 		case FUNC_CONST:
 			//Store the function name
-			constant->function_name = const_node->func_record;
+			constant->constant_value.function_name = const_node->func_record;
 			break;
 
 		//Some very weird error here
@@ -3382,9 +3389,8 @@ three_addr_const_t* emit_string_constant(symtab_function_record_t* function, gen
 	//Let's allocate it first
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
+	//Add into here for memory management
+	dynamic_array_add(emitted_consts, constant);
 
 	//Now we'll assign the appropriate values
 	constant->const_type = const_node->constant_type; 
@@ -3784,9 +3790,8 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 	//First allocate it
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
-	//Attach it for memory management
-	constant->next_created = emitted_consts;
-	emitted_consts = constant;
+	//Add into here for memory management
+	dynamic_array_add(emitted_consts, constant);
 
 	//Store the type here
 	constant->type = type;
@@ -4366,18 +4371,17 @@ void instruction_dealloc(instruction_t* stmt){
  * Deallocate all variables using our global list strategy
 */
 void deallocate_all_vars(){
-	//For holding 
-	three_addr_var_t* temp;
+	//Until we're empty
+	while(dynamic_array_is_empty(emitted_vars) == FALSE){
+		//O(1) removal
+		three_addr_var_t* variable = dynamic_array_delete_from_back(emitted_vars);
 
-	//Run through the whole list
-	while(emitted_vars != NULL){
-		//Hold onto it here
-		temp = emitted_vars;
-		//Advance
-		emitted_vars = emitted_vars->next_created;
-		//Free the one we just had
-		free(temp);
+		//Free it
+		free(variable);
 	}
+
+	//Finally scrap the array
+	dynamic_array_dealloc(emitted_vars);
 }
 
 
@@ -4385,16 +4389,15 @@ void deallocate_all_vars(){
  * Deallocate all constants using our global list strategy
 */
 void deallocate_all_consts(){
-	//For holding
-	three_addr_const_t* temp;
+	//Until we're empty
+	while(dynamic_array_is_empty(emitted_consts) == FALSE){
+		//O(1) removal
+		three_addr_const_t* constant = dynamic_array_delete_from_back(emitted_consts);
 
-	//Run through the whole list
-	while(emitted_consts != NULL){
-		//Hold onto it here
-		temp = emitted_consts;
-		//Advance
-		emitted_consts = emitted_consts->next_created;
-		//Deallocate temp
-		free(temp);
+		//Free it
+		free(constant);
 	}
+
+	//Finally scrap the array
+	dynamic_array_dealloc(emitted_consts);
 }

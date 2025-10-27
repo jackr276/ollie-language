@@ -15,6 +15,7 @@
 #include "../type_system/type_system.h"
 #include "../utils/stack/lightstack.h"
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/constants.h"
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 
@@ -88,7 +89,7 @@ struct symtab_function_record_t{
 	//The parameters for the function
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
 	//What registers does the function assign to in its body
-	u_int8_t assigned_regsiters[15];
+	u_int8_t assigned_regsiters[K_COLORS_GEN_USE];
 	//The name of the function
 	dynamic_string_t func_name;
 	//The data area for the whole function
@@ -134,8 +135,8 @@ struct symtab_variable_record_t{
 	symtab_variable_record_t* next;
 	//What is the enum member value
 	u_int64_t enum_member_value;
-	//The stack offset of this variable, if it is a stack variable
-	u_int32_t stack_offset;
+	//The associate region that this variable is stored in
+	stack_region_t* stack_region;
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The hash of it

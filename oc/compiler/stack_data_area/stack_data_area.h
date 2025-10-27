@@ -15,20 +15,7 @@
 
 #include <sys/types.h>
 #include "../utils/dynamic_array/dynamic_array.h"
-
-//An overall structure that holds our stack data area
-typedef struct stack_data_area_t stack_data_area_t;
-
-/**
- * A structure that contains an automatically organizing linked
- * list. This linked list contains all of our data
- */
-struct stack_data_area_t{
-	//The array of all variables in the stack currently
-	dynamic_array_t* variables;
-	//The total size of the data area
-	u_int32_t total_size;
-};
+#include "../utils/stack_management_structs.h"
 
 /**
  * Allocate the internal dynamic array in the data area
@@ -36,19 +23,15 @@ struct stack_data_area_t{
 void stack_data_area_alloc(stack_data_area_t* area);
 
 /**
- * Add a node into the stack data area
+ * Create a stack region for the type provided. This will handle alignment and addition
+ * of this stack region
  */
-void add_variable_to_stack(stack_data_area_t* area, void* variable);
+stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_type_t* type);
 
 /**
- * Does a stack contain a given *symtab variable* address?
+ * Remove a given region from the stack
  */
-u_int8_t does_stack_contain_symtab_variable(stack_data_area_t* area, void* symtab_variable);
-
-/**
- * Remove a node from the stack if it is deemed useless
- */
-void remove_variable_from_stack(stack_data_area_t* area, void* variable);
+void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region);
 
 /**
  * Print the stack data area out in its entirety

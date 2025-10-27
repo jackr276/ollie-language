@@ -8,56 +8,28 @@
 #include "stack_data_area.h"
 #include <stdio.h>
 #include <sys/types.h>
-#include "../instruction/instruction.h"
-#include "../utils/constants.h"
+#include <stdlib.h>
+
+//Atomically increasing stack region ID
+static u_int32_t current_stack_region_id = 0;
+
+
+/**
+ * Returns the current region Id, then increments
+ * holder
+ */
+static u_int32_t increment_and_get_stack_region_id(){
+	//Get the old value and then increment
+	return current_stack_region_id++;
+}
+
 
 /**
  * Allocate the internal dynamic array in the data area
  */
 void stack_data_area_alloc(stack_data_area_t* area){
-	//Just allocate the dynamic array
-	area->variables = dynamic_array_alloc();
-
-	//Currently the size is 0
-	area->total_size = 0;
-}
-
-
-/**
- * Does the stack already contain this variable? This is important for types like
- * constructs and arrays
- */
-static u_int8_t does_stack_contain_variable(stack_data_area_t* area, three_addr_var_t* var){
-	//Run through and try to find this
-	for(u_int16_t i = 0; i < area->variables->current_index; i++){
-		if(dynamic_array_get_at(area->variables, i) == var){
-			return TRUE;
-		}
-	}
-
-	//Return false if we get here
-	return FALSE;
-}
-
-
-/**
- * Does the stack already contain this variable? This is important for types like
- * constructs and arrays
- */
-u_int8_t does_stack_contain_symtab_variable(stack_data_area_t* area, void* symtab_variable){
-	//Run through and try to find this
-	for(u_int16_t i = 0; i < area->variables->current_index; i++){
-		//Grab it out
-		three_addr_var_t* ir_variable = dynamic_array_get_at(area->variables, i);
-
-		//This is our success case
-		if(ir_variable->linked_var != NULL && ir_variable->linked_var == symtab_variable){
-			return TRUE;
-		}
-	}
-
-	//Return false if we get here
-	return FALSE;
+	//Allocate the regions array
+	area->stack_regions = dynamic_array_alloc();
 }
 
 
@@ -91,31 +63,40 @@ void align_stack_data_area(stack_data_area_t* area){
 
 
 /**
- * Add a node into the stack data area
- *
- * We'll need to guarantee that the base and ending address of each
- * variable in here is a multiple of their alignment requirement K
+ * Create a stack region with a given size and base address in the stack 
  */
-void add_variable_to_stack(stack_data_area_t* area, void* variable){
-	//If we already have the variable in here then leave
-	if(does_stack_contain_variable(area, variable) == TRUE){
-		return;
-	}
+static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t size){
+	//Calloc it
+	stack_region_t* region = calloc(1, sizeof(stack_region_t));
 
-	//We already know it's one of these
-	three_addr_var_t* var = variable;
+	//Populate
+	region->size = size;
+	region->base_address = base_address;
 
+	//Assign it a unique ID
+	region->stack_region_id = increment_and_get_stack_region_id();
+
+	//Throw back
+	return region;
+}
+
+
+/**
+ * Create a stack region for the type provided. This will handle alignment and addition
+ * of this stack region
+ */
+stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_type_t* type){
 	/**
 	 * To align new variables that are added onto the stack, we will pad
 	 * their starting addresses as needed to ensure that the starting
 	 * address of the variable is a multiple of alignable type size
 	 */
 
-	//Get the type that we need to align by for the new var
-	generic_type_t* base_alignment = get_base_alignment_type(var->type);
+	//First we'll need the type that we can align by
+	generic_type_t* base_alignment_type = get_base_alignment_type(type);
 
 	//Get the alignment size
-	u_int32_t alignable_size = base_alignment->type_size;
+	u_int32_t alignable_size = base_alignment_type->type_size;
 
 	//How much padding do we need? Initially we assume none
 	u_int32_t needed_padding = 0;
@@ -126,20 +107,21 @@ void add_variable_to_stack(stack_data_area_t* area, void* variable){
 		needed_padding = area->total_size % alignable_size;
 	}
 
-	//This one's stack offset is the original total size plus whatever padding we need
-	var->stack_offset = area->total_size + needed_padding;
-	
-	//Update the total size of the stack too. The new size is the original size
-	//with the needed padding and the new type's size added onto it
-	area->total_size = area->total_size + needed_padding + var->type->type_size;
+	//Create a new stack region. The base address of this stack region must be the total area plus
+	//the needed padding
+	stack_region_t* region = create_stack_region(area->total_size + needed_padding, type->type_size);
 
-	//Copy this over to the variable itself if it's there
-	if(var->linked_var != NULL){
-		var->linked_var->stack_offset = var->stack_offset;
-	}
+	//Store the type in here - we'll need it for later on
+	region->type = type;
 
-	//Finally add this to the array
-	dynamic_array_add(area->variables, var);
+	//The new size has the needed padding and the new region's size on top of it
+	area->total_size = area->total_size + needed_padding + type->type_size;
+
+	//Add the region into the stack data area
+	dynamic_array_add(area->stack_regions, region);
+
+	//Give back the allocated region
+	return region;
 }
 
 
@@ -152,18 +134,18 @@ static void realign_data_area(stack_data_area_t* area){
 	area->total_size = 0;
 
 	//Run through every single variable
-	for(u_int16_t i = 0; i < area->variables->current_index; i++){
+	for(u_int16_t i = 0; i < area->stack_regions->current_index; i++){
 		//Grab it out
-		three_addr_var_t* variable = dynamic_array_get_at(area->variables, i);
+		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
 
 		/**
-		 * To align new variables that are added onto the stack, we will pad
+		 * To align new regions that are added onto the stack, we will pad
 		 * their starting addresses as needed to ensure that the starting
 		 * address of the variable is a multiple of alignable type size
 		 */
 
 		//Get the type that we need to align by for the new var
-		generic_type_t* base_alignment = get_base_alignment_type(variable->type);
+		generic_type_t* base_alignment = get_base_alignment_type(region->type);
 
 		//Get the alignment size
 		u_int32_t alignable_size = base_alignment->type_size;
@@ -178,32 +160,23 @@ static void realign_data_area(stack_data_area_t* area){
 		}
 
 		//This one's stack offset is the original total size plus whatever padding we need
-		variable->stack_offset = area->total_size + needed_padding;
-
-		//If the variable also has a three address variable associated with it - we will
-		//update that variable's stack address
-		if(variable->linked_var != NULL){
-			variable->linked_var->stack_offset = variable->stack_offset;
-		}
+		region->base_address = area->total_size + needed_padding;
 		
 		//Update the total size of the stack too. The new size is the original size
 		//with the needed padding and the new type's size added onto it
-		area->total_size = area->total_size + needed_padding + variable->type->type_size;
+		area->total_size = area->total_size + needed_padding + region->type->type_size;
 	}
 }
 
 
 /**
- * Remove a node from the stack if it is deemed useless
- *
- * Once we're done removing, we'll need to completely redo the data area's alignment
- *
+ * Remove a given region from the stack
  */
-void remove_variable_from_stack(stack_data_area_t* area, void* variable){
+void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region){
 	//Delete this variable
-	dynamic_array_delete(area->variables, variable);
+	dynamic_array_delete(area->stack_regions, region);
 
-	//Realign the whole thing
+	//Realign the entire thing now
 	realign_data_area(area);
 }
 
@@ -215,34 +188,38 @@ void print_stack_data_area(stack_data_area_t* area){
 	printf("======== Stack Layout ============\n");
 
 	//If it's empty we'll leave
-	if(area->variables->current_index == 0){
+	if(area->stack_regions->current_index == 0){
 		printf("EMPTY\n");
 		printf("======== Stack Layout ============\n");
 		return;
 	}
 
-	//Otherwise run through everything backwards and print
-	for(int16_t i = area->variables->current_index - 1; i >= 0; i--){
-		//Grab the variable out
-		three_addr_var_t* variable = dynamic_array_get_at(area->variables, i);
+	//Run through all of the regions backwards and print
+	for(int16_t i = area->stack_regions->current_index - 1; i >= 0; i--){
+		//Extract it
+		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
 
-		//We'll take the variable and the size
-		if(variable->is_temporary == FALSE){
-			printf("%10s\t%8d\t%8d\n", variable->linked_var->var_name.string, variable->type->type_size, variable->stack_offset);
-		} else {
-			printf("temp %d\t%8d\t%8d\n", variable->temp_var_number, variable->type->type_size, variable->stack_offset);
-		}
+		//Print it
+		printf("Region #%d\t%8d\t%8d\n", region->stack_region_id, region->size, region->base_address);
 	}
 
 	printf("======== Stack Layout ============\n");
 }
 
 
-
 /**
  * Deallocate the internal linked list of the stack data area
  */
 void stack_data_area_dealloc(stack_data_area_t* stack_data_area){
-	//All we need to do here is deallocate the dynamic array
-	dynamic_array_dealloc(stack_data_area->variables);
+	//Run through all regions
+	for(u_int16_t i = 0; i < stack_data_area->stack_regions->current_index; i++){
+		//Grab it out
+		stack_region_t* region = dynamic_array_get_at(stack_data_area->stack_regions, i);
+
+		//Delete it
+		free(region);
+	}
+
+	//Finally deallocate the region here
+	dynamic_array_dealloc(stack_data_area->stack_regions);
 }
