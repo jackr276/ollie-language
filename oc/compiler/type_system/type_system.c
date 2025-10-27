@@ -731,8 +731,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
 				*b = lookup_type_name_only(symtab, "u64")->type;
 
-				//Give back the u64 type as the result
-				return *b;
+				//Give back the pointer type as the result
+				return *a;
 			}
 			
 			//If b is a pointer type. This is teh exact same scenario as a
@@ -758,8 +758,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
 				*a = lookup_type_name_only(symtab, "u64")->type;
 
-				//Give back the u64 type as the result
-				return *a;
+				//Give back the pointer type as the result
+				return *b;
 			}
 
 			//At this point if these are not basic types, we're done

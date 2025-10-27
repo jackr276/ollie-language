@@ -42,8 +42,8 @@ struct stack_region_t {
 	u_int32_t base_address;
 	//The size
 	u_int32_t size;
-	//The read count
-	u_int32_t read_count;
+	//Is this marked or not
+	u_int8_t mark;
 };
 
 

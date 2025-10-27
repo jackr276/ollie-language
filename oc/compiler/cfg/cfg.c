@@ -2708,6 +2708,9 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Emit this
 		instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(ident_node->variable->type_defined_as), emit_var(ident_node->variable));
 
+		//These will have the same memory regions
+		memory_address_of_stmt->assignee->stack_region = ident_node->variable->stack_region;
+
 		//This counts as a use
 		add_used_variable(basic_block, memory_address_of_stmt->op1);
 
@@ -4250,7 +4253,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			result_package.final_block = current;
 		}
 
-		//We'll also need to emit a temp assignment here. This is because we need to move everything into given
 		//registers before a function call
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
 
