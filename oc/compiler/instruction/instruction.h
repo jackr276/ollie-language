@@ -558,12 +558,6 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset);
 
 /**
- * Emit a store statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
- */
-instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const);
-
-/**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
  */
 instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee, three_addr_const_t* constant);

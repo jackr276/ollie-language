@@ -50,8 +50,6 @@ typedef enum{
 	THREE_ADDR_CODE_IDLE_STMT,
 	//A negation statement
 	THREE_ADDR_CODE_NEG_STATEMENT,
-	//A store statement, but explicitly with a constant
-	THREE_ADDR_CODE_STORE_CONST_STATEMENT,
 	//Store with a variable offset
 	THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET,
 	//Store with a constant offset
