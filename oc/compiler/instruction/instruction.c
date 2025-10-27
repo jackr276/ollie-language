@@ -1486,10 +1486,59 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
-		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		/**
+		 * These print out as
+		 *
+		 * store x <- storee
+		 */
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			fprintf(fl, "store ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
 			break;
 
+		/**
+		 * These print out like
+		 *
+		 * store x[offset] <- storee
+		 */
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			//First the base address(assignee)
+			fprintf(fl, "store ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+			//Then the constant offset
+			fprintf(fl, "["); 
+			print_three_addr_constant(fl, stmt->op1_const);
+			fprintf(fl, "] <- "); 
+
+			//Finally the storee(op2)
+			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+
+			break;
+
+		/**
+		 * These print out like
+		 *
+		 * store x[offset] <- storee
+		 */
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			//First the base address(assignee)
+			fprintf(fl, "store ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+			//Then the variable offset(op1)
+			fprintf(fl, "["); 
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "] <- "); 
+
+			//Finally the storee(op2)
+			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+
 			break;
 
 		case THREE_ADDR_CODE_JUMP_STMT:
@@ -1614,15 +1663,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- store ");
 			print_three_addr_constant(fl, stmt->op1_const);
-			fprintf(fl, "\n");
-			break;
-
-		//A store statement takes a value and stores it into a variable's
-		//memory location on the stack
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- store ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
