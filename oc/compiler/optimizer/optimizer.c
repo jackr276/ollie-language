@@ -461,24 +461,6 @@ static void mark(cfg_t* cfg){
 
 				break;
 
-			//If we have a memory address statement, we need to mark the stack
-			//region that we reference as important
-			case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
-				/**
-				 * Since the memory address statement is flagged as important, it's clear
-				 * that this stack region is now important as well
-				 */
-				if(stmt->op1->stack_region != NULL){
-					stmt->op1->stack_region->mark = TRUE;
-
-				//Otherwise, this could be a literal memory address statement. In which
-				//case, mark and add the definition of op1
-				} else {
-					mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
-				}
-
-				break;
-
 			//An indirect function call behaves similarly to a function call, but we'll also
 			//need to mark it's "op1" value as important. This is the value that stores
 			//the memory address of the function that we're calling
@@ -501,9 +483,6 @@ static void mark(cfg_t* cfg){
 				/**
 				 * If we have an assignee that is being dereferenced, it's not truly an assignee. We'll
 				 * need to go through and handle the appropriate memory optimizations for this
-				 *
-				 *
-				 * TODO currently we add all writes, we'll need to update this with the readcounts
 				 */
 				if(stmt->assignee != NULL && stmt->assignee->indirection_level > 0){
 					mark_and_add_definition(cfg, stmt->assignee, stmt->function, worklist);
