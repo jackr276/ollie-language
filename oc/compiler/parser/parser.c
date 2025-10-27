@@ -2505,8 +2505,6 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			//Let's first determine if they're compatible
 			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-			printf("Return type is %s\n", return_type->type_name.string);
-
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
 				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
@@ -2515,6 +2513,11 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 
 			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
 			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child, side);
+
+			//Copy the variable over here for later use
+			if(temp_holder->variable != NULL){
+				sub_tree_root->variable = temp_holder->variable;
+			}
 
 			//Once we're done here, the right child is the pointer arithmetic
 			right_child = pointer_arithmetic;
