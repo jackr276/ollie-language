@@ -526,10 +526,15 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 
- * an offset(either op1), and the value we're storing(op2)
+ * an offset(op1), and the value we're storing(op2)
  */
 instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee);
 
+/**
+ * Emit a store with offset ir code. We take in a base address(assignee), 
+ * a constant offset(op1_const), and the value we're storing(op2)
+ */
+instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee);
 
 /**
  * Emit a load statement. This is like an assignment instruction, but we're explicitly

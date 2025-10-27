@@ -1159,12 +1159,6 @@ static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg)
  * and nothing more. This function is also designed to take into account the indirection aspected as well
  */
 void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode_t mode){
-	//If we have a block header, we will NOT print out any indirection info
-	//We will first print out any and all indirection("(") opening parens
-	for(u_int16_t i = 0; mode == PRINTING_VAR_INLINE && i < variable->indirection_level; i++){
-		fprintf(fl, "(");
-	}
-	
 	//If we're printing live ranges, we'll use the LR number
 	if(mode == PRINTING_LIVE_RANGES){
 		fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
@@ -1201,11 +1195,6 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 	} else {
 		//Otherwise, print out the SSA generation along with the variable
 		fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
-	}
-
-	//Lastly we print out the remaining indirection characters
-	for(u_int16_t i = 0; mode == PRINTING_VAR_INLINE && i < variable->indirection_level; i++){
-		fprintf(fl, ")");
 	}
 }
 
@@ -1495,6 +1484,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			
 			//No matter what, print a newline
 			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			break;
+
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 			break;
 
 		case THREE_ADDR_CODE_JUMP_STMT:
@@ -3627,18 +3622,44 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 
- * an offset(either op1 or op1_const), and the value we're storing(op2)
+ * a variable offset(op1), and the value we're storing(op2)
  */
 instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now populate with values
-	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_OFFSET;
+	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
 	//The base address that we're assigning to
 	stmt->assignee = base_address;
 	//The op1 is our varia
 	stmt->op1 = offset;
+
+	//What we're storing
+	stmt->op2 = storee;
+
+	//Save our current function
+	stmt->function = current_function;
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a store with offset ir code. We take in a base address(assignee), 
+ * a constant offset(op1_const), and the value we're storing(op2)
+ */
+instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee){
+	//First allocate
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now populate with values
+	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+	//The base address that we're assigning to
+	stmt->assignee = base_address;
+	//The op1 is our varia
+	stmt->op1_const = offset;
 
 	//What we're storing
 	stmt->op2 = storee;

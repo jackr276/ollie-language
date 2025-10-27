@@ -58,8 +58,10 @@ typedef enum{
 	THREE_ADDR_CODE_STORE_STATEMENT,
 	//Load with an offset
 	THREE_ADDR_CODE_LOAD_WITH_OFFSET,
-	//Store with an offset
-	THREE_ADDR_CODE_STORE_WITH_OFFSET,
+	//Store with a variable offset
+	THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET,
+	//Store with a constant offset
+	THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET,
 	//SPECIAL CASE - assembly inline statement
 	THREE_ADDR_CODE_ASM_INLINE_STMT,
 	//A "Load effective address(lea)" instruction
