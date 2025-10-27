@@ -2734,6 +2734,11 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
 		load_instruction->is_branch_ending = is_branch_ending;
 
+		//Update the read count here
+		if(load_instruction->op1->stack_region != NULL){
+			load_instruction->op1->stack_region->read_count++;
+		}
+
 		//Add it to the block
 		add_statement(basic_block, load_instruction);
 
@@ -3554,6 +3559,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//If we're on the right hand side, we need to have a temp assignment
 			if(first_child->side == SIDE_TYPE_RIGHT){
+				//This counts as an additional read
+				if(assignee->stack_region != NULL){
+					assignee->stack_region->read_count++;
+				}
+
 				//Emit the temp assignment
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
