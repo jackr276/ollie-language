@@ -7525,8 +7525,14 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	//The member index
 	u_int32_t member_index = 0;
 
+	//The eventual offset constant
+	three_addr_const_t* offset_constant;
+
 	//For storing the address as needed
 	three_addr_var_t* address;
+
+	//The store instruction
+	instruction_t* store;
 
 	//The initializer results
 	cfg_result_package_t initializer_results;
@@ -7553,14 +7559,21 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 
 			default:
+				//Just call the vanilla rule
+				initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
+
+				//Creat the offset constant
+				offset_constant = emit_direct_integer_or_char_constant(current_offset, u64);
+
+				//
+				store = emit_store_with_constant_offset_ir_code(base_address, offset, three_addr_var_t *storee)
+
 				//We'll need to emit the proper address offset calculation for each one
 				address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(current_offset, u64), is_branch_ending);
 
 				//Once we have the address, we'll need to emit the memory code for it
 				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
 
-				//Just call the vanilla rule
-				initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
 				break;
 		}
 
