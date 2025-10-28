@@ -2827,6 +2827,22 @@ static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_v
 
 
 /**
+ * Emit a version of the assignee that has the dereference flag turned on. This needs to be a completely
+ * distinct copy from the original
+ */
+static three_addr_var_t* emit_variable_dereference(three_addr_var_t* assignee){
+	//Grab the dereferenced version
+	three_addr_var_t* dereferenced_version = emit_var_copy(assignee);
+
+	//Set the flag that this is dereferenced
+	dereferenced_version->is_dereferenced = TRUE;
+
+	//Give this version back
+	return dereferenced_version;
+}
+
+
+/**
  * Emit a pointer indirection statement. The parser has already done the dereferencing for us, so we'll just
  * be able to store the dereferenced type in here
  */
@@ -3574,8 +3590,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Get the dereferenced variable
 			dereferenced = emit_pointer_indirection(current_block, assignee, unary_expression_parent->inferred_type);
 
+			/**
+			 * We can flag that a final expression needs to be a store instruction with the "needs store" operator
+			 * or just by using the indirection level
+			 */
+
 			//If we're on the right hand side, we need to have a temp assignment
 			if(first_child->side == SIDE_TYPE_RIGHT){
+				//If the side type here is right, we'll need a load instruction
+				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(dereferenced->type), dereferenced);
+
 				//Emit the temp assignment
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
 
@@ -4071,6 +4095,12 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 	//We'll process based on the class of our expression node
 	switch(expr_node->ast_node_type){
+		/**
+		 * TODO As an idea here, it is possible for us to actually
+		 * emit the right hand side first. This would allow us to pass the final
+		 * assignee over to the left hand side so that we can avoid needing to pass any weird
+		 * load or store arguments around
+		 */
 		case AST_NODE_TYPE_ASNMNT_EXPR:
 			//In our tree, an assignment statement decays into a unary expression
 			//on the left and a binary op expr on the right

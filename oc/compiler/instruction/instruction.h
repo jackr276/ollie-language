@@ -197,6 +197,11 @@ struct three_addr_var_t{
 	//TODO DEPRECATE - SHOULD NOT BE USED IN IR
 	u_int16_t indirection_level;
 
+
+	//Is this variable dereferenced in some way
+	//(either loaded from or stored to)
+	u_int8_t is_dereferenced;
+
 	//Is this a temp variable?
 	u_int8_t is_temporary;
 	//Is this a stack pointer?
