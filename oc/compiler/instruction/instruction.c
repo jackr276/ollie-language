@@ -1541,6 +1541,65 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			break;
 
+
+		/**
+		 * These print out like
+		 *
+		 * load assignee <- x_0
+		 */
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			fprintf(fl, "load ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- "); 
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		/**
+		 * These print out like
+		 *
+		 * load assignee <- x[offset] 
+		 */
+		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
+			//First the assignee
+			fprintf(fl, "load ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+
+			//Now the base address
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+			//Then the constant offset
+			fprintf(fl, "["); 
+			print_three_addr_constant(fl, stmt->op1_const);
+			fprintf(fl, "]"); 
+
+			fprintf(fl, "\n");
+
+			break;
+
+		/**
+		 * These print out like
+		 *
+		 * store x[offset] <- storee
+		 */
+		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
+			//First the assignee
+			fprintf(fl, "load ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+
+			//Now the base address
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+			//Then the constant offset
+			fprintf(fl, "["); 
+			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			fprintf(fl, "]"); 
+
+			fprintf(fl, "\n");
+			break;
+
 		case THREE_ADDR_CODE_JUMP_STMT:
 			//Then print out the block label
 			fprintf(fl, "jmp .L%d\n", ((basic_block_t*)(stmt->if_block))->block_id);
@@ -1644,15 +1703,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_NEG_STATEMENT:
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- neg ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-			fprintf(fl, "\n");
-			break;
-
-		//A load statement takes a variable out of memory and stores
-		//it into a temp
-		case THREE_ADDR_CODE_LOAD_STATEMENT:
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- load ");
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
