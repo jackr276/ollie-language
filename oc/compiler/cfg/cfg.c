@@ -7370,6 +7370,17 @@ static void visit_declaration_statement(generic_ast_node_t* node){
 
 
 /**
+ * Emit a base level intialization given an offset, base address and a node. When we do this,
+ * we'll have something like:
+ *
+ * store base_address[offset] <- emit_expression(node)
+ */
+static cfg_result_package_t emit_final_initialization(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* expression_node, u_int8_t is_branch_ending){
+
+}
+
+
+/**
  * Emit all array intializer assignments. To do this, we'll need the base address and the initializer
  * node that contains all elements to add in. We'll leverage the root level "emit_initializer" here
  * and let it do all of the heavy lifting in terms of assignment operations. This rule
@@ -7601,7 +7612,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
  * offset that we need directly. We're able to do this because all array and struct initialization statements at
  * the end of the day just calculate offsets.
  */
-static cfg_result_package_t emit_initialization(basic_block_t* current_block, three_addr_var_t* assignee, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_complex_initialization(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending){
 	//Initialize the results here
 	cfg_result_package_t intermediary_results;
 
@@ -7611,69 +7622,20 @@ static cfg_result_package_t emit_initialization(basic_block_t* current_block, th
 	switch(initializer_root->ast_node_type){
 		//Make a direct call to the rule. Seed with 0 as the initial offset
 		case AST_NODE_TYPE_STRING_INITIALIZER:
-			return emit_string_initializer(current_block, assignee, 0, initializer_root, is_branch_ending);
+			return emit_string_initializer(current_block, base_address, 0, initializer_root, is_branch_ending);
 
 		//Make a direct call to the rule. Seed with 0 as the initial offset
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			return emit_struct_initializer(current_block, assignee, 0, initializer_root, is_branch_ending);
+			return emit_struct_initializer(current_block, base_address, 0, initializer_root, is_branch_ending);
 		
 		//Make a direct call to the array initializer. We'll "seed" with 0 as the starting address
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			return emit_array_initializer(current_block, assignee, 0, initializer_root, is_branch_ending);
+			return emit_array_initializer(current_block, base_address, 0, initializer_root, is_branch_ending);
 
-		/**
-		 * This is our so-called "base-case" initialization path where we end up if we have a regular =
-		 * or we have reached the end of a string/struct/array initializer chain
-		 */
+		//We should never actually hit this. If we do it's bad news
 		default:
-			//Now emit whatever binary expression code that we have
-			intermediary_results = emit_expression(current_block, initializer_root, is_branch_ending, FALSE);
-
-			//The current block here is whatever the final block in the package is 
-			if(intermediary_results.final_block != current_block){
-				//We'll reassign this to be the final block. If this does happen, it means that
-				//at some point we had a ternary expression
-				current_block = intermediary_results.final_block;
-			}
-
-			/**
-			 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
-			 * variable that is on the stack, then a regular assignment just won't do. We'll need to
-			 * emit a store operation
-			 */
-			if(assignee->linked_var == NULL || assignee->linked_var->stack_variable == FALSE){
-				//The actual statement is the assignment of right to left
-				instruction_t* assignment_statement = emit_assignment_instruction(assignee, intermediary_results.assignee);
-
-				//If this is not temporary, then it counts as used
-				add_used_variable(current_block, intermediary_results.assignee);
-
-				//Finally we'll add this into the overall block
-				add_statement(current_block, assignment_statement);
-			
-			/**
-			 * Otherwise, we'll need to emit a store operation here
-			 */
-			} else {
-				//Emit the store code
-				instruction_t* final_assignment = emit_store_ir_code(assignee, intermediary_results.assignee);
-
-				//This counts as a use
-				add_used_variable(current_block, intermediary_results.assignee);
-				
-				//Mark this with what was passed through
-				final_assignment->is_branch_ending = is_branch_ending;
-
-				//Now add thi statement in here
-				add_statement(current_block, final_assignment);
-			}
-
-			//Store the package's assignee too
-			package.assignee = assignee;
-			package.final_block = intermediary_results.final_block;
-
-			//Give back the package
-			return package;
+			print_parse_message(PARSE_ERROR, "Fatal Internal Compiler Error. Unreachable path reached", 0);
+			exit(1);
 	}
 }
 
@@ -7699,7 +7661,7 @@ static void visit_global_declare_statement(generic_ast_node_t* node){
  *
  * No array/string/struct initializers here
  */
-static cfg_result_package_t emit_regular_let_initialization(basic_block_t* current_block, three_addr_var_t* let_variable, generic_ast_node_t* expression_node, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_simple_initialization(basic_block_t* current_block, three_addr_var_t* let_variable, generic_ast_node_t* expression_node, u_int8_t is_branch_ending){
 	//Allocate the return package here
 	cfg_result_package_t let_results = {current_block, current_block, let_variable, BLANK};
 
@@ -7791,7 +7753,20 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			//Add it into the block
 			add_statement(current_block, mem_addr);
 
-			break;
+			//The left hand var is our assigned var
+			let_results.assignee = assignee;
+
+			//We know that this will be the lead block
+			let_results.starting_block = current_block;
+			
+			//Invoke the complex initialization method. We know that we have a struct, array or string initializer here
+			cfg_result_package_t package = emit_complex_initialization(current_block, assignee, node->first_child, is_branch_ending);
+
+			//This is also the final block for now, unless a ternary comes along
+			let_results.final_block = package.final_block;
+
+			//And give the block back
+			return let_results;
 			
 		//Otherwise we just have a garden variety variable - no stack allocation required
 		default:
@@ -7799,23 +7774,8 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			assignee = emit_var(node->variable);
 
 			//Let the helper rule deal with the rest here
-			return emit_regular_let_initialization(current_block, assignee, node->first_child, is_branch_ending);
+			return emit_simple_initialization(current_block, assignee, node->first_child, is_branch_ending);
 	}
-
-	//The left hand var is our assigned var
-	let_results.assignee = assignee;
-
-	//We know that this will be the lead block
-	let_results.starting_block = current_block;
-	
-	//Declare the result package up here
-	cfg_result_package_t package = emit_initialization(current_block, assignee, node->first_child, is_branch_ending);
-
-	//This is also the final block for now, unless a ternary comes along
-	let_results.final_block = package.final_block;
-
-	//Give the block back
-	return let_results;
 }
 
 
