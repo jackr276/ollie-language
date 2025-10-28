@@ -7570,7 +7570,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 
 			default:
-				initializer_results = emit_final_initialization(current_block, base_address, offset, cursor, is_branch_ending);
+				initializer_results = emit_final_initialization(current_block, base_address, current_offset, cursor, is_branch_ending);
 				break;
 		}
 
