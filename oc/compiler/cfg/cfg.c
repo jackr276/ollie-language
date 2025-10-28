@@ -7559,14 +7559,8 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 
 			default:
-				//Just call the vanilla rule
-				initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
-
 				//Creat the offset constant
 				offset_constant = emit_direct_integer_or_char_constant(current_offset, u64);
-
-				//
-				store = emit_store_with_constant_offset_ir_code(base_address, offset, three_addr_var_t *storee)
 
 				//We'll need to emit the proper address offset calculation for each one
 				address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(current_offset, u64), is_branch_ending);
@@ -7574,6 +7568,8 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				//Once we have the address, we'll need to emit the memory code for it
 				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
 
+				//Just call the vanilla rule
+				initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
 				break;
 		}
 
@@ -7695,6 +7691,70 @@ static void visit_global_declare_statement(generic_ast_node_t* node){
 
 
 /**
+ * Emit a normal intialization
+ *
+ * We'll hit this when we have something like:
+ *
+ * let x:i32 = a + b + c;
+ *
+ * No array/string/struct initializers here
+ */
+static cfg_result_package_t emit_regular_let_initialization(basic_block_t* current_block, three_addr_var_t* let_variable, generic_ast_node_t* expression_node, u_int8_t is_branch_ending){
+	//Allocate the return package here
+	cfg_result_package_t let_results = {current_block, current_block, let_variable, BLANK};
+
+	//Emit the right hand expression here
+	cfg_result_package_t package = emit_expression(current_block, expression_node, is_branch_ending, FALSE);
+
+	//Reassign the block here
+	current_block = package.final_block;
+
+	//Now update the final block
+	let_results.final_block = current_block;
+
+	/**
+	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
+	 * variable that is on the stack, then a regular assignment just won't do. We'll need to
+	 * emit a store operation
+	 */
+	if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
+		//The actual statement is the assignment of right to left
+		instruction_t* assignment_statement = emit_assignment_instruction(let_variable, package.assignee);
+		assignment_statement->is_branch_ending = is_branch_ending;
+
+		//The let variable was assigned
+		add_assigned_variable(current_block, let_variable);
+
+		//If this is not temporary, then it counts as used
+		add_used_variable(current_block, package.assignee);
+
+		//Finally we'll add this into the overall block
+		add_statement(current_block, assignment_statement);
+			
+	/**
+	 * Otherwise, we'll need to emit a store operation here
+	 */
+	} else {
+		//Emit the store code
+		instruction_t* store_statement = emit_store_ir_code(let_variable, package.assignee);
+		store_statement->is_branch_ending = is_branch_ending;
+
+		//The let variable was assigned
+		add_assigned_variable(current_block, let_variable);
+
+		//This counts as a use
+		add_used_variable(current_block, package.assignee);
+				
+		//Now add thi statement in here
+		add_statement(current_block, store_statement);
+	}
+
+	//And give it back
+	return let_results;
+}
+
+
+/**
  * Visit a let statement
  */
 static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
@@ -7738,9 +7798,8 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			//Emit it
 			assignee = emit_var(node->variable);
 
-			//This has been assigned to, no matter which path we took above
-			add_assigned_variable(current_block, assignee);
-			break;
+			//Let the helper rule deal with the rest here
+			return emit_regular_let_initialization(current_block, assignee, node->first_child, is_branch_ending);
 	}
 
 	//The left hand var is our assigned var
