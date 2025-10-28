@@ -111,7 +111,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
-static cfg_result_package_t emit_initialization(basic_block_t* current_block, three_addr_var_t* assignee, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer, u_int8_t is_branch_ending);
 basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
@@ -7546,15 +7545,6 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	//The member index
 	u_int32_t member_index = 0;
 
-	//The eventual offset constant
-	three_addr_const_t* offset_constant;
-
-	//For storing the address as needed
-	three_addr_var_t* address;
-
-	//The store instruction
-	instruction_t* store;
-
 	//The initializer results
 	cfg_result_package_t initializer_results;
 
@@ -7580,17 +7570,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 				break;
 
 			default:
-				//Creat the offset constant
-				offset_constant = emit_direct_integer_or_char_constant(current_offset, u64);
-
-				//We'll need to emit the proper address offset calculation for each one
-				address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(current_offset, u64), is_branch_ending);
-
-				//Once we have the address, we'll need to emit the memory code for it
-				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
-
-				//Just call the vanilla rule
-				initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
+				initializer_results = emit_final_initialization(current_block, base_address, offset, cursor, is_branch_ending);
 				break;
 		}
 
@@ -7623,12 +7603,6 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
  * the end of the day just calculate offsets.
  */
 static cfg_result_package_t emit_complex_initialization(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* initializer_root, u_int8_t is_branch_ending){
-	//Initialize the results here
-	cfg_result_package_t intermediary_results;
-
-	//The return package
-	cfg_result_package_t package = {current_block, current_block, NULL, BLANK};
-
 	switch(initializer_root->ast_node_type){
 		//Make a direct call to the rule. Seed with 0 as the initial offset
 		case AST_NODE_TYPE_STRING_INITIALIZER:
