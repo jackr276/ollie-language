@@ -36,6 +36,8 @@ basic_block_t* function_exit_block = NULL;
 three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 variable_symtab_t* variable_symtab;
+//Store for use
+generic_type_t* char_type = NULL;
 //Store this for usage
 generic_type_t* u8 = NULL;
 //Store this for usage
@@ -3196,6 +3198,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_type_t* memory_region_type = first_child->inferred_type;
 	generic_type_t* original_memory_access_type = operator_node->inferred_type;
 
+	//For the eventual load statement
+	three_addr_var_t* load_destination;
+
 	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
 	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, is_branch_ending);
 
@@ -3268,28 +3273,31 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			 * If we're on the right hand side, then we've got a load operation
 			 */
 			case SIDE_TYPE_RIGHT:
-				//Still emit the memory code
-				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
+				//Emit the assignee
+				load_destination = emit_temp_var(original_memory_access_type);
 
-				//We will perform the deref here, as we can't do it in the lea 
-				instruction_t* deref_stmt = emit_assignment_instruction(emit_temp_var(original_memory_access_type), final_assignee);
+				//Now we'll emit the load itself
+				instruction_t* load = emit_load_with_variable_offset_ir_code(load_destination, base_address, postfix_expression_results.assignee);
+				load->is_branch_ending = is_branch_ending;
 
-				//Is this branch ending?
-				deref_stmt->is_branch_ending = is_branch_ending;
-				//And add it in
-				add_statement(current_block, deref_stmt);
+				//These both count as used
+				add_used_variable(current_block, base_address);
+				add_used_variable(current_block, postfix_expression_results.assignee);
 
-				//Update the final assignee
-				final_assignee = deref_stmt->assignee;
+				//Throw it in the block
+				add_statement(current_block, load);
 
 				/**
 				 * It is often the case where we require an expanding move after we access memory. In order to
 				 * do this, we'll inject an assignment expression here which will eventually become a converting move
 				 * in the instruction selector
 				*/
-				if(is_expanding_move_required(parent_node_type, final_assignee->type) == TRUE){
+				if(is_expanding_move_required(parent_node_type, load_destination->type) == TRUE){
 					//Assigning to something of the inferred type
-					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parent_node_type), final_assignee);
+					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parent_node_type), load_destination);
+
+					//This is a use
+					add_used_variable(current_block, load_destination);
 
 					//We'll add the assignment in
 					add_statement(current_block, assignment);
@@ -7457,9 +7465,6 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 	//The string index starts off at 0
 	u_int32_t current_index = 0;
 
-	//We'll have the char type on hand for the pointer indirection call
-	generic_type_t* char_type = lookup_type_name_only(type_symtab, "char")->type;
-
 	//Now we'll go through every single character here and emit a load instruction for them
 	while(current_index <= string_initializer->string_value.current_length){
 		//Grab the value that we want out
@@ -7927,6 +7932,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	u32 = lookup_type_name_only(type_symtab, "u32")->type;
 	i32 = lookup_type_name_only(type_symtab, "i32")->type;
 	u8 = lookup_type_name_only(type_symtab, "u8")->type;
+	char_type = lookup_type_name_only(type_symtab, "char")->type;
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
