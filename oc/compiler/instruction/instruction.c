@@ -3723,6 +3723,58 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 
 
 /**
+ * Emit a load with offset ir code. We take in a base address(op1), 
+ * an offset(op2), and the value we're loading into(assignee)
+ */
+instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset){
+	//First allocate
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now populate with values
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET;
+	//The base address that we're assigning to
+	stmt->assignee = assignee;
+	//The op1 is our base address
+	stmt->op1 = base_address;
+
+	//And op2 is our offset
+	stmt->op2 = offset;
+
+	//Save our current function
+	stmt->function = current_function;
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a load with constant offset ir code. We take in a base address(op1), 
+ * an offset(op1_const), and the value we're loading into(assignee)
+ */
+instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset){
+	//First allocate
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now populate with values
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+	//The assignee that we're loading into
+	stmt->assignee = assignee;
+	//The op1 is our base address
+	stmt->op1 = base_address;
+
+	//Op1_const is our offset
+	stmt->op1_const = offset;
+
+	//Save our current function
+	stmt->function = current_function;
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
  * Emit a jump statement where we jump to the block with the ID provided
  */
 instruction_t* emit_jmp_instruction(void* jumping_to_block){

@@ -50,18 +50,18 @@ typedef enum{
 	THREE_ADDR_CODE_IDLE_STMT,
 	//A negation statement
 	THREE_ADDR_CODE_NEG_STATEMENT,
+	//Store a variable only(valid for SSA)
+	THREE_ADDR_CODE_STORE_STATEMENT,
 	//Store with a variable offset
 	THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET,
 	//Store with a constant offset
 	THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET,
-	//And a store statement
-	THREE_ADDR_CODE_STORE_STATEMENT,
+	//Load a variable only(valid for SSA)
+	THREE_ADDR_CODE_LOAD_STATEMENT,
 	//Emit a load instruction with a variable offset
 	THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET,
 	//Load with a constant offset
 	THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET,
-	//A load statement
-	THREE_ADDR_CODE_LOAD_STATEMENT,
 	//SPECIAL CASE - assembly inline statement
 	THREE_ADDR_CODE_ASM_INLINE_STMT,
 	//A "Load effective address(lea)" instruction
