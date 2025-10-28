@@ -7376,7 +7376,33 @@ static void visit_declaration_statement(generic_ast_node_t* node){
  * store base_address[offset] <- emit_expression(node)
  */
 static cfg_result_package_t emit_final_initialization(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* expression_node, u_int8_t is_branch_ending){
+	//Initialize our final results
+	cfg_result_package_t final_results = {current_block, current_block, base_address, BLANK};
 
+	//Now let's emit the expression using the node
+	cfg_result_package_t expression_results = emit_expression(current_block, expression_node, is_branch_ending, FALSE);
+	
+	//Update this
+	current_block = expression_results.final_block;
+
+	//This is now the final block
+	final_results.final_block = current_block;
+
+	//First we emit the offset
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(offset, u64);
+
+	//Now we need to emit the store operation
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, offset_constant, expression_results.assignee);
+
+	//This counts as a use for the base address and the assignee
+	add_used_variable(current_block, base_address);
+	add_used_variable(current_block, expression_results.assignee);
+
+	//Add it into the block
+	add_statement(current_block, store_instruction);
+
+	//Give this back
+	return final_results;
 }
 
 
@@ -7393,14 +7419,8 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 	//Grab a cursor to the child
 	generic_ast_node_t* cursor = array_initializer->first_child;
 
-	//Keep track of the total offset here
-	u_int32_t offset;
-
 	//What is the current index of the initializer? We start at 0
 	u_int32_t current_array_index = 0;
-
-	//For when we eventually need it - the offset constant
-	three_addr_const_t* offset_constant;
 
 	//For storing all of our results
 	cfg_result_package_t initializer_results;
@@ -7411,7 +7431,7 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 		generic_type_t* base_type = cursor->inferred_type;
 
 		//Calculate the correct offset for our member
-		offset = current_offset + current_array_index * base_type->type_size;
+		u_int32_t offset = current_offset + current_array_index * base_type->type_size;
 
 		//Determine if we need to emit an indirection instruction or not
 		switch(cursor->ast_node_type){
@@ -7433,18 +7453,8 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* current_block,
 
 			//When we hit the default case, that means that we've stopped seeing initializer values
 			default:
-				//Emit the actual offset here
-				offset_constant = emit_direct_integer_or_char_constant(offset, u64);
-
-				//We'll need to emit the proper address offset calculation for each one
-				three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, offset_constant, is_branch_ending);
-
-				//Once we have the address, we'll need to emit the memory code for it
-				address = emit_pointer_indirection(current_block, address, cursor->inferred_type);
-
-				//We'll now invoke the top level rule to handle everything else
-				initializer_results = emit_initialization(current_block, address, cursor, is_branch_ending);
-
+				//Once we get here, we need to let the helper finish it off
+				initializer_results = emit_final_initialization(current_block, base_address, offset, cursor, is_branch_ending);
 				break;
 		}
 
