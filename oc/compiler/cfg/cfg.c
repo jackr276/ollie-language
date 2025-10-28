@@ -3220,7 +3220,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 	//If the offset is not there, we'll need to construct one
 	if(current_offset == NULL){
-		current_offset = emit_temp_var(u64);
+		//current_offset = emit_temp_var(u64);
 	}
 
 	//For the eventual load statement
@@ -3293,9 +3293,15 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			/**
 			 * If we're on the left side, then we have a store instruction
 			 *
-			 * TODO
+			 * I think our best bet here is to emit an incomplete store expression
+			 * where everything except for the result is left out. Doing this will
+			 * allow us to avoid needing to pass variables all over. With the incomplete
+			 * store instruction there, we'd just need to fill it in when we get to whatever
+			 * rule called this.
 			 */
 			case SIDE_TYPE_LEFT:
+
+				//TODO FIX
 				//Emit the indirection for this one
 				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
 				break;
@@ -3598,7 +3604,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//If we're on the right hand side, we need to have a temp assignment
 			if(first_child->side == SIDE_TYPE_RIGHT){
 				//If the side type here is right, we'll need a load instruction
-				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(dereferenced->type), dereferenced);
+				//
+				// TODO WILL RE-ENABLE
+				//instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(dereferenced->type), dereferenced);
 
 				//Emit the temp assignment
 				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
@@ -4080,148 +4088,156 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 
 /**
+ * Handle an assignment expression and all of the required bookkeeping that comes 
+ * with it
+ */
+static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node, u_int8_t is_branch_ending){
+	//Final return package here - this will be updated as we go
+	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
+
+	/**
+	 * TODO As an idea here, it is possible for us to actually
+	 * emit the right hand side first. This would allow us to pass the final
+	 * assignee over to the left hand side so that we can avoid needing to pass any weird
+	 * load or store arguments around
+	 */
+	//Current block always starts off as the basic_block
+	basic_block_t* current_block = basic_block;
+		
+	//This should always be a unary expression
+	generic_ast_node_t* left_child = parent_node->first_child;
+
+	//Emit the left hand unary expression
+	cfg_result_package_t unary_package = emit_unary_expression(current_block, left_child, is_branch_ending);
+
+	//If this is different(which it could be), we'll reassign current
+	if(unary_package.final_block != current_block){
+		//Reassign current to be at the end
+		current_block = unary_package.final_block;
+	}
+
+	//The left hand var is the final assignee of the unary statement
+	three_addr_var_t* left_hand_var = unary_package.assignee;
+
+	//The rightmost node is the right hand side of the expression
+	generic_ast_node_t* right_child = left_child->next_sibling;
+
+	//TODO we may not actually go with this
+	//Now emit the right hand expression
+	cfg_result_package_t right_hand_package = emit_expression(current_block, right_child, is_branch_ending, FALSE);
+
+	//Again, if this is different(which it could be), we'll reassign current
+	if(right_hand_package.final_block != current_block){
+		//Reassign current to be at the end
+		current_block = right_hand_package.final_block;
+	}
+
+	//The final first operand will be the expression package's assignee for now
+	three_addr_var_t* final_op1 = right_hand_package.assignee;
+
+	/**
+	 * It is often the case where we require an expanding move after we access memory. In order to
+	 * do this, we'll inject an assignment expression here which will eventually become a converting move
+	 * in the instruction selector
+	 */
+	if(left_hand_var->indirection_level > 0 &&
+		is_expanding_move_required(left_hand_var->type, right_hand_package.assignee->type) == TRUE){
+
+		//Assigning to something of the inferred type
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(left_hand_var->type), final_op1);
+
+		//The final op1 has been used
+		add_used_variable(current_block, final_op1);
+
+		//Now the final_op1 becomes this result
+		final_op1 = assignment->assignee;
+
+		//We'll add the assignment in
+		add_statement(current_block, assignment);
+	}
+
+	/**
+	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
+	 * variable that is on the stack, then a regular assignment just won't do. We'll need to
+	 * emit a store operation
+	 */
+	if(left_hand_var->linked_var == NULL 
+		|| (left_hand_var->linked_var->stack_variable == FALSE && left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
+		//Finally we'll struct the whole thing
+		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+
+		//If this is not a temp var, then we can flag it as being assigned
+		add_assigned_variable(current_block, left_hand_var);
+
+		//This counts as a use
+		add_used_variable(current_block, final_op1);
+		
+		//Mark this with what was passed through
+		final_assignment->is_branch_ending = is_branch_ending;
+
+		//Now add thi statement in here
+		add_statement(current_block, final_assignment);
+
+	/**
+	 * Otherwise, we'll need to emit a store operation here
+	 */
+	} else {
+		instruction_t* final_assignment = emit_store_ir_code(left_hand_var, final_op1);
+
+		//If this is not a temp var, then we can flag it as being assigned
+		add_assigned_variable(current_block, left_hand_var);
+
+		//This counts as a use
+		add_used_variable(current_block, final_op1);
+		
+		//Mark this with what was passed through
+		final_assignment->is_branch_ending = is_branch_ending;
+
+		//Now add thi statement in here
+		add_statement(current_block, final_assignment);
+	}
+
+	//Now pack the return value here
+	result_package.assignee = left_hand_var;
+	//This is whatever the current block is
+	result_package.final_block = current_block;
+
+	//And give the results back
+	return result_package;
+}
+
+
+/**
  * Emit abstract machine code for an expression. This is a top level statement.
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
  */
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_conditional){
-	//A cursor for tree traversal
-	generic_ast_node_t* cursor;
 	//Declare and initialize the results
-	cfg_result_package_t result_package = {basic_block, basic_block, NULL, BLANK};
-
-	//Keep track of our current block - this may change as we go through this
-	basic_block_t* current_block = basic_block;
+	cfg_result_package_t result_package;
 
 	//We'll process based on the class of our expression node
 	switch(expr_node->ast_node_type){
-		/**
-		 * TODO As an idea here, it is possible for us to actually
-		 * emit the right hand side first. This would allow us to pass the final
-		 * assignee over to the left hand side so that we can avoid needing to pass any weird
-		 * load or store arguments around
-		 */
+		//Handle an assignment expression
 		case AST_NODE_TYPE_ASNMNT_EXPR:
-			//In our tree, an assignment statement decays into a unary expression
-			//on the left and a binary op expr on the right
-			
-			//This should always be a unary expression
-			cursor = expr_node->first_child;
-
-			//Emit the left hand unary expression
-			cfg_result_package_t unary_package = emit_unary_expression(current_block, cursor, is_branch_ending);
-
-			//If this is different(which it could be), we'll reassign current
-			if(unary_package.final_block != current_block){
-				//Reassign current to be at the end
-				current_block = unary_package.final_block;
-
-				//And we now have a new final block
-				result_package.final_block = current_block;
-			}
-
-			//The left hand var is the final assignee of the unary statement
-			three_addr_var_t* left_hand_var = unary_package.assignee;
-
-			//Advance the cursor up
-			cursor = cursor->next_sibling;
-
-			//Now emit the right hand expression
-			cfg_result_package_t expression_package = emit_expression(current_block, cursor, is_branch_ending, FALSE);
-
-			//Again, if this is different(which it could be), we'll reassign current
-			if(expression_package.final_block != current_block){
-				//Reassign current to be at the end
-				current_block = expression_package.final_block;
-
-				//And we now have a new final block
-				expression_package.final_block = current_block;
-			}
-
-			//The final first operand will be the expression package's assignee for now
-			three_addr_var_t* final_op1 = expression_package.assignee;
-
-			/**
-			 * It is often the case where we require an expanding move after we access memory. In order to
-			 * do this, we'll inject an assignment expression here which will eventually become a converting move
-			 * in the instruction selector
-			 */
-			if(left_hand_var->indirection_level > 0 &&
-				is_expanding_move_required(left_hand_var->type, expression_package.assignee->type) == TRUE){
-
-				//Assigning to something of the inferred type
-				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(left_hand_var->type), final_op1);
-
-				//The final op1 has been used
-				add_used_variable(current_block, final_op1);
-
-				//Now the final_op1 becomes this result
-				final_op1 = assignment->assignee;
-
-				//We'll add the assignment in
-				add_statement(current_block, assignment);
-			}
-
-			/**
-			 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
-			 * variable that is on the stack, then a regular assignment just won't do. We'll need to
-			 * emit a store operation
-			 */
-			if(left_hand_var->linked_var == NULL 
-				|| (left_hand_var->linked_var->stack_variable == FALSE && left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
-				//Finally we'll struct the whole thing
-				instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
-
-				//If this is not a temp var, then we can flag it as being assigned
-				add_assigned_variable(current_block, left_hand_var);
-
-				//This counts as a use
-				add_used_variable(current_block, final_op1);
-				
-				//Mark this with what was passed through
-				final_assignment->is_branch_ending = is_branch_ending;
-
-				//Now add thi statement in here
-				add_statement(current_block, final_assignment);
-
-			/**
-			 * Otherwise, we'll need to emit a store operation here
-			 */
-			} else {
-				instruction_t* final_assignment = emit_store_ir_code(left_hand_var, final_op1);
-
-				//If this is not a temp var, then we can flag it as being assigned
-				add_assigned_variable(current_block, left_hand_var);
-
-				//This counts as a use
-				add_used_variable(current_block, final_op1);
-				
-				//Mark this with what was passed through
-				final_assignment->is_branch_ending = is_branch_ending;
-
-				//Now add thi statement in here
-				add_statement(current_block, final_assignment);
-			}
-
-			//Now pack the return value here
-			result_package.assignee = left_hand_var;
-			
+			//Let the helper deal with it
+			result_package = emit_assignment_expression(basic_block, expr_node, is_branch_ending);
 			break;
 	
 		case AST_NODE_TYPE_BINARY_EXPR:
 			//Emit the binary expression node
-			result_package = emit_binary_expression(current_block, expr_node, is_branch_ending);
+			result_package = emit_binary_expression(basic_block, expr_node, is_branch_ending);
 			break;
 
 		case AST_NODE_TYPE_FUNCTION_CALL:
 			//Emit the function call statement
-			result_package = emit_function_call(current_block, expr_node, is_branch_ending);
+			result_package = emit_function_call(basic_block, expr_node, is_branch_ending);
 			break;
 
 		//Hanlde an indirect function call
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 			//Let the helper rule deal with it
-			result_package = emit_indirect_function_call(current_block, expr_node, is_branch_ending);
+			result_package = emit_indirect_function_call(basic_block, expr_node, is_branch_ending);
 			break;
 
 		case AST_NODE_TYPE_TERNARY_EXPRESSION:
