@@ -3007,9 +3007,10 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 /**
  * Emit the code needed to perform an array access
  *
- * This rule returns *the address* of the value that we've asked for
+ * This rule returns *the offset* of the value that we want. It has no idea what the array's
+ * base address even is
  */
-static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block, generic_ast_node_t* array_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_ast_node_t* array_accessor, three_addr_var_t* current_offset, u_int8_t is_branch_ending){
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
@@ -3039,9 +3040,9 @@ static cfg_result_package_t emit_array_accessor_expression(basic_block_t* block,
 
 	//Remember, we can only use lea if we have a power of 2 
 	if(is_power_of_2(member_type->type_size) == TRUE){
-		address = emit_lea(current_block, base_address, array_offset, member_type, is_branch_ending);
+		address = emit_lea(current_block, current_offset, array_offset, member_type, is_branch_ending);
 	} else {
-		address = emit_address_offset_calculation(current_block, base_address, array_offset, member_type, is_branch_ending);
+		address = emit_address_offset_calculation(current_block, current_offset, array_offset, member_type, is_branch_ending);
 	}
 
 	//The assignee is the address
@@ -3104,9 +3105,10 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 /**
  * Emit the code needed to perform a struct access
  *
- * This rule returns *the address* of the value that we've asked for
+ * This rule returns *the offset* of the address that we're after. It has no idea
+ * what the base address even is
  */
-static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_struct_offset_calculation(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t* current_offset, u_int8_t is_branch_ending){
 	//Grab the variable that we need
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
 
@@ -3117,7 +3119,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	three_addr_const_t* struct_offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
 
 	//Now we'll emit the address using the helper
-	three_addr_var_t* struct_address = emit_struct_address_calculation(block, struct_type, base_address, struct_offset, is_branch_ending);
+	three_addr_var_t* struct_address = emit_struct_address_calculation(block, struct_type, current_offset, struct_offset, is_branch_ending);
 
 	//Package & return the results
 	cfg_result_package_t results = {block, block, struct_address, BLANK};
@@ -3128,7 +3130,8 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 /**
  * Emit the code needed to perform a struct pointer access
  *
- * This rule returns *the address* of the value that we've asked for
+ * This rule returns *the offset* of the value that we want. It has
+ * no idea what the base address of the memory region it's in is
  */
 static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
 	//Get the current type
@@ -3220,7 +3223,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		//Array accessor node
 		case AST_NODE_TYPE_ARRAY_ACCESSOR:
 			//Emits the address of what we want
-			postfix_expression_results = emit_array_accessor_expression(current_block, operator_node, base_address, is_branch_ending);
+			postfix_expression_results = emit_array_offset_calculation(current_block, operator_node, base_address, is_branch_ending);
 			break;
 
 		//Union accessor node
@@ -3235,7 +3238,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 		//Struct accessor
 		case AST_NODE_TYPE_STRUCT_ACCESSOR:
-			postfix_expression_results = emit_struct_accessor_expression(current_block, memory_region_type, operator_node, base_address, is_branch_ending);
+			postfix_expression_results = emit_struct_offset_calculation(current_block, memory_region_type, operator_node, base_address, is_branch_ending);
 			break;
 
 		//Struct pointer accessor
