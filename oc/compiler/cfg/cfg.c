@@ -3180,8 +3180,10 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  * The parent node though, is prone to type inference by the parser. As such, we *do not* want to use
  * the parent node's type in our decision making. We *will* use it at the very end to determine if any kind
  * of converting move is required for us to make
+ * 
+ * We will always know the true base address at the time of use here
  */
-static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* node, three_addr_var_t* current_offset, u_int8_t is_branch_ending){
 	//Acts as a base case/stopper. We'll just go right through in this case
 	if(node->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
 		return emit_primary_expr_code(basic_block, node, is_branch_ending);
@@ -3200,11 +3202,22 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_type_t* memory_region_type = first_child->inferred_type;
 	generic_type_t* original_memory_access_type = operator_node->inferred_type;
 
+	//If the offset is not there, we'll need to construct one
+	if(current_offset == NULL){
+		current_offset = emit_temp_var(u64);
+	}
+
 	//For the eventual load statement
 	three_addr_var_t* load_destination;
 
 	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
-	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, is_branch_ending);
+	cfg_result_package_t first_child_results = emit_postfix_expression(current_block, first_child, current_offset, is_branch_ending);
+
+	/**
+	 * Whenever we get here, result's assignee should be the variable containing the offset that we've calculated
+	 * up to this point. We'll be sure to reassign here
+	 */
+	current_offset = first_child_results.assignee;
 
 	//Reassign the current block if need be
 	if(first_child_results.final_block != current_block){
@@ -3222,7 +3235,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		//Array accessor node
 		case AST_NODE_TYPE_ARRAY_ACCESSOR:
 			//Emits the address of what we want
-			postfix_expression_results = emit_array_offset_calculation(current_block, operator_node, base_address, is_branch_ending);
+			postfix_expression_results = emit_array_offset_calculation(current_block, operator_node, current_offset, is_branch_ending);
 			break;
 
 		//Union accessor node
@@ -3336,7 +3349,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	generic_ast_node_t* postfix_node = node->first_child;
 
 	//We will first emit the postfix expression code that comes from this
-	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, is_branch_ending);
+	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, NULL, is_branch_ending);
 
 	//If this is now different, which it could be, we'll change what current is
 	if(postfix_expression_results.final_block != current_block){
@@ -3404,7 +3417,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
 
 		//Now we emit the copied package
-		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, is_branch_ending);
+		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, NULL, is_branch_ending);
 
 		//If this is now different, which it could be, we'll change what current is
 		if(copied_package.final_block != current_block){
@@ -3701,7 +3714,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//Set the deref flag to false so we don't deref
 					second_child->dereference_needed = FALSE;
 					//Emit the whole thing
-					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, second_child, is_branch_ending);
+					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, second_child, NULL, is_branch_ending);
 
 					//Set if need be
 					if(postfix_results.final_block != current_block){
@@ -3748,7 +3761,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 			return emit_postoperation_code(basic_block, unary_expression, is_branch_ending);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
-			return emit_postfix_expression(basic_block, unary_expression, is_branch_ending);
+			return emit_postfix_expression(basic_block, unary_expression, NULL, is_branch_ending);
 	}
 }
 
