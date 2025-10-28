@@ -3254,13 +3254,19 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		 */
 		//Go based on what side we have here
 		switch(node->side){
-			//Left side - this is a write operation
+			/**
+			 * If we're on the left side, then we have a store instruction
+			 *
+			 * TODO
+			 */
 			case SIDE_TYPE_LEFT:
 				//Emit the indirection for this one
 				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
 				break;
 
-			//Right side, this is a read operations
+			/**
+			 * If we're on the right hand side, then we've got a load operation
+			 */
 			case SIDE_TYPE_RIGHT:
 				//Still emit the memory code
 				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
@@ -7463,17 +7469,26 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		//there's nothing to multiply by
 		u_int64_t stack_offset = offset + current_index; 
 
-		//We'll first emit the calculation for the address
-		three_addr_var_t* address = emit_binary_operation_with_constant(current_block, emit_temp_var(base_address->type), base_address, PLUS, emit_direct_integer_or_char_constant(stack_offset, u64), is_branch_ending);
+		//Create the character type itself
+		three_addr_const_t* constant = emit_direct_integer_or_char_constant(char_value, char_type);
 
-		//Once we've emitted the binary operation, we'll have the address available for use. We now need to emit the load operation to add it in
-		three_addr_var_t* dereferenced = emit_pointer_indirection(current_block, address, char_type);
+		//We need an assignment operation for this one
+		instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(char_type), constant);
+		constant_assignment->is_branch_ending = is_branch_ending;
+		
+		//Add it into the block
+		add_statement(current_block, constant_assignment);
 
-		//We'll now emit a constant assignment statement to load the char value in
-		instruction_t* const_assignment = emit_assignment_with_const_instruction(dereferenced, emit_direct_integer_or_char_constant(char_value, lookup_type_name_only(type_symtab, "char")->type));
+		//Now finally we'll store it
+		instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, emit_direct_integer_or_char_constant(stack_offset, u64), constant_assignment->assignee);
+		store_instruction->is_branch_ending = is_branch_ending;
 
-		//Now we'll add this into the block
-		add_statement(current_block, const_assignment);
+		//These both count as used
+		add_used_variable(current_block, base_address);
+		add_used_variable(current_block, constant_assignment->assignee);
+
+		//Add the instruction in
+		add_statement(current_block, store_instruction);
 
 		//Once this is all done, we'll loop back up to the top
 		current_index++;
