@@ -193,10 +193,6 @@ struct three_addr_var_t{
 	//the instruction selector
 	u_int32_t use_count;
 	//What is the indirection level
-	
-	//TODO DEPRECATE - SHOULD NOT BE USED IN IR
-	u_int16_t indirection_level;
-
 
 	//Is this variable dereferenced in some way
 	//(either loaded from or stored to)

@@ -1162,10 +1162,6 @@ static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg)
  * and nothing more. This function is also designed to take into account the indirection aspected as well
  */
 void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode_t mode){
-	for(u_int16_t i = 0; mode == PRINTING_VAR_INLINE && i < variable->indirection_level; i++){
-		fprintf(fl, "(");
-	}
-
 	//If we're printing live ranges, we'll use the LR number
 	if(mode == PRINTING_LIVE_RANGES){
 		fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
@@ -1202,11 +1198,6 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 	} else {
 		//Otherwise, print out the SSA generation along with the variable
 		fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
-	}
-
-	//Lastly we print out the remaining indirection characters
-	for(u_int16_t i = 0; mode == PRINTING_VAR_INLINE && i < variable->indirection_level; i++){
-		fprintf(fl, ")");
 	}
 }
 
@@ -4434,11 +4425,6 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 		return FALSE;
 	}
 
-	//Another way to tell
-	if(a->indirection_level != b->indirection_level && ignore_indirect_level == FALSE){
-		return FALSE;
-	}
-
 	//For temporary variables, the comparison is very easy
 	if(a->is_temporary){
 		if(a->temp_var_number == b->temp_var_number){
@@ -4475,11 +4461,6 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8
 
 	//Another easy way to tell
 	if(a->is_temporary != b->is_temporary){
-		return FALSE;
-	}
-
-	//Another way to tell
-	if(a->indirection_level != b->indirection_level && ignore_indirect_level == FALSE){
 		return FALSE;
 	}
 
