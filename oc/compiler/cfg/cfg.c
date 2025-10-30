@@ -11,6 +11,7 @@
 */
 
 #include "cfg.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -3217,6 +3218,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		return emit_primary_expr_code(basic_block, root, is_branch_ending);
 	}
 
+	//Hold onto what our current block is, it may change
+	basic_block_t* current_block = basic_block;
+
 	//A variable for our base address(it starts off as null, the recursive rule will modify it)
 	three_addr_var_t* base_address = NULL;
 
@@ -3226,16 +3230,51 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	//Let the recursive rule do all the work
 	cfg_result_package_t postfix_results = emit_postfix_expression_rec(basic_block, root, &base_address, &current_offset, is_branch_ending);
 
+	//This is whatever the final block is
+	current_block = postfix_results.final_block;
+
+	//In case we need them - load and store
+	instruction_t* load_instruction;
+	instruction_t* store_instruction;
+
 	//Do we need a dereference(load or store) here?
 	if(root->dereference_needed == TRUE){
+		//Based on what we have here - we emit the appropriate statement
 		switch(root->side){
+			//Left side = store statement
 			case SIDE_TYPE_LEFT:
+				//Intentionally leave the storee null, it will be populated down the line
+				store_instruction = emit_store_with_variable_offset_ir_code(base_address, current_offset, NULL);
+
+				//Counts as uses for both
+				add_used_variable(current_block, base_address);
+				add_used_variable(current_block, current_offset);
+
+				//Give back the base address as the assignee(even though it's not really)
+				postfix_results.assignee = base_address;
+
 				break;
 
-
+			//Right side = load statement
 			case SIDE_TYPE_RIGHT:
 				break;
 		}
+
+	//Otherwise it's just a memory address call, just emit the 
+	//base address plus the offset
+	} else {
+		//Just do base address + offset
+		instruction_t* address_calculation = emit_binary_operation_instruction(emit_temp_var(base_address->type), base_address, PLUS, current_offset);
+
+		//These count as uses
+		add_used_variable(current_block, base_address);
+		add_used_variable(current_block, current_offset);
+
+		//Add the instruction in
+		add_statement(current_block, address_calculation);
+
+		//This is what we're returning
+		postfix_results.assignee = address_calculation->assignee;
 	}
 
 	//Give back these results
