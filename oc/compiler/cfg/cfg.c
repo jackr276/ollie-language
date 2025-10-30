@@ -3389,16 +3389,15 @@ static cfg_result_package_t emit_postfix_expression_root_level(basic_block_t* ba
 	//Keep track of our current block
 	basic_block_t* current_block = basic_block;
 
-	//First thing we need is our base address. The variable always comes through
-	//the parent variable
-	three_addr_var_t* base_address = emit_var(parent_node->variable);
-
 	//Now we'll need this base address's memory address
-	instruction_t* address_assignment = emit_memory_address_assignment(emit_temp_var(base_address->type), base_address);
+	instruction_t* address_assignment = emit_memory_address_assignment(emit_temp_var(base_address->type), emit_var(parent_node->variable));
 	address_assignment->is_branch_ending = is_branch_ending;
 
 	//This counts as a use for the address
-	add_used_variable(current_block, base_address);
+	add_used_variable(current_block, address_assignment->op1);
+
+	//The base address is the result from there
+	three_addr_var_t* base_address = address_assignment->assignee;
 
 	//Get the statement in there
 	add_statement(current_block, address_assignment);
@@ -3412,6 +3411,41 @@ static cfg_result_package_t emit_postfix_expression_root_level(basic_block_t* ba
 	 */
 	cfg_result_package_t address_calculation = emit_postfix_expression_address_calc_rec(basic_block, parent_node, base_address, current_offset, is_branch_ending);
 
+	//Whatever our assignee is here
+	three_addr_var_t* assignee;
+
+	if(parent_node->dereference_needed == TRUE){
+		switch(parent_node->side){
+			//Left hand side we need a store
+			case SIDE_TYPE_LEFT:
+				break;
+
+
+			//Right hand side we need a load
+			case SIDE_TYPE_RIGHT:
+				break;
+		}
+
+	//Otherwise we're just looking for the address
+	} else {
+		//Emit our assignee
+		assignee = emit_temp_var(base_address->type);
+
+		//This is our address calculation(base_address + offset)
+		instruction_t* address_calculation = emit_binary_operation_instruction(assignee, base_address, PLUS, current_offset);
+		address_calculation->is_branch_ending = is_branch_ending;
+
+		//These count as uses
+		add_used_variable(current_block, base_address);
+		add_used_variable(current_block, current_offset);
+
+		//Add it into the block
+		add_statement(current_block, address_calculation);
+	}
+
+	//Package and return
+	cfg_result_package_t postfix_results = {basic_block, current_block, assignee, BLANK};
+	return postfix_results;
 }
 
 
@@ -3861,7 +3895,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 			return emit_postoperation_code(basic_block, unary_expression, is_branch_ending);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
-			return emit_postfix_expression(basic_block, unary_expression, NULL, is_branch_ending);
+			return emit_postfix_expression_root_level(basic_block, unary_expression, is_branch_ending);
 	}
 }
 
