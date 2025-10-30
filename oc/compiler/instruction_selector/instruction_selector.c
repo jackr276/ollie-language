@@ -1351,6 +1351,21 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 	
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
+		//If this is a function parameter, we'll need to emit a copy instruction
+		//here for the eventual precolorer to use. If we don't do this, the precolorer
+		//will clash because it doesn't know whether to use the parameter register or
+		//the %ecx register that shift operands must be in. This is a unique case for shifting
+		//due to a quirk of x86
+		if(instruction->op2->parameter_number > 0){
+			//Move it on over here
+			instruction_t* copy_instruction = emit_movX_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
+			//Add this instruction to our block
+			insert_instruction_before_given(copy_instruction, instruction);
+
+			//Now our op2 is really this one's assignee
+			instruction->op2 = copy_instruction->destination_register;
+		}
+	
 		//We will always emit the byte copy version of the source register here
 		instruction->source_register = emit_byte_copy_of_variable(instruction->op2);
 
@@ -1409,6 +1424,21 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
+		//If this is a function parameter, we'll need to emit a copy instruction
+		//here for the eventual precolorer to use. If we don't do this, the precolorer
+		//will clash because it doesn't know whether to use the parameter register or
+		//the %ecx register that shift operands must be in. This is a unique case for shifting
+		//due to a quirk of x86
+		if(instruction->op2->parameter_number > 0){
+			//Move it on over here
+			instruction_t* copy_instruction = emit_movX_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
+			//Add this instruction to our block
+			insert_instruction_before_given(copy_instruction, instruction);
+
+			//Now our op2 is really this one's assignee
+			instruction->op2 = copy_instruction->destination_register;
+		}
+
 		//We will always emit the byte copy version of the source register here
 		instruction->source_register = emit_byte_copy_of_variable(instruction->op2);
 
