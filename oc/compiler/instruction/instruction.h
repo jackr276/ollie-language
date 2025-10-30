@@ -193,11 +193,9 @@ struct three_addr_var_t{
 	//the instruction selector
 	u_int32_t use_count;
 	//What is the indirection level
-
 	//Is this variable dereferenced in some way
 	//(either loaded from or stored to)
 	u_int8_t is_dereferenced;
-
 	//Is this a temp variable?
 	u_int8_t is_temporary;
 	//Is this a stack pointer?

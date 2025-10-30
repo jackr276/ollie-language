@@ -2061,7 +2061,7 @@ static void rename_block(basic_block_t* entry){
 
 			//Same goes for the assignee, except this one is the LHS
 			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE
-				&& cursor->assignee->indirection_level == 0){
+				&& cursor->assignee->is_dereferenced == 0){
 				lhs_new_name(cursor->assignee);
 			}
 
@@ -2145,7 +2145,7 @@ static void rename_block(basic_block_t* entry){
 	while(cursor != NULL){
 		//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
 		if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE
-			&& cursor->assignee->indirection_level == 0){
+			&& cursor->assignee->is_dereferenced == 0){
 			//Pop it off
 			lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
 		}
@@ -2795,9 +2795,9 @@ static three_addr_var_t* emit_variable_dereference(three_addr_var_t* assignee){
  * Emit a pointer indirection statement. The parser has already done the dereferencing for us, so we'll just
  * be able to store the dereferenced type in here
  */
-static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, three_addr_var_t* assignee, generic_type_t* dereferenced_type){
+static three_addr_var_t* emit_indirection(basic_block_t* basic_block, three_addr_var_t* assignee, generic_type_t* dereferenced_type){
 	//If the assignee's indirection level is already more than 0, we can't double dereference
-	if(assignee->indirection_level > 0){
+	if(assignee->is_dereferenced == TRUE){
 		//Emit the assignment instruction here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee); 
 
@@ -2819,7 +2819,7 @@ static three_addr_var_t* emit_pointer_indirection(basic_block_t* basic_block, th
 	add_used_variable(basic_block, indirect_var);
 
 	//Increment the indirection
-	indirect_var->indirection_level++;
+	indirect_var->is_dereferenced = TRUE;
 	//Temp or not same deal
 	indirect_var->is_temporary = assignee->is_temporary;
 
@@ -3046,7 +3046,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	basic_block_t* current_block = block;
 	
 	//The type is stored within the accessor
-	three_addr_var_t* dereferenced = emit_pointer_indirection(current_block, base_address, raw_union_type);
+	three_addr_var_t* dereferenced = emit_indirection(current_block, base_address, raw_union_type);
 
 	//Now we'll grab a temp assignment for the current address
 	instruction_t* pointer_deref_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
@@ -3102,7 +3102,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	generic_type_t* raw_struct_type = struct_pointer_type->internal_types.points_to;
 
 	//We need to first dereference this
-	three_addr_var_t* dereferenced = emit_pointer_indirection(block, base_address, raw_struct_type);
+	three_addr_var_t* dereferenced = emit_indirection(block, base_address, raw_struct_type);
 
 	//Assign temp to be the current address
 	instruction_t* assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
@@ -3252,7 +3252,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 				//TODO FIX
 				//Emit the indirection for this one
-				final_assignee = emit_pointer_indirection(current_block, final_assignee, original_memory_access_type);
+				final_assignee = emit_indirection(current_block, final_assignee, original_memory_access_type);
 				break;
 
 			/**
@@ -3543,7 +3543,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 
 			//Get the dereferenced variable
-			dereferenced = emit_pointer_indirection(current_block, assignee, unary_expression_parent->inferred_type);
+			dereferenced = emit_indirection(current_block, assignee, unary_expression_parent->inferred_type);
 
 			/**
 			 * Right hand side means that we want to read from memory, so we'll have a load here
@@ -4093,7 +4093,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * do this, we'll inject an assignment expression here which will eventually become a converting move
 	 * in the instruction selector
 	 */
-	if(left_hand_var->indirection_level > 0 &&
+	if(left_hand_var->is_dereferenced == TRUE &&
 		is_expanding_move_required(left_hand_var->type, right_hand_package.assignee->type) == TRUE){
 
 		//Assigning to something of the inferred type
@@ -4107,6 +4107,19 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 		//We'll add the assignment in
 		add_statement(current_block, assignment);
+	}
+
+	//This is the case where we've pre-loaded up a store and just need to drop in the op1
+	//to be done
+	if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
+		current_block->exit_statement->op1 = final_op1;
+
+		add_used_variable(current_block, final_op1);
+	//Now pack the return value here
+	result_package.assignee = left_hand_var;
+	//This is whatever the current block is
+	result_package.final_block = current_block;
+		return result_package;
 	}
 
 	/**
