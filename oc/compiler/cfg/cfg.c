@@ -2234,21 +2234,18 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, o
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
  */
-static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
-	//We assume this is the true base address
-	three_addr_var_t* true_base_address = base_addr;
-
+static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* current_offset, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(true_base_address->type);
+	three_addr_var_t* assignee = emit_temp_var(current_offset->type);
 
 	//If the base addr is not temporary, this counts as a read
-	add_used_variable(basic_block, true_base_address);
+	add_used_variable(basic_block, current_offset);
 
 	//If the offset is not temporary, it also counts as used
 	add_used_variable(basic_block, offset);
 
 	//Now we leverage the helper to emit this
-	instruction_t* stmt = emit_lea_instruction(assignee, true_base_address, offset, member_type->type_size);
+	instruction_t* stmt = emit_lea_instruction(assignee, current_offset, offset, member_type->type_size);
 
 	//Mark this with whatever was passed through
 	stmt->is_branch_ending = is_branch_ending;
@@ -2981,11 +2978,8 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
 	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child, is_branch_ending, FALSE);
 
-	//If there is a difference in current and the final block, we'll reassign here
-	if(current_block != expression_package.final_block){
-		//Set this to be at the end
-		current_block = expression_package.final_block;
-	}
+	//Set this to be at the end
+	current_block = expression_package.final_block;
 
 	//This is whatever was emitted by the expression
 	three_addr_var_t* array_offset = expression_package.assignee;
@@ -2994,23 +2988,42 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	generic_type_t* member_type = array_accessor->inferred_type;
 
 	/**
-	 * The formula for array subscript is: base_address + type_size * subscript
-	 * 
-	 * However, if we're on our second or third round, the current var may be an address
-	 *
-	 * This can be done using a lea instruction, so we will emit that directly
+	 * If this is not null, we'll be adding on top of it
+	 * with this rule and eventually reassigning what the current offset
+	 * actually is
 	 */
-	three_addr_var_t* address;
+	if(*current_offset != NULL){
+		/**
+		 * The formula for array subscript is: base_address + type_size * subscript
+		 * 
+		 * However, if we're on our second or third round, the current var may be an address
+		 *
+		 * This can be done using a lea instruction, so we will emit that directly
+		 */
+		three_addr_var_t* address;
 
-	//Remember, we can only use lea if we have a power of 2 
-	if(is_power_of_2(member_type->type_size) == TRUE){
-		address = emit_lea(current_block, current_offset, array_offset, member_type, is_branch_ending);
+		//Remember, we can only use lea if we have a power of 2 
+		if(is_power_of_2(member_type->type_size) == TRUE){
+			address = emit_lea(current_block, *current_offset, array_offset, member_type, is_branch_ending);
+		} else {
+			address = emit_address_offset_calculation(current_block, *current_offset, array_offset, member_type, is_branch_ending);
+		}
+
+		//And finally - our current offset is no longer the actual offset
+		*current_offset = address;
+
+	/**
+	 * If this is NULL, then we can just make the current offset be
+	 * the result + the array offset * member type
+	 */
 	} else {
-		address = emit_address_offset_calculation(current_block, current_offset, array_offset, member_type, is_branch_ending);
+		//Emit the variable directly here
+		*current_offset = emit_temp_var(u64);
+
+		//Emit the binary operation directly with this. The current offset remains unchanged
+		emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, emit_direct_integer_or_char_constant(member_type->type_size, u64), is_branch_ending);
 	}
 
-	//The assignee is the address
-	expression_package.assignee = address;
 	//And the final block is this as well
 	expression_package.final_block = current_block;
 
@@ -3248,7 +3261,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	generic_ast_node_t* postfix_node = node->first_child;
 
 	//We will first emit the postfix expression code that comes from this
-	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, NULL, is_branch_ending);
+	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node, is_branch_ending);
 
 	//If this is now different, which it could be, we'll change what current is
 	if(postfix_expression_results.final_block != current_block){
@@ -3316,7 +3329,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
 
 		//Now we emit the copied package
-		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, NULL, is_branch_ending);
+		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, is_branch_ending);
 
 		//If this is now different, which it could be, we'll change what current is
 		if(copied_package.final_block != current_block){
@@ -3629,7 +3642,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//Set the deref flag to false so we don't deref
 					second_child->dereference_needed = FALSE;
 					//Emit the whole thing
-					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, second_child, NULL, is_branch_ending);
+					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, second_child, is_branch_ending);
 
 					//Set if need be
 					if(postfix_results.final_block != current_block){
@@ -3676,7 +3689,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 			return emit_postoperation_code(basic_block, unary_expression, is_branch_ending);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
-			return emit_postfix_expression(basic_block, unary_expression, NULL, is_branch_ending);
+			return emit_postfix_expression(basic_block, unary_expression, is_branch_ending);
 	}
 }
 
