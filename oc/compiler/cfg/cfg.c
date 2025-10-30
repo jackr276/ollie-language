@@ -4140,7 +4140,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
 	 * we'll need to handle this appropriately
 	 */
-	if(is_store_operation(current_block->exit_statement->statement_type) == TRUE){
+	if(is_store_operation(current_block->exit_statement) == TRUE){
 		//This is our store statement
 		instruction_t* store_statement = current_block->exit_statement;
 

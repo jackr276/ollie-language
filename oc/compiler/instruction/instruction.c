@@ -221,8 +221,13 @@ u_int8_t is_operator_relational_operator(ollie_token_t op){
 /**
  * Helper function to determine if we have a store operation
  */
-u_int8_t is_store_operation(instruction_stmt_type_t statement_type){
-	switch(statement_type){
+u_int8_t is_store_operation(instruction_t* statement){
+	//Input validation
+	if(statement == NULL){
+		return FALSE;
+	}
+
+	switch(statement->statement_type){
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:

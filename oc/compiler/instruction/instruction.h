@@ -350,7 +350,7 @@ u_int8_t is_operator_relational_operator(ollie_token_t op);
 /**
  * Helper function to determine if we have a store operation
  */
-u_int8_t is_store_operation(instruction_stmt_type_t statement_type);
+u_int8_t is_store_operation(instruction_t* statement);
 
 /**
  * Helper function to determine if an operator is can be constant folded
