@@ -3303,6 +3303,119 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 
 /**
+ * Emit a postifx expression tree's code. This rule is recursive by nature
+ *
+ * They all look like this:
+ * 			 <postfix-expression>
+ * 			  / 			\
+ *  <postfix-expression>	<postfix-operator>
+ *
+ * The right child's type is the original access value type(as defined)
+ * The left child's type is the type of the memory region being accessed(struct, union, array, pointer)
+ *
+ * The parent node though, is prone to type inference by the parser. As such, we *do not* want to use
+ * the parent node's type in our decision making. We *will* use it at the very end to determine if any kind
+ * of converting move is required for us to make
+ * 
+ * We will always know the true base address at the time of use here
+ */
+static cfg_result_package_t emit_postfix_expression_address_calc_rec(basic_block_t* basic_block, generic_ast_node_t* node, three_addr_var_t* base_address, three_addr_var_t* current_offset, u_int8_t is_branch_ending){
+	//Acts as a base case/stopper. We'll just go right through in this case
+	if(node->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
+		return emit_primary_expr_code(basic_block, node, is_branch_ending);
+	}
+
+	//Keep track of the current block here
+	basic_block_t* current_block = basic_block;
+
+	//The first child is always the other postfix expression node
+	generic_ast_node_t* first_child = node->first_child;
+	//And the operator node is always what comes after the first child
+	generic_ast_node_t* operator_node = first_child->next_sibling;
+
+	//These 3 types are what we have to work with
+	generic_type_t* parent_node_type = node->inferred_type;
+	generic_type_t* memory_region_type = first_child->inferred_type;
+	generic_type_t* original_memory_access_type = operator_node->inferred_type;
+
+	//Now we'll let the recursive rule take place on the first child, which is also a postfix expression
+	cfg_result_package_t first_child_results = emit_postfix_expression_address_calc_rec(current_block, first_child, base_address, current_offset, is_branch_ending);
+
+	/**
+	 * Whenever we get here, result's assignee should be the variable containing the offset that we've calculated
+	 * up to this point. We'll be sure to reassign here
+	 */
+	current_offset = first_child_results.assignee;
+
+	//Reassign the current block if need be
+	if(first_child_results.final_block != current_block){
+		current_block = first_child_results.final_block;
+	}
+
+	//Grab a holder for our results
+	cfg_result_package_t postfix_expression_results = {NULL, NULL, NULL, BLANK};
+
+	//Now that we have the first child, we can go through and determine what kind of operator we need to deal with
+	switch(operator_node->ast_node_type){
+		//Array accessor node
+		case AST_NODE_TYPE_ARRAY_ACCESSOR:
+			//Emits the address of what we want
+			postfix_expression_results = emit_array_offset_calculation(current_block, operator_node, current_offset, is_branch_ending);
+			//This is our current offset
+			current_offset = postfix_expression_results.assignee;
+			break;
+
+		default:
+			print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Unrecognized node type", node->line_number);
+			exit(0);
+	}
+
+	//Let's package and return everything that we need
+	cfg_result_package_t final_result = {basic_block, current_block, current_offset, BLANK};
+	return final_result;
+}
+
+
+/**
+ * This is the top-level processing rule for our postfix expressions. We know that these expressions will
+ * always turn into a memory access of some kind
+ */
+static cfg_result_package_t emit_postfix_expression_root_level(basic_block_t* basic_block, generic_ast_node_t* parent_node, u_int8_t is_branch_ending){
+	//This rule could just be a pass-through rule. In which case, we just go to the lower level
+	if(parent_node->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
+		return emit_primary_expr_code(basic_block, parent_node, is_branch_ending);
+	}
+
+	//Keep track of our current block
+	basic_block_t* current_block = basic_block;
+
+	//First thing we need is our base address. The variable always comes through
+	//the parent variable
+	three_addr_var_t* base_address = emit_var(parent_node->variable);
+
+	//Now we'll need this base address's memory address
+	instruction_t* address_assignment = emit_memory_address_assignment(emit_temp_var(base_address->type), base_address);
+	address_assignment->is_branch_ending = is_branch_ending;
+
+	//This counts as a use for the address
+	add_used_variable(current_block, base_address);
+
+	//Get the statement in there
+	add_statement(current_block, address_assignment);
+
+	//The current offset is at first just a variable
+	three_addr_var_t* current_offset = emit_temp_var(u64);
+
+	/**
+	 * Now we're equipped with the base address that we need, we can begin working through all of our child-level
+	 * memory accesses and such
+	 */
+	cfg_result_package_t address_calculation = emit_postfix_expression_address_calc_rec(basic_block, parent_node, base_address, current_offset, is_branch_ending);
+
+}
+
+
+/**
  * Emit a postoperation(postincrement or postdecrement) expression
  *
  * These are of the form:
