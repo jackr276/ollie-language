@@ -3135,12 +3135,37 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  * The helper will process the postfix expression for us in a recursive way. We will pass along the "base_address" variable which
  * will eventually be populated by the root level expression
  */
-satic cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t* base_address, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
+	/**
+	 * If we make it here, this is actually our base address emittal. We will use the
+	 * results from here to hang onto our base address
+	 */
+	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
+		//Run the primary results function
+		cfg_result_package_t primary_results = emit_primary_expr_code(basic_block, root, is_branch_ending);
+
+		//The base address is whatever this assignee is
+		*base_address = primary_results.assignee;
+
+		//And give these back
+		return primary_results;
+	}
+
+	//Once we make it down here, we know that we don't have a primary expression so we need to do postfix processing
+	//The left child *always* decays into another postfix expression
+	generic_ast_node_t* left_child = root->first_child;
+	//And this will *always* be our postoperation code
+	generic_ast_node_t* right_child = left_child->next_sibling;
+	
+	//We need to first recursively emit the left child's postfix expression
+	cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, is_branch_ending);
+
+	//NOTE: by the time we get down here, base address will have been populated with an actual value(usually "memory address of")
+
+
 
 
 }
-
-
 
 
 /**
@@ -3156,6 +3181,15 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
 		return emit_primary_expr_code(basic_block, root, is_branch_ending);
 	}
+
+	//A variable for our base address(it starts off as null, the recursive rule will modify it)
+	three_addr_var_t* base_address = NULL;
+
+	//Another variable for our current offset(again it starts as NULL, the rule will populate if need be)
+	three_addr_var_t* current_offset = NULL;
+	
+	//Let the recursive rule do all the work
+	cfg_result_package_t postfix_results = emit_postfix_expression_rec(basic_block, root, &base_address, &current_offset, is_branch_ending);
 
 }
 
