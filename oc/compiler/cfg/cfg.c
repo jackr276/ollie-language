@@ -3597,31 +3597,34 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			dereferenced = emit_pointer_indirection(current_block, assignee, unary_expression_parent->inferred_type);
 
 			/**
-			 * We can flag that a final expression needs to be a store instruction with the "needs store" operator
-			 * or just by using the indirection level
+			 * Right hand side means that we want to read from memory, so we'll have a load here
+			 * and return the temp var that was loaded in
 			 */
-
-			//If we're on the right hand side, we need to have a temp assignment
 			if(first_child->side == SIDE_TYPE_RIGHT){
 				//If the side type here is right, we'll need a load instruction
-				//
-				// TODO WILL RE-ENABLE
-				//instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(dereferenced->type), dereferenced);
-
-				//Emit the temp assignment
-				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(dereferenced->type), dereferenced);
 
 				//The dereferenced variable has been used
 				add_used_variable(current_block, dereferenced);
 
 				//Add it in
-				add_statement(current_block, temp_assignment);
+				add_statement(current_block, load_instruction);
 
 				//This one's assignee is our overall assignee
-				unary_package.assignee = temp_assignment->assignee;
+				unary_package.assignee = load_instruction->assignee;
 
-			//Otherwise just give back what we had
+			/**
+			 * If we make it here, we will return an *incomplete* store
+			 * instruction with the knowledge that whomever called use
+			 * will fill it in
+			 */
 			} else {
+				//We will intentionally leave op1 blank so that it can be filled in down the line
+				instruction_t* store_instruction = emit_store_ir_code(dereferenced, NULL);
+
+				//Now let's get this into the block
+				add_statement(current_block, store_instruction);
+
 				//This one's assignee is just the dereferenced var
 				unary_package.assignee = dereferenced;
 			}
