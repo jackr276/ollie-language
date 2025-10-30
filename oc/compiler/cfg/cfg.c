@@ -3250,6 +3250,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				add_used_variable(current_block, base_address);
 				add_used_variable(current_block, current_offset);
 
+				//Add it into the block
+				add_statement(current_block, store_instruction);
+
 				//Give back the base address as the assignee(even though it's not really)
 				postfix_results.assignee = base_address;
 
@@ -3257,6 +3260,19 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 			//Right side = load statement
 			case SIDE_TYPE_RIGHT:
+				//Calculate our load here
+				load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(root->inferred_type), base_address, current_offset);
+
+				//Counts as uses for both
+				add_used_variable(current_block, base_address);
+				add_used_variable(current_block, current_offset);
+
+				//Add it into the block
+				add_statement(current_block, load_instruction);
+
+				//Now the final assignee here is important - it's what we give it here
+				postfix_results.assignee = load_instruction->assignee;
+				
 				break;
 		}
 
