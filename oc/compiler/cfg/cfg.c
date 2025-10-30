@@ -2974,7 +2974,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
  * This rule returns *the offset* of the value that we want. It has no idea what the array's
  * base address even is
  */
-static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_ast_node_t* array_accessor, three_addr_var_t* current_offset, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_ast_node_t* array_accessor, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
@@ -3136,6 +3136,9 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  * will eventually be populated by the root level expression
  */
 static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
+	//A tracker for what the current block actually is(this can change)
+	basic_block_t* current = basic_block;
+
 	/**
 	 * If we make it here, this is actually our base address emittal. We will use the
 	 * results from here to hang onto our base address
@@ -3160,11 +3163,30 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	//We need to first recursively emit the left child's postfix expression
 	cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, is_branch_ending);
 
+	//Update whatever the last block may be
+	current = left_child_results.final_block;
+
+	//The postfix results package
+	cfg_result_package_t postfix_results;
+
 	//NOTE: by the time we get down here, base address will have been populated with an actual value(usually "memory address of")
 
+	//Now we need to go through and calculate the offset
+	switch(right_child->ast_node_type){
+		//Handle an array accessor
+		case AST_NODE_TYPE_ARRAY_ACCESSOR:
+			postfix_results = emit_array_offset_calculation(current, right_child, current_offset, is_branch_ending);
+			break;
 
+		//For now
+		default:
+			printf("TODO not implemented\n");
+			exit(1);
+	}
 
-
+	//Give back our final results(assignee is not needed here)
+	cfg_result_package_t final_results = {current, current, NULL, BLANK};
+	return final_results;
 }
 
 
@@ -3191,6 +3213,20 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	//Let the recursive rule do all the work
 	cfg_result_package_t postfix_results = emit_postfix_expression_rec(basic_block, root, &base_address, &current_offset, is_branch_ending);
 
+	//Do we need a dereference(load or store) here?
+	if(root->dereference_needed == TRUE){
+		switch(root->side){
+			case SIDE_TYPE_LEFT:
+				break;
+
+
+			case SIDE_TYPE_RIGHT:
+				break;
+		}
+	}
+
+	//Give back these results
+	return postfix_results;
 }
 
 
