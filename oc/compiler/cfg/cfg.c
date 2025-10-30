@@ -3390,7 +3390,7 @@ static cfg_result_package_t emit_postfix_expression_root_level(basic_block_t* ba
 	basic_block_t* current_block = basic_block;
 
 	//Now we'll need this base address's memory address
-	instruction_t* address_assignment = emit_memory_address_assignment(emit_temp_var(base_address->type), emit_var(parent_node->variable));
+	instruction_t* address_assignment = emit_memory_address_assignment(emit_temp_var(parent_node->inferred_type), emit_var(parent_node->variable));
 	address_assignment->is_branch_ending = is_branch_ending;
 
 	//This counts as a use for the address
@@ -3895,7 +3895,7 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 			return emit_postoperation_code(basic_block, unary_expression, is_branch_ending);
 		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
 		default:
-			return emit_postfix_expression_root_level(basic_block, unary_expression, is_branch_ending);
+			return emit_postfix_expression(basic_block, unary_expression, NULL, is_branch_ending);
 	}
 }
 
@@ -4256,25 +4256,44 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		add_statement(current_block, assignment);
 	}
 
-	//This is the case where we've pre-loaded up a store and just need to drop in the op1
-	//to be done
-	if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
-		current_block->exit_statement->op1 = final_op1;
+	/**
+	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
+	 * we'll need to handle this appropriately
+	 */
+	if(is_store_operation(current_block->exit_statement->statement_type) == TRUE){
+		//This is our store statement
+		instruction_t* store_statement = current_block->exit_statement;
 
+		/**
+		 * Different store statement types have different areas where the operands go
+		 */
+		switch(store_statement->statement_type){
+			//Store statements have the storee in op1
+			case THREE_ADDR_CODE_STORE_STATEMENT:
+				//This is now our op1
+				current_block->exit_statement->op1 = final_op1;
+				break;
+
+			//When we have offsets, the storee goes into op2
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+				current_block->exit_statement->op2 = final_op1;
+				break;
+
+			//This is unreachable, just so the compiler is happy
+			default:
+				break;
+		}
+
+		//No matter what happened, we used this
 		add_used_variable(current_block, final_op1);
-	//Now pack the return value here
-	result_package.assignee = left_hand_var;
-	//This is whatever the current block is
-	result_package.final_block = current_block;
-		return result_package;
-	}
 
 	/**
 	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
 	 * variable that is on the stack, then a regular assignment just won't do. We'll need to
 	 * emit a store operation
 	 */
-	if(left_hand_var->linked_var == NULL 
+	} else if(left_hand_var->linked_var == NULL 
 		|| (left_hand_var->linked_var->stack_variable == FALSE && left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
 		//Finally we'll struct the whole thing
 		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);

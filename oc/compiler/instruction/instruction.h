@@ -348,6 +348,11 @@ void set_new_function(symtab_function_record_t* func);
 u_int8_t is_operator_relational_operator(ollie_token_t op);
 
 /**
+ * Helper function to determine if we have a store operation
+ */
+u_int8_t is_store_operation(instruction_stmt_type_t statement_type);
+
+/**
  * Helper function to determine if an operator is can be constant folded
  */
 u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op);

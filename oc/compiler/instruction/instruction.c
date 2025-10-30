@@ -219,6 +219,21 @@ u_int8_t is_operator_relational_operator(ollie_token_t op){
 
 
 /**
+ * Helper function to determine if we have a store operation
+ */
+u_int8_t is_store_operation(instruction_stmt_type_t statement_type){
+	switch(statement_type){
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Helper function to determine if an operator is can be constant folded
  */
 u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op){
@@ -3716,7 +3731,7 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
 	//The base address that we're assigning to
 	stmt->assignee = base_address;
-	//The op1 is our varia
+	//The op1 is our offset
 	stmt->op1 = offset;
 
 	//What we're storing
