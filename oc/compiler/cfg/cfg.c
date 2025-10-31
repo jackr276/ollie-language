@@ -3277,9 +3277,8 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 
 		//Handle a struct pointer access
 		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
-			postfix_results =  emit_struct_pointer_accessor_expression(current, memory_region_type, right_child, base_address, u_int8_t is_branch_ending)
+			postfix_results = emit_struct_pointer_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, is_branch_ending);
 			break;
-			
 
 		//Handle a regular union access(. access)
 		case AST_NODE_TYPE_UNION_ACCESSOR:
@@ -3291,15 +3290,13 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			postfix_results = emit_union_pointer_accessor_expression(current, memory_region_type, base_address, current_offset);
 			break;
 			
-
-		//For now
+		//We should never actually hit this, it's just so the compiler is happy
 		default:
-			printf("TODO not implemented\n");
-			exit(1);
+			break;
 	}
 
 	//Give back our final results(assignee is not needed here)
-	cfg_result_package_t final_results = {current, current, NULL, BLANK};
+	cfg_result_package_t final_results = {current, postfix_results.final_block, NULL, BLANK};
 	return final_results;
 }
 
