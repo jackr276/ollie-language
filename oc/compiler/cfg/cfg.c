@@ -3094,16 +3094,58 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		//Emit the load
 		load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset);
 
-	} else {
+		//This counts as a use for both
+		add_used_variable(block, *base_address);
+		add_used_variable(block, *current_offset);
 
+		//Add it into the block
+		add_statement(block, load_instruction);
+
+		//The new base address now is the load instruction's assignee
+		*base_address = load_instruction->assignee;
+
+		//And the offset is now nothing
+		*current_offset = NULL;
+
+	//If we get here, we have an empty offset so we just need a regular load
+	} else {
+		//Regular load here
+		load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address);
+
+		//This counts as a use
+		add_used_variable(block, *base_address);
+		
+		//Get it into the block
+		add_statement(block, load_instruction);
+
+		//Again this now is the base address
+		*base_address = load_instruction->assignee;
 	}
+
+	//Once we get down here, we've emitted everything that we would like to regarding
+	//the pointer. Now we need to handle the struct part
 
 	//Extract the var first
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
 
 	//Now we'll grab the associated struct record
-	symtab_variable_record_t* struct_record = get_struct_member(struct_type, struct_variable->var_name.string);
+	symtab_variable_record_t* struct_record = get_struct_member(raw_struct_type, struct_variable->var_name.string);
+	
+	//Let's create our offset here
+	three_addr_const_t* offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
 
+	//Now we'll have one final assignment here
+	instruction_t* final_assignment =  emit_assignment_with_const_instruction(emit_temp_var(u64), offset);
+
+	//Add it into the block
+	add_statement(block, final_assignment);
+
+	//The current offset now is this
+	*current_offset = final_assignment->assignee;
+
+	//And we're done here, we can package and return what we have
+	cfg_result_package_t results = {block, block, *base_address, BLANK};
+	return results;
 }
 
 
