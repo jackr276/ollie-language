@@ -3064,6 +3064,7 @@ static cfg_result_package_t emit_struct_offset_calculation(basic_block_t* block,
 
 		//Emit the const assignment here
 		instruction_t* assignment_instruction = emit_assignment_with_const_instruction(*current_offset, struct_offset);
+		assignment_instruction->is_branch_ending = is_branch_ending;
 
 		//Add it into the block
 		add_statement(block, assignment_instruction);
@@ -3093,6 +3094,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	if(*current_offset != NULL){
 		//Emit the load
 		load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset);
+		load_instruction->is_branch_ending = is_branch_ending;
 
 		//This counts as a use for both
 		add_used_variable(block, *base_address);
@@ -3111,6 +3113,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	} else {
 		//Regular load here
 		load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address);
+		load_instruction->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
 		add_used_variable(block, *base_address);
@@ -3168,7 +3171,7 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_type_t* union_pointer_type, three_addr_var_t** base_address, three_addr_var_t** current_offset){
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_type_t* union_pointer_type, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
 	//Get the current type
 	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
 
@@ -3180,6 +3183,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	if(*current_offset != NULL){
 		//Emit our load statement here
 		instruction_t* load_statement = emit_load_with_variable_offset_ir_code(emit_temp_var(raw_union_type), *base_address, *current_offset);
+		load_statement->is_branch_ending = is_branch_ending;
 
 		//These count as uses
 		add_used_variable(block, *base_address);
@@ -3199,6 +3203,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	} else {
 		//Emit our load statement here
 		instruction_t* load_statement = emit_load_ir_code(emit_temp_var(raw_union_type), *base_address);
+		load_statement->is_branch_ending = is_branch_ending;
 
 		//These count as uses
 		add_used_variable(block, *base_address);
@@ -3287,7 +3292,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 
 		//Handle a union pointer access (-> access)
 		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-			postfix_results = emit_union_pointer_accessor_expression(current, memory_region_type, base_address, current_offset);
+			postfix_results = emit_union_pointer_accessor_expression(current, memory_region_type, base_address, current_offset, is_branch_ending);
 			break;
 			
 		//We should never actually hit this, it's just so the compiler is happy
