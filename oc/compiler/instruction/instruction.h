@@ -707,13 +707,13 @@ instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer
 /**
  * Are two variables equal? A helper method for searching
  */
-u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection_level);
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);
 
 /**
  * Are two variables equal regardless of their SSA status? This function should only ever be used
  * by the instruction selector, under very careful circumstances
  */
-u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level);
+u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);
 
 /**
  * Emit a complete, one-for-one copy of an instruction

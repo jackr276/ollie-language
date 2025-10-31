@@ -4434,9 +4434,14 @@ u_int8_t is_register_callee_saved(general_purpose_register_t reg){
 /**
  * Are two variables equal? A helper method for searching
  */
-u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level){
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection){
 	//Easy way to tell here
 	if(a == NULL || b == NULL){
+		return FALSE;
+	}
+
+	//Are we ignoring indirection? If not, we need to compare the dereference here
+	if(ignore_indirection == FALSE && a->is_dereferenced != b->is_dereferenced){
 		return FALSE;
 	}
 
@@ -4473,9 +4478,14 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 /**
  * Are two variables equal regardless of their SSA level? A helper method for searching
  */
-u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level){
+u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection){
 	//Easy way to tell here
 	if(a == NULL || b == NULL){
+		return FALSE;
+	}
+
+	//Are we ignoring indirection? If not, we need to compare the dereference here
+	if(ignore_indirection == FALSE && a->is_dereferenced != b->is_dereferenced){
 		return FALSE;
 	}
 
