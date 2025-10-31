@@ -3265,6 +3265,15 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	//Let the recursive rule do all the work
 	cfg_result_package_t postfix_results = emit_postfix_expression_rec(basic_block, root, &base_address, &current_offset, is_branch_ending);
 
+	//Grab htese out for later
+	generic_ast_node_t* left_child = root->first_child;
+	generic_ast_node_t* right_child = left_child->next_sibling;
+
+	//These 3 types are what we have to work with
+	generic_type_t* parent_node_type = root->inferred_type;
+	generic_type_t* memory_region_type = left_child->inferred_type;
+	generic_type_t* original_memory_access_type = right_child->inferred_type;
+
 	//This is whatever the final block is
 	current_block = postfix_results.final_block;
 
@@ -3293,10 +3302,18 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					//Give back the base address as the assignee(even though it's not really)
 					postfix_results.assignee = base_address;
 
+				//Otherwise, this means that the current offset is null
 				} else {
+					//Emit the store here - remember we leave the op1 NULL so that
+					//a later rule can fill it in
+					store_instruction = emit_store_ir_code(base_address, NULL);
 
+					//Counts as a use
+					add_used_variable(current_block, base_address);
+
+					//Add it into our block
+					add_statement(current_block, store_instruction);
 				}
-
 
 				break;
 
@@ -3305,7 +3322,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//This will not be null in the case of structs & arrays
 				if(current_offset != NULL){
 					//Calculate our load here
-					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(root->inferred_type), base_address, current_offset);
+					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(original_memory_access_type), base_address, current_offset);
 
 					//Counts as uses for both
 					add_used_variable(current_block, base_address);
@@ -3316,9 +3333,21 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 					//Now the final assignee here is important - it's what we give it here
 					postfix_results.assignee = load_instruction->assignee;
-
+					
+				//Otherwise we have a null current offset, so we're just
+				//relying on the base address
 				} else {
+					//Emit a regular load here
+					load_instruction = emit_load_ir_code(emit_temp_var(original_memory_access_type), base_address);
 
+					//Counts as a use
+					add_used_variable(current_block, base_address);
+
+					//Add it into the block
+					add_statement(current_block, load_instruction);
+
+					//This is our final assignee
+					postfix_results.assignee = load_instruction->assignee;
 				}
 				
 				break;
