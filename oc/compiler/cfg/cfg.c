@@ -3076,55 +3076,6 @@ static cfg_result_package_t emit_struct_offset_calculation(basic_block_t* block,
 
 
 /**
- * Emit the code needed to perform a regular union access
- *
- * This rule returns *the address* of the value that we've asked for
- */
-static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, three_addr_var_t* base_address){
-	//Very simple rule, we just have this for consistency
-	cfg_result_package_t accessor = {block, block, base_address, BLANK};
-
-	//Give it back
-	return accessor;
-}
-
-
-/**
- * Emit the code needed to perform a union pointer access
- *
- * This rule returns *the address* of the value that we've asked for
- */
-static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_type_t* union_pointer_type, three_addr_var_t* base_address){
-	//Get the current type
-	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
-
-	//Store the current block
-	basic_block_t* current_block = block;
-	
-	//The type is stored within the accessor
-	three_addr_var_t* dereferenced = emit_indirection(current_block, base_address, raw_union_type);
-
-	//Now we'll grab a temp assignment for the current address
-	instruction_t* pointer_deref_assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
-
-	//This now counts as a use
-	add_used_variable(current_block, dereferenced);
-
-	//Now we add the statement in
-	add_statement(current_block, pointer_deref_assignment);
-
-	//This is the union address here
-	three_addr_var_t* union_address = pointer_deref_assignment->assignee;
-
-	//Construct and return
-	cfg_result_package_t return_package = {current_block, current_block, union_address, BLANK};
-	return return_package;
-}
-
-
-
-
-/**
  * Emit the code needed to perform a struct pointer access
  *
  * This rule returns *the offset* of the value that we want. It has
@@ -3161,6 +3112,75 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	//Package & return the results
 	cfg_result_package_t results = {block, block, struct_address, BLANK};
 	return results;
+}
+
+
+/**
+ * Emit the code needed to perform a regular union access
+ *
+ * This rule returns *the address* of the value that we've asked for
+ */
+static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, three_addr_var_t* base_address){
+	//Very simple rule, we just have this for consistency
+	cfg_result_package_t accessor = {block, block, base_address, BLANK};
+
+	//Give it back
+	return accessor;
+}
+
+
+/**
+ * Emit the code needed to perform a union pointer access
+ *
+ * This rule returns *the address* of the value that we've asked for
+ */
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_type_t* union_pointer_type, three_addr_var_t** base_address, three_addr_var_t** current_offset){
+	//Get the current type
+	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
+
+	//Store the current block
+	basic_block_t* current_block = block;
+
+	//We need to emit a load instruction here to load the union into a variable
+	//The current offset could be NULL
+	if(*current_offset != NULL){
+		//Emit our load statement here
+		instruction_t* load_statement = emit_load_with_variable_offset_ir_code(emit_temp_var(raw_union_type), *base_address, *current_offset);
+
+		//These count as uses
+		add_used_variable(block, *base_address);
+		add_used_variable(block, *current_offset);
+
+		//Now add this statement to the block
+		add_statement(block, load_statement);
+
+		//The current offset is now NULL because we've used what we stored up so far
+		*current_offset = NULL;
+
+		//And the base address is now what we have here
+		*base_address = load_statement->assignee;
+
+	//Otherwise the current offset is already NULL, so we just have a regular load statement
+	//here
+	} else {
+		//Emit our load statement here
+		instruction_t* load_statement = emit_load_ir_code(emit_temp_var(raw_union_type), *base_address);
+
+		//These count as uses
+		add_used_variable(block, *base_address);
+
+		//Now add this statement to the block
+		add_statement(block, load_statement);
+
+		//And the base address is now what we have here
+		*base_address = load_statement->assignee;
+	}
+
+	//By the time we get out here, we have performed a dereference and loaded whatever our offset
+	//math was before into the new base address variable. The current offset will be NULL again
+	//because we need to start over if we have any more offsets
+	cfg_result_package_t return_package = {current_block, current_block, *base_address, BLANK};
+	return return_package;
 }
 
 
@@ -3224,6 +3244,11 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		//Handle a regular union access(. access)
 		case AST_NODE_TYPE_UNION_ACCESSOR:
 			postfix_results = emit_union_accessor_expression(current, *base_address);
+			break;
+
+		//Handle a union pointer access
+		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
+			postfix_results = emit_union_pointer_accessor_expression(current, memory_region_type, base_address, current_offset);
 			break;
 			
 
