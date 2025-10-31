@@ -2071,13 +2071,32 @@ static void rename_block(basic_block_t* entry){
 					}
 				}
 
-			break;
+				break;
 
+			/**
+			 * These statements are interesting because the "assignee" is not really
+			 * being assigned to. It holds a memory address that is being dereferenced
+			 * and then assigned to. As such, these values should never count as an lhs new name
+			 */
 			case THREE_ADDR_CODE_STORE_STATEMENT:
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-				break;
+				//If we have a non-temp variable, rename it
+				if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
+					rhs_new_name(cursor->op1);
+				}
 
+				//If we have a non-temp variable, rename it
+				if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE){
+					rhs_new_name(cursor->op2);
+				}
+
+				//UNIQUE CASE - rhs also gets a new name here
+				if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+					rhs_new_name(cursor->assignee);
+				}
+
+				break;
 
 			//And now if it's anything else that has an assignee, operands, etc,
 			//we'll need to rewrite all of those as well
@@ -2162,11 +2181,23 @@ static void rename_block(basic_block_t* entry){
 	//Grab the cursor again
 	cursor = entry->leader_statement;
 	while(cursor != NULL){
-		//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-		if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE
-			&& cursor->assignee->is_dereferenced == 0){
-			//Pop it off
-			lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
+		//We have some special exceptions here...
+		switch(cursor->statement_type){
+			//These ones have assignees in name only - they do not count
+			case THREE_ADDR_CODE_STORE_STATEMENT:
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+				break;
+
+			//Otherwise this does count
+			default:
+				//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
+				if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+					//Pop it off
+					lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
+				}
+
+				break;
 		}
 
 		//Advance to the next one
