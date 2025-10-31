@@ -3356,18 +3356,26 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	//Otherwise it's just a memory address call, just emit the 
 	//base address plus the offset
 	} else {
-		//Just do base address + offset
-		instruction_t* address_calculation = emit_binary_operation_instruction(emit_temp_var(base_address->type), base_address, PLUS, current_offset);
+		//If the current offset is not NULL, we'll need to do some calculations
+		//here
+		if(current_offset != NULL){
+			//Just do base address + offset
+			instruction_t* address_calculation = emit_binary_operation_instruction(emit_temp_var(base_address->type), base_address, PLUS, current_offset);
 
-		//These count as uses
-		add_used_variable(current_block, base_address);
-		add_used_variable(current_block, current_offset);
+			//These count as uses
+			add_used_variable(current_block, base_address);
+			add_used_variable(current_block, current_offset);
 
-		//Add the instruction in
-		add_statement(current_block, address_calculation);
+			//Add the instruction in
+			add_statement(current_block, address_calculation);
 
-		//This is what we're returning
-		postfix_results.assignee = address_calculation->assignee;
+			//This is what we're returning
+			postfix_results.assignee = address_calculation->assignee;
+
+		//Otherwise it is null, so we can just use the base address
+		} else {
+			postfix_results.assignee = base_address;
+		}
 	}
 
 	//Give back these results
