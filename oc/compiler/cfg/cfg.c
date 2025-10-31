@@ -3536,18 +3536,52 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		//Now we emit the copied package
 		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy, is_branch_ending);
 
-		//If this is now different, which it could be, we'll change what current is
-		if(copied_package.final_block != current_block){
-			current_block = copied_package.final_block;
+		//This is now the final block
+		current_block = copied_package.final_block;
+
+		//Is this a store operation? If so, we just need to fill in the op1 here
+		if(is_store_operation(current_block->exit_statement) == TRUE){
+			//This is our store statement
+			instruction_t* store_statement = current_block->exit_statement;
+
+			/**
+			 * Different store statement types have different areas where the operands go
+			 */
+			switch(store_statement->statement_type){
+				//Store statements have the storee in op1
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+					//This is now our op1
+					current_block->exit_statement->op1 = assignee;
+					break;
+
+				//When we have offsets, the storee goes into op2
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					current_block->exit_statement->op2 = assignee;
+					break;
+
+				//This is unreachable, just so the compiler is happy
+				default:
+					break;
+			}
+
+			//No matter what happened, we used this
+			add_used_variable(current_block, assignee);
+
+		//Otherwise we just have a regular assignment
+		} else {
+			//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
+			instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
+			assignment_instruction->is_branch_ending = is_branch_ending;
+
+			//This counts as a use
+			add_used_variable(current_block, assignee);
+
+			//Add this into the block
+			add_statement(current_block, assignment_instruction);
 		}
 
-		//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-		instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.assignee, assignee);
-		assignment_instruction->is_branch_ending = is_branch_ending;
-
-		//Add this into the block
-		add_statement(current_block, assignment_instruction);
-
+		//This is always the new final block
 		postoperation_package.final_block = current_block;
 	}
 
