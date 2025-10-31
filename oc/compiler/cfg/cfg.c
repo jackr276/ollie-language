@@ -2037,36 +2037,27 @@ static void rename_block(basic_block_t* entry){
 
 	//So long as this isn't null
 	while(cursor != NULL){
-		//First option - if we encounter a phi function
-		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
-			//We will rewrite the assigneed of the phi function(LHS)
-			//with the new name
-			lhs_new_name(cursor->assignee);
-
-		//And now if it's anything else that has an assignee, operands, etc,
-		//we'll need to rewrite all of those as well
-		//We'll exclude direct jump statements, these we don't care about
-		} else {
-			//If we get here we know that we don't have a phi function
-
-			//If we have a non-temp variable, rename it
-			if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
-				rhs_new_name(cursor->op1);
-			}
-
-			//If we have a non-temp variable, rename it
-			if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE){
-				rhs_new_name(cursor->op2);
-			}
-
-			//Same goes for the assignee, except this one is the LHS
-			if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE
-				&& cursor->assignee->is_dereferenced == 0){
+		switch(cursor->statement_type){
+			//First option - if we encounter a phi function
+			case THREE_ADDR_CODE_PHI_FUNC:
+				//We will rewrite the assigneed of the phi function(LHS)
+				//with the new name
 				lhs_new_name(cursor->assignee);
-			}
+				break;
+				
+			case THREE_ADDR_CODE_FUNC_CALL:
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				//If we have a non-temp variable, rename it
+				if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
+					rhs_new_name(cursor->op1);
+				}
 
-			//Special case - do we have a function call?
-			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL){
+				//Same goes for the assignee, except this one is the LHS
+				if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+					lhs_new_name(cursor->assignee);
+				}
+				
+				//Special case - do we have a function call?
 				//Grab it out
 				dynamic_array_t* func_params = cursor->parameters;
 				//Run through them all
@@ -2079,7 +2070,35 @@ static void rename_block(basic_block_t* entry){
 						rhs_new_name(current_param);
 					}
 				}
-			}
+
+			break;
+
+			case THREE_ADDR_CODE_STORE_STATEMENT:
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+				break;
+
+
+			//And now if it's anything else that has an assignee, operands, etc,
+			//we'll need to rewrite all of those as well
+			//We'll exclude direct jump statements, these we don't care about
+			default:
+				//If we have a non-temp variable, rename it
+				if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
+					rhs_new_name(cursor->op1);
+				}
+
+				//If we have a non-temp variable, rename it
+				if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE){
+					rhs_new_name(cursor->op2);
+				}
+
+				//Same goes for the assignee, except this one is the LHS
+				if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+					lhs_new_name(cursor->assignee);
+				}
+
+				break;
 		}
 
 		//Advance up to the next statement
