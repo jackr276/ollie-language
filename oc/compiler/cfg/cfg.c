@@ -3075,8 +3075,6 @@ static cfg_result_package_t emit_struct_offset_calculation(basic_block_t* block,
 }
 
 
-
-
 /**
  * Emit the code needed to perform a regular union access
  *
@@ -3223,6 +3221,12 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			postfix_results = emit_struct_offset_calculation(current, memory_region_type, right_child, current_offset, is_branch_ending);
 			break;
 
+		//Handle a regular union access(. access)
+		case AST_NODE_TYPE_UNION_ACCESSOR:
+			postfix_results = emit_union_accessor_expression(current, *base_address);
+			break;
+			
+
 		//For now
 		default:
 			printf("TODO not implemented\n");
@@ -3274,35 +3278,48 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		switch(root->side){
 			//Left side = store statement
 			case SIDE_TYPE_LEFT:
-				//Intentionally leave the storee null, it will be populated down the line
-				store_instruction = emit_store_with_variable_offset_ir_code(base_address, current_offset, NULL);
+				//This could not be null in the case of structs & arrays
+				if(current_offset != NULL){
+					//Intentionally leave the storee null, it will be populated down the line
+					store_instruction = emit_store_with_variable_offset_ir_code(base_address, current_offset, NULL);
 
-				//Counts as uses for both
-				add_used_variable(current_block, base_address);
-				add_used_variable(current_block, current_offset);
+					//Counts as uses for both
+					add_used_variable(current_block, base_address);
+					add_used_variable(current_block, current_offset);
 
-				//Add it into the block
-				add_statement(current_block, store_instruction);
+					//Add it into the block
+					add_statement(current_block, store_instruction);
 
-				//Give back the base address as the assignee(even though it's not really)
-				postfix_results.assignee = base_address;
+					//Give back the base address as the assignee(even though it's not really)
+					postfix_results.assignee = base_address;
+
+				} else {
+
+				}
+
 
 				break;
 
 			//Right side = load statement
 			case SIDE_TYPE_RIGHT:
-				//Calculate our load here
-				load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(root->inferred_type), base_address, current_offset);
+				//This will not be null in the case of structs & arrays
+				if(current_offset != NULL){
+					//Calculate our load here
+					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(root->inferred_type), base_address, current_offset);
 
-				//Counts as uses for both
-				add_used_variable(current_block, base_address);
-				add_used_variable(current_block, current_offset);
+					//Counts as uses for both
+					add_used_variable(current_block, base_address);
+					add_used_variable(current_block, current_offset);
 
-				//Add it into the block
-				add_statement(current_block, load_instruction);
+					//Add it into the block
+					add_statement(current_block, load_instruction);
 
-				//Now the final assignee here is important - it's what we give it here
-				postfix_results.assignee = load_instruction->assignee;
+					//Now the final assignee here is important - it's what we give it here
+					postfix_results.assignee = load_instruction->assignee;
+
+				} else {
+
+				}
 				
 				break;
 		}
