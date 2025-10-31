@@ -3081,37 +3081,29 @@ static cfg_result_package_t emit_struct_offset_calculation(basic_block_t* block,
  * This rule returns *the offset* of the value that we want. It has
  * no idea what the base address of the memory region it's in is
  */
-static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t* base_address, u_int8_t is_branch_ending){
-	//Get the current type
+static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
+	//Get what the raw struct type is
 	generic_type_t* raw_struct_type = struct_pointer_type->internal_types.points_to;
 
-	//We need to first dereference this
-	three_addr_var_t* dereferenced = emit_indirection(block, base_address, raw_struct_type);
+	//Now we need to emit the load by doing our offset calculation to get out of the pointer
+	//space and into memory
+	instruction_t* load_instruction;
 
-	//Assign temp to be the current address
-	instruction_t* assignment = emit_assignment_instruction(emit_temp_var(dereferenced->type), dereferenced);
+	//The current offset is not null, we need to emit some calculation here
+	if(*current_offset != NULL){
+		//Emit the load
+		load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset);
 
-	//The dereferenced variable here is used
-	add_used_variable(block, dereferenced);
+	} else {
 
-	//Add it into the block
-	add_statement(block, assignment);
+	}
 
-	//Grab the variable that we need
+	//Extract the var first
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
 
 	//Now we'll grab the associated struct record
-	symtab_variable_record_t* struct_record = get_struct_member(raw_struct_type, struct_variable->var_name.string);
+	symtab_variable_record_t* struct_record = get_struct_member(struct_type, struct_variable->var_name.string);
 
-	//The constant that represents the offset
-	three_addr_const_t* struct_offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
-
-	//Now we'll emit the address using the helper
-	three_addr_var_t* struct_address = emit_struct_address_calculation(block, raw_struct_type, assignment->assignee, struct_offset, is_branch_ending);
-
-	//Package & return the results
-	cfg_result_package_t results = {block, block, struct_address, BLANK};
-	return results;
 }
 
 
@@ -3241,12 +3233,18 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			postfix_results = emit_struct_offset_calculation(current, memory_region_type, right_child, current_offset, is_branch_ending);
 			break;
 
+		//Handle a struct pointer access
+		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
+			postfix_results =  emit_struct_pointer_accessor_expression(current, memory_region_type, right_child, base_address, u_int8_t is_branch_ending)
+			break;
+			
+
 		//Handle a regular union access(. access)
 		case AST_NODE_TYPE_UNION_ACCESSOR:
 			postfix_results = emit_union_accessor_expression(current, *base_address);
 			break;
 
-		//Handle a union pointer access
+		//Handle a union pointer access (-> access)
 		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
 			postfix_results = emit_union_pointer_accessor_expression(current, memory_region_type, base_address, current_offset);
 			break;
