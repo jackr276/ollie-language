@@ -2820,22 +2820,6 @@ static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_v
 
 
 /**
- * Emit a version of the assignee that has the dereference flag turned on. This needs to be a completely
- * distinct copy from the original
- */
-static three_addr_var_t* emit_variable_dereference(three_addr_var_t* assignee){
-	//Grab the dereferenced version
-	three_addr_var_t* dereferenced_version = emit_var_copy(assignee);
-
-	//Set the flag that this is dereferenced
-	dereferenced_version->is_dereferenced = TRUE;
-
-	//Give this version back
-	return dereferenced_version;
-}
-
-
-/**
  * Emit a pointer indirection statement. The parser has already done the dereferencing for us, so we'll just
  * be able to store the dereferenced type in here
  */
@@ -4354,7 +4338,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * It is often the case where we require an expanding move after we access memory. In order to
 	 * do this, we'll inject an assignment expression here which will eventually become a converting move
 	 * in the instruction selector
-	 */
 	if(left_hand_var->is_dereferenced == TRUE &&
 		is_expanding_move_required(left_hand_var->type, right_hand_package.assignee->type) == TRUE){
 
@@ -4370,6 +4353,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//We'll add the assignment in
 		add_statement(current_block, assignment);
 	}
+	 */
 
 	/**
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then

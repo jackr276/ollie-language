@@ -3716,6 +3716,10 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 	stmt->assignee = assignee;
+
+	//This is being dereferenced
+	stmt->assignee->is_dereferenced = TRUE;
+
 	stmt->op1 = op1;
 	//What function are we in
 	stmt->function = current_function;
@@ -3736,6 +3740,10 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
 	//The base address that we're assigning to
 	stmt->assignee = base_address;
+
+	//This is being dereferenced
+	stmt->assignee->is_dereferenced = TRUE;
+
 	//The op1 is our offset
 	stmt->op1 = offset;
 
@@ -3762,6 +3770,10 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
 	//The base address that we're assigning to
 	stmt->assignee = base_address;
+
+	//This is being dereferenced
+	stmt->assignee->is_dereferenced = TRUE;
+
 	//The op1 is our varia
 	stmt->op1_const = offset;
 
