@@ -3630,7 +3630,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * Right hand side means that we want to read from memory, so we'll have a load here
 			 * and return the temp var that was loaded in
 			 */
-			if(first_child->side == SIDE_TYPE_RIGHT){
+			if(first_child->side == SIDE_TYPE_RIGHT || first_child->next_sibling != NULL){
 				//If the side type here is right, we'll need a load instruction
 				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(dereferenced->type), dereferenced);
 
