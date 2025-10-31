@@ -3313,6 +3313,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 					//Add it into our block
 					add_statement(current_block, store_instruction);
+
+					//Give back the base address as the assignee(even though it's not really)
+					postfix_results.assignee = base_address;
 				}
 
 				break;
@@ -4148,11 +4151,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//Now emit the right hand expression
 	cfg_result_package_t right_hand_package = emit_expression(current_block, right_child, is_branch_ending, FALSE);
 
-	//Again, if this is different(which it could be), we'll reassign current
-	if(right_hand_package.final_block != current_block){
-		//Reassign current to be at the end
-		current_block = right_hand_package.final_block;
-	}
+	//Reassign current to be at the end
+	current_block = right_hand_package.final_block;
 
 	//The final first operand will be the expression package's assignee for now
 	three_addr_var_t* final_op1 = right_hand_package.assignee;
@@ -4160,11 +4160,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//Emit the left hand unary expression
 	cfg_result_package_t unary_package = emit_unary_expression(current_block, left_child, is_branch_ending);
 
-	//If this is different(which it could be), we'll reassign current
-	if(unary_package.final_block != current_block){
-		//Reassign current to be at the end
-		current_block = unary_package.final_block;
-	}
+	//Reassign current to be at the end
+	current_block = unary_package.final_block;
 
 	//The left hand var is the final assignee of the unary statement
 	three_addr_var_t* left_hand_var = unary_package.assignee;
