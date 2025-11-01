@@ -3762,6 +3762,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * will fill it in
 			 */
 			if(unary_expression_child->side == SIDE_TYPE_LEFT && unary_expression_child->next_sibling == NULL){
+				printf("HERE\n");
 				//We will intentionally leave op1 blank so that it can be filled in down the line
 				instruction_t* store_instruction = emit_store_ir_code(indirect_version, NULL);
 
@@ -3775,8 +3776,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				unary_package.assignee = indirect_version;
 
 			/**
-			 * Right hand side means that we want to read from memory, so we'll have a load here
-			 * and return the temp var that was loaded in
+			 * If we get here, we know that we either have a right hand operation or we're on the left hand
+			 * side but we're not entirely done with the unary operations yet. Either way, we'll need a load
 			 */
 			} else {
 				//If the side type here is right, we'll need a load instruction
