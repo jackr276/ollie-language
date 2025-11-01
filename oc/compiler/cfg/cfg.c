@@ -2820,46 +2820,6 @@ static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_v
 
 
 /**
- * Emit a pointer indirection statement. The parser has already done the dereferencing for us, so we'll just
- * be able to store the dereferenced type in here
- */
-static three_addr_var_t* emit_indirection(basic_block_t* basic_block, three_addr_var_t* assignee, generic_type_t* dereferenced_type){
-	//If the assignee's indirection level is already more than 0, we can't double dereference
-	if(assignee->is_dereferenced == TRUE){
-		//Emit the assignment instruction here
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee); 
-
-		//Add it into the end
-		add_statement(basic_block, assignment);
-
-		//This counts as a use
-		add_used_variable(basic_block, assignee);
-
-		//Reassign
-		assignee = assignment->assignee;
-	}
-
-	//No actual code here, we are just accessing this guy's memory
-	//Create a new variable with an indirection level
-	three_addr_var_t* indirect_var = emit_var_copy(assignee);
-
-	//This will count as live if we read from it
-	add_used_variable(basic_block, indirect_var);
-
-	//Increment the indirection
-	indirect_var->is_dereferenced = TRUE;
-	//Temp or not same deal
-	indirect_var->is_temporary = assignee->is_temporary;
-
-	//Store the dereferenced type
-	indirect_var->type = dereferenced_type;
-
-	//And get out
-	return indirect_var;
-}
-
-
-/**
  * Emit a bitwise not statement 
  */
 static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, u_int8_t is_branch_ending){
@@ -3634,7 +3594,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
  */
 static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent, u_int8_t is_branch_ending){
 	//Top level declarations to avoid using them in the switch statement
-	three_addr_var_t* dereferenced;
 	instruction_t* assignment;
 	three_addr_var_t* assignee;
 	//The unary expression package
@@ -3794,8 +3753,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				current_block = unary_package.final_block;
 			}
 
-			//Get the dereferenced variable
-			dereferenced = emit_indirection(current_block, assignee, unary_expression_parent->inferred_type);
+			//The indiredct version's type is just what we point to
+			three_addr_var_t* indirect_version = emit_var_copy(assignee);
+			indirect_version->type = unary_expression_parent->inferred_type;
 
 			/**
 			 * Right hand side means that we want to read from memory, so we'll have a load here
@@ -3803,10 +3763,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
 			if(first_child->side == SIDE_TYPE_RIGHT || first_child->next_sibling != NULL){
 				//If the side type here is right, we'll need a load instruction
-				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(dereferenced->type), dereferenced);
+				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(indirect_version->type), indirect_version);
 
 				//The dereferenced variable has been used
-				add_used_variable(current_block, dereferenced);
+				add_used_variable(current_block, indirect_version);
 
 				//Add it in
 				add_statement(current_block, load_instruction);
@@ -3821,16 +3781,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
 			} else {
 				//We will intentionally leave op1 blank so that it can be filled in down the line
-				instruction_t* store_instruction = emit_store_ir_code(dereferenced, NULL);
+				instruction_t* store_instruction = emit_store_ir_code(indirect_version, NULL);
 
 				//This counts as a use
-				add_used_variable(current_block, dereferenced);
+				add_used_variable(current_block, indirect_version);
 
 				//Now let's get this into the block
 				add_statement(current_block, store_instruction);
 
 				//This one's assignee is just the dereferenced var
-				unary_package.assignee = dereferenced;
+				unary_package.assignee = indirect_version;
 			}
 
 			//Give back the final unary package
@@ -4338,6 +4298,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * It is often the case where we require an expanding move after we access memory. In order to
 	 * do this, we'll inject an assignment expression here which will eventually become a converting move
 	 * in the instruction selector
+	 *
+	 *
+	 * TODO INVESTIGATE THE NEED FOR THIS
 	if(left_hand_var->is_dereferenced == TRUE &&
 		is_expanding_move_required(left_hand_var->type, right_hand_package.assignee->type) == TRUE){
 
