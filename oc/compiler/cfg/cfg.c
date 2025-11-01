@@ -3760,9 +3760,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * If we make it here, we will return an *incomplete* store
 			 * instruction with the knowledge that whomever called use
 			 * will fill it in
+			 *
+			 * Conditions here: If we are on the left hand side *and* our next sibling is on the right hand side,
+			 * that means that we need to be doing an assignment here. As such, we emit a store. In any other
+			 * area, we emit a load
 			 */
-			if(unary_expression_child->side == SIDE_TYPE_LEFT && unary_expression_child->next_sibling == NULL){
-				printf("HERE\n");
+			if(unary_expression_parent->side == SIDE_TYPE_LEFT &&
+				(unary_expression_parent->next_sibling != NULL && unary_expression_parent->next_sibling->side == SIDE_TYPE_RIGHT)){
 				//We will intentionally leave op1 blank so that it can be filled in down the line
 				instruction_t* store_instruction = emit_store_ir_code(indirect_version, NULL);
 
