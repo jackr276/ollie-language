@@ -3603,12 +3603,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 	basic_block_t* current_block = basic_block;
 
 	//Extract the first child from the unary expression parent node
-	generic_ast_node_t* first_child = unary_expression_parent->first_child;
+	generic_ast_node_t* unary_operator_node = unary_expression_parent->first_child;
 	// For use later on
-	generic_ast_node_t* second_child;
+	generic_ast_node_t* unary_expression_child = unary_operator_node->next_sibling;
 
 	//Now that we've emitted the assignee, we can handle the specific unary operators
-	switch(first_child->unary_operator){
+	switch(unary_operator_node->unary_operator){
 		/**
 		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
 		 * that is returned to be used by the user is the incremented/decremented value unlike in a
@@ -3622,7 +3622,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		case PLUSPLUS:
 		case MINUSMINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, unary_expression_child, is_branch_ending);
 
 			//If this is now different, which it could be, we'll change what current is
 			if(unary_package.final_block != current_block){
@@ -3654,6 +3654,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					assignee = temp_assignment->assignee;
 				}
 				
+				//Go based on the op here
 				switch(first_child->unary_operator){
 					case PLUSPLUS:
 						//We really just have an "inc" instruction here
@@ -3748,38 +3749,19 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
-			//If this is now different, which it could be, we'll change what current is
-			if(unary_package.final_block != current_block){
-				current_block = unary_package.final_block;
-			}
+			//Update the block
+			current_block = unary_package.final_block;
 
 			//The indiredct version's type is just what we point to
 			three_addr_var_t* indirect_version = emit_var_copy(assignee);
 			indirect_version->type = unary_expression_parent->inferred_type;
 
 			/**
-			 * Right hand side means that we want to read from memory, so we'll have a load here
-			 * and return the temp var that was loaded in
-			 */
-			if(first_child->side == SIDE_TYPE_RIGHT || first_child->next_sibling != NULL){
-				//If the side type here is right, we'll need a load instruction
-				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(indirect_version->type), indirect_version);
-
-				//The dereferenced variable has been used
-				add_used_variable(current_block, indirect_version);
-
-				//Add it in
-				add_statement(current_block, load_instruction);
-
-				//This one's assignee is our overall assignee
-				unary_package.assignee = load_instruction->assignee;
-
-			/**
 			 * If we make it here, we will return an *incomplete* store
 			 * instruction with the knowledge that whomever called use
 			 * will fill it in
 			 */
-			} else {
+			if(first_child->side == SIDE_TYPE_LEFT || first_child->next_sibling != NULL){
 				//We will intentionally leave op1 blank so that it can be filled in down the line
 				instruction_t* store_instruction = emit_store_ir_code(indirect_version, NULL);
 
@@ -3791,6 +3773,23 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//This one's assignee is just the dereferenced var
 				unary_package.assignee = indirect_version;
+
+			/**
+			 * Right hand side means that we want to read from memory, so we'll have a load here
+			 * and return the temp var that was loaded in
+			 */
+			} else {
+				//If the side type here is right, we'll need a load instruction
+				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(indirect_version->type), indirect_version);
+
+				//The dereferenced variable has been used
+				add_used_variable(current_block, indirect_version);
+
+				//Add it in
+				add_statement(current_block, load_instruction);
+
+				//This one's assignee is our overall assignee
+				unary_package.assignee = load_instruction->assignee;
 			}
 
 			//Give back the final unary package
