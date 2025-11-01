@@ -3655,7 +3655,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				}
 				
 				//Go based on the op here
-				switch(first_child->unary_operator){
+				switch(unary_operator_node->unary_operator){
 					case PLUSPLUS:
 						//We really just have an "inc" instruction here
 						assignee = emit_inc_code(current_block, assignee, is_branch_ending);
@@ -3674,16 +3674,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//If we actually do have a pointer, we need the helper to deal with this
 			} else {
 				//Let the helper deal with this
-				assignee = handle_pointer_arithmetic(current_block, first_child->unary_operator, assignee, is_branch_ending);
+				assignee = handle_pointer_arithmetic(current_block, unary_operator_node->unary_operator, assignee, is_branch_ending);
 			}
 
 			/**
 			 * Logic here: if this is not some simple identifier(it could be array access, struct access, etc.), then
 			 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
 			 */
-			if(first_child->next_sibling->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+			if(unary_expression_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
 				//Duplicate the subtree here for us to use
-				generic_ast_node_t* copy = duplicate_subtree(first_child->next_sibling, SIDE_TYPE_LEFT);
+				generic_ast_node_t* copy = duplicate_subtree(unary_expression_child, SIDE_TYPE_LEFT);
 
 				//Now we emit the copied package
 				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy, is_branch_ending);
@@ -3745,7 +3745,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Handle a dereference
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, unary_expression_child, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3761,7 +3761,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * instruction with the knowledge that whomever called use
 			 * will fill it in
 			 */
-			if(first_child->side == SIDE_TYPE_LEFT || first_child->next_sibling != NULL){
+			if(unary_expression_child->side == SIDE_TYPE_LEFT && unary_expression_child->next_sibling == NULL){
 				//We will intentionally leave op1 blank so that it can be filled in down the line
 				instruction_t* store_instruction = emit_store_ir_code(indirect_version, NULL);
 
@@ -3798,7 +3798,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Bitwise not operator
 		case B_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, unary_expression_child, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3816,7 +3816,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Logical not operator
 		case L_NOT:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, unary_expression_child, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3842,7 +3842,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 */
 		case MINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
-			unary_package = emit_unary_expression(current_block, first_child->next_sibling, is_branch_ending);
+			unary_package = emit_unary_expression(current_block, unary_expression_child, is_branch_ending);
 			//The assignee comes from the package
 			assignee = unary_package.assignee;
 
@@ -3870,11 +3870,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//Handle the case of the address operator - this is a very unique case, we will not call the unary expression
 		//helper here, because we know that this must always be an identifier node
 		case SINGLE_AND:
-			//Grab this out
-			second_child = first_child->next_sibling;
-
 			//Go based on the type here
-			switch(second_child->ast_node_type){
+			switch(unary_expression_child->ast_node_type){
 				case AST_NODE_TYPE_IDENTIFIER:
 					/**
 					 * KEY DETAIL HERE: the variable may already be in the stack. If we're requesting
@@ -3885,15 +3882,15 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * We do not do this if it's a global variable, because global variables have their own unique storage
 					 * mechanism that is not stack related
 					 */
-					if(second_child->variable->membership != GLOBAL_VARIABLE
+					if(unary_expression_child->variable->membership != GLOBAL_VARIABLE
 						//Is it not on the stack already?
-						&& second_child->variable->stack_region == NULL) {
+						&& unary_expression_child->variable->stack_region == NULL) {
 						//Create the stack region and store it in the variable
-						second_child->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), second_child->variable->type_defined_as);
+						unary_expression_child->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), unary_expression_child->variable->type_defined_as);
 					}
 
 					//Add the memory address statement in
-					instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(second_child->variable));
+					instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(unary_expression_child->variable));
 					memory_address_statement->is_branch_ending = is_branch_ending;
 
 					//This counts add as a use
@@ -3910,9 +3907,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				//The other case here
 				case AST_NODE_TYPE_POSTFIX_EXPR:
 					//Set the deref flag to false so we don't deref
-					second_child->dereference_needed = FALSE;
+					unary_expression_child->dereference_needed = FALSE;
 					//Emit the whole thing
-					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, second_child, is_branch_ending);
+					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, unary_expression_child, is_branch_ending);
 
 					//Set if need be
 					if(postfix_results.final_block != current_block){
@@ -3925,7 +3922,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//This should never occur
 				default:
-					print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Unrecognized node type for address operation", second_child->line_number);
+					print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Unrecognized node type for address operation", unary_expression_child->line_number);
 					exit(0);
 			}
 
