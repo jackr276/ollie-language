@@ -193,7 +193,9 @@ struct three_addr_var_t{
 	//the instruction selector
 	u_int32_t use_count;
 	//What is the indirection level
-	u_int16_t indirection_level;
+	//Is this variable dereferenced in some way
+	//(either loaded from or stored to)
+	u_int8_t is_dereferenced;
 	//Is this a temp variable?
 	u_int8_t is_temporary;
 	//Is this a stack pointer?
@@ -344,6 +346,11 @@ void set_new_function(symtab_function_record_t* func);
  * Helper function to determine if an operator is a relational operator
  */
 u_int8_t is_operator_relational_operator(ollie_token_t op);
+
+/**
+ * Helper function to determine if we have a store operation
+ */
+u_int8_t is_store_operation(instruction_t* statement);
 
 /**
  * Helper function to determine if an operator is can be constant folded
@@ -525,16 +532,34 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
+ * Emit a store with offset ir code. We take in a base address(assignee), 
+ * an offset(op1), and the value we're storing(op2)
+ */
+instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee);
+
+/**
+ * Emit a store with offset ir code. We take in a base address(assignee), 
+ * a constant offset(op1_const), and the value we're storing(op2)
+ */
+instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee);
+
+/**
  * Emit a load statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
 instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
- * Emit a store statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a load with offset ir code. We take in a base address(op1), 
+ * an offset(op2), and the value we're loading into(assignee)
  */
-instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const);
+instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset);
+
+/**
+ * Emit a load with constant offset ir code. We take in a base address(op1), 
+ * an offset(op1_const), and the value we're loading into(assignee)
+ */
+instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
@@ -682,13 +707,13 @@ instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer
 /**
  * Are two variables equal? A helper method for searching
  */
-u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection_level);
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);
 
 /**
  * Are two variables equal regardless of their SSA status? This function should only ever be used
  * by the instruction selector, under very careful circumstances
  */
-u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level);
+u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);
 
 /**
  * Emit a complete, one-for-one copy of an instruction
