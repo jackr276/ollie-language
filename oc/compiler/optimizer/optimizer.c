@@ -389,29 +389,13 @@ static void mark(cfg_t* cfg){
 				 * on the stack
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT:
-				case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 					current_stmt->mark = TRUE;
 					//Add it to the list
 					dynamic_array_add(worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * If we have an assignment statement that writes to a
-				 * memory address, we will mark that as important
-				 */
-				case THREE_ADDR_CODE_ASSN_STMT:
-				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					//We deem all write operations to be important
-					if(current_stmt->assignee->indirection_level > 0){
-						current_stmt->mark = TRUE;
-						//Add it to the list
-						dynamic_array_add(worklist, current_stmt);
-						//The block now has a mark
-						current->contains_mark = TRUE;
-					} 
-
 					break;
 
 				//Let's see what other special cases we have
@@ -461,9 +445,11 @@ static void mark(cfg_t* cfg){
 
 				break;
 
-			//An indirect function call behaves similarly to a function call, but we'll also
-			//need to mark it's "op1" value as important. This is the value that stores
-			//the memory address of the function that we're calling
+			/**
+			 * An indirect function call behaves similarly to a function call, but we'll also
+			 * need to mark it's "op1" value as important. This is the value that stores
+			 * the memory address of the function that we're calling
+			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
@@ -476,6 +462,16 @@ static void mark(cfg_t* cfg){
 					mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
 				}
 
+				break;
+
+
+			/**
+			 * There will be special rules for store statements because we have assignees
+			 * that are not really assignees, they are more like operands
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT:
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				break;
 
 			//In all other cases, we'll just mark and add the two operands 
