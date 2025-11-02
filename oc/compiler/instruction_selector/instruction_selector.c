@@ -642,41 +642,38 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 	//If we see a constant assingment first and then we see a an assignment
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count <= 1
 		&& window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
-		//we deal with temp variables. At this point in the program, all non-temp variables have been
-		//deemed important, so we wouldn't want to remove their assignments
-		if(window->instruction1->assignee->is_temporary == TRUE &&
-			//Verify that this is not used more than once
-			window->instruction1->assignee->use_count <= 1 &&
-			variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-			//Grab this out for convenience
-			instruction_t* assign_operation = window->instruction2;
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
-			//Now we'll modify this to be an assignment const statement
-			assign_operation->op1_const = window->instruction1->op1_const;
+		//Grab this out for convenience
+		instruction_t* assign_operation = window->instruction2;
 
-			//Modify the type of the assignment
-			assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+		//Now we'll modify this to be an assignment const statement
+		assign_operation->op1_const = window->instruction1->op1_const;
 
-			//The use count here now goes down by one
-			assign_operation->op1->use_count--;
+		//Modify the type of the assignment
+		assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-			//Make sure that we now null out op1
-			assign_operation->op1 = NULL;
+		//The use count here now goes down by one
+		assign_operation->op1->use_count--;
 
-			//Once we've done this, the first statement is entirely useless
-			delete_statement(window->instruction1);
+		//Make sure that we now null out op1
+		assign_operation->op1 = NULL;
 
-			//Once we've deleted the statement, we'll need to completely rewire the block
-			//The binary operation is now the start
-			reconstruct_window(window, assign_operation);
-		
-			//Whatever happened here, we did change something
-			changed = TRUE;
-		}
+		//Once we've done this, the first statement is entirely useless
+		delete_statement(window->instruction1);
+
+		//Once we've deleted the statement, we'll need to completely rewire the block
+		//The binary operation is now the start
+		reconstruct_window(window, assign_operation);
+	
+		//Whatever happened here, we did change something
+		changed = TRUE;
 	}
+
 
 	/**
 	 * ================= Handling pure constant operations ========================
