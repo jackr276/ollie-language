@@ -13,7 +13,6 @@
 #include "../utils/constants.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/select.h>
 #include <sys/types.h>
 
 //We'll need this a lot, so we may as well have it here
@@ -3322,20 +3321,35 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	three_addr_var_t* source;
 	three_addr_var_t* source2;
 
-	//If we need to convert, we'll do that here
-	if(is_expanding_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
-		//Let the helper deal with it
-		source2 = handle_expanding_move_operation(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
+	//If we have a BIN_OP with const statement, we need to 
+	if(multiplication_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
+		//If we need to convert, we'll do that here
+		if(is_expanding_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
+			//Let the helper deal with it
+			source2 = handle_expanding_move_operation(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
 
-	//Otherwise this can be moved directly
+		//Otherwise this can be moved directly
+		} else {
+			//We first need to move the first operand into RAX
+			instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
+
+			//Insert the move to rax before the multiplication instruction
+			insert_instruction_before_given(move_to_rax, multiplication_instruction);
+
+			//This is just the destination register here
+			source2 = move_to_rax->destination_register;
+		}
+
+	//Otherwise, we have a BIN_OP_WITH_CONST statement. We're actually going to need a temp assignment for the second operand(the constant)
+	//here for this to work
 	} else {
-		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
+		//Emit the move instruction here
+		instruction_t* move_to_rax = emit_const_movX_instruciton(emit_temp_var(multiplication_instruction->assignee->type), multiplication_instruction->op1_const);
 
-		//Insert the move to rax before the multiplication instruction
+		//Put it before our multiplication
 		insert_instruction_before_given(move_to_rax, multiplication_instruction);
 
-		//This is just the destination register here
+		//Our source2 now is this
 		source2 = move_to_rax->destination_register;
 	}
 
