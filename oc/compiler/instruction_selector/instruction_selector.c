@@ -1720,9 +1720,6 @@ static void simplify(cfg_t* cfg, basic_block_t* head){
 }
 
 
-
-
-
 /**
  * Emit a converting move instruction directly, with no need to do instruction selection afterwards
  */
@@ -4868,7 +4865,6 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 		current = current->direct_successor;
 	}
 }
-
 
 
 /**
