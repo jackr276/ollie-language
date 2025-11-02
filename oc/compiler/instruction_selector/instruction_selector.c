@@ -1633,14 +1633,70 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 
 	/**
-	 * TODO OPTIMIZE SOMETHING LIKE
+	 * Optimize loads with variable offsets into one's that have constant offsets
+	 *
+	 * We'll take something like:
 	 * t3 <- 4
 	 * load t5 <- t4[t3]
 	 *
-	 * TO
+	 * And make it:
 	 *
 	 * load t5 <- t4[4]
 	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+
+		//This is now a load with constant offset
+		window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+
+		//Copy their constants over
+		window->instruction2->op1_const = window->instruction1->op1_const;
+
+		//We can delete the entire assignment statement
+		delete_statement(window->instruction1);
+
+		//Reconstruct the window now based on instruction2
+		reconstruct_window(window, window->instruction2);
+
+		//This counts as change
+	}
+
+
+	/**
+	 * Optimize loads with variable offsets into one's that have constant offsets
+	 *
+	 * We'll take something like:
+	 * t3 <- 4
+	 * store t5[t3] <- t4
+	 *
+	 * And make it:
+	 *
+	 * store t5[4] <- t4
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+
+		//This is now a store with constant offset
+		window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+
+		//Copy their constants over
+		window->instruction2->op1_const = window->instruction1->op1_const;
+
+		//We can delete the entire assignment statement
+		delete_statement(window->instruction1);
+
+		//Reconstruct the window now based on instruction2
+		reconstruct_window(window, window->instruction2);
+
+		//This counts as change
+	}
+
 
 	/**
 	 * When we have a case like this for address calculations:
@@ -1650,7 +1706,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * We can simply make this:
 	 * t35 <- t32 + 32
 	 */
-
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT 
 		&& window->instruction2 != NULL
 		&& (window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT)
