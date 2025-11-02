@@ -1695,6 +1695,58 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		reconstruct_window(window, window->instruction2);
 
 		//This counts as change
+		changed = TRUE;
+	}
+
+
+	/**
+	 * Optimize constant offset loads with a 0 offset into regular loads
+	 *
+	 * This:
+	 * 	load t4 <- t3[0]
+	 *
+	 * can become
+	 *  load t4 <- t3
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET
+		&& is_constant_value_zero(window->instruction1->op1_const) == TRUE){
+		//First NULL out the constant
+		window->instruction1->op1_const = NULL;
+
+		//Then just make this a normal load
+		window->instruction1->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+
+		//Counts as a change
+		changed = TRUE;
+	}
+
+
+	/**
+	 * Optimize constant offset stores with a 0 offset into regular stores
+	 *
+	 * This:
+	 * 	store t4[0] <- t3
+	 *
+	 * can become
+	 *  store t4 <- t3
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET 
+		&& is_constant_value_zero(window->instruction1->op1_const) == TRUE){
+		//First NULL out the constant
+		window->instruction1->op1_const = NULL;
+
+		//Slight adjustment as well, the op1's in complex stores are not the source but in regular
+		//stores they are, so we'll copy that over
+		window->instruction1->op1 = window->instruction1->op2;
+
+		//NULL out op2
+		window->instruction1->op2 = NULL;
+
+		//Then just make this a normal load
+		window->instruction1->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+
+		//Counts as a change
+		changed = TRUE;
 	}
 
 
