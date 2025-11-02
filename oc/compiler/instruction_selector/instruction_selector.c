@@ -528,24 +528,17 @@ static instruction_t* emit_appropriate_move_statement(three_addr_var_t* destinat
 
 
 /**
- * Multiply two constants together
- * 
- * NOTE: The result is always stored in the first one
+ * Can we do an inplace constant operation? Currently we only
+ * do these for *, + and -
  */
-static void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
-	//Handle our multiplications
-	if(constant1->const_type == INT_CONST){
-		if(constant2->const_type == INT_CONST){
-			constant1->constant_value.integer_constant *= constant2->constant_value.integer_constant;
-		} else {
-			constant1->constant_value.integer_constant *= constant2->constant_value.long_constant;
-		}
-	} else if(constant1->const_type == LONG_CONST){
-		if(constant2->const_type == INT_CONST){
-			constant1->constant_value.long_constant *= constant2->constant_value.integer_constant;
-		} else {
-			constant1->constant_value.long_constant *= constant2->constant_value.long_constant;
-		}
+static u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t op){
+	switch(op){
+		case PLUS:
+		case MINUS:
+		case STAR:
+			return TRUE;
+		default:
+			return FALSE;
 	}
 }
 
@@ -735,21 +728,45 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	/**
-	 * ================= Handling redundant multiplications ========================
+	 * ================= Handling pure constant operations ========================
 	 * t27 <- 5
-	 * t27 <- t27 * 68
+	 * t27 <- t27 (+/-/star(*)) 68
 	 *
 	 * Can become: t27 <- 340
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == STAR
+		&& binary_operator_valid_for_inplace_constant_match(window->instruction2->op) == TRUE
 		&& window->instruction1->assignee->is_temporary == TRUE
 		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
 
-		//We can multiply the constants now. The result will be stored in op1 const
-		multiply_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+		//Go based on the op. We already know that we can do this by the time 
+		//we get here
+		switch(window->instruction2->op){
+			case STAR:
+				//We can multiply the constants now. The result will be stored in op1 const
+				multiply_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+				break;
+
+			case PLUS:
+				//We can add the constants now. The result will be stored in op1 const
+				add_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+				break;
+			
+			case MINUS:
+				//Important caveat here. The constant above is the first one that 
+				subtract_constants(window->instruction1->op1_const, window->instruction2->op1_const);
+				break;
+
+				//Overwrite with op1
+				window->instruction2->op1_const = window->instruction1->op1_const;
+
+			//Unreachable - just so the compiler won't complain
+			default:
+				break;
+		}
+
 
 		//Instruction 2 is now simply an assign const statement
 		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -768,6 +785,49 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 		//Reconstruct the window with instruction 2 as the start
 		reconstruct_window(window, window->instruction2);
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
+
+	/**
+	 * ================= Handling redundant multiplications ========================
+	 * Do it for 2 and 3
+	 *
+	 *
+	 * t27 <- 5
+	 * t27 <- t27 * 68
+	 *
+	 * Can become: t27 <- 340
+	 */
+	if(window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
+		&& window->instruction3 != NULL
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction3->op == STAR
+		&& window->instruction2->assignee->is_temporary == TRUE
+		&& variables_equal(window->instruction3->op1, window->instruction2->assignee, FALSE) == TRUE){
+
+		//We can multiply the constants now. The result will be stored in op1 const
+		multiply_constants(window->instruction3->op1_const, window->instruction2->op1_const);
+
+		//Instruction 2 is now simply an assign const statement
+		window->instruction3->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+		//Op1 is now used one less time
+		window->instruction3->op1->use_count--;
+
+		//Null out where the old value was
+		window->instruction2->op1 = NULL;
+
+		//Instruction 1 is now completely useless *if* that was the only time that
+		//his assignee was used. Otherwise, we need to keep it in
+		if(window->instruction2->assignee->use_count == 0){
+			delete_statement(window->instruction2);
+		}
+
+		//Reconstruct the window with instruction 2 as the start
+		reconstruct_window(window, window->instruction3);
 
 		//This counts as a change
 		changed = TRUE;
@@ -1544,7 +1604,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL){
 			//What we'll do first is add the two constants. The resultant constant will be stored
 			//in the second instruction's constant
-			second->op1_const = add_constants(second->op1_const, first->op1_const);
+			add_constants(second->op1_const, first->op1_const);
 
 			//Manage our use state here
 			replace_variable(second->op1, first->op1);

@@ -719,11 +719,25 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8
 instruction_t* copy_instruction(instruction_t* copied);
 
 /**
- * Emit the sum of two given constants. The result will overwrite the second constant given
+ * Emit the product of two given constants. The result will overwrite the first constant given
  *
- * The result will be: constant2 = constant1 + constant2
+ * The result will be: constant1 = constant1 * constant2
  */
-three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
+ * Emit the sum of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 + constant2
+ */
+void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
+ * Emit the difference of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 - constant2
+ */
+void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
 
 /**
  * select the appropriate branch statement given the circumstances, including operand and signedness

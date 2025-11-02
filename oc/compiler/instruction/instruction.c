@@ -4194,56 +4194,71 @@ instruction_t* copy_instruction(instruction_t* copied){
 
 
 /**
- * Emit the sum of two given constants. The result will overwrite the second constant given
- *
- * The result will be: constant2 = constant1 + constant2
+ * Multiply two constants together
+ * 
+ * NOTE: The result is always stored in the first one
  */
-three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
-	// Switch based on the type
-	switch(constant2->const_type){
-		//If this is a type as such, we'll add the int constant and char constant
-		//from constant 1. We can do this because whatever is unused is set to 0
-		//by the calloc
-		case INT_CONST:
-		case INT_CONST_FORCE_U:
-			//If it's any of these we'll add the int value
-			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
-				constant2->constant_value.integer_constant += constant1->constant_value.integer_constant;
-			//Otherwise add the long value
-			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
-				constant2->constant_value.integer_constant += constant1->constant_value.long_constant;
-			//Only other option is char
-			} else {
-				constant2->constant_value.integer_constant += constant1->constant_value.char_constant;
-			}
-			break;
-		case LONG_CONST:
-		case LONG_CONST_FORCE_U:
-			//If it's any of these we'll add the int value
-			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
-				constant2->constant_value.long_constant += constant1->constant_value.integer_constant;
-			//Otherwise add the long value
-			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
-				constant2->constant_value.long_constant += constant1->constant_value.long_constant;
-			//Only other option is char
-			} else {
-				constant2->constant_value.long_constant += constant1->constant_value.char_constant;
-			}
-
-			break;
-		//Can't really see this ever happening, but it won't hurt
-		case CHAR_CONST:
-			//Add the other one's char const
-			constant2->constant_value.char_constant += constant1->constant_value.char_constant;
-			break;
-		//Mainly for us as the programmer
-		default:
-			print_parse_message(PARSE_ERROR, "Attempt to add incompatible constants", 0);
-			break;
+void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Handle our multiplications
+	if(constant1->const_type == INT_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.integer_constant *= constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.integer_constant *= constant2->constant_value.long_constant;
+		}
+	} else if(constant1->const_type == LONG_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.long_constant *= constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.long_constant *= constant2->constant_value.long_constant;
+		}
 	}
+}
 
-	//We always give back constant 2
-	return constant2;
+
+/**
+ * Emit the sum of two given constants. The result will overwrite the first constant given
+ *
+ * NOTE: The result is always stored in the first one
+ */
+void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Handle our multiplications
+	if(constant1->const_type == INT_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.integer_constant += constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.integer_constant += constant2->constant_value.long_constant;
+		}
+	} else if(constant1->const_type == LONG_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.long_constant += constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.long_constant += constant2->constant_value.long_constant;
+		}
+	}
+}
+
+
+/**
+ * Emit the difference of two given constants. The result will overwrite the first constant given
+ *
+ * NOTE: The result is always stored in the first one
+ */
+void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Handle our multiplications
+	if(constant1->const_type == INT_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.integer_constant -= constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.integer_constant -= constant2->constant_value.long_constant;
+		}
+	} else if(constant1->const_type == LONG_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.long_constant -= constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.long_constant -= constant2->constant_value.long_constant;
+		}
+	}
 }
 
 
