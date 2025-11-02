@@ -4420,8 +4420,52 @@ static void handle_store_with_constant_offset_instruction(cfg_t* cfg, instructio
 	//The offset is our op1_const
 	instruction->offset = instruction->op1_const;
 
-	//The source register is our op1
-	instruction->op1 = instruction->source_register;
+	//The source register is our op2
+	instruction->source_register = instruction->op2;
+}
+
+
+/**
+ * Handle an instruction like
+ *
+ * store t5[t6] <- t7
+ *
+ * movX t7, (t4,t6)
+ *
+ * This will always be an OFFSET_ONLY calculation type
+ */
+static void handle_store_with_constant_variable_instruction(cfg_t* cfg, instruction_t* instruction){
+	//Size is determined by the assignee
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case BYTE:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		default:
+			break;
+	}
+
+	//This will always be offset only
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//The base address is the assignee
+	instruction->address_calc_reg1 = instruction->assignee;
+	//Op1 is the address calcu register
+	instruction->address_calc_reg2 = instruction->op1;
+
+	//The source register is our op2
+	instruction->source_register = instruction->op2;
 }
 
 
