@@ -7946,12 +7946,22 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 * Otherwise, we'll need to emit a store operation here
 	 */
 	} else {
+		//First we get our memory address statement
+		instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(u64), let_variable);
+		memory_address_statement->is_branch_ending = is_branch_ending;
+
+		//Counts as a use
+		add_used_variable(current_block, let_variable);
+
+		//Add the statement in
+		add_statement(current_block, memory_address_statement);
+
 		//Emit the store code
-		instruction_t* store_statement = emit_store_ir_code(let_variable, package.assignee);
+		instruction_t* store_statement = emit_store_ir_code(memory_address_statement->assignee, package.assignee);
 		store_statement->is_branch_ending = is_branch_ending;
 
-		//The let variable was assigned
-		add_assigned_variable(current_block, let_variable);
+		//This counts as a use
+		add_used_variable(current_block, memory_address_statement->assignee);
 
 		//This counts as a use
 		add_used_variable(current_block, package.assignee);
