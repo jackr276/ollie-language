@@ -4383,7 +4383,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
  *
  * movX t7, (t4,t6)
  *
- * This will always be an OFFSET_ONLY calculation type
+ * This will always be a REGISTERS_ONLY calculation type
  */
 static void handle_store_with_variable_offset_instruction(instruction_t* instruction){
 	//Size is determined by the assignee
@@ -4408,7 +4408,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 	}
 
 	//This will always be offset only
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
 	//The base address is the assignee
 	instruction->address_calc_reg1 = instruction->assignee;
