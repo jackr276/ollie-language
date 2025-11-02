@@ -278,6 +278,96 @@ static void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
 
 
 /**
+ * Take the binary logarithm of something that we already know
+ * is a power of 2. 
+ *
+ * IMPORTANT: This function will *only* work with values that are already
+ * known to be powers of 2. If you pass in something that isn't a power of 2,
+ * the answer *will* be wrong
+ *
+ * Here's how this works:
+ * Take 8: 1000, which is 2^3
+ *
+ * 1000 >> 1 = 0100 != 1, current power: 1
+ * 0100 >> 1 = 0010 != 1, current power: 2 
+ * 0010 >> 1 = 0001 != 1, current power: 3 
+ *
+ */
+static u_int32_t log2_of_known_power_of_2(u_int64_t value){
+	//Store a counter, initialize to 0
+	u_int32_t counter = 0;
+
+	//So long as we can shift to the left
+	while(value != 1){
+		//One more power here
+		counter++;
+		//Go back by 1
+		value = value >> 1;
+	}
+
+	return counter;
+}
+
+
+/**
+ * Take in a constant and update it with its binary log value
+ */
+static void update_constant_with_log2_value(three_addr_const_t* constant){
+	//Switch based on the type
+	switch(constant->const_type){
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+			constant->constant_value.integer_constant = log2_of_known_power_of_2(constant->constant_value.integer_constant);
+			break;
+
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.long_constant = log2_of_known_power_of_2(constant->constant_value.long_constant);
+			break;
+
+		case CHAR_CONST:
+			constant->constant_value.char_constant = log2_of_known_power_of_2(constant->constant_value.char_constant);
+			break;
+
+		//We should never get here
+		default:
+			break;
+	}
+}
+
+
+/**
+ * Initialize the instruction window by taking in the first 3 values in the head block
+ */
+static instruction_window_t initialize_instruction_window(basic_block_t* head){
+	//Grab the window
+	instruction_window_t window;
+	window.instruction1 = NULL;
+	window.instruction2 = NULL;
+	window.instruction3 = NULL;
+
+	//The first instruction is the leader statement
+	window.instruction1 = head->leader_statement;
+
+	//If this is null(possible but rare), just give it back
+	if(window.instruction1 == NULL){
+		return window;
+	}
+
+	//Instruction 2 is next to the head
+	window.instruction2 = window.instruction1->next_statement;
+
+	//If this isn't null, 3 is this guy's next one
+	if(window.instruction2 != NULL){
+		window.instruction3 = window.instruction2->next_statement;
+	}
+	
+	//And now we give back the window
+	return window;
+}
+
+
+/**
  * Reconstruct the instruction window after some kind of deletion/reordering
  *
  * The "seed" is always the first instruction, it's what we use to set the rest up
@@ -607,76 +697,40 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 
 	//If we see a constant assingment first and then we see a an assignment
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//We see an assign statement
-		if(window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
-			//we deal with temp variables. At this point in the program, all non-temp variables have been
-			//deemed important, so we wouldn't want to remove their assignments
-			if(window->instruction1->assignee->is_temporary == TRUE &&
-				//Verify that this is not used more than once
-				window->instruction1->assignee->use_count <= 1 &&
-				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-				//Grab this out for convenience
-				instruction_t* assign_operation = window->instruction2;
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+		&& window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
+		//we deal with temp variables. At this point in the program, all non-temp variables have been
+		//deemed important, so we wouldn't want to remove their assignments
+		if(window->instruction1->assignee->is_temporary == TRUE &&
+			//Verify that this is not used more than once
+			window->instruction1->assignee->use_count <= 1 &&
+			variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+			//Grab this out for convenience
+			instruction_t* assign_operation = window->instruction2;
 
-				//Now we'll modify this to be an assignment const statement
-				assign_operation->op1_const = window->instruction1->op1_const;
+			//Now we'll modify this to be an assignment const statement
+			assign_operation->op1_const = window->instruction1->op1_const;
 
-				//Modify the type of the assignment
-				assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+			//Modify the type of the assignment
+			assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-				//The use count here now goes down by one
-				assign_operation->op1->use_count--;
+			//The use count here now goes down by one
+			assign_operation->op1->use_count--;
 
-				//Make sure that we now null out op1
-				assign_operation->op1 = NULL;
+			//Make sure that we now null out op1
+			assign_operation->op1 = NULL;
 
-				//Once we've done this, the first statement is entirely useless
-				delete_statement(window->instruction1);
+			//Once we've done this, the first statement is entirely useless
+			delete_statement(window->instruction1);
 
-				//Once we've deleted the statement, we'll need to completely rewire the block
-				//The binary operation is now the start
-				reconstruct_window(window, assign_operation);
-			
-				//Whatever happened here, we did change something
-				changed = TRUE;
-			}
-
-		//We can apply the same optimization for store statements
-		} else if(window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
-			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
-			//we deal with temp variables. At this point in the program, all non-temp variables have been
-			//deemed important, so we wouldn't want to remove their assignments
-			if(window->instruction1->assignee->is_temporary == TRUE &&
-				//Verify that this is not used more than once
-				window->instruction1->assignee->use_count <= 1 &&
-				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-				//Grab this out for convenience
-				instruction_t* store_operation = window->instruction2;
-
-				//Now we'll modify this to be an assignment const statement
-				store_operation->op1_const = window->instruction1->op1_const;
-
-				//Modify the type of the assignment
-				store_operation->statement_type = THREE_ADDR_CODE_STORE_CONST_STATEMENT;
-
-				//The use count here now goes down by one
-				store_operation->op1->use_count--;
-
-				//Make sure that we now null out op1
-				store_operation->op1 = NULL;
-
-				//Once we've done this, the first statement is entirely useless
-				delete_statement(window->instruction1);
-
-				//Once we've deleted the statement, we'll need to completely rewire the block
-				//The binary operation is now the start
-				reconstruct_window(window, store_operation);
-			
-				//Whatever happened here, we did change something
-				changed = TRUE;
-			}
+			//Once we've deleted the statement, we'll need to completely rewire the block
+			//The binary operation is now the start
+			reconstruct_window(window, assign_operation);
+		
+			//Whatever happened here, we did change something
+			changed = TRUE;
 		}
 	}
 
@@ -1534,52 +1588,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 
 	/**
-	 * ============================== Redundant copy folding =======================
-	 * If we have some random temp assignment that's in the middle of everything, we can
-	 * fold it to get rid of it
-	 *
-	 * t14 <- t12 <----------- assignment that's leftover from other simplifications
-	 * (t14) <- 2
-	 *
-	 * This can become:
-	 * (t12) <- 2
-	 *
-	 * We do need to be careful to duplicate the type for the indirection when we do this
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& window->instruction2 != NULL
-		&& is_instruction_assignment_operation(window->instruction2) == TRUE
-		&& window->instruction1->op1->is_temporary == TRUE
-		&& window->instruction1->op1->indirection_level == 0 	//Ensure that this really is a pure copy
-		&& window->instruction1->assignee->indirection_level == 0
-		&& window->instruction2->assignee->indirection_level == 1 // This one is an indirection
-		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
-
-		//Emit this as a copy
-		three_addr_var_t* new_assignee = emit_var_copy(window->instruction1->op1);
-
-		//Copy over the assignee's indirection level
-		new_assignee->indirection_level = window->instruction2->assignee->indirection_level;
-
-		//Copy over the value of the type - VERY IMPORTANT - the type may be different based on
-		//what the internal field is
-		new_assignee->type = window->instruction2->assignee->type;
-		
-		//Now instruction2's assignee is this
-		window->instruction2->assignee = new_assignee;
-
-		//Now we delete this
-		delete_statement(window->instruction1);
-
-		//And reconstruct the window based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//Flag that we've changed
-		changed = TRUE;
-	}
-
-
-	/**
 	 * There is a chance that we could be left with statements that assign to themselves
 	 * like this:
 	 *  t11 <- 2
@@ -1593,9 +1601,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//If we get here, we have a temp assignment who is completely useless, so we delete
 		&& window->instruction1->assignee->is_temporary == TRUE
 		//Ensure that it's not being used at all
-		&& window->instruction1->assignee->use_count == 0
-		//We can't mess with memory movement instructions
-		&& window->instruction1->assignee->indirection_level == 0){
+		&& window->instruction1->assignee->use_count == 0){
 
 		//Delete it
 		delete_statement(window->instruction1);
@@ -2060,37 +2066,6 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 	//And now we'll give it back
 	return instruction;
-}
-
-
-/**
- * Initialize the instruction window by taking in the first 3 values in the head block
- */
-static instruction_window_t initialize_instruction_window(basic_block_t* head){
-	//Grab the window
-	instruction_window_t window;
-	window.instruction1 = NULL;
-	window.instruction2 = NULL;
-	window.instruction3 = NULL;
-
-	//The first instruction is the leader statement
-	window.instruction1 = head->leader_statement;
-
-	//If this is null(possible but rare), just give it back
-	if(window.instruction1 == NULL){
-		return window;
-	}
-
-	//Instruction 2 is next to the head
-	window.instruction2 = window.instruction1->next_statement;
-
-	//If this isn't null, 3 is this guy's next one
-	if(window.instruction2 != NULL){
-		window.instruction3 = window.instruction2->next_statement;
-	}
-	
-	//And now we give back the window
-	return window;
 }
 
 
@@ -4894,64 +4869,6 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 	}
 }
 
-
-/**
- * Take the binary logarithm of something that we already know
- * is a power of 2. 
- *
- * IMPORTANT: This function will *only* work with values that are already
- * known to be powers of 2. If you pass in something that isn't a power of 2,
- * the answer *will* be wrong
- *
- * Here's how this works:
- * Take 8: 1000, which is 2^3
- *
- * 1000 >> 1 = 0100 != 1, current power: 1
- * 0100 >> 1 = 0010 != 1, current power: 2 
- * 0010 >> 1 = 0001 != 1, current power: 3 
- *
- */
-static u_int32_t log2_of_known_power_of_2(u_int64_t value){
-	//Store a counter, initialize to 0
-	u_int32_t counter = 0;
-
-	//So long as we can shift to the left
-	while(value != 1){
-		//One more power here
-		counter++;
-		//Go back by 1
-		value = value >> 1;
-	}
-
-	return counter;
-}
-
-
-/**
- * Take in a constant and update it with its binary log value
- */
-static void update_constant_with_log2_value(three_addr_const_t* constant){
-	//Switch based on the type
-	switch(constant->const_type){
-		case INT_CONST:
-		case INT_CONST_FORCE_U:
-			constant->constant_value.integer_constant = log2_of_known_power_of_2(constant->constant_value.integer_constant);
-			break;
-
-		case LONG_CONST:
-		case LONG_CONST_FORCE_U:
-			constant->constant_value.long_constant = log2_of_known_power_of_2(constant->constant_value.long_constant);
-			break;
-
-		case CHAR_CONST:
-			constant->constant_value.char_constant = log2_of_known_power_of_2(constant->constant_value.char_constant);
-			break;
-
-		//We should never get here
-		default:
-			break;
-	}
-}
 
 
 /**
