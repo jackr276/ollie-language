@@ -3776,35 +3776,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 * This can be folded into simply:
 	 * 	t11 <- x_2
-	 *
-	 * HOWEVER: There's a special case where we can't do this
-	 * t30 <- (t29)
-	 * (t25) <- t30
-	 * 
-	 * (t25) <- (t29) <--------- WRONG! memory-to-memory moves are impossible!
-	 * So we'll need to ensure that we aren't doing this optimization if op1 of instruction1 is an indirect value
-	 *
-	 * t16 <- arr_0
-	 * t17 <- (t16)
-	 *
-	 * t17 <- (arr_0)
-	 *
-	 *  | First->op1 | second->assignee | can_combine
-	 *  | 1			 | 1				| 0
-	 *  | 1   		 | 0 				| 1
-	 *  | 0 		 | 1			    | 1
-	 *  | 0 		 | 0 				| 1
-	 *
-	 * So we'll use XOR for this one
-	 * 
-	 *  | First->assignee | second->op1 | can_combine
-	 *  | 1			 	  | 1				| 0
-	 *  | 1   		 	  | 0 				| 1
-	 *  | 0 		  	  | 1			    | 1
-	 *  | 0 		  	  | 0 				| 1
-	 *
-	 * So we'll use XOR for this one as well
-	 * 
 	 */
 	//If we have two consecutive assignment statements
 	if(window->instruction2 != NULL 
@@ -3820,39 +3791,21 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE
 			//And the assignee of the first statement is only ever used once
 			&& first->assignee->use_count <= 1){
-			//Now let's check for any indirection level violations that we need to account for
-			//These both can't have higher indirection levels than 0
-			if(!(first->op1->indirection_level > 0 && second->assignee->indirection_level > 0)
-				//Same with these
-				&& !(second->op1->indirection_level > 0 && first->assignee->indirection_level > 0)
-				//We also can't combine these
-				&& !(second->op1->indirection_level > 0 && first->op1->indirection_level > 0)){
 
-				//If this is more than 0, we'll need to emit a copy of the first variable
-				//so that modifying it does not mess with any other instances of said variable
-				if(second->op1->indirection_level > 0){
-					//Emit an exact copy
-					first->op1 = emit_var_copy(first->op1);
+			//Manage our use state here
+			replace_variable(second->op1, first->op1);
 
-					//Copy over the indirection levels
-					first->op1->indirection_level = second->op1->indirection_level;
-				}
+			//Reorder the op1's
+			second->op1 = first->op1;
 
-				//Manage our use state here
-				replace_variable(second->op1, first->op1);
+			//We can now delete the first statement
+			delete_statement(first);
 
-				//Reorder the op1's
-				second->op1 = first->op1;
-
-				//We can now delete the first statement
-				delete_statement(first);
-
-				//Reconstruct the window with second as the start
-				reconstruct_window(window, second);
+			//Reconstruct the window with second as the start
+			reconstruct_window(window, second);
 				
-				//Regardless of what happened, we did see a change here
-				changed = TRUE;
-			}
+			//Regardless of what happened, we did see a change here
+			changed = TRUE;
 		}
 	}
 
