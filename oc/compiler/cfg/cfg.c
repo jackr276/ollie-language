@@ -4339,7 +4339,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			//Store statements have the storee in op1
 			case THREE_ADDR_CODE_STORE_STATEMENT:
 				//If the last instruction is *not* a constant assignment, we can go ahead like this
-				if(last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+				if(last_instruction == NULL
+					|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 					//This is now our op1
 					current_block->exit_statement->op1 = final_op1;
 
@@ -4365,7 +4366,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				//If the last instruction is *not* a constant assignment, we can go ahead like this
-				if(last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+				if(last_instruction == NULL
+					|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 					//This is now our op1
 					current_block->exit_statement->op2 = final_op1;
 
@@ -7705,7 +7707,8 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	add_used_variable(current_block, base_address);
 
 	//If the last instruction is *not* a constant assignment, we can go ahead like this
-	if(last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+	if(last_instruction == NULL
+		|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//This is now our op1
 		store_instruction->op2 = expression_results.assignee;
 
