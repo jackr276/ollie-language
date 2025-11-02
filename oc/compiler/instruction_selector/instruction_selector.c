@@ -1682,7 +1682,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
 
 		//Copy their constants over
-		window->instruction2->op1_const = window->instruction1->op1_const;
+		window->instruction2->offset = window->instruction1->op1_const;
 
 		//We can delete the entire assignment statement
 		delete_statement(window->instruction1);
@@ -1715,7 +1715,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
 
 		//Copy their constants over
-		window->instruction2->op1_const = window->instruction1->op1_const;
+		window->instruction2->offset = window->instruction1->op1_const;
 
 		//We can delete the entire assignment statement
 		delete_statement(window->instruction1);
@@ -1738,9 +1738,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  load t4 <- t3
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET
-		&& is_constant_value_zero(window->instruction1->op1_const) == TRUE){
+		&& is_constant_value_zero(window->instruction1->offset) == TRUE){
 		//First NULL out the constant
-		window->instruction1->op1_const = NULL;
+		window->instruction1->offset = NULL;
 
 		//Then just make this a normal load
 		window->instruction1->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
@@ -1760,9 +1760,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  store t4 <- t3
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET 
-		&& is_constant_value_zero(window->instruction1->op1_const) == TRUE){
+		&& is_constant_value_zero(window->instruction1->offset) == TRUE){
 		//First NULL out the constant
-		window->instruction1->op1_const = NULL;
+		window->instruction1->offset = NULL;
 
 		//Slight adjustment as well, the op1's in complex stores are not the source but in regular
 		//stores they are, so we'll copy that over
@@ -4330,8 +4330,7 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 
 	//Op1 is our base address
 	instruction->address_calc_reg1 = instruction->op1;
-	//The op1_const is our offset
-	instruction->offset = instruction->op1_const;
+	//Our offset has already been set at the start - so we're good here
 }
 
 
@@ -4449,8 +4448,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 
 	//The base address is the assignee
 	instruction->address_calc_reg1 = instruction->assignee;
-	//The offset is our op1_const
-	instruction->offset = instruction->op1_const;
+	//Our offset has already been saved at the start - so we're good here
 
 	//The source register is our op2
 	instruction->source_register = instruction->op2;

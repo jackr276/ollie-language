@@ -1571,7 +1571,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->op1_const);
+			print_three_addr_constant(fl, stmt->offset);
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op2)
@@ -1631,7 +1631,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->op1_const);
+			print_three_addr_constant(fl, stmt->offset);
 			fprintf(fl, "]"); 
 
 			fprintf(fl, "\n");
@@ -3792,7 +3792,7 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 
- * a constant offset(op1_const), and the value we're storing(op2)
+ * a constant offset(offset), and the value we're storing(op2)
  */
 instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee){
 	//First allocate
@@ -3806,8 +3806,8 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	//This is being dereferenced
 	stmt->assignee->is_dereferenced = TRUE;
 
-	//The op1 is our varia
-	stmt->op1_const = offset;
+	//The offset placeholder is used for our offset, not op1_const 
+	stmt->offset = offset;
 
 	//What we're storing
 	stmt->op2 = storee;
@@ -3867,7 +3867,7 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 
 /**
  * Emit a load with constant offset ir code. We take in a base address(op1), 
- * an offset(op1_const), and the value we're loading into(assignee)
+ * an offset(offset), and the value we're loading into(assignee)
  */
 instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset){
 	//First allocate
@@ -3880,8 +3880,8 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	//The op1 is our base address
 	stmt->op1 = base_address;
 
-	//Op1_const is our offset
-	stmt->op1_const = offset;
+	//Our offset is stored in "offset", not op1_const
+	stmt->offset = offset;
 
 	//Save our current function
 	stmt->function = current_function;
