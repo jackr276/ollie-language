@@ -4263,6 +4263,56 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 
 
 /**
+ * Logical or two constants. The result is always stored in constant1
+ */
+void logical_or_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Determine if they are 0 or not
+	u_int8_t const_1_0 = is_constant_value_zero(constant1);
+	u_int8_t const_2_0 = is_constant_value_zero(constant2);
+
+	//Go through the 4 cases in the truth table
+	if(const_1_0 == TRUE){
+		/* 0 || (non-zero) = 1 */
+		if(const_2_0 == FALSE){
+			constant1->constant_value.long_constant = 1;
+		/* 0 || 0 = 0 */
+		} else {
+			constant1->constant_value.long_constant = 0;
+		}
+
+	//This is non-zero, the other one is irrelevant
+	} else {
+		constant1->constant_value.long_constant = 1;
+	}
+}
+
+
+/**
+ * Logical and two constants. The result is always stored in constant1
+ */
+void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Determine if they are 0 or not
+	u_int8_t const_1_0 = is_constant_value_zero(constant1);
+	u_int8_t const_2_0 = is_constant_value_zero(constant2);
+
+	//If this one is 0, the other one's result is irrelevant
+	if(const_1_0 == TRUE){
+		constant1->constant_value.long_constant = 0;
+
+	//Nonzero
+	} else {
+		/* (non-zero) && (non-zero) = 1 */
+		if(const_2_0 == FALSE){
+			constant1->constant_value.long_constant = 1;
+		/* (non-zero) && 0 = 0 */
+		} else {
+			constant1->constant_value.long_constant = 0;
+		}
+	}
+}
+
+
+/**
  * select the appropriate branch statement given the circumstances, including operand and signedness
  */
 branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_category_t branch_type, u_int8_t is_signed){

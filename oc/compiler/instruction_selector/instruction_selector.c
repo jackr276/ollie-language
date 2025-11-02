@@ -471,6 +471,7 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 
 			//If this is unsigned, we cannot do this
 			if(is_type_signed(instruction->assignee->type) == FALSE){
+				//TODO ISSUE IS SOMETHING OVER HERE
 				return FALSE;
 			}
 
@@ -539,56 +540,6 @@ static u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t o
 			return TRUE;
 		default:
 			return FALSE;
-	}
-}
-
-
-/**
- * Logical or two constants. The result is always stored in constant1
- */
-static void logical_or_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
-	//Determine if they are 0 or not
-	u_int8_t const_1_0 = is_constant_value_zero(constant1);
-	u_int8_t const_2_0 = is_constant_value_zero(constant2);
-
-	//Go through the 4 cases in the truth table
-	if(const_1_0 == TRUE){
-		/* 0 || (non-zero) = 1 */
-		if(const_2_0 == FALSE){
-			constant1->constant_value.long_constant = 1;
-		/* 0 || 0 = 0 */
-		} else {
-			constant1->constant_value.long_constant = 0;
-		}
-
-	//This is non-zero, the other one is irrelevant
-	} else {
-		constant1->constant_value.long_constant = 1;
-	}
-}
-
-
-/**
- * Logical and two constants. The result is always stored in constant1
- */
-static void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
-	//Determine if they are 0 or not
-	u_int8_t const_1_0 = is_constant_value_zero(constant1);
-	u_int8_t const_2_0 = is_constant_value_zero(constant2);
-
-	//If this one is 0, the other one's result is irrelevant
-	if(const_1_0 == TRUE){
-		constant1->constant_value.long_constant = 0;
-
-	//Nonzero
-	} else {
-		/* (non-zero) && (non-zero) = 1 */
-		if(const_2_0 == FALSE){
-			constant1->constant_value.long_constant = 1;
-		/* (non-zero) && 0 = 0 */
-		} else {
-			constant1->constant_value.long_constant = 0;
-		}
 	}
 }
 
@@ -3362,6 +3313,10 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
 	//Instruction 1 is the multiplication instruction
 	instruction_t* multiplication_instruction = window->instruction1;
+
+	printf("HANDLING:\n");
+	print_three_addr_code_stmt(stdout, multiplication_instruction);
+	printf("\n\n");
 
 	//We'll need to know the variables size
 	variable_size_t size = get_type_size(multiplication_instruction->assignee->type);

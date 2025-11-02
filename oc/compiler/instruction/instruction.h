@@ -740,6 +740,16 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
 
 /**
+ * Logical or two constants. The result is always stored in constant1
+ */
+void logical_or_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
+ * Logical and two constants. The result is always stored in constant1
+ */
+void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
  * select the appropriate branch statement given the circumstances, including operand and signedness
  */
 branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_category_t branch_type, u_int8_t is_signed);
