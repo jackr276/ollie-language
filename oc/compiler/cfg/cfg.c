@@ -7689,6 +7689,9 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//Update this
 	current_block = expression_results.final_block;
 
+	//Grab the last instruction - we'll need this for later
+	instruction_t* last_instruction = current_block->exit_statement;
+
 	//This is now the final block
 	final_results.final_block = current_block;
 
@@ -7696,11 +7699,31 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(offset, u64);
 
 	//Now we need to emit the store operation
-	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, offset_constant, expression_results.assignee);
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, offset_constant, NULL);
 
-	//This counts as a use for the base address and the assignee
+	//This counts as a use
 	add_used_variable(current_block, base_address);
-	add_used_variable(current_block, expression_results.assignee);
+
+	//If the last instruction is *not* a constant assignment, we can go ahead like this
+	if(last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//This is now our op1
+		store_instruction->op2 = expression_results.assignee;
+
+		//No matter what happened, we used this
+		add_used_variable(current_block, expression_results.assignee);
+
+	//Otherwise, we can do a small optimization here by scrapping the 
+	//constant assignment and just putting the constant in directly
+	} else {
+		//Extract it
+		three_addr_const_t* constant_assignee = last_instruction->op1_const;
+
+		//This is now useless
+		delete_statement(last_instruction);
+
+		//Set the store statement's op1_const to be this
+		store_instruction->op1_const = constant_assignee;
+	}
 
 	//Add it into the block
 	add_statement(current_block, store_instruction);
