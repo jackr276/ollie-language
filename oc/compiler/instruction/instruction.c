@@ -477,13 +477,6 @@ u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 		case MOVL:
 		case MOVW:
 		case MOVQ:
-			//If we have an immediate value OR we 
-			//have some indirection, we say false
-			if(instruction->source_register == NULL
-				|| instruction->indirection_level > 0){
-				return FALSE;
-			}
-
 			//Otherwise it is a pure copy
 			return TRUE;
 
@@ -1917,19 +1910,14 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 */
 		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE:
 		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
-			for(u_int8_t i = 0; i < instruction->indirection_level; i++){
-				fprintf(fl, "(");
-			}
+			fprintf(fl, "(");
 
 			if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE){
 				print_variable(fl, instruction->source_register, mode);
 			} else {
 				print_variable(fl, instruction->destination_register, mode);
 			}
-
-			for(u_int8_t i = 0; i < instruction->indirection_level; i++){
-				fprintf(fl, ")");
-			}
+			fprintf(fl, ")");
 
 			break;
 
