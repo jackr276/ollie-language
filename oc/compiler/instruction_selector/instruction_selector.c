@@ -49,6 +49,76 @@ struct instruction_window_t{
 
 
 /**
+ * Print a block our for reading
+*/
+static void print_ordered_block(basic_block_t* block, instruction_printing_mode_t mode){
+	//If this is some kind of switch block, we first print the jump table
+	if(block->jump_table != NULL){
+		print_jump_table(stdout, block->jump_table);
+	}
+
+	//Switch here based on the type of block that we have
+	switch(block->block_type){
+		//Function entry blocks need extra printing
+		case BLOCK_TYPE_FUNC_ENTRY:
+			printf("%s:\n", block->function_defined_in->func_name.string);
+			print_stack_data_area(&(block->function_defined_in->data_area));
+			break;
+
+		//By default just print the name
+		default:
+			printf(".L%d:\n", block->block_id);
+			break;
+	}
+
+	//Now grab a cursor and print out every statement that we 
+	//have
+	instruction_t* cursor = block->leader_statement;
+
+	//So long as it isn't null
+	while(cursor != NULL){
+		//Based on what mode we're given here, we call the appropriate
+		//print statement
+		if(mode == PRINT_THREE_ADDRESS_CODE){
+			//Hand off to printing method
+			print_three_addr_code_stmt(stdout, cursor);
+		} else {
+			print_instruction(stdout, cursor, PRINTING_VAR_IN_INSTRUCTION);
+		}
+
+
+		//Move along to the next one
+		cursor = cursor->next_statement;
+	}
+
+	//For spacing
+	printf("\n");
+}
+
+
+/**
+ * Run through using the direct successor strategy and print all ordered blocks.
+ * We print much less here than the debug printer in the CFG, because all dominance
+ * relations are now useless
+ */
+static void print_ordered_blocks(cfg_t* cfg, basic_block_t* head_block, instruction_printing_mode_t mode){
+	//Run through the direct successors so long as the block is not null
+	basic_block_t* current = head_block;
+
+	//So long as this one isn't NULL
+	while(current != NULL){
+		//Print it
+		print_ordered_block(current, mode);
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
+
+	//Print all global variables after the blocks
+	print_all_global_variables(stdout, cfg->global_variables);
+}
+
+
+/**
  * This is used to manage when we need to swap a variable out and handle all use case
  * modifications
  */
@@ -246,6 +316,1157 @@ static void logical_and_constants(three_addr_const_t* constant1, three_addr_cons
 		}
 	}
 }
+
+
+/**
+ * The pattern optimizer takes in a window and performs hyperlocal optimzations
+ * on passing instructions. If we do end up deleting instructions, we'll need
+ * to take care with how that affects the window that we take in
+ */
+static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
+	//By default, we didn't change anything
+	u_int8_t changed = FALSE;
+
+	//Let's perform some quick checks. If we see a window where the first instruction
+	//is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
+	//case
+	if(window->instruction1 == NULL || window->instruction2 == NULL){
+		return changed;
+	}
+
+	//Right off the bat, if we see any memory address instructions, now is our time to
+	//convert out of them
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
+		remediate_memory_address_instruction(cfg, window->instruction1);
+	}
+
+	//Now we'll match based off of a series of patterns. Depending on the pattern that we
+	//see, we perform one small optimization
+	
+	/**
+	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
+	 *
+	 * If we see something like this
+	 * t2 <- 0x8
+	 * x0 <- t2
+	 *
+	 * We can "fold" to result in:
+	 * x0 <- 0x8
+	 * 
+	 * This will also result in the deletion of the first statement
+	 *
+	 * This also works with store statements
+	 */
+
+	//If we see a constant assingment first and then we see a an assignment
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//We see an assign statement
+		if(window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
+			//we deal with temp variables. At this point in the program, all non-temp variables have been
+			//deemed important, so we wouldn't want to remove their assignments
+			if(window->instruction1->assignee->is_temporary == TRUE &&
+				//Verify that this is not used more than once
+				window->instruction1->assignee->use_count <= 1 &&
+				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+				//Grab this out for convenience
+				instruction_t* assign_operation = window->instruction2;
+
+				//Now we'll modify this to be an assignment const statement
+				assign_operation->op1_const = window->instruction1->op1_const;
+
+				//Modify the type of the assignment
+				assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+				//The use count here now goes down by one
+				assign_operation->op1->use_count--;
+
+				//Make sure that we now null out op1
+				assign_operation->op1 = NULL;
+
+				//Once we've done this, the first statement is entirely useless
+				delete_statement(window->instruction1);
+
+				//Once we've deleted the statement, we'll need to completely rewire the block
+				//The binary operation is now the start
+				reconstruct_window(window, assign_operation);
+			
+				//Whatever happened here, we did change something
+				changed = TRUE;
+			}
+
+		//We can apply the same optimization for store statements
+		} else if(window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
+			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
+			//we deal with temp variables. At this point in the program, all non-temp variables have been
+			//deemed important, so we wouldn't want to remove their assignments
+			if(window->instruction1->assignee->is_temporary == TRUE &&
+				//Verify that this is not used more than once
+				window->instruction1->assignee->use_count <= 1 &&
+				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+				//Grab this out for convenience
+				instruction_t* store_operation = window->instruction2;
+
+				//Now we'll modify this to be an assignment const statement
+				store_operation->op1_const = window->instruction1->op1_const;
+
+				//Modify the type of the assignment
+				store_operation->statement_type = THREE_ADDR_CODE_STORE_CONST_STATEMENT;
+
+				//The use count here now goes down by one
+				store_operation->op1->use_count--;
+
+				//Make sure that we now null out op1
+				store_operation->op1 = NULL;
+
+				//Once we've done this, the first statement is entirely useless
+				delete_statement(window->instruction1);
+
+				//Once we've deleted the statement, we'll need to completely rewire the block
+				//The binary operation is now the start
+				reconstruct_window(window, store_operation);
+			
+				//Whatever happened here, we did change something
+				changed = TRUE;
+			}
+		}
+	}
+
+	/**
+	 * ================= Handling redundant multiplications ========================
+	 * t27 <- 5
+	 * t27 <- t27 * 68
+	 *
+	 * Can become: t27 <- 340
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
+		&& window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == STAR
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
+
+		//We can multiply the constants now. The result will be stored in op1 const
+		multiply_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+
+		//Instruction 2 is now simply an assign const statement
+		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+		//Op1 is now used one less time
+		window->instruction2->op1->use_count--;
+
+		//Null out where the old value was
+		window->instruction2->op1 = NULL;
+
+		//Instruction 1 is now completely useless *if* that was the only time that
+		//his assignee was used. Otherwise, we need to keep it in
+		if(window->instruction1->assignee->use_count == 0){
+			delete_statement(window->instruction1);
+		}
+
+		//Reconstruct the window with instruction 2 as the start
+		reconstruct_window(window, window->instruction2);
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
+
+	/**
+	 * --------------------- Redundnant copying elimination ------------------------------------
+	 *  Let's now fold redundant copies. Here is an example of a redundant copy
+	 * 	t10 <- x_2
+	 * 	t11 <- t10
+	 *
+	 * This can be folded into simply:
+	 * 	t11 <- x_2
+	 */
+	//If we have two consecutive assignment statements
+	if(window->instruction2 != NULL 
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& can_assignment_instruction_be_removed(window->instruction1) == TRUE
+		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
+		//Grab these out for convenience
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+		
+		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
+		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE
+			//And the assignee of the first statement is only ever used once
+			&& first->assignee->use_count <= 1){
+
+			//Manage our use state here
+			replace_variable(second->op1, first->op1);
+
+			//Reorder the op1's
+			second->op1 = first->op1;
+
+			//We can now delete the first statement
+			delete_statement(first);
+
+			//Reconstruct the window with second as the start
+			reconstruct_window(window, second);
+				
+			//Regardless of what happened, we did see a change here
+			changed = TRUE;
+		}
+	}
+
+	/**
+	 * --------------------- Folding constant assignments in arithmetic expressions ----------------
+	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
+	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
+	 *
+	 * NOTE: This does not work for division or modulus instructions
+	 */
+	//Check first with 1 and 2
+	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
+		if(window->instruction1->assignee->is_temporary == TRUE
+			//Validate that the use count is less than 1
+			&& window->instruction1->assignee->use_count <= 1
+			&& is_operation_valid_for_constant_folding(window->instruction2, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
+			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
+			//Grab this out for convenience
+			instruction_t* const_assignment = window->instruction1;
+
+			//Let's mark that this is now a binary op with const statement
+			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+			//op2 is now used one less time
+			window->instruction2->op2->use_count--;
+
+			//We'll want to NULL out the secondary variable in the operation
+			window->instruction2->op2 = NULL;
+			
+			//We'll replace it with the op1 const that we've gotten from the prior instruction
+			window->instruction2->op1_const = const_assignment->op1_const;
+
+			//We can now delete the very first statement
+			delete_statement(window->instruction1);
+
+			//Reconstruct the window with instruction2 as the start
+			reconstruct_window(window, window->instruction1);
+
+			//This does count as a change
+			changed = TRUE;
+		}
+	}
+
+	//Now check with 1 and 3. The prior compression may have made this more worthwhile
+	if(window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
+		if(window->instruction1->assignee->is_temporary == TRUE
+			//Validate that this is not being used more than once
+			&& window->instruction1->assignee->use_count <= 1
+			&& is_operation_valid_for_constant_folding(window->instruction3, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
+			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
+			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
+			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
+			//Grab this out for convenience
+			instruction_t* const_assignment = window->instruction1;
+
+			//Let's mark that this is now a binary op with const statement
+			window->instruction3->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+			//Op2 for instruction3 is now used one less time
+			window->instruction3->op2->use_count--;
+
+			//We'll want to NULL out the secondary variable in the operation
+			window->instruction3->op2 = NULL;
+			
+			//We'll replace it with the op1 const that we've gotten from the prior instruction
+			window->instruction3->op1_const = const_assignment->op1_const;
+
+			//We can now delete the very first statement
+			delete_statement(window->instruction1);
+
+			//Reconstruct the window with instruction2 as the seed
+			reconstruct_window(window, window->instruction2);
+
+			//This does count as a change
+			changed = TRUE;
+		}
+	}
+
+
+	/**
+	 * ==================== Op1 Assignment Folding for expressions ======================
+	 * If we have expressions like:
+	 *   t3 <- x_0
+	 *   t4 <- y_0
+	 *   t5 <- t3 && t4
+	 *
+	 *  We need to recognize opportunities for assignment folding. And ideal optimization would transform
+	 *  this into:
+	 *   
+	 *   t5 <- x_0 && y_0
+	 *
+	 *   This rule will do the first part of that
+	 *
+	 *  We will seek to do that in this optimization
+	 *
+	 *
+	 *  Note that this is just for op1 assignment folding. It is generall much more restrictive
+	 *  because so many operations overwrite their op1(think add, subtract), and those would therefore
+	 *  be *invalid* for this
+	 */
+	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
+	if(is_instruction_binary_operation(window->instruction2) == TRUE
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& is_operation_valid_for_op1_assignment_folding(window->instruction2->op) == TRUE){
+
+		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
+		if(window->instruction1->assignee->is_temporary == TRUE 
+			//Make sure that this is the only use
+			&& window->instruction1->assignee->use_count <= 1
+			&& window->instruction1->op1->is_temporary == FALSE
+			&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+
+			//Set these two to be equal
+			window->instruction2->op1 = window->instruction1->op1;
+
+			//We can now delete the very first statement
+			delete_statement(window->instruction1);
+
+			//Reconstruct the window with instruction2 as the seed
+			reconstruct_window(window, window->instruction2);
+
+			//This does count as a change
+			changed = TRUE;
+		}
+	}
+
+
+	/**
+	 * -------------------- Arithmetic expressions with assignee the same as op1 ---------------------
+	 *  There will be times where we generate arithmetic expressions like this:
+	 *
+	 * 	t19 <- a_3
+	 * 	t20 <- t19 + y_0
+	 * 	a_4 <- t20
+	 *
+	 *  Since a_4 and a_3 are the same variable(register), this is an ideal candidate to be compressed
+	 *  like
+	 *
+	 *  a_4 <- a_3 + y_0
+	 *
+	 * This 3-instruction large optimizaion will look for this
+	 */
+	//If the first statement is an assignmehnt statement, and the second statement is a binary operation,
+	//and the third statement is an assignment statement, we have our chance to optimize
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& is_instruction_binary_operation(window->instruction2) == TRUE
+		&& window->instruction3 != NULL
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+
+		//Grab these out for convenience
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+		instruction_t* third = window->instruction3;
+
+		//We still need further checks to see if this is indeed the pattern above. If
+		//we survive all of these checks, we know that we're set to optimize
+		if(first->assignee->is_temporary == TRUE && third->assignee->is_temporary == FALSE &&
+			first->assignee->use_count <= 2 &&
+			variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE &&
+	 		variables_equal(first->assignee, second->op1, FALSE) == TRUE &&
+	 		variables_equal(second->assignee, third->op1, FALSE) == TRUE){
+
+			//Manage our use state here
+			replace_variable(second->op1, first->op1);
+
+			//The second op1 will now become the first op1
+			second->op1 = first->op1;
+
+			//And the second's assignee will now be the third's assignee
+			second->assignee = third->assignee;
+
+			//Following this, all we need to do is delete and rearrange
+			delete_statement(first);
+			delete_statement(third);
+
+			//Reconstruct the window with second as the new instruction1
+			reconstruct_window(window, second);
+
+			//Regardless of what happened, we did change the window, so we'll
+			//update this
+			changed = TRUE;
+		}
+	}
+	
+
+	/**
+	 * --------------------- Folding constant assingments in LEA statements ----------------------
+	 *  In cases where we have a lea statement that uses a constant which is assigned to a temporary
+	 *  variable right before it, we should eliminate that unnecessary assingment by folding that constant
+	 *  into the lea statement.
+	 *
+	 *  We can also go one further by performing the said multiplication to get out the value that we want
+	 *
+	 * NOTE: This will actually produce invalid binary operation instructions in the short run. However, 
+	 * when the instruction selector gets to them, we will turn them into memory move operations
+	 */
+	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
+		if(window->instruction1->assignee->is_temporary == TRUE &&
+	 		variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+
+			//What we can do is rewrite the LEA statement all together as a simple addition statement. We'll
+			//evaluate the multiplication of the constant and lea multiplicator at comptime
+			u_int64_t address_offset = window->instruction2->lea_multiplicator;
+
+			//Let's now grab what the constant is
+			three_addr_const_t* constant = window->instruction1->op1_const;
+			
+			//What kind of constant do we have?
+			if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U){
+				//If this is a the case, we'll multiply the address const by the int value
+				address_offset *= constant->constant_value.integer_constant;
+			//Otherwise, this has to be a long const
+			} else {
+				address_offset *= constant->constant_value.long_constant;
+			}
+
+			//Once we've done this, the address offset is now properly multiplied. We'll reuse
+			//the constant from operation one, and convert the lea statement into a BIN_OP_WITH_CONST
+			//statement. This saves a lot of loading and arithmetic operations
+		
+			//This is now a long const
+			constant->const_type = LONG_CONST;
+
+			//Set this to be the address offset
+			constant->constant_value.long_constant = address_offset;
+
+			//Add it into instruction 2
+			window->instruction2->op1_const = constant;
+
+			//We'll now transfrom instruction 2 into a bin op with const
+			window->instruction2->op2 = NULL;
+			window->instruction2->op = PLUS;
+			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+			//We can now scrap the first instruction entirely
+			delete_statement(window->instruction1);
+
+			//Reconstruct the window. Instruction 2 is the new start
+			reconstruct_window(window, window->instruction2);
+
+			//This counts as a change 
+			changed = TRUE;
+		}
+	}
+
+
+	/**
+	 * =================== Adjacent assignment statement folding ====================
+	 * If we have a binary operation or a bin op with const statement followed by an
+	 * assignment of that result to a non-temporary variable, we have an opportunity
+	 * to simplify. This would lead nicely into the following optimizations below
+	 *
+	 * Example: 
+	 * t12 <- a_2 + 0x1
+	 * a_3 <- t12
+	 * could become
+	 * a_3 <- a_2 + 0x1
+	 */
+
+	//If the first instruction is a binary operation and the immediately following instruction is an assignment
+	//operation, this is a potential match
+	if(is_instruction_binary_operation(window->instruction1) == TRUE
+		&& window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+		//For convenience/memory ease
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+
+		//If we have a temporary start variable, a non temp end variable, and the variables
+		//match in the corresponding spots, we have our opportunity
+		if(first->assignee->is_temporary == TRUE && second->assignee->is_temporary == FALSE
+			&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
+			//Special no-ssa comparison, we expect that the ssa would be different due to assignment levels
+			&& variables_equal_no_ssa(second->assignee, first->op1, FALSE) == TRUE){
+
+			//We will now take the second variables assignee to be the first statements assignee
+			first->assignee = second->assignee;
+
+			//That's really all we need to do for the first one. Now, we need to delete the second
+			//statement entirely
+			delete_statement(second);
+
+			//We'll reconstruct the window here, the first is still the first
+			reconstruct_window(window, first);
+
+			//Regardless of what happened here, we did change the window so we'll set the flag
+			changed = TRUE;
+
+		//We could also have a scenario like this that will apply only to logical combination(&& and ||) operators.
+		/**
+		 * t33 <- t34 && t35
+		 * x_0 <- t33
+		 *
+		 * Because of the way that we handle logical and, we can actuall eliminate the second assignment
+		 * with no issue
+		 * x_0 <- t34 && t35
+		 *
+		 * NOTE: This does not work for logical or, due to the way we handle logical OR
+		 */
+		} else if(first->op == DOUBLE_AND
+				&& first->assignee->is_temporary == TRUE 
+				&& variables_equal(first->assignee, second->op1, FALSE) == TRUE){
+
+			//Set these to be equal
+			first->assignee = second->assignee;
+
+			//We can now scrap the second statement
+			delete_statement(second);
+
+			//We'll reconstruct the window here, the first is still the first
+			reconstruct_window(window, first);
+
+			//This counts as a change
+			changed = TRUE;
+		}
+	}
+
+
+	/**
+	 * ==================== On-the-fly logical and/or ========================
+	 * t27 <- 5
+	 * t27 <- t27 && 68
+	 *
+	 * t27 <- 1
+	 *
+	 * Or
+	 * t27 <- 5
+	 * t27 <- t27 || 68
+	 *
+	 * t27 <- 1
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
+		&& window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
+		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
+
+		//We will handle the constants accordingly
+		if(window->instruction2->op == DOUBLE_OR) {
+			logical_or_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+		} else {
+			logical_and_constants(window->instruction2->op1_const, window->instruction1->op1_const);
+		}
+
+		//Instruction 2 is now simply an assign const statement
+		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+		//Op1 is now used one less time
+		window->instruction2->op1->use_count--;
+
+		//Null out where the old value was
+		window->instruction2->op1 = NULL;
+
+		//Instruction 1 is now completely useless *if* that was the only time that
+		//his assignee was used. Otherwise, we need to keep it in
+		if(window->instruction1->assignee->use_count == 0){
+			delete_statement(window->instruction1);
+		}
+
+		//Reconstruct the window with instruction 2 as the start
+		reconstruct_window(window, window->instruction2);
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
+
+	/**
+	 * ======================= Logical And operation simplifying ==========================
+	 * t2 <- t4 && 0 === set t2 to be 0
+	 * t2 <- t4 && (non-zero) === test t4,t4 and setne t2 if t4 isn't 0
+	 *
+	 * It is safe to assume that a logical and binary operation with constant is always
+	 * simplifiable
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == DOUBLE_AND){
+		//For convenience extract this
+		instruction_t* current_instruction = window->instruction1;
+
+		//First option - the value is 0
+		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
+			//It's now just an assign statement
+			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+			//Wipe out op1
+			if(current_instruction->op1 != NULL){
+				current_instruction->op1->use_count--;
+				current_instruction->op1 = NULL;
+			}
+
+		//Otherwise, the value is not 0
+		} else {
+			//First we add a test instruction
+			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+						
+			//The result of this will be used for our set instruction
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
+			//Subtly hook this in, even though it's not needed
+			setne_instruction->op1 = test_instruction->assignee;
+
+			//Assign the two over
+			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
+
+			//Insert these both in beforehand
+			insert_instruction_before_given(test_instruction, current_instruction);
+			insert_instruction_before_given(setne_instruction, current_instruction);
+			insert_instruction_before_given(assignment, current_instruction);
+
+			//And then remove this now useless current instruction
+			delete_statement(current_instruction);
+
+			//Reconstruct the window based on the set instruction
+			reconstruct_window(window, assignment);
+		}
+
+		//We changed something
+		changed = TRUE;
+	}
+
+
+	/**
+	 * ======================= Logical OR operation simplifying ==========================
+	 * t2 <- t4 || 0 === test t4, t4 and setne t2 if t4 isn't 0
+	 * t2 <- t4 || (non-zero) === t2 <- 1
+	 *
+	 * It is safe to assume that a logical and binary operation with constant is always
+	 * simplifiable
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == DOUBLE_OR){
+		//For convenience extract this
+		instruction_t* current_instruction = window->instruction1;
+
+		//First option - the value is 0. If it is, then anything else is irrelevant
+		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
+			//First we add a test instruction
+			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+						
+			//The result of this will be used for our set instruction
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
+			//Subtly hook this in, even though it's not needed
+			setne_instruction->op1 = test_instruction->assignee;
+
+			//Assign the two over
+			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
+
+			//Insert these both in beforehand
+			insert_instruction_before_given(test_instruction, current_instruction);
+			insert_instruction_before_given(setne_instruction, current_instruction);
+			insert_instruction_before_given(assignment, current_instruction);
+
+			//And then remove this now useless current instruction
+			delete_statement(current_instruction);
+
+			//Reconstruct the window based on the set instruction
+			reconstruct_window(window, assignment);
+
+		//Otherwise, the value is not 0
+		} else {
+			//It's now just an assign statement
+			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+			//Wipe out op1
+			if(current_instruction->op1 != NULL){
+				current_instruction->op1->use_count--;
+				current_instruction->op1 = NULL;
+			}
+
+			//Set the constant's value to 1
+			current_instruction->op1_const->constant_value.long_constant = 1;
+		}
+
+		//We changed something
+		changed = TRUE;
+	}
+
+
+
+	/**
+	 * ================== Arithmetic Operation Simplifying ==========================
+	 * After we do all of this folding, we can stand to ask the question of if we 
+	 * have any simple arithmetic operations that can be folded together. Our first
+	 * example of this is arithmetic operations with 0
+	 *
+	 * There are many cases here which allow simplification. Here are the first
+	 * few with zero:
+	 *
+	 * t2 <- t4 + 0 can just become t2 <- t4
+	 * t2 <- t4 - 0 can just become t2 <- t4
+	 * t2 <- t4 * 0 can just become t2 <- 0 
+	 * t2 <- t4 / 0 will stay the same, but we will produce an error
+	 * 
+	 * Logical operators(somewhat different)
+	 * t2 <- t4 || 0 === test t4,t4 and setne t2(if t4 isn't 0)
+	 * t2 <- t4 || (non-zero) === set t2 to be 1
+	 * 
+	 *
+	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
+	 */
+
+	//Shove these all into an array for selecting
+	instruction_t* instructions[3] = {window->instruction1, window->instruction2, window->instruction3};
+
+	//The current instruction pointer
+	instruction_t* current_instruction;
+
+	//If we have a bin op with const statement, we have an opportunity
+	for(u_int16_t i = 0; i < 3; i++){
+		//Grab the current instruction out
+		current_instruction = instructions[i];
+
+		//Skip if NULL
+		if(current_instruction == NULL){
+			continue;
+		}
+
+		/**
+		 * We have a chance to do some optimizations if we see a BIN_OP_WITH_CONST. It will
+		 * have been primed for us by the constant folding portion. Now, we'll search and see
+		 * if we're able to simplify some instructions
+		 */
+		if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+			//If it isn't in the list here, we won't be considering it and as such shouldn't waste time
+			//processing
+			switch(current_instruction->op){
+				case PLUS:
+				case R_SHIFT:
+				case L_SHIFT:
+				case MINUS:
+				case STAR:
+				case F_SLASH:
+				case MOD:
+					break;
+				default:
+					continue;
+			}
+
+			//Grab this out for convenience
+			three_addr_const_t* constant = current_instruction->op1_const;
+
+			//If this is 0, then we can optimize
+			if(is_constant_value_zero(constant) == TRUE){
+				//Switch based on current instruction's op
+				switch(current_instruction->op){
+					//If we made it out of this conditional with the flag being set, we can simplify.
+					//If this is the case, then this just becomes a regular assignment expression
+					case PLUS:
+					case MINUS:
+					case L_SHIFT:
+					case R_SHIFT:
+						//We're just assigning here
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+						//Wipe the values out
+						current_instruction->op1_const = NULL;
+
+						//Also scrap the op
+						current_instruction->op = BLANK;
+
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					case STAR:
+						//Now we're assigning a const
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+						//The constant is still the same thing(0), let's just wipe out the ops
+						if(current_instruction->op1 != NULL){
+							current_instruction->op1->use_count--;
+							current_instruction->op1 = NULL;
+						}
+
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					//Just do nothing here
+					default:
+						break;
+				}
+
+
+			//Notice how we do NOT mark any change as true here. This is because, even though yes we
+			//did change the instructions, the sliding window itself did not change at all. This is
+			//an important note as if we did mark a change, there are cases where this could
+			//cause an infinite loop
+			
+			//What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
+			//if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
+			//or division
+			} else if(is_constant_value_one(constant) == TRUE){
+				//Switch based on the op in the current instruction
+				switch(current_instruction->op){
+					//If it's an addition statement, turn it into an inc statement
+					/**
+				 	* NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
+				 	* want to first make sure that the assignees are not temporary variables. If they are temporary variables,
+				 	* then doing this would mess the whole operation up
+				 	*/
+					case PLUS:
+						//If it's temporary, we jump out
+						if(current_instruction->assignee->is_temporary == TRUE){
+							break;
+						}
+
+						//Now turn it into an inc statement
+						current_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
+						//Wipe the values out
+						current_instruction->op1_const = NULL;
+						current_instruction->op = BLANK;
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					case MINUS:
+						//If it's temporary, we jump out
+						if(current_instruction->assignee->is_temporary == TRUE){
+							break;
+						}
+
+						//Change what the class is
+						current_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
+						//Wipe the values out
+						current_instruction->op1_const = NULL;
+						current_instruction->op = BLANK;
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					//These are both the same - handle a 1 multiply, 1 divide
+					case STAR:
+					case F_SLASH:
+						//Change it to a regular assignment statement
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+						//Wipe the operator out
+						current_instruction->op1_const = NULL;
+						current_instruction->op = BLANK;
+						//We changed something
+						changed = TRUE;
+
+						break;
+
+					//Modulo by 1 will always result in 0
+					case MOD:
+						//Change it to a regular assignment statement
+						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+						//This is blank
+						current_instruction->op = BLANK;
+
+						//We no longer even need our op1
+						if(current_instruction->op1 != NULL){
+							current_instruction->op1->use_count--;
+							current_instruction->op1 = NULL;
+						}
+
+						//We can modify op1 const to just be 0 now. This is lazy but it
+						//works, we'll just 0 out all 64 bits
+						current_instruction->op1_const->constant_value.long_constant = 0;
+
+						//We changed something
+						changed = TRUE;
+
+					//Just bail out
+					default:
+						break;
+				}
+
+			//What if we have a power of 2 here? For any kind of multiplication or division, this can
+			//be optimized into a left or right shift if we have a compatible type(not a float)
+			} else if(is_constant_power_of_2(constant) == TRUE){
+				//If we have a star that's a left shift
+				if(current_instruction->op == STAR){
+					//Multiplication is a left shift
+					current_instruction->op = L_SHIFT;
+					//Update the constant with its log2 value
+					update_constant_with_log2_value(current_instruction->op1_const);
+					//We changed something
+					changed = TRUE;
+
+				} else if(current_instruction->op == F_SLASH){
+					//Division is a right shift
+					current_instruction->op = R_SHIFT;
+					//Update the constant with its log2 value
+					update_constant_with_log2_value(current_instruction->op1_const);
+					//We changed something
+					changed = TRUE;
+				}
+			}
+		}
+	}
+
+	/**
+	 * ================== Simplifying Consecutive Binary Operation with Constant statements ==============
+	 * Here is an example:
+	 * t2 <- arr_0 + 24
+	 * t4 <- t2 + 4
+	 * 
+	 * We could turn this into
+	 * t4 <- arr_0 + 28
+	 *
+	 * This is incredibly common with array address calculations, which is why we do it. We focus on the special case
+	 * of two consecutive additions here for this reason. Any other two consecutive operations are usually quite uncommon
+	 */
+	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
+	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == PLUS && window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+		&& window->instruction1->op == PLUS){
+
+		//Let's do this for convenience
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+
+		//Calculate this for now in case we need it
+		generic_type_t* final_type = types_assignable(second->op1_const->type, first->op1_const->type);
+
+		//If these are the same variable and the types are compatible, then we're good to go
+		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL){
+			//What we'll do first is add the two constants. The resultant constant will be stored
+			//in the second instruction's constant
+			second->op1_const = add_constants(second->op1_const, first->op1_const);
+
+			//Manage our use state here
+			replace_variable(second->op1, first->op1);
+
+			//Now that we've done that, we'll modify the second equation's op1 to be the first equation's op1
+			second->op1 = first->op1;
+
+			//Now that this is done, we can remove the first equation
+			delete_statement(first);
+
+			//We'll reconstruct the window with the second instruction being the
+			//first instruction now
+			reconstruct_window(window, second);
+
+			//This counts as a change because we deleted
+			changed = TRUE;
+		}
+	}
+
+	/**
+	 * There is a chance that we could be left with statements that assign to themselves
+	 * like this:
+	 *  t11 <- t11
+	 *
+	 *  These are guaranteed to be useless, so we can eliminate them
+	 */
+	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		//If we get here, we have a temp assignment who is completely useless, so we delete
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == TRUE){
+
+		//Delete it
+		delete_statement(window->instruction1);
+
+		//Rebuild now based on instruction2
+		reconstruct_window(window, window->instruction2);
+
+		//Counts as a change
+		changed = TRUE;
+	}
+
+
+	/**
+	 * ============================== Redundant copy folding =======================
+	 * If we have some random temp assignment that's in the middle of everything, we can
+	 * fold it to get rid of it
+	 *
+	 * t14 <- t12 <----------- assignment that's leftover from other simplifications
+	 * (t14) <- 2
+	 *
+	 * This can become:
+	 * (t12) <- 2
+	 *
+	 * We do need to be careful to duplicate the type for the indirection when we do this
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& window->instruction2 != NULL
+		&& is_instruction_assignment_operation(window->instruction2) == TRUE
+		&& window->instruction1->op1->is_temporary == TRUE
+		&& window->instruction1->op1->indirection_level == 0 	//Ensure that this really is a pure copy
+		&& window->instruction1->assignee->indirection_level == 0
+		&& window->instruction2->assignee->indirection_level == 1 // This one is an indirection
+		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
+
+		//Emit this as a copy
+		three_addr_var_t* new_assignee = emit_var_copy(window->instruction1->op1);
+
+		//Copy over the assignee's indirection level
+		new_assignee->indirection_level = window->instruction2->assignee->indirection_level;
+
+		//Copy over the value of the type - VERY IMPORTANT - the type may be different based on
+		//what the internal field is
+		new_assignee->type = window->instruction2->assignee->type;
+		
+		//Now instruction2's assignee is this
+		window->instruction2->assignee = new_assignee;
+
+		//Now we delete this
+		delete_statement(window->instruction1);
+
+		//And reconstruct the window based on instruction2
+		reconstruct_window(window, window->instruction2);
+
+		//Flag that we've changed
+		changed = TRUE;
+	}
+
+
+	/**
+	 * There is a chance that we could be left with statements that assign to themselves
+	 * like this:
+	 *  t11 <- 2
+	 *
+	 *  Where t11 has no real usage at all. Since this is the case, we can eliminate the whole
+	 *  operation
+	 *
+	 *  These are guaranteed to be useless, so we can eliminate them
+	 */
+	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+		//If we get here, we have a temp assignment who is completely useless, so we delete
+		&& window->instruction1->assignee->is_temporary == TRUE
+		//Ensure that it's not being used at all
+		&& window->instruction1->assignee->use_count == 0
+		//We can't mess with memory movement instructions
+		&& window->instruction1->assignee->indirection_level == 0){
+
+		//Delete it
+		delete_statement(window->instruction1);
+
+		//Rebuild now based on instruction2
+		reconstruct_window(window, window->instruction2);
+
+		//Counts as a change
+		changed = TRUE;
+	}
+
+
+	/**
+	 * If we have a memory address statement where the stack address is 0, we can
+	 * simply make this into an assignment instruction. We don't need the normal lea
+	 * that others have
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT
+		// Ignore global vars, they don't have stack addresses
+		&& window->instruction1->op1->linked_var->membership != GLOBAL_VARIABLE){
+		//We can reorgnaize this into an assignment instruction
+		if(window->instruction1->op1->stack_region->base_address == 0){
+			//Reset the type
+			window->instruction1->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+			//The op1 is now the stack pointer
+			window->instruction1->op1 = cfg->stack_pointer;
+		}
+	}
+
+	/**
+	 * When we have a case like this for address calculations:
+	 * t32 <- stack_pointer
+	 * t35 <- t32 + 32
+	 *
+	 * We can simply make this:
+	 * t35 <- t32 + 32
+	 */
+
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT 
+		&& window->instruction2 != NULL
+		&& (window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT)
+		&& window->instruction1->assignee->is_temporary == TRUE //It has to be a temp var otherwise we shouldn't remove it
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& window->instruction1->op1 == cfg->stack_pointer){
+		
+		//Delete the first statement
+		delete_statement(window->instruction1);
+
+		//Set instruction2's op1 to be the stack pointer
+		window->instruction2->op1 = cfg->stack_pointer;
+
+		//Rebuild it
+		reconstruct_window(window, window->instruction1);
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
+
+	//Return whether or not we changed the block return changed;
+	return changed;
+}
+
+
+/**
+ * Make one pass through the sliding window for simplification. This could include folding,
+ * etc. Simplification happens first over the entirety of the OIR using the sliding window
+ * technique. Following this, the instruction selector runs over the same area
+ */
+static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* head){
+	//First we'll grab the head
+	basic_block_t* current = head;
+
+	u_int8_t window_changed = FALSE;
+	u_int8_t changed;
+
+	//So long as this isn't NULL
+	while(current != NULL){
+		changed = FALSE;
+		
+		//Initialize the sliding window(very basic, more to come)
+		instruction_window_t window = initialize_instruction_window(current);
+
+		//Run through and simplify everything we can
+		do{
+			//Simplify the window
+			changed = simplify_window(cfg, &window);
+
+			//Set this flag if it was changed
+			if(changed == TRUE){
+				window_changed = TRUE;
+			}
+
+			//And slide it
+			slide_window(&window);
+
+		//So long as we aren't at the end
+		} while(window.instruction1 != NULL);
+
+
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
+
+	//Give back whether or not it's been changed
+	return window_changed;
+}
+
+
+/**
+ * We'll make use of a while change algorithm here. We make passes
+ * until we see the first pass where we experience no chnage at all.
+ */
+static void simplify(cfg_t* cfg, basic_block_t* head){
+	while(simplifier_pass(cfg, head) == TRUE);
+}
+
+
+
 
 
 /**
@@ -3614,1152 +4835,6 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 }
 
 
-/**
- * The pattern optimizer takes in a window and performs hyperlocal optimzations
- * on passing instructions. If we do end up deleting instructions, we'll need
- * to take care with how that affects the window that we take in
- */
-static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
-	//By default, we didn't change anything
-	u_int8_t changed = FALSE;
-
-	//Let's perform some quick checks. If we see a window where the first instruction
-	//is NULL or the second one is NULL, there's nothing we can do. We'll just leave in this
-	//case
-	if(window->instruction1 == NULL || window->instruction2 == NULL){
-		return changed;
-	}
-
-	//Right off the bat, if we see any memory address instructions, now is our time to
-	//convert out of them
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
-		remediate_memory_address_instruction(cfg, window->instruction1);
-	}
-
-	//Now we'll match based off of a series of patterns. Depending on the pattern that we
-	//see, we perform one small optimization
-	
-	/**
-	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
-	 *
-	 * If we see something like this
-	 * t2 <- 0x8
-	 * x0 <- t2
-	 *
-	 * We can "fold" to result in:
-	 * x0 <- 0x8
-	 * 
-	 * This will also result in the deletion of the first statement
-	 *
-	 * This also works with store statements
-	 */
-
-	//If we see a constant assingment first and then we see a an assignment
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//We see an assign statement
-		if(window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
-			//we deal with temp variables. At this point in the program, all non-temp variables have been
-			//deemed important, so we wouldn't want to remove their assignments
-			if(window->instruction1->assignee->is_temporary == TRUE &&
-				//Verify that this is not used more than once
-				window->instruction1->assignee->use_count <= 1 &&
-				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-				//Grab this out for convenience
-				instruction_t* assign_operation = window->instruction2;
-
-				//Now we'll modify this to be an assignment const statement
-				assign_operation->op1_const = window->instruction1->op1_const;
-
-				//Modify the type of the assignment
-				assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-				//The use count here now goes down by one
-				assign_operation->op1->use_count--;
-
-				//Make sure that we now null out op1
-				assign_operation->op1 = NULL;
-
-				//Once we've done this, the first statement is entirely useless
-				delete_statement(window->instruction1);
-
-				//Once we've deleted the statement, we'll need to completely rewire the block
-				//The binary operation is now the start
-				reconstruct_window(window, assign_operation);
-			
-				//Whatever happened here, we did change something
-				changed = TRUE;
-			}
-
-		//We can apply the same optimization for store statements
-		} else if(window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
-			//If the first assignee is what we're assigning to the next one, we can fold. We only do this when
-			//we deal with temp variables. At this point in the program, all non-temp variables have been
-			//deemed important, so we wouldn't want to remove their assignments
-			if(window->instruction1->assignee->is_temporary == TRUE &&
-				//Verify that this is not used more than once
-				window->instruction1->assignee->use_count <= 1 &&
-				variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-				//Grab this out for convenience
-				instruction_t* store_operation = window->instruction2;
-
-				//Now we'll modify this to be an assignment const statement
-				store_operation->op1_const = window->instruction1->op1_const;
-
-				//Modify the type of the assignment
-				store_operation->statement_type = THREE_ADDR_CODE_STORE_CONST_STATEMENT;
-
-				//The use count here now goes down by one
-				store_operation->op1->use_count--;
-
-				//Make sure that we now null out op1
-				store_operation->op1 = NULL;
-
-				//Once we've done this, the first statement is entirely useless
-				delete_statement(window->instruction1);
-
-				//Once we've deleted the statement, we'll need to completely rewire the block
-				//The binary operation is now the start
-				reconstruct_window(window, store_operation);
-			
-				//Whatever happened here, we did change something
-				changed = TRUE;
-			}
-		}
-	}
-
-	/**
-	 * ================= Handling redundant multiplications ========================
-	 * t27 <- 5
-	 * t27 <- t27 * 68
-	 *
-	 * Can become: t27 <- 340
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
-		&& window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == STAR
-		&& window->instruction1->assignee->is_temporary == TRUE
-		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
-
-		//We can multiply the constants now. The result will be stored in op1 const
-		multiply_constants(window->instruction2->op1_const, window->instruction1->op1_const);
-
-		//Instruction 2 is now simply an assign const statement
-		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-		//Op1 is now used one less time
-		window->instruction2->op1->use_count--;
-
-		//Null out where the old value was
-		window->instruction2->op1 = NULL;
-
-		//Instruction 1 is now completely useless *if* that was the only time that
-		//his assignee was used. Otherwise, we need to keep it in
-		if(window->instruction1->assignee->use_count == 0){
-			delete_statement(window->instruction1);
-		}
-
-		//Reconstruct the window with instruction 2 as the start
-		reconstruct_window(window, window->instruction2);
-
-		//This counts as a change
-		changed = TRUE;
-	}
-
-
-	/**
-	 * --------------------- Redundnant copying elimination ------------------------------------
-	 *  Let's now fold redundant copies. Here is an example of a redundant copy
-	 * 	t10 <- x_2
-	 * 	t11 <- t10
-	 *
-	 * This can be folded into simply:
-	 * 	t11 <- x_2
-	 */
-	//If we have two consecutive assignment statements
-	if(window->instruction2 != NULL 
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& can_assignment_instruction_be_removed(window->instruction1) == TRUE
-		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
-		//Grab these out for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-		
-		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE
-			//And the assignee of the first statement is only ever used once
-			&& first->assignee->use_count <= 1){
-
-			//Manage our use state here
-			replace_variable(second->op1, first->op1);
-
-			//Reorder the op1's
-			second->op1 = first->op1;
-
-			//We can now delete the first statement
-			delete_statement(first);
-
-			//Reconstruct the window with second as the start
-			reconstruct_window(window, second);
-				
-			//Regardless of what happened, we did see a change here
-			changed = TRUE;
-		}
-	}
-
-	/**
-	 * --------------------- Folding constant assignments in arithmetic expressions ----------------
-	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
-	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
-	 *
-	 * NOTE: This does not work for division or modulus instructions
-	 */
-	//Check first with 1 and 2
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE
-			//Validate that the use count is less than 1
-			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction2, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
-			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
-			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
-			//Grab this out for convenience
-			instruction_t* const_assignment = window->instruction1;
-
-			//Let's mark that this is now a binary op with const statement
-			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-			//op2 is now used one less time
-			window->instruction2->op2->use_count--;
-
-			//We'll want to NULL out the secondary variable in the operation
-			window->instruction2->op2 = NULL;
-			
-			//We'll replace it with the op1 const that we've gotten from the prior instruction
-			window->instruction2->op1_const = const_assignment->op1_const;
-
-			//We can now delete the very first statement
-			delete_statement(window->instruction1);
-
-			//Reconstruct the window with instruction2 as the start
-			reconstruct_window(window, window->instruction1);
-
-			//This does count as a change
-			changed = TRUE;
-		}
-	}
-
-	//Now check with 1 and 3. The prior compression may have made this more worthwhile
-	if(window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE
-			//Validate that this is not being used more than once
-			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction3, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
-			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
-			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
-			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
-			//Grab this out for convenience
-			instruction_t* const_assignment = window->instruction1;
-
-			//Let's mark that this is now a binary op with const statement
-			window->instruction3->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-			//Op2 for instruction3 is now used one less time
-			window->instruction3->op2->use_count--;
-
-			//We'll want to NULL out the secondary variable in the operation
-			window->instruction3->op2 = NULL;
-			
-			//We'll replace it with the op1 const that we've gotten from the prior instruction
-			window->instruction3->op1_const = const_assignment->op1_const;
-
-			//We can now delete the very first statement
-			delete_statement(window->instruction1);
-
-			//Reconstruct the window with instruction2 as the seed
-			reconstruct_window(window, window->instruction2);
-
-			//This does count as a change
-			changed = TRUE;
-		}
-	}
-
-
-	/**
-	 * ==================== Op1 Assignment Folding for expressions ======================
-	 * If we have expressions like:
-	 *   t3 <- x_0
-	 *   t4 <- y_0
-	 *   t5 <- t3 && t4
-	 *
-	 *  We need to recognize opportunities for assignment folding. And ideal optimization would transform
-	 *  this into:
-	 *   
-	 *   t5 <- x_0 && y_0
-	 *
-	 *   This rule will do the first part of that
-	 *
-	 *  We will seek to do that in this optimization
-	 *
-	 *
-	 *  Note that this is just for op1 assignment folding. It is generall much more restrictive
-	 *  because so many operations overwrite their op1(think add, subtract), and those would therefore
-	 *  be *invalid* for this
-	 */
-	//Check first with 1 and 2. We need a binary operation that has a comparison operator in it
-	if(is_instruction_binary_operation(window->instruction2) == TRUE
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& is_operation_valid_for_op1_assignment_folding(window->instruction2->op) == TRUE){
-
-		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE 
-			//Make sure that this is the only use
-			&& window->instruction1->assignee->use_count <= 1
-			&& window->instruction1->op1->is_temporary == FALSE
-			&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-
-			//Set these two to be equal
-			window->instruction2->op1 = window->instruction1->op1;
-
-			//We can now delete the very first statement
-			delete_statement(window->instruction1);
-
-			//Reconstruct the window with instruction2 as the seed
-			reconstruct_window(window, window->instruction2);
-
-			//This does count as a change
-			changed = TRUE;
-		}
-	}
-
-
-	/**
-	 * -------------------- Arithmetic expressions with assignee the same as op1 ---------------------
-	 *  There will be times where we generate arithmetic expressions like this:
-	 *
-	 * 	t19 <- a_3
-	 * 	t20 <- t19 + y_0
-	 * 	a_4 <- t20
-	 *
-	 *  Since a_4 and a_3 are the same variable(register), this is an ideal candidate to be compressed
-	 *  like
-	 *
-	 *  a_4 <- a_3 + y_0
-	 *
-	 * This 3-instruction large optimizaion will look for this
-	 */
-	//If the first statement is an assignmehnt statement, and the second statement is a binary operation,
-	//and the third statement is an assignment statement, we have our chance to optimize
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& is_instruction_binary_operation(window->instruction2) == TRUE
-		&& window->instruction3 != NULL
-		&& window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-
-		//Grab these out for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-		instruction_t* third = window->instruction3;
-
-		//We still need further checks to see if this is indeed the pattern above. If
-		//we survive all of these checks, we know that we're set to optimize
-		if(first->assignee->is_temporary == TRUE && third->assignee->is_temporary == FALSE &&
-			first->assignee->use_count <= 2 &&
-			variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE &&
-	 		variables_equal(first->assignee, second->op1, FALSE) == TRUE &&
-	 		variables_equal(second->assignee, third->op1, FALSE) == TRUE){
-
-			//Manage our use state here
-			replace_variable(second->op1, first->op1);
-
-			//The second op1 will now become the first op1
-			second->op1 = first->op1;
-
-			//And the second's assignee will now be the third's assignee
-			second->assignee = third->assignee;
-
-			//Following this, all we need to do is delete and rearrange
-			delete_statement(first);
-			delete_statement(third);
-
-			//Reconstruct the window with second as the new instruction1
-			reconstruct_window(window, second);
-
-			//Regardless of what happened, we did change the window, so we'll
-			//update this
-			changed = TRUE;
-		}
-	}
-	
-
-	/**
-	 * --------------------- Folding constant assingments in LEA statements ----------------------
-	 *  In cases where we have a lea statement that uses a constant which is assigned to a temporary
-	 *  variable right before it, we should eliminate that unnecessary assingment by folding that constant
-	 *  into the lea statement.
-	 *
-	 *  We can also go one further by performing the said multiplication to get out the value that we want
-	 *
-	 * NOTE: This will actually produce invalid binary operation instructions in the short run. However, 
-	 * when the instruction selector gets to them, we will turn them into memory move operations
-	 */
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
-		if(window->instruction1->assignee->is_temporary == TRUE &&
-	 		variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
-
-			//What we can do is rewrite the LEA statement all together as a simple addition statement. We'll
-			//evaluate the multiplication of the constant and lea multiplicator at comptime
-			u_int64_t address_offset = window->instruction2->lea_multiplicator;
-
-			//Let's now grab what the constant is
-			three_addr_const_t* constant = window->instruction1->op1_const;
-			
-			//What kind of constant do we have?
-			if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U){
-				//If this is a the case, we'll multiply the address const by the int value
-				address_offset *= constant->constant_value.integer_constant;
-			//Otherwise, this has to be a long const
-			} else {
-				address_offset *= constant->constant_value.long_constant;
-			}
-
-			//Once we've done this, the address offset is now properly multiplied. We'll reuse
-			//the constant from operation one, and convert the lea statement into a BIN_OP_WITH_CONST
-			//statement. This saves a lot of loading and arithmetic operations
-		
-			//This is now a long const
-			constant->const_type = LONG_CONST;
-
-			//Set this to be the address offset
-			constant->constant_value.long_constant = address_offset;
-
-			//Add it into instruction 2
-			window->instruction2->op1_const = constant;
-
-			//We'll now transfrom instruction 2 into a bin op with const
-			window->instruction2->op2 = NULL;
-			window->instruction2->op = PLUS;
-			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-			//We can now scrap the first instruction entirely
-			delete_statement(window->instruction1);
-
-			//Reconstruct the window. Instruction 2 is the new start
-			reconstruct_window(window, window->instruction2);
-
-			//This counts as a change 
-			changed = TRUE;
-		}
-	}
-
-
-	/**
-	 * =================== Adjacent assignment statement folding ====================
-	 * If we have a binary operation or a bin op with const statement followed by an
-	 * assignment of that result to a non-temporary variable, we have an opportunity
-	 * to simplify. This would lead nicely into the following optimizations below
-	 *
-	 * Example: 
-	 * t12 <- a_2 + 0x1
-	 * a_3 <- t12
-	 * could become
-	 * a_3 <- a_2 + 0x1
-	 */
-
-	//If the first instruction is a binary operation and the immediately following instruction is an assignment
-	//operation, this is a potential match
-	if(is_instruction_binary_operation(window->instruction1) == TRUE
-		&& window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-		//For convenience/memory ease
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-
-		//If we have a temporary start variable, a non temp end variable, and the variables
-		//match in the corresponding spots, we have our opportunity
-		if(first->assignee->is_temporary == TRUE && second->assignee->is_temporary == FALSE
-			&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
-			//Special no-ssa comparison, we expect that the ssa would be different due to assignment levels
-			&& variables_equal_no_ssa(second->assignee, first->op1, FALSE) == TRUE){
-
-			//We will now take the second variables assignee to be the first statements assignee
-			first->assignee = second->assignee;
-
-			//That's really all we need to do for the first one. Now, we need to delete the second
-			//statement entirely
-			delete_statement(second);
-
-			//We'll reconstruct the window here, the first is still the first
-			reconstruct_window(window, first);
-
-			//Regardless of what happened here, we did change the window so we'll set the flag
-			changed = TRUE;
-
-		//We could also have a scenario like this that will apply only to logical combination(&& and ||) operators.
-		/**
-		 * t33 <- t34 && t35
-		 * x_0 <- t33
-		 *
-		 * Because of the way that we handle logical and, we can actuall eliminate the second assignment
-		 * with no issue
-		 * x_0 <- t34 && t35
-		 *
-		 * NOTE: This does not work for logical or, due to the way we handle logical OR
-		 */
-		} else if(first->op == DOUBLE_AND
-				&& first->assignee->is_temporary == TRUE 
-				&& variables_equal(first->assignee, second->op1, FALSE) == TRUE){
-
-			//Set these to be equal
-			first->assignee = second->assignee;
-
-			//We can now scrap the second statement
-			delete_statement(second);
-
-			//We'll reconstruct the window here, the first is still the first
-			reconstruct_window(window, first);
-
-			//This counts as a change
-			changed = TRUE;
-		}
-	}
-
-
-	/**
-	 * ==================== On-the-fly logical and/or ========================
-	 * t27 <- 5
-	 * t27 <- t27 && 68
-	 *
-	 * t27 <- 1
-	 *
-	 * Or
-	 * t27 <- 5
-	 * t27 <- t27 || 68
-	 *
-	 * t27 <- 1
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
-		&& window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& (window->instruction2->op == DOUBLE_AND || window->instruction2->op == DOUBLE_OR)
-		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
-
-		//We will handle the constants accordingly
-		if(window->instruction2->op == DOUBLE_OR) {
-			logical_or_constants(window->instruction2->op1_const, window->instruction1->op1_const);
-		} else {
-			logical_and_constants(window->instruction2->op1_const, window->instruction1->op1_const);
-		}
-
-		//Instruction 2 is now simply an assign const statement
-		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-		//Op1 is now used one less time
-		window->instruction2->op1->use_count--;
-
-		//Null out where the old value was
-		window->instruction2->op1 = NULL;
-
-		//Instruction 1 is now completely useless *if* that was the only time that
-		//his assignee was used. Otherwise, we need to keep it in
-		if(window->instruction1->assignee->use_count == 0){
-			delete_statement(window->instruction1);
-		}
-
-		//Reconstruct the window with instruction 2 as the start
-		reconstruct_window(window, window->instruction2);
-
-		//This counts as a change
-		changed = TRUE;
-	}
-
-
-	/**
-	 * ======================= Logical And operation simplifying ==========================
-	 * t2 <- t4 && 0 === set t2 to be 0
-	 * t2 <- t4 && (non-zero) === test t4,t4 and setne t2 if t4 isn't 0
-	 *
-	 * It is safe to assume that a logical and binary operation with constant is always
-	 * simplifiable
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction1->op == DOUBLE_AND){
-		//For convenience extract this
-		instruction_t* current_instruction = window->instruction1;
-
-		//First option - the value is 0
-		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
-			//It's now just an assign statement
-			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-			//Wipe out op1
-			if(current_instruction->op1 != NULL){
-				current_instruction->op1->use_count--;
-				current_instruction->op1 = NULL;
-			}
-
-		//Otherwise, the value is not 0
-		} else {
-			//First we add a test instruction
-			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
-						
-			//The result of this will be used for our set instruction
-			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
-			//Subtly hook this in, even though it's not needed
-			setne_instruction->op1 = test_instruction->assignee;
-
-			//Assign the two over
-			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
-
-			//Insert these both in beforehand
-			insert_instruction_before_given(test_instruction, current_instruction);
-			insert_instruction_before_given(setne_instruction, current_instruction);
-			insert_instruction_before_given(assignment, current_instruction);
-
-			//And then remove this now useless current instruction
-			delete_statement(current_instruction);
-
-			//Reconstruct the window based on the set instruction
-			reconstruct_window(window, assignment);
-		}
-
-		//We changed something
-		changed = TRUE;
-	}
-
-
-	/**
-	 * ======================= Logical OR operation simplifying ==========================
-	 * t2 <- t4 || 0 === test t4, t4 and setne t2 if t4 isn't 0
-	 * t2 <- t4 || (non-zero) === t2 <- 1
-	 *
-	 * It is safe to assume that a logical and binary operation with constant is always
-	 * simplifiable
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction1->op == DOUBLE_OR){
-		//For convenience extract this
-		instruction_t* current_instruction = window->instruction1;
-
-		//First option - the value is 0. If it is, then anything else is irrelevant
-		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
-			//First we add a test instruction
-			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
-						
-			//The result of this will be used for our set instruction
-			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
-			//Subtly hook this in, even though it's not needed
-			setne_instruction->op1 = test_instruction->assignee;
-
-			//Assign the two over
-			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
-
-			//Insert these both in beforehand
-			insert_instruction_before_given(test_instruction, current_instruction);
-			insert_instruction_before_given(setne_instruction, current_instruction);
-			insert_instruction_before_given(assignment, current_instruction);
-
-			//And then remove this now useless current instruction
-			delete_statement(current_instruction);
-
-			//Reconstruct the window based on the set instruction
-			reconstruct_window(window, assignment);
-
-		//Otherwise, the value is not 0
-		} else {
-			//It's now just an assign statement
-			current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-			//Wipe out op1
-			if(current_instruction->op1 != NULL){
-				current_instruction->op1->use_count--;
-				current_instruction->op1 = NULL;
-			}
-
-			//Set the constant's value to 1
-			current_instruction->op1_const->constant_value.long_constant = 1;
-		}
-
-		//We changed something
-		changed = TRUE;
-	}
-
-
-
-	/**
-	 * ================== Arithmetic Operation Simplifying ==========================
-	 * After we do all of this folding, we can stand to ask the question of if we 
-	 * have any simple arithmetic operations that can be folded together. Our first
-	 * example of this is arithmetic operations with 0
-	 *
-	 * There are many cases here which allow simplification. Here are the first
-	 * few with zero:
-	 *
-	 * t2 <- t4 + 0 can just become t2 <- t4
-	 * t2 <- t4 - 0 can just become t2 <- t4
-	 * t2 <- t4 * 0 can just become t2 <- 0 
-	 * t2 <- t4 / 0 will stay the same, but we will produce an error
-	 * 
-	 * Logical operators(somewhat different)
-	 * t2 <- t4 || 0 === test t4,t4 and setne t2(if t4 isn't 0)
-	 * t2 <- t4 || (non-zero) === set t2 to be 1
-	 * 
-	 *
-	 * These may seem trivial, but this is not so uncommon when we're doing address calculation
-	 */
-
-	//Shove these all into an array for selecting
-	instruction_t* instructions[3] = {window->instruction1, window->instruction2, window->instruction3};
-
-	//The current instruction pointer
-	instruction_t* current_instruction;
-
-	//If we have a bin op with const statement, we have an opportunity
-	for(u_int16_t i = 0; i < 3; i++){
-		//Grab the current instruction out
-		current_instruction = instructions[i];
-
-		//Skip if NULL
-		if(current_instruction == NULL){
-			continue;
-		}
-
-		/**
-		 * We have a chance to do some optimizations if we see a BIN_OP_WITH_CONST. It will
-		 * have been primed for us by the constant folding portion. Now, we'll search and see
-		 * if we're able to simplify some instructions
-		 */
-		if(current_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-			//If it isn't in the list here, we won't be considering it and as such shouldn't waste time
-			//processing
-			switch(current_instruction->op){
-				case PLUS:
-				case R_SHIFT:
-				case L_SHIFT:
-				case MINUS:
-				case STAR:
-				case F_SLASH:
-				case MOD:
-					break;
-				default:
-					continue;
-			}
-
-			//Grab this out for convenience
-			three_addr_const_t* constant = current_instruction->op1_const;
-
-			//If this is 0, then we can optimize
-			if(is_constant_value_zero(constant) == TRUE){
-				//Switch based on current instruction's op
-				switch(current_instruction->op){
-					//If we made it out of this conditional with the flag being set, we can simplify.
-					//If this is the case, then this just becomes a regular assignment expression
-					case PLUS:
-					case MINUS:
-					case L_SHIFT:
-					case R_SHIFT:
-						//We're just assigning here
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-						//Wipe the values out
-						current_instruction->op1_const = NULL;
-
-						//Also scrap the op
-						current_instruction->op = BLANK;
-
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					case STAR:
-						//Now we're assigning a const
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-						//The constant is still the same thing(0), let's just wipe out the ops
-						if(current_instruction->op1 != NULL){
-							current_instruction->op1->use_count--;
-							current_instruction->op1 = NULL;
-						}
-
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					//Just do nothing here
-					default:
-						break;
-				}
-
-
-			//Notice how we do NOT mark any change as true here. This is because, even though yes we
-			//did change the instructions, the sliding window itself did not change at all. This is
-			//an important note as if we did mark a change, there are cases where this could
-			//cause an infinite loop
-			
-			//What if this is a 1? Well if it is, we can transform this statement into an inc or dec statement
-			//if it's addition or subtraction, or we can turn it into a simple assignment statement if it's multiplication
-			//or division
-			} else if(is_constant_value_one(constant) == TRUE){
-				//Switch based on the op in the current instruction
-				switch(current_instruction->op){
-					//If it's an addition statement, turn it into an inc statement
-					/**
-				 	* NOTE: for addition and subtraction, since we'll be turning this into inc/dec statements, we'll
-				 	* want to first make sure that the assignees are not temporary variables. If they are temporary variables,
-				 	* then doing this would mess the whole operation up
-				 	*/
-					case PLUS:
-						//If it's temporary, we jump out
-						if(current_instruction->assignee->is_temporary == TRUE){
-							break;
-						}
-
-						//Now turn it into an inc statement
-						current_instruction->statement_type = THREE_ADDR_CODE_INC_STMT;
-						//Wipe the values out
-						current_instruction->op1_const = NULL;
-						current_instruction->op = BLANK;
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					case MINUS:
-						//If it's temporary, we jump out
-						if(current_instruction->assignee->is_temporary == TRUE){
-							break;
-						}
-
-						//Change what the class is
-						current_instruction->statement_type = THREE_ADDR_CODE_DEC_STMT;
-						//Wipe the values out
-						current_instruction->op1_const = NULL;
-						current_instruction->op = BLANK;
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					//These are both the same - handle a 1 multiply, 1 divide
-					case STAR:
-					case F_SLASH:
-						//Change it to a regular assignment statement
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-						//Wipe the operator out
-						current_instruction->op1_const = NULL;
-						current_instruction->op = BLANK;
-						//We changed something
-						changed = TRUE;
-
-						break;
-
-					//Modulo by 1 will always result in 0
-					case MOD:
-						//Change it to a regular assignment statement
-						current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-						//This is blank
-						current_instruction->op = BLANK;
-
-						//We no longer even need our op1
-						if(current_instruction->op1 != NULL){
-							current_instruction->op1->use_count--;
-							current_instruction->op1 = NULL;
-						}
-
-						//We can modify op1 const to just be 0 now. This is lazy but it
-						//works, we'll just 0 out all 64 bits
-						current_instruction->op1_const->constant_value.long_constant = 0;
-
-						//We changed something
-						changed = TRUE;
-
-					//Just bail out
-					default:
-						break;
-				}
-
-			//What if we have a power of 2 here? For any kind of multiplication or division, this can
-			//be optimized into a left or right shift if we have a compatible type(not a float)
-			} else if(is_constant_power_of_2(constant) == TRUE){
-				//If we have a star that's a left shift
-				if(current_instruction->op == STAR){
-					//Multiplication is a left shift
-					current_instruction->op = L_SHIFT;
-					//Update the constant with its log2 value
-					update_constant_with_log2_value(current_instruction->op1_const);
-					//We changed something
-					changed = TRUE;
-
-				} else if(current_instruction->op == F_SLASH){
-					//Division is a right shift
-					current_instruction->op = R_SHIFT;
-					//Update the constant with its log2 value
-					update_constant_with_log2_value(current_instruction->op1_const);
-					//We changed something
-					changed = TRUE;
-				}
-			}
-		}
-	}
-
-	/**
-	 * ================== Simplifying Consecutive Binary Operation with Constant statements ==============
-	 * Here is an example:
-	 * t2 <- arr_0 + 24
-	 * t4 <- t2 + 4
-	 * 
-	 * We could turn this into
-	 * t4 <- arr_0 + 28
-	 *
-	 * This is incredibly common with array address calculations, which is why we do it. We focus on the special case
-	 * of two consecutive additions here for this reason. Any other two consecutive operations are usually quite uncommon
-	 */
-	//If instructions 1 and 2 are both BIN_OP_WITH_CONST
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2->op == PLUS && window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
-		&& window->instruction1->op == PLUS){
-
-		//Let's do this for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
-
-		//Calculate this for now in case we need it
-		generic_type_t* final_type = types_assignable(second->op1_const->type, first->op1_const->type);
-
-		//If these are the same variable and the types are compatible, then we're good to go
-		if(variables_equal(first->assignee, second->op1, FALSE) == TRUE && final_type != NULL){
-			//What we'll do first is add the two constants. The resultant constant will be stored
-			//in the second instruction's constant
-			second->op1_const = add_constants(second->op1_const, first->op1_const);
-
-			//Manage our use state here
-			replace_variable(second->op1, first->op1);
-
-			//Now that we've done that, we'll modify the second equation's op1 to be the first equation's op1
-			second->op1 = first->op1;
-
-			//Now that this is done, we can remove the first equation
-			delete_statement(first);
-
-			//We'll reconstruct the window with the second instruction being the
-			//first instruction now
-			reconstruct_window(window, second);
-
-			//This counts as a change because we deleted
-			changed = TRUE;
-		}
-	}
-
-	/**
-	 * There is a chance that we could be left with statements that assign to themselves
-	 * like this:
-	 *  t11 <- t11
-	 *
-	 *  These are guaranteed to be useless, so we can eliminate them
-	 */
-	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		//If we get here, we have a temp assignment who is completely useless, so we delete
-		&& window->instruction1->assignee->is_temporary == TRUE
-		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == TRUE){
-
-		//Delete it
-		delete_statement(window->instruction1);
-
-		//Rebuild now based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//Counts as a change
-		changed = TRUE;
-	}
-
-
-	/**
-	 * ============================== Redundant copy folding =======================
-	 * If we have some random temp assignment that's in the middle of everything, we can
-	 * fold it to get rid of it
-	 *
-	 * t14 <- t12 <----------- assignment that's leftover from other simplifications
-	 * (t14) <- 2
-	 *
-	 * This can become:
-	 * (t12) <- 2
-	 *
-	 * We do need to be careful to duplicate the type for the indirection when we do this
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& window->instruction2 != NULL
-		&& is_instruction_assignment_operation(window->instruction2) == TRUE
-		&& window->instruction1->op1->is_temporary == TRUE
-		&& window->instruction1->op1->indirection_level == 0 	//Ensure that this really is a pure copy
-		&& window->instruction1->assignee->indirection_level == 0
-		&& window->instruction2->assignee->indirection_level == 1 // This one is an indirection
-		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
-
-		//Emit this as a copy
-		three_addr_var_t* new_assignee = emit_var_copy(window->instruction1->op1);
-
-		//Copy over the assignee's indirection level
-		new_assignee->indirection_level = window->instruction2->assignee->indirection_level;
-
-		//Copy over the value of the type - VERY IMPORTANT - the type may be different based on
-		//what the internal field is
-		new_assignee->type = window->instruction2->assignee->type;
-		
-		//Now instruction2's assignee is this
-		window->instruction2->assignee = new_assignee;
-
-		//Now we delete this
-		delete_statement(window->instruction1);
-
-		//And reconstruct the window based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//Flag that we've changed
-		changed = TRUE;
-	}
-
-
-	/**
-	 * There is a chance that we could be left with statements that assign to themselves
-	 * like this:
-	 *  t11 <- 2
-	 *
-	 *  Where t11 has no real usage at all. Since this is the case, we can eliminate the whole
-	 *  operation
-	 *
-	 *  These are guaranteed to be useless, so we can eliminate them
-	 */
-	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		//If we get here, we have a temp assignment who is completely useless, so we delete
-		&& window->instruction1->assignee->is_temporary == TRUE
-		//Ensure that it's not being used at all
-		&& window->instruction1->assignee->use_count == 0
-		//We can't mess with memory movement instructions
-		&& window->instruction1->assignee->indirection_level == 0){
-
-		//Delete it
-		delete_statement(window->instruction1);
-
-		//Rebuild now based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//Counts as a change
-		changed = TRUE;
-	}
-
-
-	/**
-	 * If we have a memory address statement where the stack address is 0, we can
-	 * simply make this into an assignment instruction. We don't need the normal lea
-	 * that others have
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT
-		// Ignore global vars, they don't have stack addresses
-		&& window->instruction1->op1->linked_var->membership != GLOBAL_VARIABLE){
-		//We can reorgnaize this into an assignment instruction
-		if(window->instruction1->op1->stack_region->base_address == 0){
-			//Reset the type
-			window->instruction1->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-			//The op1 is now the stack pointer
-			window->instruction1->op1 = cfg->stack_pointer;
-		}
-	}
-
-	/**
-	 * When we have a case like this for address calculations:
-	 * t32 <- stack_pointer
-	 * t35 <- t32 + 32
-	 *
-	 * We can simply make this:
-	 * t35 <- t32 + 32
-	 */
-
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& window->instruction2 != NULL
-		&& (window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT)
-		&& window->instruction1->assignee->is_temporary == TRUE //It has to be a temp var otherwise we shouldn't remove it
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
-		&& window->instruction1->op1 == cfg->stack_pointer){
-		
-		//Delete the first statement
-		delete_statement(window->instruction1);
-
-		//Set instruction2's op1 to be the stack pointer
-		window->instruction2->op1 = cfg->stack_pointer;
-
-		//Rebuild it
-		reconstruct_window(window, window->instruction1);
-
-		//This counts as a change
-		changed = TRUE;
-	}
-
-
-	//Return whether or not we changed the block return changed;
-	return changed;
-}
-
-
-/**
- * Make one pass through the sliding window for simplification. This could include folding,
- * etc. Simplification happens first over the entirety of the OIR using the sliding window
- * technique. Following this, the instruction selector runs over the same area
- */
-static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* head){
-	//First we'll grab the head
-	basic_block_t* current = head;
-
-	u_int8_t window_changed = FALSE;
-	u_int8_t changed;
-
-	//So long as this isn't NULL
-	while(current != NULL){
-		changed = FALSE;
-		
-		//Initialize the sliding window(very basic, more to come)
-		instruction_window_t window = initialize_instruction_window(current);
-
-		//Run through and simplify everything we can
-		do{
-			//Simplify the window
-			changed = simplify_window(cfg, &window);
-
-			//Set this flag if it was changed
-			if(changed == TRUE){
-				window_changed = TRUE;
-			}
-
-			//And slide it
-			slide_window(&window);
-
-		//So long as we aren't at the end
-		} while(window.instruction1 != NULL);
-
-
-		//Advance to the direct successor
-		current = current->direct_successor;
-	}
-
-	//Give back whether or not it's been changed
-	return window_changed;
-}
-
-
-/**
- * We'll make use of a while change algorithm here. We make passes
- * until we see the first pass where we experience no chnage at all.
- */
-static void simplify(cfg_t* cfg, basic_block_t* head){
-	while(simplifier_pass(cfg, head) == TRUE);
-}
 
 
 /**
@@ -4879,74 +4954,6 @@ static basic_block_t* order_blocks(cfg_t* cfg){
 }
 
 
-/**
- * Print a block our for reading
-*/
-static void print_ordered_block(basic_block_t* block, instruction_printing_mode_t mode){
-	//If this is some kind of switch block, we first print the jump table
-	if(block->jump_table != NULL){
-		print_jump_table(stdout, block->jump_table);
-	}
-
-	//Switch here based on the type of block that we have
-	switch(block->block_type){
-		//Function entry blocks need extra printing
-		case BLOCK_TYPE_FUNC_ENTRY:
-			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_stack_data_area(&(block->function_defined_in->data_area));
-			break;
-
-		//By default just print the name
-		default:
-			printf(".L%d:\n", block->block_id);
-			break;
-	}
-
-	//Now grab a cursor and print out every statement that we 
-	//have
-	instruction_t* cursor = block->leader_statement;
-
-	//So long as it isn't null
-	while(cursor != NULL){
-		//Based on what mode we're given here, we call the appropriate
-		//print statement
-		if(mode == PRINT_THREE_ADDRESS_CODE){
-			//Hand off to printing method
-			print_three_addr_code_stmt(stdout, cursor);
-		} else {
-			print_instruction(stdout, cursor, PRINTING_VAR_IN_INSTRUCTION);
-		}
-
-
-		//Move along to the next one
-		cursor = cursor->next_statement;
-	}
-
-	//For spacing
-	printf("\n");
-}
-
-
-/**
- * Run through using the direct successor strategy and print all ordered blocks.
- * We print much less here than the debug printer in the CFG, because all dominance
- * relations are now useless
- */
-static void print_ordered_blocks(cfg_t* cfg, basic_block_t* head_block, instruction_printing_mode_t mode){
-	//Run through the direct successors so long as the block is not null
-	basic_block_t* current = head_block;
-
-	//So long as this one isn't NULL
-	while(current != NULL){
-		//Print it
-		print_ordered_block(current, mode);
-		//Advance to the direct successor
-		current = current->direct_successor;
-	}
-
-	//Print all global variables after the blocks
-	print_all_global_variables(stdout, cfg->global_variables);
-}
 
 
 /**
