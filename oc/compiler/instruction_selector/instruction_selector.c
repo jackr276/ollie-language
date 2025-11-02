@@ -470,7 +470,6 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
 
 			//If this is unsigned, we cannot do this
 			if(is_type_signed(instruction->assignee->type) == FALSE){
-				//TODO ISSUE IS SOMETHING OVER HERE
 				return FALSE;
 			}
 
@@ -3309,10 +3308,6 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 static void handle_unsigned_multiplication_instruction(instruction_window_t* window){
 	//Instruction 1 is the multiplication instruction
 	instruction_t* multiplication_instruction = window->instruction1;
-
-	printf("HANDLING:\n");
-	print_three_addr_code_stmt(stdout, multiplication_instruction);
-	printf("\n\n");
 
 	//We'll need to know the variables size
 	variable_size_t size = get_type_size(multiplication_instruction->assignee->type);
