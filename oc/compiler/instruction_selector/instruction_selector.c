@@ -49,6 +49,152 @@ struct instruction_window_t{
 
 
 /**
+ * Does the block that we're passing in end in a direct(jmp) jump to
+ * the very next block. If so, we'll return what block the jump goes to.
+ * If not, we'll return null.
+ */
+static basic_block_t* does_block_end_in_jump(basic_block_t* block){
+	//If it's null then leave
+	if(block->exit_statement == NULL){
+		return NULL;
+	}
+
+	//Go based on our type here
+	switch(block->exit_statement->statement_type){
+		//Direct jump, just use the if block
+		case THREE_ADDR_CODE_JUMP_STMT:
+			return block->exit_statement->if_block;
+
+		//In a branch statement, the else block is
+		//the direct jump
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			return block->exit_statement->else_block;
+
+		//By default no
+		default:
+			return NULL;
+	}
+}
+
+
+/**
+ * The first step in our instruction selector is to get the instructions stored in
+ * a straight line in the exact way that we want them to be. This is done with a breadth-first
+ * search traversal of the simplified CFG that has been optimized. 
+ *
+ * One special consideration we'll take is ordering nodes with a given jump next to eachother.
+ * For example, if block .L15 ends in a direct jump to .L16, we'll endeavor to have .L16 right
+ * after .L15 so that in a later stage, we can eliminate that jump.
+ */
+static basic_block_t* order_blocks(cfg_t* cfg){
+	//We'll first wipe the visited status on this CFG
+	reset_visited_status(cfg, TRUE);
+	
+	//We will perform a breadth first search and use the "direct successor" area
+	//of the blocks to store them all in one chain
+	
+	//The current block
+	basic_block_t* previous;
+	//The starting point that all traversals will use
+	basic_block_t* head_block;
+
+	//Initialize these to null first
+	previous = head_block = NULL;
+	
+	//We'll need to use a queue every time, we may as well just have one big one
+	heap_queue_t* queue = heap_queue_alloc();
+
+	//For each function
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+		//Grab the function block out
+		basic_block_t* func_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
+
+		//This function start block is the begging of our BFS	
+		enqueue(queue, func_block);
+		
+		//So long as the queue is not empty
+		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+			//Grab this block off of the queue
+			basic_block_t* current = dequeue(queue);
+
+			//If previous is NULL, this is the first block
+			if(previous == NULL){
+				previous = current;
+				//This is also the head block then
+				head_block = previous;
+			//We need to handle the rare case where we reach two of the same blocks(maybe the block points
+			//to itself) but neither have been visited. We make sure that, in this event, we do not set the
+			//block to be it's own direct successor
+			} else if(previous != current && current->visited == FALSE){
+				//We'll add this in as a direct successor
+				previous->direct_successor = current;
+
+				//Do we end in a jump?
+				basic_block_t* end_jumps_to = does_block_end_in_jump(previous);
+
+				//If we do AND what we're jumping to is the direct successor, then we'll
+				//delete the jump statement as it is now unnecessary
+				if(end_jumps_to == previous->direct_successor){
+					//Get rid of this jump as it's no longer needed
+					//delete_statement(previous->exit_statement);
+				}
+
+				//Add this in as well
+				previous = current;
+			}
+
+			//Make sure that we flag this as visited
+			current->visited = TRUE;
+
+			//Let's first check for our special case - us jumping to a given block as the very last statement. If
+			//this turns back something that isn't null, it'll be the first thing we add in
+			basic_block_t* direct_end_jump = does_block_end_in_jump(current);
+
+			//If this is the case, we'll add it in first
+			if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
+				//Add it into the queue
+				enqueue(queue, direct_end_jump);
+			}
+
+			//Now we'll go through each of the successors in this node
+			for(u_int16_t idx = 0; current->successors != NULL && idx < current->successors->current_index; idx++){
+				//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
+				//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
+
+				//Grab the successor
+				basic_block_t* successor = dynamic_array_get_at(current->successors, idx);
+
+				//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
+				if(successor == direct_end_jump){
+					continue;
+				}
+
+				//If the block is completely empty(function end block), we'll also skip
+				if(successor->leader_statement == NULL){
+					successor->visited = TRUE;
+					continue;
+				}
+
+				//Otherwise it's not, so we'll add it in
+				if(successor->visited == FALSE){
+					enqueue(queue, successor);
+				}
+			}
+		}
+	}
+
+	//Destroy the queue when done
+	heap_queue_dealloc(queue);
+
+	//Set this for later on
+	cfg->head_block = head_block;
+
+	//Give back the head block
+	return head_block;
+}
+
+
+/**
  * Print a block our for reading
 */
 static void print_ordered_block(basic_block_t* block, instruction_printing_mode_t mode){
@@ -128,6 +274,52 @@ static void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
 
 	//And update the new one's use count
 	new->use_count++;
+}
+
+
+/**
+ * Reconstruct the instruction window after some kind of deletion/reordering
+ *
+ * The "seed" is always the first instruction, it's what we use to set the rest up
+ */
+static void reconstruct_window(instruction_window_t* window, instruction_t* seed){
+	//Instruction 1 is always the seed
+	window->instruction1 = seed;
+
+	//The second one always comes after here
+	instruction_t* second = seed->next_statement;
+
+	//This is always the next statement
+	window->instruction2 = second;
+
+	//If second is not null, third is just what is after second
+	if(second != NULL){
+		window->instruction3 = second->next_statement;
+	} else {
+		window->instruction3 = NULL;
+	}
+}
+
+
+/**
+ * Advance the window up by 1 instruction. This means that the lowest instruction slides
+ * out of our window, and the one next to the highest instruction slides into it
+ */
+static instruction_window_t* slide_window(instruction_window_t* window){
+	//Instruction1 becomes instruction 2
+	window->instruction1 = window->instruction2;
+	//Instruction2 becomes instruction3
+	window->instruction2 = window->instruction3;
+
+	//Instruction3 becomes what's next to instruction 2
+	if(window->instruction2 != NULL){
+		window->instruction3 = window->instruction2->next_statement;
+	} else {
+		window->instruction3 = NULL;
+	}
+
+	//Give it back
+	return window;
 }
 
 
@@ -314,6 +506,62 @@ static void logical_and_constants(three_addr_const_t* constant1, three_addr_cons
 		} else {
 			constant1->constant_value.long_constant = 0;
 		}
+	}
+}
+
+
+/**
+ * Remediate a memory address instruction. Note that this will not convert a statement to
+ * assembly, it will simply take the memory address instruction and put it into the
+ * a different OIR form
+ *
+ * This needs to handle both stack variables and global variables
+ */
+static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* instruction){
+	//Grab this out
+	symtab_variable_record_t* var = instruction->op1->linked_var;
+
+	//Our most common case - global variables for obvious reasons do not have a stack address
+	if(var->membership != GLOBAL_VARIABLE){
+		//Extract the stack offset for our use
+		u_int32_t stack_offset = var->stack_region->base_address;
+
+		//If this offset is not 0, then we have an operation in the form of
+		//"stack_pointer" + stack offset
+		if(stack_offset != 0){
+			instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+			//Addition statement
+			instruction->op = PLUS;
+
+			//Emit the offset value
+			instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+			//And we're offsetting from the stack pointer
+			instruction->op1 = cfg->stack_pointer;
+
+		//Otherwise if this is 0, then all we're doing is assigning the stack pointer
+		} else {
+			//This is an assign statement
+			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+			//And the op1 is the stack pointer
+			instruction->op1 = cfg->stack_pointer;
+		}
+	
+	//Otherwise it is a global variable, and we will treat it as such
+	} else {
+		//These will always be lea's
+		instruction->instruction_type = LEAQ;
+
+		//Signify that we have a global variable
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+		//The first address calc register is the instruction pointer
+		instruction->address_calc_reg1 = cfg->instruction_pointer;
+
+		//We'll use the at this point ignored op2 slot to hold the value of the offset
+		instruction->op2 = instruction->op1;
 	}
 }
 
@@ -1842,52 +2090,6 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
 	}
 	
 	//And now we give back the window
-	return window;
-}
-
-
-/**
- * Reconstruct the instruction window after some kind of deletion/reordering
- *
- * The "seed" is always the first instruction, it's what we use to set the rest up
- */
-static void reconstruct_window(instruction_window_t* window, instruction_t* seed){
-	//Instruction 1 is always the seed
-	window->instruction1 = seed;
-
-	//The second one always comes after here
-	instruction_t* second = seed->next_statement;
-
-	//This is always the next statement
-	window->instruction2 = second;
-
-	//If second is not null, third is just what is after second
-	if(second != NULL){
-		window->instruction3 = second->next_statement;
-	} else {
-		window->instruction3 = NULL;
-	}
-}
-
-
-/**
- * Advance the window up by 1 instruction. This means that the lowest instruction slides
- * out of our window, and the one next to the highest instruction slides into it
- */
-static instruction_window_t* slide_window(instruction_window_t* window){
-	//Instruction1 becomes instruction 2
-	window->instruction1 = window->instruction2;
-	//Instruction2 becomes instruction3
-	window->instruction2 = window->instruction3;
-
-	//Instruction3 becomes what's next to instruction 2
-	if(window->instruction2 != NULL){
-		window->instruction3 = window->instruction2->next_statement;
-	} else {
-		window->instruction3 = NULL;
-	}
-
-	//Give it back
 	return window;
 }
 
@@ -4229,60 +4431,6 @@ static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stac
 }
 
 
-/**
- * Remediate a memory address instruction. Note that this will not convert a statement to
- * assembly, it will simply take the memory address instruction and put it into the
- * a different OIR form
- *
- * This needs to handle both stack variables and global variables
- */
-static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* instruction){
-	//Grab this out
-	symtab_variable_record_t* var = instruction->op1->linked_var;
-
-	//Our most common case - global variables for obvious reasons do not have a stack address
-	if(var->membership != GLOBAL_VARIABLE){
-		//Extract the stack offset for our use
-		u_int32_t stack_offset = var->stack_region->base_address;
-
-		//If this offset is not 0, then we have an operation in the form of
-		//"stack_pointer" + stack offset
-		if(stack_offset != 0){
-			instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-			//Addition statement
-			instruction->op = PLUS;
-
-			//Emit the offset value
-			instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-			//And we're offsetting from the stack pointer
-			instruction->op1 = cfg->stack_pointer;
-
-		//Otherwise if this is 0, then all we're doing is assigning the stack pointer
-		} else {
-			//This is an assign statement
-			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-
-			//And the op1 is the stack pointer
-			instruction->op1 = cfg->stack_pointer;
-		}
-	
-	//Otherwise it is a global variable, and we will treat it as such
-	} else {
-		//These will always be lea's
-		instruction->instruction_type = LEAQ;
-
-		//Signify that we have a global variable
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
-
-		//The first address calc register is the instruction pointer
-		instruction->address_calc_reg1 = cfg->instruction_pointer;
-
-		//We'll use the at this point ignored op2 slot to hold the value of the offset
-		instruction->op2 = instruction->op1;
-	}
-}
 
 
 /**
@@ -4748,35 +4896,6 @@ static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
 
 
 /**
- * Does the block that we're passing in end in a direct(jmp) jump to
- * the very next block. If so, we'll return what block the jump goes to.
- * If not, we'll return null.
- */
-static basic_block_t* does_block_end_in_jump(basic_block_t* block){
-	//If it's null then leave
-	if(block->exit_statement == NULL){
-		return NULL;
-	}
-
-	//Go based on our type here
-	switch(block->exit_statement->statement_type){
-		//Direct jump, just use the if block
-		case THREE_ADDR_CODE_JUMP_STMT:
-			return block->exit_statement->if_block;
-
-		//In a branch statement, the else block is
-		//the direct jump
-		case THREE_ADDR_CODE_BRANCH_STMT:
-			return block->exit_statement->else_block;
-
-		//By default no
-		default:
-			return NULL;
-	}
-}
-
-
-/**
  * Take the binary logarithm of something that we already know
  * is a power of 2. 
  *
@@ -4833,127 +4952,6 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 			break;
 	}
 }
-
-
-
-
-/**
- * The first step in our instruction selector is to get the instructions stored in
- * a straight line in the exact way that we want them to be. This is done with a breadth-first
- * search traversal of the simplified CFG that has been optimized. 
- *
- * One special consideration we'll take is ordering nodes with a given jump next to eachother.
- * For example, if block .L15 ends in a direct jump to .L16, we'll endeavor to have .L16 right
- * after .L15 so that in a later stage, we can eliminate that jump.
- */
-static basic_block_t* order_blocks(cfg_t* cfg){
-	//We'll first wipe the visited status on this CFG
-	reset_visited_status(cfg, TRUE);
-	
-	//We will perform a breadth first search and use the "direct successor" area
-	//of the blocks to store them all in one chain
-	
-	//The current block
-	basic_block_t* previous;
-	//The starting point that all traversals will use
-	basic_block_t* head_block;
-
-	//Initialize these to null first
-	previous = head_block = NULL;
-	
-	//We'll need to use a queue every time, we may as well just have one big one
-	heap_queue_t* queue = heap_queue_alloc();
-
-	//For each function
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
-		//Grab the function block out
-		basic_block_t* func_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
-
-		//This function start block is the begging of our BFS	
-		enqueue(queue, func_block);
-		
-		//So long as the queue is not empty
-		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
-			//Grab this block off of the queue
-			basic_block_t* current = dequeue(queue);
-
-			//If previous is NULL, this is the first block
-			if(previous == NULL){
-				previous = current;
-				//This is also the head block then
-				head_block = previous;
-			//We need to handle the rare case where we reach two of the same blocks(maybe the block points
-			//to itself) but neither have been visited. We make sure that, in this event, we do not set the
-			//block to be it's own direct successor
-			} else if(previous != current && current->visited == FALSE){
-				//We'll add this in as a direct successor
-				previous->direct_successor = current;
-
-				//Do we end in a jump?
-				basic_block_t* end_jumps_to = does_block_end_in_jump(previous);
-
-				//If we do AND what we're jumping to is the direct successor, then we'll
-				//delete the jump statement as it is now unnecessary
-				if(end_jumps_to == previous->direct_successor){
-					//Get rid of this jump as it's no longer needed
-					//delete_statement(previous->exit_statement);
-				}
-
-				//Add this in as well
-				previous = current;
-			}
-
-			//Make sure that we flag this as visited
-			current->visited = TRUE;
-
-			//Let's first check for our special case - us jumping to a given block as the very last statement. If
-			//this turns back something that isn't null, it'll be the first thing we add in
-			basic_block_t* direct_end_jump = does_block_end_in_jump(current);
-
-			//If this is the case, we'll add it in first
-			if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
-				//Add it into the queue
-				enqueue(queue, direct_end_jump);
-			}
-
-			//Now we'll go through each of the successors in this node
-			for(u_int16_t idx = 0; current->successors != NULL && idx < current->successors->current_index; idx++){
-				//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
-				//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
-
-				//Grab the successor
-				basic_block_t* successor = dynamic_array_get_at(current->successors, idx);
-
-				//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
-				if(successor == direct_end_jump){
-					continue;
-				}
-
-				//If the block is completely empty(function end block), we'll also skip
-				if(successor->leader_statement == NULL){
-					successor->visited = TRUE;
-					continue;
-				}
-
-				//Otherwise it's not, so we'll add it in
-				if(successor->visited == FALSE){
-					enqueue(queue, successor);
-				}
-			}
-		}
-	}
-
-	//Destroy the queue when done
-	heap_queue_dealloc(queue);
-
-	//Set this for later on
-	cfg->head_block = head_block;
-
-	//Give back the head block
-	return head_block;
-}
-
-
 
 
 /**
