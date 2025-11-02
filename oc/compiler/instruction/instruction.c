@@ -1574,8 +1574,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_three_addr_constant(fl, stmt->offset);
 			fprintf(fl, "] <- "); 
 
-			//Finally the storee(op2)
-			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			//Finally the storee(op2 or op1_const)
+			if(stmt->op2 != NULL){
+				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			} else {
+				print_three_addr_constant(fl, stmt->op1_const);
+			}
+
 			fprintf(fl, "\n");
 
 			break;
@@ -1595,8 +1600,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "] <- "); 
 
-			//Finally the storee(op2)
-			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			//Finally the storee(op2 or op1_const)
+			if(stmt->op2 != NULL){
+				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			} else {
+				print_three_addr_constant(fl, stmt->op1_const);
+			}
+
 			fprintf(fl, "\n");
 
 			break;

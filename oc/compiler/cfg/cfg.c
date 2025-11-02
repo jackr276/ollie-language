@@ -4282,6 +4282,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//Now emit the right hand expression
 	cfg_result_package_t right_hand_package = emit_expression(current_block, right_child, is_branch_ending, FALSE);
 
+	//Hold onto this for later
+	instruction_t* last_instruction = current_block->exit_statement;
+
 	//Reassign current to be at the end
 	current_block = right_hand_package.final_block;
 

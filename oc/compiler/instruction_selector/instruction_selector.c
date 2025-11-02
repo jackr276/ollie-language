@@ -4407,8 +4407,12 @@ static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
 	//This is our destination register
 	instruction->destination_register = instruction->assignee;
 
-	//And the source register is our op1
-	instruction->source_register = instruction->op1;
+	//And the source register is our op1 or we have an immediate
+	if(instruction->op1 != NULL){
+		instruction->source_register = instruction->op1;
+	} else {
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
@@ -4450,8 +4454,12 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 	instruction->address_calc_reg1 = instruction->assignee;
 	//Our offset has already been saved at the start - so we're good here
 
-	//The source register is our op2
-	instruction->source_register = instruction->op2;
+	//And the source register is our op2 or we have an immediate source
+	if(instruction->op2 != NULL){
+		instruction->source_register = instruction->op2;
+	} else {
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
@@ -4494,8 +4502,12 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 	//Op1 is the address calcu register
 	instruction->address_calc_reg2 = instruction->op1;
 
-	//The source register is our op2
-	instruction->source_register = instruction->op2;
+	//And the source register is our op2 or we have an immediate source
+	if(instruction->op2 != NULL){
+		instruction->source_register = instruction->op2;
+	} else {
+		instruction->source_immediate = instruction->op1_const;
+	}
 }
 
 
