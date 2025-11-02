@@ -472,18 +472,16 @@ static void mark(cfg_t* cfg){
 			case THREE_ADDR_CODE_STORE_STATEMENT:
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+				//Add the assignee as if it was a variable itself
+				mark_and_add_definition(cfg, stmt->assignee, stmt->function, worklist);
+
+				//We need to mark the place where each definition is set
+				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op2, stmt->function, worklist);
 				break;
 
 			//In all other cases, we'll just mark and add the two operands 
 			default:
-				/**
-				 * If we have an assignee that is being dereferenced, it's not truly an assignee. We'll
-				 * need to go through and handle the appropriate memory optimizations for this
-				 */
-				if(stmt->assignee != NULL && stmt->assignee->indirection_level > 0){
-					mark_and_add_definition(cfg, stmt->assignee, stmt->function, worklist);
-				}
-
 				//We need to mark the place where each definition is set
 				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
 				mark_and_add_definition(cfg, stmt->op2, stmt->function, worklist);
