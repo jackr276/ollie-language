@@ -4218,71 +4218,44 @@ static void handle_load_instruction(cfg_t* cfg, instruction_t* instruction){
 
 
 /**
- * Handle a store const instruction. This will be reorganized into a memory accessing move
+ * Handle a load with constant offset instruction
+ *
+ * load t5 <- t23[8] --> movx 8(t23), t5
+ *
+ * This will always generate an address calculation mode of OFFSET_ONLY 
  */
-static void handle_store_const_instruction(cfg_t* cfg, instruction_t* instruction){
+static void handle_load_with_constant_offset_instruction(cfg_t* cfg, instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Select the instruction type accordingly
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			instruction->instruction_type = MEM_TO_REG_MOVQ;
 			break;
 		case DOUBLE_WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVL;
+			instruction->instruction_type = MEM_TO_REG_MOVL;
 			break;
 		case WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVB;
+			instruction->instruction_type = MEM_TO_REG_MOVW;
 			break;
 		case BYTE:
-			instruction->instruction_type = REG_TO_MEM_MOVB;
+			instruction->instruction_type = MEM_TO_REG_MOVB;
 			break;
 		default:
 			break;
 	}
 
-	//Extract the variable that we're trying to store
-	three_addr_var_t* stored_variable = instruction->assignee;
+	//This will always be offset only
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-	//Regular stack storage
-	if(stored_variable->linked_var->stack_variable == TRUE){
-		//Extract the variable record from the assignee
-		symtab_variable_record_t* variable = stored_variable->linked_var;
+	//The destination register is always the assignee
+	instruction->destination_register = instruction->assignee;
 
-		//We need to grab this variable's stack offset
-		u_int32_t stack_offset = variable->stack_region->base_address;
-
-		//Once we have that, we can emit our offset constant
-		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-		//This is in offset only mode
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-
-		//And the offset itself is the offset constant
-		instruction->offset = offset_constant;
-
-		//And the first address calc register is just our stack pointer
-		instruction->address_calc_reg1 = cfg->stack_pointer;
-
-		//And for the source, we'll occupy the source immediate with our value
-		instruction->source_immediate = instruction->op1_const;
-
-	//Otherwise we have a global variable, so we'll need to emit
-	//a different kind of store
-	} else {
-		//Signify that we have a global variable
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
-
-		//The first address calc register is the instruction pointer
-		instruction->address_calc_reg1 = cfg->instruction_pointer;
-
-		//We'll use the at this point ignored op2 slot to hold the value of the offset
-		instruction->op2 = stored_variable;
-
-		//The const is the immediate source
-		instruction->source_immediate = instruction->op1_const;
-	}
+	//Op1 is our base address
+	instruction->address_calc_reg1 = instruction->op1;
+	//The op1_const is our offset
+	instruction->offset = instruction->op1_const;
 }
 
 
@@ -4822,6 +4795,12 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
 			handle_load_instruction(cfg, instruction);
+			break;
+		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
+			handle_load_with_constant_offset_instruction(cfg, instruction);
+			break;
+		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
+			handle_load_with_variable_offset_instruction(cfg, instruction);
 			break;
 		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
 			handle_store_const_instruction(cfg, instruction);
