@@ -4260,6 +4260,48 @@ static void handle_load_with_constant_offset_instruction(cfg_t* cfg, instruction
 
 
 /**
+ * Handle a load with variable offset instruction
+ *
+ * load t5 <- t23[t24] --> movx (t23, t24), t5
+ *
+ * This will always generate an address calculation mode of OFFSET_ONLY 
+ */
+static void handle_load_with_variable_offset_instruction(cfg_t* cfg, instruction_t* instruction){
+	//Size is determined by the assignee
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case WORD:
+			instruction->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case BYTE:
+			instruction->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		default:
+			break;
+	}
+
+	//This will always be offset only
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
+	//The destination register is always the assignee
+	instruction->destination_register = instruction->assignee;
+
+	//Op1 is our base address
+	instruction->address_calc_reg1 = instruction->op1;
+	//Op2 is the variable offset
+	instruction->address_calc_reg2 = instruction->op2;
+}
+
+
+/**
  * Handle a store instruction. This will be reorganized into a memory accessing move
  */
 static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
