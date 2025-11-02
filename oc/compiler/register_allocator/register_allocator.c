@@ -1857,10 +1857,14 @@ static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* gra
 				continue;
 			}
 
+			printf("HERE with:\n\n");
+			print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+			printf("\n\n");
+
+
 			//Otherwise if we get here, then we know that we have a pure copy instruction
 			live_range_t* source_live_range = instruction->source_register->associated_live_range;
 			live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
-
 
 			/**
 			 * One potential case, we could have done some optimizations where we're left with something

@@ -477,8 +477,13 @@ u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 		case MOVL:
 		case MOVW:
 		case MOVQ:
-			//Otherwise it is a pure copy
-			return TRUE;
+			//If there's a source register we're good
+			if(instruction->source_register != NULL){
+				return TRUE;
+			}
+
+			//Otherwise we're assigning a constant so this isn't a pure copy
+			return FALSE;
 
 		//By default this isn't
 		default:
