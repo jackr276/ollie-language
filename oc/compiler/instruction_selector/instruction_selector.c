@@ -792,24 +792,47 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 
 	/**
-	 * ================= Handling redundant multiplications ========================
-	 * Do it for 2 and 3
-	 *
-	 *
+	 * ================= Handling pure constant operations ========================
 	 * t27 <- 5
-	 * t27 <- t27 * 68
+	 * t27 <- t27 (+/-/star(*)) 68
 	 *
 	 * Can become: t27 <- 340
+	 *
+	 * This is the same as above, but for 2 & 3
 	 */
 	if(window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT 
 		&& window->instruction3 != NULL
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction3->op == STAR
+		&& binary_operator_valid_for_inplace_constant_match(window->instruction3->op) == TRUE
 		&& window->instruction2->assignee->is_temporary == TRUE
 		&& variables_equal(window->instruction3->op1, window->instruction2->assignee, FALSE) == TRUE){
 
-		//We can multiply the constants now. The result will be stored in op1 const
-		multiply_constants(window->instruction3->op1_const, window->instruction2->op1_const);
+		//Go based on the op. We already know that we can do this by the time 
+		//we get here
+		switch(window->instruction3->op){
+			case STAR:
+				//We can multiply the constants now. The result will be stored in op1 const
+				multiply_constants(window->instruction3->op1_const, window->instruction2->op1_const);
+				break;
+
+			case PLUS:
+				//We can add the constants now. The result will be stored in op1 const
+				add_constants(window->instruction3->op1_const, window->instruction2->op1_const);
+				break;
+			
+			case MINUS:
+				//Important caveat here. The constant above is the first one that 
+				subtract_constants(window->instruction2->op1_const, window->instruction3->op1_const);
+				break;
+
+				//Overwrite with op1
+				window->instruction3->op1_const = window->instruction2->op1_const;
+
+			//Unreachable - just so the compiler won't complain
+			default:
+				break;
+		}
+
 
 		//Instruction 2 is now simply an assign const statement
 		window->instruction3->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -818,7 +841,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		window->instruction3->op1->use_count--;
 
 		//Null out where the old value was
-		window->instruction2->op1 = NULL;
+		window->instruction3->op1 = NULL;
 
 		//Instruction 1 is now completely useless *if* that was the only time that
 		//his assignee was used. Otherwise, we need to keep it in
