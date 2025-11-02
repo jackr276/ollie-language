@@ -1631,6 +1631,17 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * TODO OPTIMIZE SOMETHING LIKE
+	 * t3 <- 4
+	 * load t5 <- t4[t3]
+	 *
+	 * TO
+	 *
+	 * load t5 <- t4[4]
+	 */
+
 	/**
 	 * When we have a case like this for address calculations:
 	 * t32 <- stack_pointer
@@ -4224,7 +4235,7 @@ static void handle_load_instruction(cfg_t* cfg, instruction_t* instruction){
  *
  * This will always generate an address calculation mode of OFFSET_ONLY 
  */
-static void handle_load_with_constant_offset_instruction(cfg_t* cfg, instruction_t* instruction){
+static void handle_load_with_constant_offset_instruction(instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -4266,7 +4277,7 @@ static void handle_load_with_constant_offset_instruction(cfg_t* cfg, instruction
  *
  * This will always generate an address calculation mode of OFFSET_ONLY 
  */
-static void handle_load_with_variable_offset_instruction(cfg_t* cfg, instruction_t* instruction){
+static void handle_load_with_variable_offset_instruction(instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -4367,6 +4378,50 @@ static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
 		//Op1 is the source register
 		instruction->source_register = instruction->op1;
 	}
+}
+
+
+/**
+ * Handle an instruction like
+ *
+ * store t5[4] <- t7
+ *
+ * movX t7, 4(t4)
+ *
+ * This will always be an OFFSET_ONLY calculation type
+ */
+static void handle_store_with_constant_offset_instruction(cfg_t* cfg, instruction_t* instruction){
+	//Size is determined by the assignee
+	variable_size_t size = get_type_size(instruction->assignee->type);
+
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case WORD:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case BYTE:
+			instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		default:
+			break;
+	}
+
+	//This will always be offset only
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//The base address is the assignee
+	instruction->address_calc_reg1 = instruction->assignee;
+	//The offset is our op1_const
+	instruction->offset = instruction->op1_const;
+
+	//The source register is our op1
+	instruction->op1 = instruction->source_register;
 }
 
 
@@ -4839,16 +4894,19 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			handle_load_instruction(cfg, instruction);
 			break;
 		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
-			handle_load_with_constant_offset_instruction(cfg, instruction);
+			handle_load_with_constant_offset_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
-			handle_load_with_variable_offset_instruction(cfg, instruction);
-			break;
-		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
-			handle_store_const_instruction(cfg, instruction);
+			handle_load_with_variable_offset_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			handle_store_instruction(cfg, instruction);
+			break;
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			handle_store_with_constant_offset_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			handle_store_with_variable_offset_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
 			handle_memory_address_instruction(cfg, cfg->stack_pointer, instruction);
