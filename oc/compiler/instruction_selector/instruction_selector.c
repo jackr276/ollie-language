@@ -3646,16 +3646,8 @@ static void handle_dec_instruction(instruction_t* instruction){
  * Handle the case where we have a constant to register move
  */
 static void handle_constant_to_register_move_instruction(instruction_t* instruction){
-	//Select the destination size first
-	variable_size_t size;
-
-	//If this has a 0 indirection, we'll use it's size
-	if(instruction->assignee->indirection_level == 0){
-		size = get_type_size(instruction->assignee->type);
-	//Otherwise take the constant's size
-	} else {
-		size = get_type_size(instruction->op1_const->type);
-	}
+	//Get the size we need first
+	variable_size_t size = get_type_size(instruction->op1_const->type);
 
 	//Select based on size
 	instruction->instruction_type = select_move_instruction(size);
@@ -3664,12 +3656,6 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 	instruction->destination_register = instruction->assignee;
 	//Set the source immediate here
 	instruction->source_immediate = instruction->op1_const;
-
-	//Handle the indirection levels here if we have a deref only case
-	if(instruction->destination_register->indirection_level > 0){
-		instruction->indirection_level = instruction->destination_register->indirection_level;
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
-	} 
 }
 
 
@@ -3682,47 +3668,12 @@ static void handle_simple_movement_instruction(instruction_t* instruction){
 	variable_size_t destination_size = get_type_size(instruction->assignee->type);
 	variable_size_t source_size = get_type_size(instruction->op1->type);
 
-	//Are these being dereferenced?
-	u_int8_t assignee_is_deref = TRUE;
-	u_int8_t op1_is_deref = TRUE;
-
-	//If it's 0(most common), we don't need to do anything fancy
-	if(instruction->assignee->indirection_level == 0){
-		//Set the flag
-		assignee_is_deref = FALSE;
-	}
-
-	//If it's 0(most common), we don't need to do anything fancy
-	if(instruction->op1->indirection_level == 0){
-		//Set the flag
-		op1_is_deref = FALSE;
-	}
-
 	//Set the sources and destinations
 	instruction->destination_register = instruction->assignee;
 	instruction->source_register = instruction->op1;
 
-	//If they both are not derferenced(most common), we'll invoke the
-	//moving helper
-	if(assignee_is_deref == FALSE && op1_is_deref == FALSE){
-		//Use the helper to get the right sized move instruction
-		instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(instruction->assignee->type));
-
-	//If we get here this means that we do have a dereference of some kind. We'll invoke a different rule,
-	//but we will still rely on the destination type
-	} else {
-		instruction->instruction_type = select_move_instruction(destination_size);
-
-		//Handle the indirection levels here if we have a deref only case
-		if(assignee_is_deref == TRUE){
-			instruction->indirection_level = instruction->destination_register->indirection_level;
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
-
-		} else if(op1_is_deref == TRUE){
-			instruction->indirection_level = instruction->source_register->indirection_level;
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
-		}
-	}
+	//Use the helper to get the right sized move instruction
+	instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(instruction->assignee->type));
 }
 
 
@@ -4390,7 +4341,7 @@ static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
  *
  * This will always be an OFFSET_ONLY calculation type
  */
-static void handle_store_with_constant_offset_instruction(cfg_t* cfg, instruction_t* instruction){
+static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -4434,7 +4385,7 @@ static void handle_store_with_constant_offset_instruction(cfg_t* cfg, instructio
  *
  * This will always be an OFFSET_ONLY calculation type
  */
-static void handle_store_with_constant_variable_instruction(cfg_t* cfg, instruction_t* instruction){
+static void handle_store_with_variable_offset_instruction(instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -4612,198 +4563,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	//We want to ensure that we get the best possible outcome for memory movement address calculations.
 	//This is where *a lot* of instructions get generated, so it's worth it to spend compilation time
 	//compressing these
-
-	/**
-	 * =========================== Memory Movement Instructions =======================
-	 * The to-memory case
-	 *
-	 * Moving from memory to a register or vice versa often presents opportunities, because
-	 * we're able to make use of memory addressing mode. This will arise whenever we do
-	 * a register-to-memory "store" or a memory-to-register "load". Remember, in x86 assembly
-	 * we can't go from memory-to-memory, so every memory access operation will fall within
-	 * this category
-	 *
-	 * t7 <- arr_0 + 340
-	 * t8 <- t7 + arg_0 * 4
-	 * (t8) <- 3
-	 *
-	 * Should become
-	 * mov(w/l/q) $3, 340(arr_0, arg_0, 4)
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& is_instruction_assignment_operation(window->instruction3) == TRUE
-		&& window->instruction3->assignee->indirection_level == 1
-		&& window->instruction1->assignee->use_count <= 1
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
-		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
-
-		//Let the helper deal with everything related to this
-		handle_three_instruction_address_calc_to_memory_move(window->instruction1, window->instruction2, window->instruction3);
-
-		//Once we're done doing this, the first 2 instructions are now useless
-		delete_statement(window->instruction1);
-		delete_statement(window->instruction2);
-
-		//Reconstruct the window with instruction3 as the seed
-		reconstruct_window(window, window->instruction3);
-		return;
-	}
-
-	/**
-	 * The from-memory case
-	 *
-	 * t7 <- arr_0 + 340
-	 * t8 <- t7 + arg_0 * 4
-	 * t9 <- (t8)
-	 *
-	 * Should become
-	 * mov(w/l/q) 340(arr_0, arg_0, 4), t9
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction2 != NULL && window->instruction3 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& window->instruction1->assignee->use_count <= 1
-		&& window->instruction3->op1->indirection_level <= 1
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
-		&& variables_equal(window->instruction2->assignee, window->instruction3->op1, TRUE) == TRUE){
-
-		//Let the helper deal with it
-		handle_three_instruction_address_calc_from_memory_move(window->instruction1, window->instruction2, window->instruction3);
-
-		//Once we're done doing this, the first 2 instructions are now useless
-		delete_statement(window->instruction1);
-		delete_statement(window->instruction2);
-		
-		//Reconstruct the window so that instruction3 is the start
-		reconstruct_window(window, window->instruction3);
-		return;
-	}
-
-
-	/**
-	 * t26 <- arr_0 + t25
-	 * t28 <- t26 + 8
-	 * t29 <- (t28)
-	 *
-	 * Should become
-	 * mov(w/l/q) 8(arr_0, t25), t29
-	 */
-	if(window->instruction2 != NULL && window->instruction3 != NULL
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& window->instruction3->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& window->instruction1->assignee->use_count <= 1
-		&& window->instruction3->op1->indirection_level <= 1 //Only works for memory movement
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
-		&& variables_equal(window->instruction2->assignee, window->instruction3->op1, TRUE) == TRUE){
-
-		//Let the helper deal with it
-		handle_three_instruction_registers_and_offset_only_from_memory_move(window->instruction1, window->instruction2, window->instruction3);
-		
-		//Once the helper is done, we need to delete instructions 1 and 2
-		delete_statement(window->instruction1);
-		delete_statement(window->instruction2);
-
-		//Reconstruct the window with instruction3 as the start
-		reconstruct_window(window, window->instruction3);
-		return;
-	}
-
-	
-	/**
-	 * t26 <- arr_0 + t25
-	 * t28 <- t26 + 8
-	 * (t28) <- t29
-	 *
-	 * Should become
-	 * mov(w/l/q) t29, 8(arr_0, t25)
-	 */
-	if(window->instruction2 != NULL
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
-		&& is_instruction_assignment_operation(window->instruction3) == TRUE
-		&& window->instruction3->assignee->indirection_level == 1 //Only works for memory movement
-		&& window->instruction1->assignee->use_count <= 1
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
-		&& variables_equal(window->instruction2->assignee, window->instruction3->assignee, TRUE) == TRUE){
-
-		//Let the helper deal with it
-		handle_three_instruction_registers_and_offset_only_to_memory_move(window->instruction1, window->instruction2, window->instruction3);
-		
-		//Once the helper is done, we need to delete instructions 1 and 2
-		delete_statement(window->instruction1);
-		delete_statement(window->instruction2);
-
-		//Reconstruct the window with instruction3 as the start
-		reconstruct_window(window, window->instruction3);
-		return;
-	}
-
-	 /**
-	  * Handle to-memory movement with 2 operands
-	  *
-	  * Example:
-	  * t25 <- t24 + 4
-	  * (t25) <- 3
-	  *
-	  * Should become
-	  * mov(w/l/q) 4(t24), t25
-	  */
-	//If we have some kind of offset calculation followed by a dereferencing assingment, we have either a 
-	//register to memory or immediate to memory move. Either way, we can rewrite this using address computation mode
-	if(is_instruction_binary_operation(window->instruction1) == TRUE
-		&& window->instruction1->op == PLUS 
-		&& is_instruction_assignment_operation(window->instruction2) == TRUE
-		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
-		&& window->instruction1->assignee->use_count <= 1
-		&& window->instruction2->assignee->indirection_level == 1){
-
-		//Use the helper to keep things somewhat clean in here
-		handle_two_instruction_address_calc_to_memory_move(window->instruction1, window->instruction2);
-
-		//We can now delete instruction 1
-		delete_statement(window->instruction1);
-
-		//Reconstruct the window with instruction2 as the start
-		reconstruct_window(window, window->instruction2);
-		return;
-	}
-
-
-	/**
-	 * ====================================== FROM MEMORY MOVEMENT ==================================
-	 *
-	 * Example:
-	 * t43 <- oneDi32_0 + 8
-	 * t44 <- (t43)
-	 *
-	 * should become
-	 * mov(w/l/q) 8(oneDi32_0), t44
-	 *
-	 * Unlike the prior case, we won't need to worry about immediate source operands here
-	 */
-	if(window->instruction2 != NULL
-		&& is_instruction_binary_operation(window->instruction1)
-		&& window->instruction1->op == PLUS
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE
-		&& window->instruction1->assignee->use_count <= 1
-		&& window->instruction2->op1->indirection_level == 1){
-
-		//Use the helper to avoid an explosion of code here
-		handle_two_instruction_address_calc_from_memory_move(window->instruction1, window->instruction2);
-
-		//We can scrap instruction 1 now, it's useless
-		delete_statement(window->instruction1);
-
-		//Reconstruct the window with instruction2 as the start
-		reconstruct_window(window, window->instruction2);
-		return;
-	}
-
 
 	//Do we have a case where we have an indirect jump statement? If so we can handle that by condensing it into one
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT
