@@ -2719,24 +2719,26 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 */
 	if(ident_node->side == SIDE_TYPE_RIGHT && 
 		(ident_node->variable->stack_variable == TRUE || ident_node->variable->membership == GLOBAL_VARIABLE)){
-		//The final assignee
-		three_addr_var_t* assignee;
+		//First we emit the memory address of the variable
+		instruction_t* memory_address_assignment = emit_memory_address_assignment(emit_temp_var(u64), emit_var(ident_node->variable));
+		//Counts as a use
+		add_used_variable(basic_block, memory_address_assignment->op1);
+
+		//Get it in the block
+		add_statement(basic_block, memory_address_assignment);
 
 		//Emit the load instruction
-		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), emit_var(ident_node->variable));
+		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), memory_address_assignment->assignee);
 		load_instruction->is_branch_ending = is_branch_ending;
-
-		//Add it to the block
-		add_statement(basic_block, load_instruction);
 
 		//This counts as a use
 		add_used_variable(basic_block, load_instruction->op1);
 
-		//And the final assignee is this load
-		assignee = load_instruction->assignee;
+		//Add it to the block
+		add_statement(basic_block, load_instruction);
 
 		//Just give back the temp var here
-		return assignee;
+		return load_instruction->assignee;
 	}
 
 	//Create our variable - the most basic case
@@ -4377,10 +4379,19 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * Otherwise, we'll need to emit a store operation here
 	 */
 	} else {
-		instruction_t* final_assignment = emit_store_ir_code(left_hand_var, final_op1);
+		//Otherwise, we need to first get the memory address of this variable
+		instruction_t* memory_address_instruction = emit_memory_address_assignment(emit_temp_var(u64), left_hand_var);
+		//Counts as a use
+		add_used_variable(current_block, left_hand_var);
+		
+		//Put it in the block
+		add_statement(current_block, memory_address_instruction);
+
+		//Now for the final store code
+		instruction_t* final_assignment = emit_store_ir_code(memory_address_instruction->assignee, final_op1);
 
 		//If this is not a temp var, then we can flag it as being assigned
-		add_assigned_variable(current_block, left_hand_var);
+		add_assigned_variable(current_block, memory_address_instruction->assignee);
 
 		//This counts as a use
 		add_used_variable(current_block, final_op1);
