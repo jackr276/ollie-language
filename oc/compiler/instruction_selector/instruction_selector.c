@@ -4375,7 +4375,7 @@ static void handle_store_instruction(instruction_t* instruction){
 			instruction->instruction_type = REG_TO_MEM_MOVL;
 			break;
 		case WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVB;
+			instruction->instruction_type = REG_TO_MEM_MOVW;
 			break;
 		case BYTE:
 			instruction->instruction_type = REG_TO_MEM_MOVB;
