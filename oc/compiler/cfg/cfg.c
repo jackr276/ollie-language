@@ -4456,17 +4456,40 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		add_statement(current_block, memory_address_instruction);
 
 		//Now for the final store code
-		instruction_t* final_assignment = emit_store_ir_code(memory_address_instruction->assignee, final_op1);
+		//
+		//
+		//
+		//TODO THIS IS INCORRECT TYPE WISE(always u64)
+		//
+		//
+		instruction_t* final_assignment = emit_store_ir_code(memory_address_instruction->assignee, NULL);
+		final_assignment->is_branch_ending = is_branch_ending;
+
+		//If the last instruction is *not* a constant assignment, we can go ahead like this
+		if(last_instruction == NULL
+			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+			//This is now our op1
+			final_assignment->op1 = final_op1;
+
+			//No matter what happened, we used this
+			add_used_variable(current_block, final_op1);
+
+		//Otherwise, we can do a small optimization here by scrapping the 
+		//constant assignment and just putting the constant in directly
+		} else {
+			//Extract it
+			three_addr_const_t* constant_assignee = last_instruction->op1_const;
+
+			//This is now useless
+			delete_statement(last_instruction);
+
+			//Set the store statement's op1_const to be this
+			final_assignment->op1_const = constant_assignee;
+		}
 
 		//If this is not a temp var, then we can flag it as being assigned
 		add_assigned_variable(current_block, memory_address_instruction->assignee);
-
-		//This counts as a use
-		add_used_variable(current_block, final_op1);
 		
-		//Mark this with what was passed through
-		final_assignment->is_branch_ending = is_branch_ending;
-
 		//Now add thi statement in here
 		add_statement(current_block, final_assignment);
 	}
