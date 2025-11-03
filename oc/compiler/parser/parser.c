@@ -105,14 +105,6 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 	parse_message.info = info;
 	parse_message.line_num = line_num;
 
-	//If we don't want debug printing, we'll skip printing this out if it's a warning or info message
-	if(message_type == INFO || message_type == WARNING){
-		//Skip if this isn't enabled
-		if(enable_debug_printing == FALSE){
-			return;
-		}
-	}
-
 	//Now print it
 	//Mapped by index to the enum values
 	char* type[] = {"WARNING", "ERROR", "INFO"};
@@ -5341,8 +5333,6 @@ static generic_type_t* type_specifier(FILE* fl){
 	//We're done with it, so deallocate
 	lightstack_dealloc(&lightstack);
 
-	printf("Type size of %s is %d\n", current_type_record->type->type_name.string, current_type_record->type->type_size);
-
 	//Give back whatever the current type may be
 	return current_type_record->type;
 }
@@ -9710,7 +9700,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	prog = program(fl);
 
 	//We'll only perform these tests if we want debug printing enabled
-	if(enable_debug_printing == TRUE && prog->ast_node_type != AST_NODE_TYPE_ERR_NODE){
+	if(prog->ast_node_type != AST_NODE_TYPE_ERR_NODE){
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);
 		//Check for any bad variable declarations
