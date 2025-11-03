@@ -8092,6 +8092,27 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//This counts as a use
 		add_used_variable(current_block, memory_address_statement->assignee);
 
+		//If the last instruction is *not* a constant assignment, we can go ahead like this
+		if(last_instruction == NULL
+			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+			//This is now our op1
+			store_statement->op1 = package.assignee;
+
+			//No matter what happened, we used this
+			add_used_variable(current_block, package.assignee);
+
+		//Otherwise, we can do a small optimization here by scrapping the 
+		//constant assignment and just putting the constant in directly
+		} else {
+			//Extract it
+			three_addr_const_t* constant_assignee = last_instruction->op1_const;
+
+			//This is now useless
+			delete_statement(last_instruction);
+
+			//Set the store statement's op1_const to be this
+			store_statement->op1_const = constant_assignee;
+		}
 				
 		//Now add thi statement in here
 		add_statement(current_block, store_statement);
