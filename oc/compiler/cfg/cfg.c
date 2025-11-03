@@ -4455,14 +4455,12 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//Put it in the block
 		add_statement(current_block, memory_address_instruction);
 
+		//NOTE: we use the type of the left hand var for our address because we are dereferencing
+		three_addr_var_t* true_base_address = emit_var_copy(memory_address_instruction->assignee);
+		true_base_address->type = left_hand_var->type;
+
 		//Now for the final store code
-		//
-		//
-		//
-		//TODO THIS IS INCORRECT TYPE WISE(always u64)
-		//
-		//
-		instruction_t* final_assignment = emit_store_ir_code(memory_address_instruction->assignee, NULL);
+		instruction_t* final_assignment = emit_store_ir_code(true_base_address, NULL);
 		final_assignment->is_branch_ending = is_branch_ending;
 
 		//If the last instruction is *not* a constant assignment, we can go ahead like this
@@ -4488,7 +4486,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		}
 
 		//If this is not a temp var, then we can flag it as being assigned
-		add_assigned_variable(current_block, memory_address_instruction->assignee);
+		add_assigned_variable(current_block, true_base_address);
 		
 		//Now add thi statement in here
 		add_statement(current_block, final_assignment);
@@ -8071,11 +8069,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 */
 	} else {
 		//First we get our memory address statement
-		//
-		//
-		// TODO THIS MEMORY ADDRESS TYPING IS INCORRECT!!!!
-		//
-		//
 		instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(u64), let_variable);
 		memory_address_statement->is_branch_ending = is_branch_ending;
 
@@ -8085,12 +8078,16 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//Add the statement in
 		add_statement(current_block, memory_address_statement);
 
+		//NOTE: We use the type of our let variable here for the address assignment
+		three_addr_var_t* true_base_address = emit_var_copy(memory_address_statement->assignee);
+		true_base_address->type = let_variable->type;
+		
 		//Emit the store code
-		instruction_t* store_statement = emit_store_ir_code(memory_address_statement->assignee, NULL);
+		instruction_t* store_statement = emit_store_ir_code(true_base_address, NULL);
 		store_statement->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
-		add_used_variable(current_block, memory_address_statement->assignee);
+		add_used_variable(current_block, true_base_address);
 
 		//If the last instruction is *not* a constant assignment, we can go ahead like this
 		if(last_instruction == NULL
