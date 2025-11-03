@@ -7640,16 +7640,24 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		if(parameter->stack_region == NULL){
 			//Add this variable onto the stack now, since we know it is not already on it
 			parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
-		}	
+		}
 
-		//A special case here - if this variable is a function parameter, it will not naturally
-		//be in the stack when it comes in. To remedy this, we will have to do an initial load
-		//to get it into the stack
-		instruction_t* store_code = emit_store_ir_code(emit_var(parameter), emit_var(parameter));
+		//Following this, we'll need to get an actual load into the stack for this variable
+		instruction_t* memory_address_assignment = emit_memory_address_assignment(emit_temp_var(u64), emit_var(parameter));
+
+		//Add this into the block
+		add_statement(function_starting_block, memory_address_assignment);
+
+		//Copy the type over here
+		three_addr_var_t* type_adjusted_address = emit_var_copy(memory_address_assignment->assignee);
+		type_adjusted_address->type = parameter->type_defined_as;
+
+		//Now we'll need to do our initial load
+		instruction_t* store_code = emit_store_ir_code(type_adjusted_address, emit_var(parameter));
 
 		//Bookkeeping here
 		add_used_variable(function_starting_block, store_code->op1);
-		add_assigned_variable(function_starting_block, store_code->assignee);
+		add_used_variable(function_starting_block, store_code->assignee);
 
 		//Add it into the starting block
 		add_statement(function_starting_block, store_code);
