@@ -581,7 +581,6 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 }
 
 
-
 /**
  * Create the stack pointer live range
  */

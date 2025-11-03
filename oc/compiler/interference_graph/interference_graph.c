@@ -42,6 +42,11 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 		return;
 	}
 
+	//Stack pointer - this never interferes with anything
+	if(a->reg == RSP || b->reg == RSP){
+		return;
+	}
+
 	//Add b to a's neighbors if it's not already there
 	if(dynamic_array_contains(a->neighbors, b) == NOT_FOUND){
 		dynamic_array_add(a->neighbors, b);
