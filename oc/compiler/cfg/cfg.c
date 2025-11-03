@@ -2724,11 +2724,15 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Counts as a use
 		add_used_variable(basic_block, memory_address_assignment->op1);
 
+		//Now emit the type adjusted address
+		three_addr_var_t* type_adjusted_address = emit_var_copy(memory_address_assignment->assignee);
+		type_adjusted_address->type = ident_node->inferred_type;
+
 		//Get it in the block
 		add_statement(basic_block, memory_address_assignment);
 
 		//Emit the load instruction
-		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), memory_address_assignment->assignee);
+		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), type_adjusted_address);
 		load_instruction->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
@@ -8157,7 +8161,7 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			assignee = emit_var(node->variable);
 
 			//Emit the statement here to get the base address
-			instruction_t* mem_addr = emit_memory_address_assignment(emit_temp_var(assignee->type), assignee);
+			instruction_t* mem_addr = emit_memory_address_assignment(emit_temp_var(u64), assignee);
 
 			//For later reference, this is what we should be using
 			assignee = mem_addr->assignee;
