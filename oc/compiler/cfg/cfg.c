@@ -3404,7 +3404,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 					//Now the final assignee here is important - it's what we give it here
 					postfix_results.assignee = load_instruction->assignee;
-					
+
 				//Otherwise we have a null current offset, so we're just
 				//relying on the base address
 				} else {
@@ -3419,6 +3419,27 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 					//This is our final assignee
 					postfix_results.assignee = load_instruction->assignee;
+				}
+
+
+				/**
+				 * It is possible that through type coercion, casting, etc., we need to do a converting
+				 * move between what we got out of memory and what we're expecting to return from this
+				 * rule. We'll do so here. Remember, the parent node type *may* have been casted/coerced
+				 */
+				if(is_converting_move_required(parent_node_type, original_memory_access_type) == TRUE){
+					//Conversion instruction
+					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parent_node_type), load_instruction->assignee);
+					assignment->is_branch_ending = is_branch_ending;
+
+					//This counts as a use
+					add_used_variable(current_block, load_instruction->assignee);
+
+					//Add it into the block
+					add_statement(current_block, assignment);
+
+					//The final assignee now is this one's
+					postfix_results.assignee = assignment->assignee;
 				}
 				
 				break;
