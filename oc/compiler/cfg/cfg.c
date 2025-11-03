@@ -7692,6 +7692,9 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 
 	//Now let's emit the expression using the node
 	cfg_result_package_t expression_results = emit_expression(current_block, expression_node, is_branch_ending, FALSE);
+
+	//The type that we're after
+	generic_type_t* inferred_type = expression_node->inferred_type;
 	
 	//Update this
 	current_block = expression_results.final_block;
@@ -7705,11 +7708,15 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//First we emit the offset
 	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(offset, u64);
 
+	//The true base address will have it's type modified to the dereferenced type
+	three_addr_var_t* true_base_address = emit_var_copy(base_address);
+	true_base_address->type = inferred_type;
+
 	//Now we need to emit the store operation
-	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, offset_constant, NULL);
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(true_base_address, offset_constant, NULL);
 
 	//This counts as a use
-	add_used_variable(current_block, base_address);
+	add_used_variable(current_block, true_base_address);
 
 	//If the last instruction is *not* a constant assignment, we can go ahead like this
 	if(last_instruction == NULL
