@@ -3346,6 +3346,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 	//Do we need a dereference(load or store) here?
 	if(root->dereference_needed == TRUE){
+		//We will use this as the original memory access type for our use here
+		three_addr_var_t* type_adjusted_base_address = emit_var_copy(base_address);
+		//Change the type to what we're accessing memory-wise
+		type_adjusted_base_address->type = original_memory_access_type;
+
 		//Based on what we have here - we emit the appropriate statement
 		switch(root->side){
 			//Left side = store statement
@@ -3353,10 +3358,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//This could not be null in the case of structs & arrays
 				if(current_offset != NULL){
 					//Intentionally leave the storee null, it will be populated down the line
-					store_instruction = emit_store_with_variable_offset_ir_code(base_address, current_offset, NULL);
+					store_instruction = emit_store_with_variable_offset_ir_code(type_adjusted_base_address, current_offset, NULL);
 
 					//Counts as uses for both
-					add_used_variable(current_block, base_address);
+					add_used_variable(current_block, type_adjusted_base_address);
 					add_used_variable(current_block, current_offset);
 
 					//Add it into the block
@@ -3369,10 +3374,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				} else {
 					//Emit the store here - remember we leave the op1 NULL so that
 					//a later rule can fill it in
-					store_instruction = emit_store_ir_code(base_address, NULL);
+					store_instruction = emit_store_ir_code(type_adjusted_base_address, NULL);
 
 					//Counts as a use
-					add_used_variable(current_block, base_address);
+					add_used_variable(current_block, type_adjusted_base_address);
 
 					//Add it into our block
 					add_statement(current_block, store_instruction);
