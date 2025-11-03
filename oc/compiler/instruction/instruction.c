@@ -355,6 +355,25 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 
 
 /**
+ * Is the destination actually assigned?
+ */
+u_int8_t is_destination_assigned(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		//For these operations, the destination
+		//is not assigned
+		case REG_TO_MEM_MOVB:
+		case REG_TO_MEM_MOVL:
+		case REG_TO_MEM_MOVW:
+		case REG_TO_MEM_MOVQ:
+			return FALSE;
+		//By default yes
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
  * Is this an unsigned multiplication instruction?
  */
 u_int8_t is_unsigned_multplication_instruction(instruction_t* instruction){

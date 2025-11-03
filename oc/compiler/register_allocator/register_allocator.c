@@ -672,7 +672,7 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 		add_used_live_range(live_range, block);
 
 	//If this is being derefenced, then it's not a true assignment, just a use
-	} else if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST){
+	} else if(is_destination_assigned(instruction) == FALSE){
 		add_used_live_range(live_range, block);
 
 	//If we get all the way to here, then it was truly assigned
@@ -1218,7 +1218,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 			 * region. Since this is the case, we're not really assigning to the register here. In
 			 * fact, we're using it, so we'll need to add this to LIVE_NOW
 			 */
-			} else if(operation->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST){
+			} else if(is_destination_assigned(operation) == FALSE){
 				//Add it to live now and we're done
 				add_live_now_live_range(operation->destination_register->associated_live_range, live_now);
 
@@ -2111,7 +2111,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				 */
 				if(current->destination_register->associated_live_range == spill_range){
 					//This counts as a source spill, and nothing more
-					if(current->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST){
+					if(is_destination_assigned(current) == FALSE){
 						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
 
 					//Otherwise, we could also have a case where the destination is also
@@ -2146,7 +2146,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				//live range. We'll also need to handle events like this if that's the case
 				} else if(current->destination_register->associated_live_range == currently_spilled){
 					//This counts as a source spill, and nothing more
-					if(current->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST){
+					if(is_destination_assigned(current) == FALSE){
 						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
 
 					//Otherwise, we could also have a case where the destination is also
