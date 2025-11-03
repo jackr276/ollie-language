@@ -1682,10 +1682,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->assignee->is_temporary == TRUE
 		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 
 		//This is now a load with constant offset
 		window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+
+		//We don't want to have this in here anymore
+		window->instruction2->op2 = NULL;
 
 		//Copy their constants over
 		window->instruction2->offset = window->instruction1->op1_const;
@@ -1720,6 +1723,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 		//This is now a store with constant offset
 		window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+
+		//We don't want to have this in here anymore
+		window->instruction2->op1 = NULL;
 
 		//Copy their constants over
 		window->instruction2->offset = window->instruction1->op1_const;
