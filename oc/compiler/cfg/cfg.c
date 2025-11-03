@@ -3248,10 +3248,9 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	//And this will *always* be our postoperation code
 	generic_ast_node_t* right_child = left_child->next_sibling;
 	
-	//These 3 types are what we have to work with
-	generic_type_t* parent_node_type = root->inferred_type;
+	//The type of the memory region we're accessing is all we need here. This is always
+	//the left child's type
 	generic_type_t* memory_region_type = left_child->inferred_type;
-	generic_type_t* original_memory_access_type = right_child->inferred_type;
 
 	//We need to first recursively emit the left child's postfix expression
 	cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, is_branch_ending);
@@ -3332,9 +3331,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_ast_node_t* left_child = root->first_child;
 	generic_ast_node_t* right_child = left_child->next_sibling;
 
-	//These 3 types are what we have to work with
+	//For this rule, we care about the parent node's type(after cast/coercion) and
+	//the original memory access type(before cast/coercion). We will use these 2 to 
+	//determine if a converting operation is needed
 	generic_type_t* parent_node_type = root->inferred_type;
-	generic_type_t* memory_region_type = left_child->inferred_type;
 	generic_type_t* original_memory_access_type = right_child->inferred_type;
 
 	//This is whatever the final block is
@@ -8038,6 +8038,9 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	//Emit the right hand expression here
 	cfg_result_package_t package = emit_expression(current_block, expression_node, is_branch_ending, FALSE);
 
+	//Store the last instruction for later use
+	instruction_t* last_instruction = current_block->exit_statement;
+
 	//Reassign the block here
 	current_block = package.final_block;
 
@@ -8068,6 +8071,11 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 */
 	} else {
 		//First we get our memory address statement
+		//
+		//
+		// TODO THIS MEMORY ADDRESS TYPING IS INCORRECT!!!!
+		//
+		//
 		instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(u64), let_variable);
 		memory_address_statement->is_branch_ending = is_branch_ending;
 
@@ -8078,14 +8086,12 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		add_statement(current_block, memory_address_statement);
 
 		//Emit the store code
-		instruction_t* store_statement = emit_store_ir_code(memory_address_statement->assignee, package.assignee);
+		instruction_t* store_statement = emit_store_ir_code(memory_address_statement->assignee, NULL);
 		store_statement->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
 		add_used_variable(current_block, memory_address_statement->assignee);
 
-		//This counts as a use
-		add_used_variable(current_block, package.assignee);
 				
 		//Now add thi statement in here
 		add_statement(current_block, store_statement);

@@ -4243,7 +4243,7 @@ static void handle_test_instruction(instruction_t* instruction){
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
  */
-static void handle_load_instruction(cfg_t* cfg, instruction_t* instruction){
+static void handle_load_instruction(instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -4362,7 +4362,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 /**
  * Handle a store instruction. This will be reorganized into a memory accessing move
  */
-static void handle_store_instruction(cfg_t* cfg, instruction_t* instruction){
+static void handle_store_instruction(instruction_t* instruction){
 	//Size is determined by the assignee
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -4768,7 +4768,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
-			handle_load_instruction(cfg, instruction);
+			handle_load_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
 			handle_load_with_constant_offset_instruction(instruction);
@@ -4777,7 +4777,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			handle_load_with_variable_offset_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_STORE_STATEMENT:
-			handle_store_instruction(cfg, instruction);
+			handle_store_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			handle_store_with_constant_offset_instruction(instruction);
