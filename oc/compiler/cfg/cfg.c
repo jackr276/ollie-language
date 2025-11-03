@@ -7852,6 +7852,10 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 	//The string index starts off at 0
 	u_int32_t current_index = 0;
 
+	//Let's emit our modified base address that's a char type while we're at it
+	three_addr_var_t* type_adjusted_base_address = emit_var_copy(base_address);
+	type_adjusted_base_address->type = char_type;
+
 	//Now we'll go through every single character here and emit a load instruction for them
 	while(current_index <= string_initializer->string_value.current_length){
 		//Grab the value that we want out
@@ -7864,20 +7868,15 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		//Create the character type itself
 		three_addr_const_t* constant = emit_direct_integer_or_char_constant(char_value, char_type);
 
-		//We need an assignment operation for this one
-		instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(char_type), constant);
-		constant_assignment->is_branch_ending = is_branch_ending;
-		
-		//Add it into the block
-		add_statement(current_block, constant_assignment);
-
 		//Now finally we'll store it
-		instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, emit_direct_integer_or_char_constant(stack_offset, u64), constant_assignment->assignee);
+		instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(type_adjusted_base_address, emit_direct_integer_or_char_constant(stack_offset, u64), NULL);
 		store_instruction->is_branch_ending = is_branch_ending;
 
+		//We can skip the assignment here and just directly put the constant in
+		store_instruction->op1_const = constant;
+
 		//These both count as used
-		add_used_variable(current_block, base_address);
-		add_used_variable(current_block, constant_assignment->assignee);
+		add_used_variable(current_block, type_adjusted_base_address);
 
 		//Add the instruction in
 		add_statement(current_block, store_instruction);
