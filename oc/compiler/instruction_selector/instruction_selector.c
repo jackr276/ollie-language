@@ -4576,6 +4576,64 @@ static void handle_two_instruction_address_calc_and_load(instruction_t* address_
 }
 
 
+/**
+ * Handle a lea and load statement
+ *
+ * t4 <- lea x(%rip)
+ * load t3 <- t4
+ *
+ * Into:
+ *
+ * mov(w/l/q) x(%rip), t3
+ *
+ * DOES NOT DO DELETION/WINDOW REORDERING
+ */
+static void handle_two_instruction_lea_and_load(instruction_t* lea_statement, instruction_t* load_instruction){
+	//Select the variable size based on the assignee
+	variable_size_t size = get_type_size(load_instruction->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			load_instruction->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		case WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case DOUBLE_WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case QUAD_WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+	}
+
+	//Copy the calculation mode over entirely
+	load_instruction->calculation_mode = lea_statement->calculation_mode;
+
+	//And then just copy the address calcs
+	load_instruction->address_calc_reg1 = lea_statement->address_calc_reg1;
+	load_instruction->address_calc_reg2 = lea_statement->address_calc_reg2;
+
+	//For global vars only, the op2 is used to hold our global var
+	if(load_instruction->calculation_mode == ADDRESS_CALCULATION_MODE_GLOBAL_VAR){
+		load_instruction->op2 = lea_statement->op2;
+	}
+	
+	//Copy the offset too
+	load_instruction->offset = lea_statement->offset;
+
+	//The multiplicator as well
+	load_instruction->lea_multiplicator = lea_statement->lea_multiplicator;
+
+	//No matter what this is always set
+	load_instruction->destination_register = load_instruction->assignee;
+}
+
 
 /**
  * Select instructions that follow a singular pattern. This one single pass will run after
@@ -4661,7 +4719,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		reconstruct_window(window, assignment);
 		return;
 	}
-
 
 	//============================= Address Calculation Optimization  ==============================
 	//These are patterns that span multiple instructions. Often we're able to
@@ -4771,6 +4828,35 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		delete_statement(window->instruction1);
 
 		//And reconstruct the window based on instruction 2
+		reconstruct_window(window, window->instruction2);
+
+		//Done here
+		return;
+	}
+
+	/**
+	 * Handle from memory with lea statement
+	 *
+	 * Something like:
+	 * t6 <- Memory address of x_0(lea statement)
+	 * load t7 <- t6
+	 *
+	 * Can become:
+	 * mov(w/l/q) x(%rip), t7
+	 */
+	if(window->instruction1->instruction_type == LEAQ 
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count <= 1
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
+
+		//Let the helper deal with it
+		handle_two_instruction_lea_and_load(window->instruction1, window->instruction2);
+
+		//This is now useless
+		delete_statement(window->instruction1);
+
+		//Rework the whole window
 		reconstruct_window(window, window->instruction2);
 
 		//Done here
