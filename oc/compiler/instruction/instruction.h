@@ -151,6 +151,8 @@ struct live_range_t{
 	u_int32_t live_range_id;
 	//Store the assignment count - used for stack pointer fixing
 	u_int16_t assignment_count;
+	//Store the use count as well
+	u_int16_t use_count;
 	//The degree of this live range
 	u_int16_t degree;
 	//The interference graph index of it

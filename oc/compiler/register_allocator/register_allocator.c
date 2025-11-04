@@ -497,6 +497,9 @@ static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
 	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
 		dynamic_array_add(block->used_variables, live_range);
 	}
+
+	//No matter what, this increases
+	(live_range->use_count)++;
 }
 
 
@@ -1902,12 +1905,6 @@ static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* gra
 
 				//Perform the actual coalescence
 				coalesce_live_ranges(graph, source_live_range, destination_live_range);
-
-				//If this is in any of these sets, it shouldn't be anymore
-				dynamic_array_delete(current->used_variables, destination_live_range);
-				dynamic_array_delete(current->assigned_variables, destination_live_range);
-				dynamic_array_delete(current->live_out, destination_live_range);
-				dynamic_array_delete(current->live_in, destination_live_range);
 
 				//No more assignments to this one
 				destination_live_range->assignment_count = 0;
