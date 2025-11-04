@@ -934,7 +934,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//If we have two consecutive assignment statements
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
+		&& is_load_operation(window->instruction1) == TRUE
 		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
 		//Grab these out for convenience
 		instruction_t* load = window->instruction1;
