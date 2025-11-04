@@ -4577,7 +4577,7 @@ static void handle_two_instruction_address_calc_and_load(instruction_t* address_
 
 
 /**
- * Handle a lea and load statement
+ * Handle a lea and load statement for global vars
  *
  * t4 <- lea x(%rip)
  * load t3 <- t4
@@ -4588,7 +4588,7 @@ static void handle_two_instruction_address_calc_and_load(instruction_t* address_
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
-static void handle_two_instruction_lea_and_load(instruction_t* lea_statement, instruction_t* load_instruction){
+static void handle_two_instruction_lea_and_load_global_var(instruction_t* lea_statement, instruction_t* load_instruction){
 	//Select the variable size based on the assignee
 	variable_size_t size = get_type_size(load_instruction->assignee->type);
 
@@ -4620,9 +4620,7 @@ static void handle_two_instruction_lea_and_load(instruction_t* lea_statement, in
 	load_instruction->address_calc_reg2 = lea_statement->address_calc_reg2;
 
 	//For global vars only, the op2 is used to hold our global var
-	if(load_instruction->calculation_mode == ADDRESS_CALCULATION_MODE_GLOBAL_VAR){
-		load_instruction->op2 = lea_statement->op2;
-	}
+	load_instruction->op2 = lea_statement->op2;
 	
 	//Copy the offset too
 	load_instruction->offset = lea_statement->offset;
@@ -4632,6 +4630,70 @@ static void handle_two_instruction_lea_and_load(instruction_t* lea_statement, in
 
 	//No matter what this is always set
 	load_instruction->destination_register = load_instruction->assignee;
+}
+
+
+/**
+ * Handle a register/immediate to memory move type instruction selection with an address calculation
+ *
+ * This is specifically for global variables
+ *
+ * t4 <- lea x(%rip)
+ * store t4 <- t3
+ *
+ * Into:
+ *
+ * mov(w/l/q) t3, x(%rip)
+ *
+ * DOES NOT DO DELETION/WINDOW REORDERING
+ */
+static void handle_two_instruction_lea_and_store_global_var(instruction_t* lea_statement, instruction_t* store_instruction){
+	//The size is based on the store instruction's type
+	variable_size_t size = get_type_size(store_instruction->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			store_instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+	}
+
+	//Copy the calculation mode over entirely
+	store_instruction->calculation_mode = lea_statement->calculation_mode;
+
+	//And then just copy the address calcs
+	store_instruction->address_calc_reg1 = lea_statement->address_calc_reg1;
+	store_instruction->address_calc_reg2 = lea_statement->address_calc_reg2;
+
+	//For global vars only, the op2 is used to hold our global var
+	store_instruction->op2 = lea_statement->op2;
+	
+	//Copy the offset too
+	store_instruction->offset = lea_statement->offset;
+
+	//The multiplicator as well
+	store_instruction->lea_multiplicator = lea_statement->lea_multiplicator;
+
+	//If we have op1, then our source is op1
+	if(store_instruction->op1 != NULL){
+		store_instruction->source_register = store_instruction->op1;
+	//Otherwise our source is the constant
+	} else {
+		store_instruction->source_immediate = store_instruction->op1_const;
+	}
 }
 
 
@@ -4851,7 +4913,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
 		//Let the helper deal with it
-		handle_two_instruction_lea_and_load(window->instruction1, window->instruction2);
+		handle_two_instruction_lea_and_load_global_var(window->instruction1, window->instruction2);
 
 		//This is now useless
 		delete_statement(window->instruction1);
@@ -4863,6 +4925,34 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		return;
 	}
 
+	/**
+	 * Handle to memory with lea statement
+	 *
+	 * Something like:
+	 * t6 <- Memory address of x_0(lea statement)
+	 * store t6 <- t7
+	 *
+	 * Can become:
+	 * mov(w/l/q) x(%rip), t7
+	 */
+	if(window->instruction1->instruction_type == LEAQ 
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count <= 1
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT 
+		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
+
+		//Let the helper deal with it
+		handle_two_instruction_lea_and_store_global_var(window->instruction1, window->instruction2);
+
+		//This is now useless
+		delete_statement(window->instruction1);
+
+		//Rework the whole window
+		reconstruct_window(window, window->instruction2);
+
+		//Done here
+		return;
+	}
 
 	//The instruction that we have here is the window's instruction 1
 	instruction_t* instruction = window->instruction1;
