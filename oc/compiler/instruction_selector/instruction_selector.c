@@ -620,6 +620,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		remediate_memory_address_instruction(cfg, window->instruction1);
 	}
 
+	//Same for instruction 2 if we see it
+	if(window->instruction2->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
+		remediate_memory_address_instruction(cfg, window->instruction2);
+	}
+
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
 	//see, we perform one small optimization
 	
@@ -2358,6 +2363,10 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
 
 /**
  * Handle a register/immediate to memory move type instruction selection with an address calculation
+ *
+ * t4 <- stack_pointer_0 + 8
+ * store t4 <- t3
+ *
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
@@ -4723,6 +4732,36 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		reconstruct_window(window, window->instruction2);
 		return;
 	}
+
+
+	/**
+	 * Handle to memory movement with 2 operands
+	 *
+	 * Something like:
+	 * t4 <- stack_pointer_0 + 8
+	 * store t4 <- t3
+	 * 
+	 * Will become mov(w/l/q) t3, 8(stack_pointer_0)
+	 */
+	if(is_instruction_binary_operation(window->instruction1) == TRUE
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT
+		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
+		&& window->instruction1->assignee->use_count <= 1){
+
+		//Let the helper deal with it
+		handle_two_instruction_address_calc_to_memory_move(window->instruction1, window->instruction2);
+
+		//Now that we've done this, instruction 1 is useless
+		delete_statement(window->instruction1);
+
+		//And reconstruct the window based on instruction 2
+		reconstruct_window(window, window->instruction2);
+
+		//Done here
+		return;
+	}
+
+
 
 	//The instruction that we have here is the window's instruction 1
 	instruction_t* instruction = window->instruction1;
