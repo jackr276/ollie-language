@@ -4768,6 +4768,81 @@ static void handle_three_instruction_load_operation(instruction_window_t* window
 
 
 /**
+ * Handle a three instruction spanning store operation
+ *
+ * Take this:
+ * t8 <- 4
+ * t9 <- t8 + arg_0 * 4
+ * store t7[t9] <- t11
+ *
+ * Which can become
+ *
+ * mov(w/l/q) t11, 4(t7, arg_0, 4)
+ */
+static void handle_three_instruction_store_operation(instruction_window_t* window){
+	//Extract for convenience
+	instruction_t* constant_assignment = window->instruction1;
+	instruction_t* lea_statement = window->instruction2;
+	instruction_t* store_with_variable_offset = window->instruction3;
+
+	//Select the variable size based on the assignee
+	variable_size_t size = get_type_size(store_with_variable_offset->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			store_with_variable_offset->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case WORD:
+			store_with_variable_offset->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			store_with_variable_offset->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			store_with_variable_offset->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			store_with_variable_offset->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+	}
+
+	//This is a full address calculation here
+	store_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+	//This is the base address
+	store_with_variable_offset->address_calc_reg1 = store_with_variable_offset->assignee;
+
+	//Extract for our work here
+	three_addr_var_t* address_calc_reg2 = lea_statement->op2;
+
+	//Do we need to convert here? This can happen
+	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+		 address_calc_reg2 = handle_expanding_move_operation(store_with_variable_offset, address_calc_reg2, u64);
+	}
+
+	//The op2 comes from the lea statement
+	store_with_variable_offset->address_calc_reg2 = address_calc_reg2;
+	//The multiplicator also comes form here
+	store_with_variable_offset->lea_multiplicator = lea_statement->lea_multiplicator;
+
+	//The offset on the outside comes from the constant assignment
+	store_with_variable_offset->offset = constant_assignment->op1_const;
+
+	//If we have op1, then our source is op1
+	if(store_with_variable_offset->op2 != NULL){
+		store_with_variable_offset->source_register = store_with_variable_offset->op2;
+	//Otherwise our source is the constant
+	} else {
+		store_with_variable_offset->source_immediate = store_with_variable_offset->op1_const;
+	}
+	
+	return;
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -5046,6 +5121,39 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 
 		//Invoke the helper
 		handle_three_instruction_load_operation(window);
+
+		//Instructions 1 and 2 are now bunk
+		delete_statement(window->instruction1);
+		delete_statement(window->instruction2);
+
+		//The window is now entirely based on the third instruction
+		reconstruct_window(window, window->instruction3);
+
+		//Done here
+		return;
+	}
+
+	/**
+	 * Handle a three-instruction spanning store like this:
+	 *
+	 * t8 <- 4
+	 * t9 <- t8 + arg_0 * 4
+	 * store t7[t9] <- t11
+	 *
+	 * Which can become
+	 *
+	 * mov(w/l/q) t11, 4(t7, arg_0, 4)
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& window->instruction3 != NULL
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
+		&& variables_equal(window->instruction3->op1, window->instruction2->assignee, TRUE) == TRUE){
+
+		//Invoke the helper
+		handle_three_instruction_store_operation(window);
 
 		//Instructions 1 and 2 are now bunk
 		delete_statement(window->instruction1);
