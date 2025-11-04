@@ -4331,30 +4331,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	three_addr_var_t* left_hand_var = unary_package.assignee;
 
 	/**
-	 * It is often the case where we require an expanding move after we access memory. In order to
-	 * do this, we'll inject an assignment expression here which will eventually become a converting move
-	 * in the instruction selector
-	 *
-	 *
-	 * TODO INVESTIGATE THE NEED FOR THIS
-	if(left_hand_var->is_dereferenced == TRUE &&
-		is_expanding_move_required(left_hand_var->type, right_hand_package.assignee->type) == TRUE){
-
-		//Assigning to something of the inferred type
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(left_hand_var->type), final_op1);
-
-		//The final op1 has been used
-		add_used_variable(current_block, final_op1);
-
-		//Now the final_op1 becomes this result
-		final_op1 = assignment->assignee;
-
-		//We'll add the assignment in
-		add_statement(current_block, assignment);
-	}
-	 */
-
-	/**
 	 * Do we have a pre-loaded up store statement ready for us to go? If so, then
 	 * we'll need to handle this appropriately
 	 */

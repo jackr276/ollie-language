@@ -3637,6 +3637,13 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 	//Get the size we need first
 	variable_size_t size = get_type_size(instruction->op1_const->type);
 
+	//TODO HERE
+	//
+	//
+	//
+	//
+	//
+
 	//Select based on size
 	instruction->instruction_type = select_move_instruction(size);
 	
