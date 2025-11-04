@@ -856,34 +856,30 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//If we have two consecutive assignment statements
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& can_assignment_instruction_be_removed(window->instruction1) == TRUE
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
 		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
 		//Grab these out for convenience
-		instruction_t* first = window->instruction1;
-		instruction_t* second = window->instruction2;
+		instruction_t* load = window->instruction1;
+		instruction_t* move = window->instruction2;
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE
-			//And the assignee of the first statement is only ever used once
-			&& first->assignee->use_count <= 1){
+		if(load->assignee->is_temporary == TRUE && variables_equal(load->assignee, move->op1, TRUE) == TRUE
+			//And the load's assignee is only ever used once
+			&& load->assignee->use_count <= 1){
 
-			//Manage our use state here
-			replace_variable(second->op1, first->op1);
+			//The load's assignee now is the move's assignee
+			load->assignee = move->assignee;
 
-			//Reorder the op1's
-			second->op1 = first->op1;
+			//The second move is now useless
+			delete_statement(move);
 
-			//We can now delete the first statement
-			delete_statement(first);
-
-			//Reconstruct the window with second as the start
-			reconstruct_window(window, second);
+			//Reconstruct our window based around the load
+			reconstruct_window(window, load);
 				
 			//Regardless of what happened, we did see a change here
 			changed = TRUE;
 		}
 	}
-
 
 
 	/**
