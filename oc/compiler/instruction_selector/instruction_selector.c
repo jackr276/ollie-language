@@ -798,21 +798,18 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				break;
 		}
 
-
-		//Instruction 2 is now simply an assign const statement
-		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
 		//Op1 is now used one less time
 		window->instruction2->op1->use_count--;
 
 		//Null out where the old value was
 		window->instruction2->op1 = NULL;
 
+		//Instruction 2 is now simply an assign const statement
+		window->instruction2->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
 		//Instruction 1 is now completely useless *if* that was the only time that
 		//his assignee was used. Otherwise, we need to keep it in
-		if(window->instruction1->assignee->use_count == 0){
-			delete_statement(window->instruction1);
-		}
+		delete_statement(window->instruction1);
 
 		//Reconstruct the window with instruction 2 as the start
 		reconstruct_window(window, window->instruction2);
@@ -864,21 +861,17 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				break;
 		}
 
-
-		//Instruction 2 is now simply an assign const statement
-		window->instruction3->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-		//Op1 is now used one less time
+		//Decrement the use counts
 		window->instruction3->op1->use_count--;
 
 		//Null out where the old value was
 		window->instruction3->op1 = NULL;
 
-		//Instruction 1 is now completely useless *if* that was the only time that
-		//his assignee was used. Otherwise, we need to keep it in
-		if(window->instruction2->assignee->use_count == 0){
-			delete_statement(window->instruction2);
-		}
+		//Instruction 2 is now simply an assign const statement
+		window->instruction3->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+		//Instruction2 is now useless
+		delete_statement(window->instruction2);
 
 		//Reconstruct the window with instruction 2 as the start
 		reconstruct_window(window, window->instruction3);
