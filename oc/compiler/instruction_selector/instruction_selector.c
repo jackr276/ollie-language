@@ -2367,98 +2367,85 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
  * t4 <- stack_pointer_0 + 8
  * store t4 <- t3
  *
+ * Into:
+ *
+ * mov(w/l/q) t3, 8(stack_pointer_0)
+ *
+ * AND
+ *
+ * t4 <- stack_pointer_0 + t8
+ * store t4 <- t3
+ *
+ * Into:
+ *
+ * mov(w/l/q) t3, (stack_pointer_0, t8)
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
-static void handle_two_instruction_address_calc_to_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
-	//Select the variable size
-	variable_size_t size;
-	three_addr_var_t* address_calc_reg1;
-	three_addr_var_t* address_calc_reg2;
-
-	//Select the size based on what we're moving in
-	if(memory_access->op1 != NULL){
-		size = get_type_size(memory_access->op1->type);
-	} else {
-		size = get_type_size(memory_access->op1_const->type);
-	}
+static void handle_two_instruction_address_calc_and_store(instruction_t* address_calculation, instruction_t* store_instruction){
+	//The size is based on the store instruction's type
+	variable_size_t size = get_type_size(store_instruction->assignee->type);
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
 		case BYTE:
-			memory_access->instruction_type = REG_TO_MEM_MOVB;
+			store_instruction->instruction_type = REG_TO_MEM_MOVB;
 			break;
 		case WORD:
-			memory_access->instruction_type = REG_TO_MEM_MOVW;
+			store_instruction->instruction_type = REG_TO_MEM_MOVW;
 			break;
 		case DOUBLE_WORD:
-			memory_access->instruction_type = REG_TO_MEM_MOVL;
+			store_instruction->instruction_type = REG_TO_MEM_MOVL;
 			break;
 		case QUAD_WORD:
-			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
 			break;
 		//WE DO NOT DO FLOATS YET
 		default:
-			memory_access->instruction_type = REG_TO_MEM_MOVQ;
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
 			break;
 	}
 
-	//If we have a bin op with const statement, we'll have a constant in our answer
-	/**
-	 * If we have this case, we expect to see something like this
-	 * t26 <- t24 + 4
-	 * (t26) <- 3
-	 */
-	if(address_calculation->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		//So we know that the destination will be t26, the destination will remain unchanged
-		//We'll have a register source and an offset
-		memory_access->offset = address_calculation->op1_const;
 
-		//Grab this out so we can take a look
-		address_calc_reg1 = address_calculation->op1;
+	//Go based on what type of instruction we have here
+	switch(address_calculation->statement_type){
+		//Bin op with const statement, we'll have an offset only
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			//Our calculation mode here will be OFFSET_ONLY
+			store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-		//If this is the case, we need a converting move
-		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
-			//Reassign what reg1 is
-			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
-		}
+			//The store instruction has the offset of the address calc's op1
+			store_instruction->offset = address_calculation->op1_const;
 
-		memory_access->address_calc_reg1 = address_calc_reg1;
+			//The address calc reg 1 will be the op1 of the first instruction
+			store_instruction->address_calc_reg1 = address_calculation->op1;
 
-		//This is offset only mode
-		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-		
-	//Or if we have a statement like this(rare but may happen, covering our bases)
-	} else if(address_calculation->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-		//Grab both registers out
-		address_calc_reg1 = address_calculation->op1;
-		address_calc_reg2 = address_calculation->op2;
+			break;
 
-		//Do we need any conversion for reg1?
-		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
-			//Reassign what reg1 is
-			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
-		}
+		//Otherwise we'll have a REGISTERS_ONLY type calculation
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			//This one will be of type registers_only
+			store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
-		//Same exact treatment for reg2
-		if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
-			address_calc_reg2 = handle_expanding_move_operation(memory_access, address_calc_reg2, u64);
-		}
+			//Grab both registers out
+			//Base address
+			store_instruction->address_calc_reg1 = address_calculation->op1;
+			//Offset
+			store_instruction->address_calc_reg2 = address_calculation->op2;
 
-		//Finally we add these into the conversions
-		memory_access->address_calc_reg1 = address_calc_reg1;
-		memory_access->address_calc_reg2 = address_calc_reg2;
+			break;
 
-		//This is offset only mode
-		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+		//Unreachable here
+		default:
+			break;
 	}
 
-	//It's either an assign const or regular assignment. Either way,
-	//we'll need to set the appropriate source value
-	if(memory_access->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		memory_access->source_immediate = memory_access->op1_const;
+	//If we have op1, then our source is op1
+	if(store_instruction->op1 != NULL){
+		store_instruction->source_register = store_instruction->op1;
+	//Otherwise our source is the constant
 	} else {
-		memory_access->source_register = memory_access->op1;
+		store_instruction->source_immediate = store_instruction->op1_const;
 	}
 }
 
@@ -4744,12 +4731,13 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * Will become mov(w/l/q) t3, 8(stack_pointer_0)
 	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
+		&& window->instruction1->op == PLUS
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
 		&& window->instruction1->assignee->use_count <= 1){
 
 		//Let the helper deal with it
-		handle_two_instruction_address_calc_to_memory_move(window->instruction1, window->instruction2);
+		handle_two_instruction_address_calc_and_store(window->instruction1, window->instruction2);
 
 		//Now that we've done this, instruction 1 is useless
 		delete_statement(window->instruction1);
