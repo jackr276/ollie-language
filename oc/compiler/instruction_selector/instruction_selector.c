@@ -3635,14 +3635,7 @@ static void handle_dec_instruction(instruction_t* instruction){
  */
 static void handle_constant_to_register_move_instruction(instruction_t* instruction){
 	//Get the size we need first
-	variable_size_t size = get_type_size(instruction->op1_const->type);
-
-	//TODO HERE
-	//
-	//
-	//
-	//
-	//
+	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Select based on size
 	instruction->instruction_type = select_move_instruction(size);
