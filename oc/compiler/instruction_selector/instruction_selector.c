@@ -4465,8 +4465,17 @@ static void handle_two_instruction_address_calc_and_store(instruction_t* address
 			//Grab both registers out
 			//Base address
 			store_instruction->address_calc_reg1 = address_calculation->op1;
-			//Offset
-			store_instruction->address_calc_reg2 = address_calculation->op2;
+
+			//Extract for our work here
+			three_addr_var_t* address_calc_reg2 = address_calculation->op2;
+
+			//Do we need to convert here? This can happen
+			if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+				 address_calc_reg2 = handle_expanding_move_operation(store_instruction, address_calc_reg2, u64);
+			}
+
+			//Register offset
+			store_instruction->address_calc_reg2 = address_calc_reg2;
 
 			break;
 
@@ -4506,27 +4515,27 @@ static void handle_two_instruction_address_calc_and_store(instruction_t* address
  *
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
-static void handle_two_instruction_address_calc_and_load(instruction_t* address_calculation, instruction_t* load){
+static void handle_two_instruction_address_calc_and_load(instruction_t* address_calculation, instruction_t* load_instruction){
 	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load->assignee->type);
+	variable_size_t size = get_type_size(load_instruction->assignee->type);
 
 	//Now based on the size, we can select what variety to register/immediate to memory move we have here
 	switch (size) {
 		case BYTE:
-			load->instruction_type = MEM_TO_REG_MOVB;
+			load_instruction->instruction_type = MEM_TO_REG_MOVB;
 			break;
 		case WORD:
-			load->instruction_type = MEM_TO_REG_MOVW;
+			load_instruction->instruction_type = MEM_TO_REG_MOVW;
 			break;
 		case DOUBLE_WORD:
-			load->instruction_type = MEM_TO_REG_MOVL;
+			load_instruction->instruction_type = MEM_TO_REG_MOVL;
 			break;
 		case QUAD_WORD:
-			load->instruction_type = MEM_TO_REG_MOVQ;
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
 			break;
 		//WE DO NOT DO FLOATS YET
 		default:
-			load->instruction_type = MEM_TO_REG_MOVQ;
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
 			break;
 	}
 
@@ -4535,25 +4544,34 @@ static void handle_two_instruction_address_calc_and_load(instruction_t* address_
 		//Constant offset
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			//Our address calc mode here will be OFFSET_ONLY
-			load->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 			//The load's offset will be the op1_const
-			load->offset = address_calculation->op1_const;
+			load_instruction->offset = address_calculation->op1_const;
 
 			//The address calc reg1 is just our op1
-			load->address_calc_reg1 = address_calculation->op1;
+			load_instruction->address_calc_reg1 = address_calculation->op1;
 
 			break;
 
 		//Variable offset
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 			//This is REGISTERS_ONLY
-			load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
 			//Base address
-			load->address_calc_reg1 = address_calculation->op1;
+			load_instruction->address_calc_reg1 = address_calculation->op1;
+
+			//Extract for our work here
+			three_addr_var_t* address_calc_reg2 = address_calculation->op2;
+
+			//Do we need to convert here? This can happen
+			if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+				 address_calc_reg2 = handle_expanding_move_operation(load_instruction, address_calc_reg2, u64);
+			}
+
 			//Register offset
-			load->address_calc_reg2 = address_calculation->op2;
+			load_instruction->address_calc_reg2 = address_calc_reg2;
 			
 			break;
 
@@ -4563,7 +4581,7 @@ static void handle_two_instruction_address_calc_and_load(instruction_t* address_
 	}
 
 	//No matter what this is always set
-	load->destination_register = load->assignee;
+	load_instruction->destination_register = load_instruction->assignee;
 }
 
 
