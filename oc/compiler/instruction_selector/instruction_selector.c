@@ -677,6 +677,86 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		changed = TRUE;
 	}
 
+	/**
+	 * --------------------- Folding constant assignments in arithmetic expressions ----------------
+	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
+	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
+	 *
+	 * NOTE: This does not work for division or modulus instructions
+	 */
+	//Check first with 1 and 2
+	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
+		if(window->instruction1->assignee->is_temporary == TRUE
+			//Validate that the use count is less than 1
+			&& window->instruction1->assignee->use_count <= 1
+			&& is_operation_valid_for_constant_folding(window->instruction2, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
+			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
+			//Grab this out for convenience
+			instruction_t* const_assignment = window->instruction1;
+
+			//Let's mark that this is now a binary op with const statement
+			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+			//op2 is now used one less time
+			window->instruction2->op2->use_count--;
+
+			//We'll want to NULL out the secondary variable in the operation
+			window->instruction2->op2 = NULL;
+			
+			//We'll replace it with the op1 const that we've gotten from the prior instruction
+			window->instruction2->op1_const = const_assignment->op1_const;
+
+			//We can now delete the very first statement
+			delete_statement(window->instruction1);
+
+			//Reconstruct the window with instruction2 as the start
+			reconstruct_window(window, window->instruction1);
+
+			//This does count as a change
+			changed = TRUE;
+		}
+	}
+
+	//Now check with 1 and 3. The prior compression may have made this more worthwhile
+	if(window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
+		if(window->instruction1->assignee->is_temporary == TRUE
+			//Validate that this is not being used more than once
+			&& window->instruction1->assignee->use_count <= 1
+			&& is_operation_valid_for_constant_folding(window->instruction3, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
+			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
+			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
+			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
+			//Grab this out for convenience
+			instruction_t* const_assignment = window->instruction1;
+
+			//Let's mark that this is now a binary op with const statement
+			window->instruction3->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+			//Op2 for instruction3 is now used one less time
+			window->instruction3->op2->use_count--;
+
+			//We'll want to NULL out the secondary variable in the operation
+			window->instruction3->op2 = NULL;
+			
+			//We'll replace it with the op1 const that we've gotten from the prior instruction
+			window->instruction3->op1_const = const_assignment->op1_const;
+
+			//We can now delete the very first statement
+			delete_statement(window->instruction1);
+
+			//Reconstruct the window with instruction2 as the seed
+			reconstruct_window(window, window->instruction2);
+
+			//This does count as a change
+			changed = TRUE;
+		}
+	}
+
 
 	/**
 	 * ================= Handling pure constant operations ========================
@@ -885,88 +965,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			changed = TRUE;
 		}
 	}
-
-
-	/**
-	 * --------------------- Folding constant assignments in arithmetic expressions ----------------
-	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
-	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
-	 *
-	 * NOTE: This does not work for division or modulus instructions
-	 */
-	//Check first with 1 and 2
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE
-			//Validate that the use count is less than 1
-			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction2, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
-			&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
-			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
-			//Grab this out for convenience
-			instruction_t* const_assignment = window->instruction1;
-
-			//Let's mark that this is now a binary op with const statement
-			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-			//op2 is now used one less time
-			window->instruction2->op2->use_count--;
-
-			//We'll want to NULL out the secondary variable in the operation
-			window->instruction2->op2 = NULL;
-			
-			//We'll replace it with the op1 const that we've gotten from the prior instruction
-			window->instruction2->op1_const = const_assignment->op1_const;
-
-			//We can now delete the very first statement
-			delete_statement(window->instruction1);
-
-			//Reconstruct the window with instruction2 as the start
-			reconstruct_window(window, window->instruction1);
-
-			//This does count as a change
-			changed = TRUE;
-		}
-	}
-
-	//Now check with 1 and 3. The prior compression may have made this more worthwhile
-	if(window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE
-			//Validate that this is not being used more than once
-			&& window->instruction1->assignee->use_count <= 1
-			&& is_operation_valid_for_constant_folding(window->instruction3, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
-			&& variables_equal(window->instruction2->assignee, window->instruction3->op2, FALSE) == FALSE
-			&& variables_equal(window->instruction1->assignee, window->instruction3->op2, FALSE) == TRUE){
-			//If we make it in here, we know that we may have an opportunity to optimize. We simply 
-			//Grab this out for convenience
-			instruction_t* const_assignment = window->instruction1;
-
-			//Let's mark that this is now a binary op with const statement
-			window->instruction3->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-			//Op2 for instruction3 is now used one less time
-			window->instruction3->op2->use_count--;
-
-			//We'll want to NULL out the secondary variable in the operation
-			window->instruction3->op2 = NULL;
-			
-			//We'll replace it with the op1 const that we've gotten from the prior instruction
-			window->instruction3->op1_const = const_assignment->op1_const;
-
-			//We can now delete the very first statement
-			delete_statement(window->instruction1);
-
-			//Reconstruct the window with instruction2 as the seed
-			reconstruct_window(window, window->instruction2);
-
-			//This does count as a change
-			changed = TRUE;
-		}
-	}
-
 
 	/**
 	 * ==================== Op1 Assignment Folding for expressions ======================
