@@ -4740,6 +4740,34 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	}
 
 
+	/**
+	 * Handle from memory movement with 2 operands
+	 *
+	 * Something like:
+	 * t4 <- stack_pointer_0 + 8
+	 * load t3 <- t4
+	 * 
+	 * Will become mov(w/l/q) 8(stack_pointer_0), t3
+	 */
+	if(is_instruction_binary_operation(window->instruction1) == TRUE
+		&& window->instruction1->op == PLUS
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT 
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE
+		&& window->instruction1->assignee->use_count <= 1){
+
+		//Let the helper deal with it
+		handle_two_instruction_address_calc_and_load(window->instruction1, window->instruction2);
+
+		//Now that we've done this, instruction 1 is useless
+		delete_statement(window->instruction1);
+
+		//And reconstruct the window based on instruction 2
+		reconstruct_window(window, window->instruction2);
+
+		//Done here
+		return;
+	}
+
 
 	//The instruction that we have here is the window's instruction 1
 	instruction_t* instruction = window->instruction1;
