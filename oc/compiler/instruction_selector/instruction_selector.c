@@ -2361,93 +2361,6 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
 }
 
 
-/**
- * Handle a register/immediate to memory move type instruction selection with an address calculation
- *
- * t4 <- stack_pointer_0 + 8
- * store t4 <- t3
- *
- * Into:
- *
- * mov(w/l/q) t3, 8(stack_pointer_0)
- *
- * AND
- *
- * t4 <- stack_pointer_0 + t8
- * store t4 <- t3
- *
- * Into:
- *
- * mov(w/l/q) t3, (stack_pointer_0, t8)
- *
- * DOES NOT DO DELETION/WINDOW REORDERING
- */
-static void handle_two_instruction_address_calc_and_store(instruction_t* address_calculation, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
-
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			store_instruction->instruction_type = REG_TO_MEM_MOVB;
-			break;
-		case WORD:
-			store_instruction->instruction_type = REG_TO_MEM_MOVW;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = REG_TO_MEM_MOVL;
-			break;
-		case QUAD_WORD:
-			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
-			break;
-		//WE DO NOT DO FLOATS YET
-		default:
-			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
-			break;
-	}
-
-
-	//Go based on what type of instruction we have here
-	switch(address_calculation->statement_type){
-		//Bin op with const statement, we'll have an offset only
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			//Our calculation mode here will be OFFSET_ONLY
-			store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-
-			//The store instruction has the offset of the address calc's op1
-			store_instruction->offset = address_calculation->op1_const;
-
-			//The address calc reg 1 will be the op1 of the first instruction
-			store_instruction->address_calc_reg1 = address_calculation->op1;
-
-			break;
-
-		//Otherwise we'll have a REGISTERS_ONLY type calculation
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-			//This one will be of type registers_only
-			store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-
-			//Grab both registers out
-			//Base address
-			store_instruction->address_calc_reg1 = address_calculation->op1;
-			//Offset
-			store_instruction->address_calc_reg2 = address_calculation->op2;
-
-			break;
-
-		//Unreachable here
-		default:
-			break;
-	}
-
-	//If we have op1, then our source is op1
-	if(store_instruction->op1 != NULL){
-		store_instruction->source_register = store_instruction->op1;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
-}
 
 
 /**
@@ -2531,99 +2444,6 @@ static void handle_three_instruction_address_calc_to_memory_move(instruction_t* 
 	}
 
 	//And that's all
-}
-
-
-/**
- * Handle a memory to register move type instruction selection with an address calculation
- */
-static void handle_two_instruction_address_calc_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
-	//Temporary storage, declaring here
-	three_addr_var_t* address_calc_reg1;
-	three_addr_var_t* address_calc_reg2;
-
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(memory_access->assignee->type);
-
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			memory_access->instruction_type = MEM_TO_REG_MOVB;
-			break;
-		case WORD:
-			memory_access->instruction_type = MEM_TO_REG_MOVW;
-			break;
-		case DOUBLE_WORD:
-			memory_access->instruction_type = MEM_TO_REG_MOVL;
-			break;
-		case QUAD_WORD:
-			memory_access->instruction_type = MEM_TO_REG_MOVQ;
-			break;
-		//WE DO NOT DO FLOATS YET
-		default:
-			memory_access->instruction_type = MEM_TO_REG_MOVQ;
-			break;
-	}
-
-	/**
-	 * ======== BIN OP WITH CONST =================
-	 *
-	 * Here is what this would look like
-	 *
-	 * t26 <- t24 + 4
-	 * (t26) <- 3
-	 * 
-	 * mov(w/l/q) $3, 4(t24)
-	 *     op1_const  op2_const assignee
-	 */
-	if(address_calculation->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		//So we know that the destination will be t26, the destination will remain unchanged
-		//We'll have a register source and an offset
-		memory_access->offset = address_calculation->op1_const;
-
-		//Grab this for analysis
-		address_calc_reg1 = address_calculation->op1;
-
-		//Do we need any conversion for reg1?
-		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
-			//Reassign what reg1 is
-			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
-		}
-
-		//Once we're done with any needed conversions, we'll add it in here
-		memory_access->address_calc_reg1 = address_calc_reg1;
-
-		//This is offset only mode
-		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-		
-	//Otherwise, we just have a regular bin op statement
-	} else {
-		//Extract these two for analysis
-		address_calc_reg1 = address_calculation->op1;
-		address_calc_reg2 = address_calculation->op2;
-
-		//Do we need any conversion for reg1?
-		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
-			//Reassign what reg1 is
-			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
-		}
-
-		//Same exact treatment for reg2
-		if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
-			address_calc_reg2 = handle_expanding_move_operation(memory_access, address_calc_reg2, u64);
-		}
-
- 		//So we know that the destination will be t26, the destination will remain unchanged
-		//We'll have a register source and an offset
-		memory_access->address_calc_reg1 = address_calc_reg1;
-		memory_access->address_calc_reg2 = address_calc_reg2;
-
-		//This is offset only mode
-		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-	}
-
-	//Set the destination as well
-	memory_access->destination_register = memory_access->assignee;
 }
 
 
@@ -4575,6 +4395,187 @@ static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stac
 	}
 }
 
+
+/**
+ * Handle a register/immediate to memory move type instruction selection with an address calculation
+ *
+ * t4 <- stack_pointer_0 + 8
+ * store t4 <- t3
+ *
+ * Into:
+ *
+ * mov(w/l/q) t3, 8(stack_pointer_0)
+ *
+ * AND
+ *
+ * t4 <- stack_pointer_0 + t8
+ * store t4 <- t3
+ *
+ * Into:
+ *
+ * mov(w/l/q) t3, (stack_pointer_0, t8)
+ *
+ * DOES NOT DO DELETION/WINDOW REORDERING
+ */
+static void handle_two_instruction_address_calc_and_store(instruction_t* address_calculation, instruction_t* store_instruction){
+	//The size is based on the store instruction's type
+	variable_size_t size = get_type_size(store_instruction->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			store_instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+	}
+
+
+	//Go based on what type of instruction we have here
+	switch(address_calculation->statement_type){
+		//Bin op with const statement, we'll have an offset only
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			//Our calculation mode here will be OFFSET_ONLY
+			store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+			//The store instruction has the offset of the address calc's op1
+			store_instruction->offset = address_calculation->op1_const;
+
+			//The address calc reg 1 will be the op1 of the first instruction
+			store_instruction->address_calc_reg1 = address_calculation->op1;
+
+			break;
+
+		//Otherwise we'll have a REGISTERS_ONLY type calculation
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+			//This one will be of type registers_only
+			store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
+			//Grab both registers out
+			//Base address
+			store_instruction->address_calc_reg1 = address_calculation->op1;
+			//Offset
+			store_instruction->address_calc_reg2 = address_calculation->op2;
+
+			break;
+
+		//Unreachable here
+		default:
+			break;
+	}
+
+	//If we have op1, then our source is op1
+	if(store_instruction->op1 != NULL){
+		store_instruction->source_register = store_instruction->op1;
+	//Otherwise our source is the constant
+	} else {
+		store_instruction->source_immediate = store_instruction->op1_const;
+	}
+}
+
+
+/**
+ * Handle a memory to register move type instruction selection with an address calculation
+ */
+static void handle_two_instruction_address_calc_from_memory_move(instruction_t* address_calculation, instruction_t* memory_access){
+	//Temporary storage, declaring here
+	three_addr_var_t* address_calc_reg1;
+	three_addr_var_t* address_calc_reg2;
+
+	//Select the variable size based on the assignee
+	variable_size_t size = get_type_size(memory_access->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			memory_access->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		case WORD:
+			memory_access->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case DOUBLE_WORD:
+			memory_access->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case QUAD_WORD:
+			memory_access->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			memory_access->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+	}
+
+	/**
+	 * ======== BIN OP WITH CONST =================
+	 *
+	 * Here is what this would look like
+	 *
+	 * t26 <- t24 + 4
+	 * (t26) <- 3
+	 * 
+	 * mov(w/l/q) $3, 4(t24)
+	 *     op1_const  op2_const assignee
+	 */
+	if(address_calculation->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		//So we know that the destination will be t26, the destination will remain unchanged
+		//We'll have a register source and an offset
+		memory_access->offset = address_calculation->op1_const;
+
+		//Grab this for analysis
+		address_calc_reg1 = address_calculation->op1;
+
+		//Do we need any conversion for reg1?
+		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
+			//Reassign what reg1 is
+			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
+		}
+
+		//Once we're done with any needed conversions, we'll add it in here
+		memory_access->address_calc_reg1 = address_calc_reg1;
+
+		//This is offset only mode
+		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		
+	//Otherwise, we just have a regular bin op statement
+	} else {
+		//Extract these two for analysis
+		address_calc_reg1 = address_calculation->op1;
+		address_calc_reg2 = address_calculation->op2;
+
+		//Do we need any conversion for reg1?
+		if(is_type_address_calculation_compatible(address_calc_reg1->type) == FALSE){
+			//Reassign what reg1 is
+			address_calc_reg1 = handle_expanding_move_operation(memory_access, address_calc_reg1, u64);
+		}
+
+		//Same exact treatment for reg2
+		if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+			address_calc_reg2 = handle_expanding_move_operation(memory_access, address_calc_reg2, u64);
+		}
+
+ 		//So we know that the destination will be t26, the destination will remain unchanged
+		//We'll have a register source and an offset
+		memory_access->address_calc_reg1 = address_calc_reg1;
+		memory_access->address_calc_reg2 = address_calc_reg2;
+
+		//This is offset only mode
+		memory_access->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+	}
+
+	//Set the destination as well
+	memory_access->destination_register = memory_access->assignee;
+}
 
 
 
