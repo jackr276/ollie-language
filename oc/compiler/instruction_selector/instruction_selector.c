@@ -4698,6 +4698,76 @@ static void handle_two_instruction_lea_and_store_global_var(instruction_t* lea_s
 
 
 /**
+ * Handle a three instruction spanning load operation
+ *
+ * Take this:
+ * t8 <- 4
+ * t9 <- t8 + arg_0 * 4
+ * load t11 <- t7[t9]
+ *
+ * Which can become
+ *
+ * mov(w/l/q) 4(t7, arg_0, 4), t11
+ */
+static void handle_three_instruction_load_operation(instruction_window_t* window){
+	//Extract for convenience
+	instruction_t* constant_assignment = window->instruction1;
+	instruction_t* lea_statement = window->instruction2;
+	instruction_t* load_with_variable_offset = window->instruction3;
+
+	//Select the variable size based on the assignee
+	variable_size_t size = get_type_size(load_with_variable_offset->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		case WORD:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case DOUBLE_WORD:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case QUAD_WORD:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+	}
+
+	//This is a full address calculation here
+	load_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+	//This is the base address
+	load_with_variable_offset->address_calc_reg1 = load_with_variable_offset->op1;
+
+	//Extract for our work here
+	three_addr_var_t* address_calc_reg2 = lea_statement->op2;
+
+	//Do we need to convert here? This can happen
+	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+		 address_calc_reg2 = handle_expanding_move_operation(load_with_variable_offset, address_calc_reg2, u64);
+	}
+
+	//The op2 comes from the lea statement
+	load_with_variable_offset->address_calc_reg2 = address_calc_reg2;
+	//The multiplicator also comes form here
+	load_with_variable_offset->lea_multiplicator = lea_statement->lea_multiplicator;
+
+	//The offset on the outside comes from the constant assignment
+	load_with_variable_offset->offset = constant_assignment->op1_const;
+	
+	//And the destination is always the assignee
+	load_with_variable_offset->destination_register = load_with_variable_offset->assignee;
+	
+	return;
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -4953,6 +5023,41 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Done here
 		return;
 	}
+
+
+	/**
+	 * Handle a three-instruction spanning load like this:
+	 *
+	 * t8 <- 4
+	 * t9 <- t8 + arg_0 * 4
+	 * load t11 <- t7[t9]
+	 *
+	 * Which can become
+	 *
+	 * mov(w/l/q) 4(t7, arg_0, 4), t11
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& window->instruction3 != NULL
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
+		&& variables_equal(window->instruction3->op2, window->instruction2->assignee, TRUE) == TRUE){
+
+		//Invoke the helper
+		handle_three_instruction_load_operation(window);
+
+		//Instructions 1 and 2 are now bunk
+		delete_statement(window->instruction1);
+		delete_statement(window->instruction2);
+
+		//The window is now entirely based on the third instruction
+		reconstruct_window(window, window->instruction3);
+
+		//Done here
+		return;
+	}
+
 
 	//The instruction that we have here is the window's instruction 1
 	instruction_t* instruction = window->instruction1;
