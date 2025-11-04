@@ -227,10 +227,32 @@ u_int8_t is_store_operation(instruction_t* statement){
 		return FALSE;
 	}
 
+	//Only 3 qualifying statements
 	switch(statement->statement_type){
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Helper function to determine if we have a load operation
+ */
+u_int8_t is_load_operation(instruction_t* statement){
+	//Input validation
+	if(statement == NULL){
+		return FALSE;
+	}
+
+	//Only 3 qualifying statements
+	switch(statement->statement_type){
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
+		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
 			return TRUE;
 		default:
 			return FALSE;

@@ -845,6 +845,48 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	}
 
 	/**
+	 * --------------------- Redundnant copying elimination with loads ------------------------------------
+	 *  Let's now fold redundant copies. Here is an example of a redundant copy
+	 * 	load t10 <- x_2
+	 * 	t11 <- t10
+	 *
+	 * This can be folded into simply:
+	 * load t11 <- x_2
+	 */
+	//If we have two consecutive assignment statements
+	if(window->instruction2 != NULL 
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
+		&& can_assignment_instruction_be_removed(window->instruction1) == TRUE
+		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
+		//Grab these out for convenience
+		instruction_t* first = window->instruction1;
+		instruction_t* second = window->instruction2;
+		
+		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
+		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE
+			//And the assignee of the first statement is only ever used once
+			&& first->assignee->use_count <= 1){
+
+			//Manage our use state here
+			replace_variable(second->op1, first->op1);
+
+			//Reorder the op1's
+			second->op1 = first->op1;
+
+			//We can now delete the first statement
+			delete_statement(first);
+
+			//Reconstruct the window with second as the start
+			reconstruct_window(window, second);
+				
+			//Regardless of what happened, we did see a change here
+			changed = TRUE;
+		}
+	}
+
+
+
+	/**
 	 * --------------------- Folding constant assignments in arithmetic expressions ----------------
 	 *  In cases where we have a binary operation that is not a BIN_OP_WITH_CONST, but after simplification
 	 *  could be, we want to eliminate unnecessary register pressure by having consts directly in the arithmetic expression 
