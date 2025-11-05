@@ -5224,6 +5224,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
 		&& variables_equal(window->instruction3->op2, window->instruction2->assignee, FALSE) == TRUE){
 
+		printf("HERE\n\n\n\n");
 		//Let the helper deal with it
 		handle_three_instruction_load_with_address_calculation_operation(window);
 
