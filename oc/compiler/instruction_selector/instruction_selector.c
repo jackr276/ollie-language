@@ -4294,6 +4294,55 @@ static void handle_two_instruction_constant_offset_store_operation(instruction_t
 
 
 /**
+ * Handle an address calculation and load with constant offset operation
+ *
+ * t18 <- stack_pointer_0 + 384
+ * load 19 <- t18[2]
+ *
+ * Can become:
+ * mov(w/l/q) 386(stack_pointer_0), t19
+ *
+ * DOES NOT DO DELETION/WINDOW REORDERING
+ */
+static void handle_two_instruction_constant_offset_load_operation(instruction_t* addition_instruction, instruction_t* load_instruction){
+	//Select the variable size based on the assignee
+	variable_size_t size = get_type_size(load_instruction->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			load_instruction->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		case WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case DOUBLE_WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case QUAD_WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+	}
+
+	//This will always be OFFSET_ONLY
+	load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//The address calc reg1 is the op1. This would be a base address
+	load_instruction->address_calc_reg1 = addition_instruction->op1;
+
+	//Combine these 2 constants together. The result will go into the store instruction's offset
+	add_constants(load_instruction->offset, addition_instruction->op1_const);
+
+	//The destination register is always the assignee
+	load_instruction->destination_register = load_instruction->assignee;
+}
+
+
+/**
  * Handle a register/immediate to memory move type instruction selection with an address calculation
  *
  * t4 <- stack_pointer_0 + 8
@@ -5016,6 +5065,32 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 
 		//Let the helper do it
 		handle_two_instruction_constant_offset_store_operation(window->instruction1, window->instruction2);
+
+		//Once this is done, instruction1 is useless
+		delete_statement(window->instruction1);
+
+		//Rebuild the window based on 2
+		reconstruct_window(window, window->instruction2);
+		
+		return;
+	}
+
+	/**
+	 * Handle a situation like this:
+	 *
+	 * t18 <- stack_pointer_0 + 384
+	 * load t19 <- t18[2]
+	 *
+	 * Can become:
+	 * mov(w/l/q) 386(stack_pointer_0), t19
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET 
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
+
+		//Let the helper do it
+		handle_two_instruction_constant_offset_load_operation(window->instruction1, window->instruction2);
 
 		//Once this is done, instruction1 is useless
 		delete_statement(window->instruction1);
