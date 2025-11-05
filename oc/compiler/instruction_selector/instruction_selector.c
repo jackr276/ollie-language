@@ -4240,6 +4240,60 @@ static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stac
 
 
 /**
+ * Handle an address calculation and store with constant offset operation
+ *
+ * t18 <- stack_pointer_0 + 384
+ * store t18[2] <- 'a'
+ *
+ * Can become:
+ * mov(w/l/q) 'a', 386(stack_pointer_0)
+ *
+ * DOES NOT DO DELETION/WINDOW REORDERING
+ */
+static void handle_two_instruction_constant_offset_store_operation(instruction_t* addition_instruction, instruction_t* store_instruction){
+	//The size is based on the store instruction's type
+	variable_size_t size = get_type_size(store_instruction->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			store_instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+	}
+
+	//This will always be OFFSET_ONLY
+	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//The address calc reg1 is the op1. This would be a base address
+	store_instruction->address_calc_reg1 = addition_instruction->op1;
+
+	//Combine these 2 constants together. The result will go into the store instruction's offset
+	add_constants(store_instruction->offset, addition_instruction->op1_const);
+
+	//If we have op1, then our source is op1
+	if(store_instruction->op1 != NULL){
+		store_instruction->source_register = store_instruction->op1;
+	//Otherwise our source is the constant
+	} else {
+		store_instruction->source_immediate = store_instruction->op1_const;
+	}
+}
+
+
+/**
  * Handle a register/immediate to memory move type instruction selection with an address calculation
  *
  * t4 <- stack_pointer_0 + 8
@@ -4942,6 +4996,33 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
+		return;
+	}
+
+
+	/**
+	 * Handle a situation like this:
+	 *
+	 * t18 <- stack_pointer_0 + 384
+	 * store t18[2] <- 'a'
+	 *
+	 * Can become:
+	 * mov(w/l/q) 'a', 386(stack_pointer_0)
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
+		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
+
+		//Let the helper do it
+		handle_two_instruction_constant_offset_store_operation(window->instruction1, window->instruction2);
+
+		//Once this is done, instruction1 is useless
+		delete_statement(window->instruction1);
+
+		//Rebuild the window based on 2
+		reconstruct_window(window, window->instruction2);
+		
 		return;
 	}
 
