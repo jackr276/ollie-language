@@ -4343,6 +4343,66 @@ static void handle_two_instruction_constant_offset_load_operation(instruction_t*
 
 
 /**
+ * Handle an address calculation via multiplication and load with variable offset operation
+ *
+ * t19 <- x_0 * 4
+ * store t18[t19] <- i_0
+ *
+ * We can turn this into:
+ * mov(w/l/q) (t18, x_0, 4), i_0
+ *
+ * DOES NOT DO DELETION/WINDOW REORDERING
+ */
+static void handle_two_instruction_multiply_load_with_variable_offset(instruction_t* multiply, instruction_t* load_instruction){
+	//Select the variable size based on the assignee
+	variable_size_t size = get_type_size(load_instruction->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			load_instruction->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		case WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case DOUBLE_WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case QUAD_WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+	}
+
+	//This will always be REGISTERS_AND_SCALE
+	load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+
+	//The address calc reg1 is the op1. This would be a base address
+	load_instruction->address_calc_reg1 = load_instruction->op1;
+
+	//Extract for our work here
+	three_addr_var_t* address_calc_reg2 = multiply->op1;
+
+	//Do we need to convert here? This can happen
+	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+		 address_calc_reg2 = handle_expanding_move_operation(load_instruction, address_calc_reg2, u64);
+	}
+
+	//Register offset
+	load_instruction->address_calc_reg2 = address_calc_reg2;
+
+	//The multiplicator comes from the constant multiplication
+	load_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
+
+	//The destination register is always the assignee
+	load_instruction->destination_register = load_instruction->assignee;
+}
+
+
+/**
  * Handle a register/immediate to memory move type instruction selection with an address calculation
  *
  * t4 <- stack_pointer_0 + 8
@@ -5101,6 +5161,34 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		return;
 	}
 
+
+	/**
+	 * Handle a situation like:
+	 *
+	 * t19 <- x_0 * 4
+	 * load i_0 <- t18[t19]
+	 *
+	 * We can turn this into:
+	 * mov(w/l/q) (t18, x_0, 4), i_0
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == STAR
+		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+
+		//Let the helper do it
+		handle_two_instruction_multiply_load_with_variable_offset(window->instruction1, window->instruction2);
+
+		//Instruction1 is now useless
+		delete_statement(window->instruction1);
+
+		//Rebuild the window based on 2
+		reconstruct_window(window, window->instruction2);
+
+		return;
+	}
 
 	/**
 	 * Handle to memory movement with 2 operands
