@@ -4711,7 +4711,7 @@ static void handle_two_instruction_lea_and_store_global_var(instruction_t* lea_s
  *
  * mov(w/l/q) 4(t7, arg_0, 4), t11
  */
-static void handle_three_instruction_load_operation(instruction_window_t* window){
+static void handle_three_instruction_load_with_lea_operation(instruction_window_t* window){
 	//Extract for convenience
 	instruction_t* constant_assignment = window->instruction1;
 	instruction_t* lea_statement = window->instruction2;
@@ -4781,7 +4781,7 @@ static void handle_three_instruction_load_operation(instruction_window_t* window
  *
  * mov(w/l/q) t11, 4(t7, arg_0, 4)
  */
-static void handle_three_instruction_store_operation(instruction_window_t* window){
+static void handle_three_instruction_store_with_lea_operation(instruction_window_t* window){
 	//Extract for convenience
 	instruction_t* constant_assignment = window->instruction1;
 	instruction_t* lea_statement = window->instruction2;
@@ -4849,46 +4849,6 @@ static void handle_three_instruction_store_operation(instruction_window_t* windo
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
 static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
-	//We could see logical and/logical or
-	if(is_instruction_binary_operation(window->instruction1) == TRUE){
-		switch(window->instruction1->op){
-			//Handle the logical and case
-			case DOUBLE_AND:
-				handle_logical_and_instruction(cfg, window);
-				return;
-
-			//Handle logical or
-			case DOUBLE_OR:
-				handle_logical_or_instruction(cfg, window);
-				return;
-
-			//Handle division
-			case F_SLASH:
-				//This will generate more than one instruction
-				handle_division_instruction(window);
-				return;
-
-			//Handle modulus
-			case MOD:	
-				//This will generate more than one instruction
-				handle_modulus_instruction(window);
-				return;
-
-			//If we have a multiplication *and* it's unsigned, we go here
-			case STAR:
-				//Only do this if we're signed
-				if(is_type_signed(window->instruction1->assignee->type) == FALSE){
-					//Let the helper deal with it
-					handle_unsigned_multiplication_instruction(window);
-					return;
-				}
-				break;
-
-			default:
-				break;
-		}
-	}
-
 	/**
 	 * If we have an assignment that follows a relational operator, we need to do appropriate
 	 * setting logic. We'll do this by inserting a setX statement inbetween the relational operator
@@ -5122,7 +5082,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& variables_equal(window->instruction3->op2, window->instruction2->assignee, TRUE) == TRUE){
 
 		//Invoke the helper
-		handle_three_instruction_load_operation(window);
+		handle_three_instruction_load_with_lea_operation(window);
 
 		//Instructions 1 and 2 are now bunk
 		delete_statement(window->instruction1);
@@ -5155,7 +5115,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& variables_equal(window->instruction3->op1, window->instruction2->assignee, TRUE) == TRUE){
 
 		//Invoke the helper
-		handle_three_instruction_store_operation(window);
+		handle_three_instruction_store_with_lea_operation(window);
 
 		//Instructions 1 and 2 are now bunk
 		delete_statement(window->instruction1);
@@ -5168,6 +5128,68 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		return;
 	}
 
+	/** 
+	 * Handle a three instruction spanning store with a sort
+	 * of deconstructed lea here
+	 *
+	 * t12 <- arg_0 * 8
+	 * t13 <- t12 + 4
+	 * load t15 <- t11[t13]
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+		&& window->instruction1->op == STAR
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == PLUS
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
+		&& window->instruction3 != NULL
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
+		&& variables_equal(window->instruction3->op2, window->instruction2->assignee, FALSE) == TRUE){
+
+		//printf("HERE\n\n");
+		//print_instruction_window_three_address_code(window);
+
+	}
+
+	//We could see logical and/logical or
+	if(is_instruction_binary_operation(window->instruction1) == TRUE){
+		switch(window->instruction1->op){
+			//Handle the logical and case
+			case DOUBLE_AND:
+				handle_logical_and_instruction(cfg, window);
+				return;
+
+			//Handle logical or
+			case DOUBLE_OR:
+				handle_logical_or_instruction(cfg, window);
+				return;
+
+			//Handle division
+			case F_SLASH:
+				//This will generate more than one instruction
+				handle_division_instruction(window);
+				return;
+
+			//Handle modulus
+			case MOD:	
+				//This will generate more than one instruction
+				handle_modulus_instruction(window);
+				return;
+
+			//If we have a multiplication *and* it's unsigned, we go here
+			case STAR:
+				//Only do this if we're signed
+				if(is_type_signed(window->instruction1->assignee->type) == FALSE){
+					//Let the helper deal with it
+					handle_unsigned_multiplication_instruction(window);
+					return;
+				}
+				break;
+
+			default:
+				break;
+		}
+	}
 
 	//The instruction that we have here is the window's instruction 1
 	instruction_t* instruction = window->instruction1;
