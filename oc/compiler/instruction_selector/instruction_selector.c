@@ -4406,6 +4406,64 @@ static void handle_two_instruction_variable_offset_store_operation(instruction_t
 
 
 /**
+ * Handle a situation like:
+ *
+ * t22 <- t20 + 12
+ * load t23 <- t19[t22]
+ *
+ * Can become:
+ * mov(w/l/q) 12(t19, t20), t23
+ */
+static void handle_two_instruction_variable_offset_load_operation(instruction_t* addition_instruction, instruction_t* load_instruction){
+	//Select the variable size based on the assignee
+	variable_size_t size = get_type_size(load_instruction->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			load_instruction->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		case WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case DOUBLE_WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case QUAD_WORD:
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+	}
+
+	//This will always be OFFSET_ONLY
+	load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+	//Op1 is always our base address
+	load_instruction->address_calc_reg1 = load_instruction->op1;
+
+	//Extract for our work here
+	three_addr_var_t* address_calc_reg2 = addition_instruction->op1;
+
+	//Do we need to convert here? This can happen
+	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+		 address_calc_reg2 = handle_expanding_move_operation(load_instruction, address_calc_reg2, u64);
+	}
+
+	//Register offset
+	load_instruction->address_calc_reg2 = address_calc_reg2;
+
+	//The offset comes from the addition instruction
+	load_instruction->offset = addition_instruction->op1_const;
+
+	//The destination is always our assignee
+	load_instruction->destination_register = load_instruction->assignee;
+}
+
+
+/**
  * Handle an address calculation via multiplication and load with variable offset operation
  *
  * t19 <- x_0 * 4
@@ -5318,6 +5376,32 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		return;
 	}
 
+	/**
+	 * Handle a situation like this:
+	 *
+	 * t22 <- t20 + 12
+	 * load t23 <- t19[t22]
+	 *
+	 * Can become:
+	 * mov(w/l/q) 12(t19, t20), t23
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == PLUS
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET 
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, TRUE) == TRUE){
+
+		//Let the helper do it
+		handle_two_instruction_variable_offset_load_operation(window->instruction1, window->instruction2);
+
+		//Once this is done, instruction1 is useless
+		delete_statement(window->instruction1);
+
+		//Rebuild the window based on 2
+		reconstruct_window(window, window->instruction2);
+		
+		return;
+	}
 
 	/**
 	 * Handle a situation like:
