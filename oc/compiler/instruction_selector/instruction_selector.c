@@ -1556,8 +1556,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				}
 
 			//What if we have a power of 2 here? For any kind of multiplication or division, this can
-			//be optimized into a left or right shift if we have a compatible type(not a float)
-			} else if(is_constant_power_of_2(constant) == TRUE){
+			//be optimized into a left or right shift if we have a compatible type(not a float) *and*
+			//the assignee is equal to the variable being multiplied
+			} else if(is_constant_power_of_2(constant) == TRUE
+						&& variables_equal_no_ssa(current_instruction->assignee, current_instruction->op1, FALSE) == TRUE){
 				//If we have a star that's a left shift
 				if(current_instruction->op == STAR){
 					//Multiplication is a left shift
