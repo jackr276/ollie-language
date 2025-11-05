@@ -4843,6 +4843,79 @@ static void handle_three_instruction_store_with_lea_operation(instruction_window
 	return;
 }
 
+/**
+ * Handle a three instruction spanning load operation with a multiplication and
+ * constant calculation
+ *
+ *
+ * Handle a three instruction spanning store with a sort
+ * of deconstructed lea here
+ *
+ * t12 <- arg_0 * 8
+ * t13 <- t12 + 4
+ * load t15 <- t11[t13]
+ *
+ * Becomes:
+ * 
+ * mov(w/l/q) 4(t11, arg_0, 8)
+ */
+static void handle_three_instruction_load_with_address_calculation_operation(instruction_window_t* window){
+	//Extract for convenience
+	instruction_t* multiplication = window->instruction1;
+	instruction_t* addition = window->instruction2;
+	instruction_t* load_with_variable_offset = window->instruction3;
+
+	//Select the variable size based on the assignee
+	variable_size_t size = get_type_size(load_with_variable_offset->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVB;
+			break;
+		case WORD:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVW;
+			break;
+		case DOUBLE_WORD:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVL;
+			break;
+		case QUAD_WORD:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			load_with_variable_offset->instruction_type = MEM_TO_REG_MOVQ;
+			break;
+	}
+
+	//This is a full address calculation here
+	load_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+	//This is the base address
+	load_with_variable_offset->address_calc_reg1 = load_with_variable_offset->op1;
+
+	//Extract for our work here
+	three_addr_var_t* address_calc_reg2 = multiplication->op1;
+
+	//Do we need to convert here? This can happen
+	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+		 address_calc_reg2 = handle_expanding_move_operation(load_with_variable_offset, address_calc_reg2, u64);
+	}
+
+	//The op2 comes from the lea statement
+	load_with_variable_offset->address_calc_reg2 = address_calc_reg2;
+	//The multiplicator comes from the constant(we know it's a power of 2 by the time we get here)
+	load_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.long_constant;
+
+	//The offset on the outside comes from the constant assignment
+	load_with_variable_offset->offset = addition->op1_const;
+	
+	//And the destination is always the assignee
+	load_with_variable_offset->destination_register = load_with_variable_offset->assignee;
+	
+	return;
+}
+
 
 /**
  * Select instructions that follow a singular pattern. This one single pass will run after
@@ -5135,9 +5208,14 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * t12 <- arg_0 * 8
 	 * t13 <- t12 + 4
 	 * load t15 <- t11[t13]
+	 *
+	 * Becomes:
+	 * 
+	 * mov(w/l/q) 4(t11, arg_0, 8)
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
 		&& window->instruction1->op == STAR
+		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
 		&& window->instruction1->assignee->is_temporary == TRUE
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == PLUS
@@ -5146,9 +5224,15 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
 		&& variables_equal(window->instruction3->op2, window->instruction2->assignee, FALSE) == TRUE){
 
-		//printf("HERE\n\n");
-		//print_instruction_window_three_address_code(window);
+		//Let the helper deal with it
+		handle_three_instruction_load_with_address_calculation_operation(window);
 
+		//These 2 are now useless
+		delete_statement(window->instruction1);
+		delete_statement(window->instruction2);
+
+		//Rebuild the window based on instruction3
+		reconstruct_window(window, window->instruction3);
 	}
 
 	//We could see logical and/logical or
