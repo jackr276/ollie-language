@@ -497,6 +497,9 @@ static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
 	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
 		dynamic_array_add(block->used_variables, live_range);
 	}
+
+	//No matter what, this increases
+	(live_range->use_count)++;
 }
 
 
@@ -579,7 +582,6 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 	//Give it back
 	return live_range;
 }
-
 
 
 /**
@@ -673,7 +675,7 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 		add_used_live_range(live_range, block);
 
 	//If this is being derefenced, then it's not a true assignment, just a use
-	} else if(destination_register->indirection_level > 0){
+	} else if(is_destination_assigned(instruction) == FALSE){
 		add_used_live_range(live_range, block);
 
 	//If we get all the way to here, then it was truly assigned
@@ -1219,7 +1221,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 			 * region. Since this is the case, we're not really assigning to the register here. In
 			 * fact, we're using it, so we'll need to add this to LIVE_NOW
 			 */
-			} else if(operation->destination_register->indirection_level > 0){
+			} else if(is_destination_assigned(operation) == FALSE){
 				//Add it to live now and we're done
 				add_live_now_live_range(operation->destination_register->associated_live_range, live_now);
 
@@ -1861,7 +1863,6 @@ static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* gra
 			live_range_t* source_live_range = instruction->source_register->associated_live_range;
 			live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
 
-
 			/**
 			 * One potential case, we could have done some optimizations where we're left with something
 			 * like movq LR0, LR0. If this is the case, we should just delete that instruction and move
@@ -1904,12 +1905,6 @@ static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* gra
 
 				//Perform the actual coalescence
 				coalesce_live_ranges(graph, source_live_range, destination_live_range);
-
-				//If this is in any of these sets, it shouldn't be anymore
-				dynamic_array_delete(current->used_variables, destination_live_range);
-				dynamic_array_delete(current->assigned_variables, destination_live_range);
-				dynamic_array_delete(current->live_out, destination_live_range);
-				dynamic_array_delete(current->live_in, destination_live_range);
 
 				//No more assignments to this one
 				destination_live_range->assignment_count = 0;
@@ -2113,7 +2108,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				 */
 				if(current->destination_register->associated_live_range == spill_range){
 					//This counts as a source spill, and nothing more
-					if(current->destination_register->indirection_level > 0){
+					if(is_destination_assigned(current) == FALSE){
 						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
 
 					//Otherwise, we could also have a case where the destination is also
@@ -2148,7 +2143,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 				//live range. We'll also need to handle events like this if that's the case
 				} else if(current->destination_register->associated_live_range == currently_spilled){
 					//This counts as a source spill, and nothing more
-					if(current->destination_register->indirection_level > 0){
+					if(is_destination_assigned(current) == FALSE){
 						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
 
 					//Otherwise, we could also have a case where the destination is also

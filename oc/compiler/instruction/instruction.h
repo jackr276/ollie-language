@@ -151,6 +151,8 @@ struct live_range_t{
 	u_int32_t live_range_id;
 	//Store the assignment count - used for stack pointer fixing
 	u_int16_t assignment_count;
+	//Store the use count as well
+	u_int16_t use_count;
 	//The degree of this live range
 	u_int16_t degree;
 	//The interference graph index of it
@@ -193,7 +195,9 @@ struct three_addr_var_t{
 	//the instruction selector
 	u_int32_t use_count;
 	//What is the indirection level
-	u_int16_t indirection_level;
+	//Is this variable dereferenced in some way
+	//(either loaded from or stored to)
+	u_int8_t is_dereferenced;
 	//Is this a temp variable?
 	u_int8_t is_temporary;
 	//Is this a stack pointer?
@@ -292,8 +296,6 @@ struct instruction_t{
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;
-	//What is the indirection level?
-	u_int8_t indirection_level;
 	//Cannot be coalesced
 	u_int8_t cannot_be_combined;
 	//Is this a converting move of some kind?
@@ -346,6 +348,16 @@ void set_new_function(symtab_function_record_t* func);
 u_int8_t is_operator_relational_operator(ollie_token_t op);
 
 /**
+ * Helper function to determine if we have a store operation
+ */
+u_int8_t is_store_operation(instruction_t* statement);
+
+/**
+ * Helper function to determine if we have a load operation
+ */
+u_int8_t is_load_operation(instruction_t* statement);
+
+/**
  * Helper function to determine if an operator is can be constant folded
  */
 u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op);
@@ -364,6 +376,11 @@ u_int8_t is_instruction_assignment_operation(instruction_t* instruction);
  * Does a given operation overwrite it's source? Think add, subtract, etc
  */
 u_int8_t is_destination_also_operand(instruction_t* instruction);
+
+/**
+ * Is the destination actually assigned?
+ */
+u_int8_t is_destination_assigned(instruction_t* instruction);
 
 /**
  * Is this operation a pure copy? In other words, is it a move instruction
@@ -483,6 +500,13 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
 instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_var_t* source);
 
 /**
+ * Emit a movX instruction with a constant
+ *
+ * This is used for when we need extra moves(after a division/modulus)
+ */
+instruction_t* emit_const_movX_instruciton(three_addr_var_t* destination, three_addr_const_t* source);
+
+/**
  * Emit a lea statement with no type size multiplier on it
  */
 instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
@@ -525,16 +549,34 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
+ * Emit a store with offset ir code. We take in a base address(assignee), 
+ * an offset(op1), and the value we're storing(op2)
+ */
+instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee);
+
+/**
+ * Emit a store with offset ir code. We take in a base address(assignee), 
+ * a constant offset(op1_const), and the value we're storing(op2)
+ */
+instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee);
+
+/**
  * Emit a load statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
 instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
- * Emit a store statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a load with offset ir code. We take in a base address(op1), 
+ * an offset(op2), and the value we're loading into(assignee)
  */
-instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const);
+instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset);
+
+/**
+ * Emit a load with constant offset ir code. We take in a base address(op1), 
+ * an offset(op1_const), and the value we're loading into(assignee)
+ */
+instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
@@ -682,13 +724,13 @@ instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer
 /**
  * Are two variables equal? A helper method for searching
  */
-u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection_level);
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);
 
 /**
  * Are two variables equal regardless of their SSA status? This function should only ever be used
  * by the instruction selector, under very careful circumstances
  */
-u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level);
+u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);
 
 /**
  * Emit a complete, one-for-one copy of an instruction
@@ -696,11 +738,35 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8
 instruction_t* copy_instruction(instruction_t* copied);
 
 /**
- * Emit the sum of two given constants. The result will overwrite the second constant given
+ * Emit the product of two given constants. The result will overwrite the first constant given
  *
- * The result will be: constant2 = constant1 + constant2
+ * The result will be: constant1 = constant1 * constant2
  */
-three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
+ * Emit the sum of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 + constant2
+ */
+void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
+ * Emit the difference of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 - constant2
+ */
+void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
+ * Logical or two constants. The result is always stored in constant1
+ */
+void logical_or_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
+
+/**
+ * Logical and two constants. The result is always stored in constant1
+ */
+void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* constant2);
 
 /**
  * select the appropriate branch statement given the circumstances, including operand and signedness

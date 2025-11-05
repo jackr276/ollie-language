@@ -219,6 +219,48 @@ u_int8_t is_operator_relational_operator(ollie_token_t op){
 
 
 /**
+ * Helper function to determine if we have a store operation
+ */
+u_int8_t is_store_operation(instruction_t* statement){
+	//Input validation
+	if(statement == NULL){
+		return FALSE;
+	}
+
+	//Only 3 qualifying statements
+	switch(statement->statement_type){
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Helper function to determine if we have a load operation
+ */
+u_int8_t is_load_operation(instruction_t* statement){
+	//Input validation
+	if(statement == NULL){
+		return FALSE;
+	}
+
+	//Only 3 qualifying statements
+	switch(statement->statement_type){
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
+		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Helper function to determine if an operator is can be constant folded
  */
 u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op){
@@ -330,6 +372,25 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 			return TRUE;
 		default:
 			return FALSE;
+	}
+}
+
+
+/**
+ * Is the destination actually assigned?
+ */
+u_int8_t is_destination_assigned(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		//For these operations, the destination
+		//is not assigned
+		case REG_TO_MEM_MOVB:
+		case REG_TO_MEM_MOVL:
+		case REG_TO_MEM_MOVW:
+		case REG_TO_MEM_MOVQ:
+			return FALSE;
+		//By default yes
+		default:
+			return TRUE;
 	}
 }
 
@@ -457,15 +518,13 @@ u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 		case MOVL:
 		case MOVW:
 		case MOVQ:
-			//If we have an immediate value OR we 
-			//have some indirection, we say false
-			if(instruction->source_register == NULL
-				|| instruction->indirection_level > 0){
-				return FALSE;
+			//If there's a source register we're good
+			if(instruction->source_register != NULL){
+				return TRUE;
 			}
 
-			//Otherwise it is a pure copy
-			return TRUE;
+			//Otherwise we're assigning a constant so this isn't a pure copy
+			return FALSE;
 
 		//By default this isn't
 		default:
@@ -765,6 +824,45 @@ instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_v
 	//Finally we set the destination
 	instruction->destination_register = destination;
 	instruction->source_register = source;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a movX instruction with a constant
+ *
+ * This is used for when we need extra moves(after a division/modulus)
+ */
+instruction_t* emit_const_movX_instruciton(three_addr_var_t* destination, three_addr_const_t* source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We set the size based on the destination 
+	variable_size_t size = get_type_size(destination->type);
+
+	switch (size) {
+		case BYTE:
+			instruction->instruction_type = MOVB;
+			break;
+		case WORD:
+			instruction->instruction_type = MOVW;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MOVL;
+			break;
+		case QUAD_WORD:
+			instruction->instruction_type = MOVQ;
+			break;
+		//Should never reach this
+		default:
+			break;
+	}
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_immediate = source;
 
 	//And now we'll give it back
 	return instruction;
@@ -1162,12 +1260,6 @@ static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg)
  * and nothing more. This function is also designed to take into account the indirection aspected as well
  */
 void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode_t mode){
-	//If we have a block header, we will NOT print out any indirection info
-	//We will first print out any and all indirection("(") opening parens
-	for(u_int16_t i = 0; mode == PRINTING_VAR_INLINE && i < variable->indirection_level; i++){
-		fprintf(fl, "(");
-	}
-	
 	//If we're printing live ranges, we'll use the LR number
 	if(mode == PRINTING_LIVE_RANGES){
 		fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
@@ -1204,11 +1296,6 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 	} else {
 		//Otherwise, print out the SSA generation along with the variable
 		fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
-	}
-
-	//Lastly we print out the remaining indirection characters
-	for(u_int16_t i = 0; mode == PRINTING_VAR_INLINE && i < variable->indirection_level; i++){
-		fprintf(fl, ")");
 	}
 }
 
@@ -1500,6 +1587,135 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
+		/**
+		 * These print out as
+		 *
+		 * store x <- storee
+		 */
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			fprintf(fl, "store ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+			//Finally the storee(op1 or op1_const)
+			if(stmt->op1 != NULL){
+				print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			} else {
+				print_three_addr_constant(fl, stmt->op1_const);
+			}
+			fprintf(fl, "\n");
+			break;
+
+		/**
+		 * These print out like
+		 *
+		 * store x[offset] <- storee
+		 */
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			//First the base address(assignee)
+			fprintf(fl, "store ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+			//Then the constant offset
+			fprintf(fl, "["); 
+			print_three_addr_constant(fl, stmt->offset);
+			fprintf(fl, "] <- "); 
+
+			//Finally the storee(op2 or op1_const)
+			if(stmt->op2 != NULL){
+				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			} else {
+				print_three_addr_constant(fl, stmt->op1_const);
+			}
+
+			fprintf(fl, "\n");
+
+			break;
+
+		/**
+		 * These print out like
+		 *
+		 * store x[offset] <- storee
+		 */
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			//First the base address(assignee)
+			fprintf(fl, "store ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
+			//Then the variable offset(op1)
+			fprintf(fl, "["); 
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "] <- "); 
+
+			//Finally the storee(op2 or op1_const)
+			if(stmt->op2 != NULL){
+				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			} else {
+				print_three_addr_constant(fl, stmt->op1_const);
+			}
+
+			fprintf(fl, "\n");
+
+			break;
+
+
+		/**
+		 * These print out like
+		 *
+		 * load assignee <- x_0
+		 */
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			fprintf(fl, "load ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- "); 
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
+			break;
+
+		/**
+		 * These print out like
+		 *
+		 * load assignee <- x[offset] 
+		 */
+		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
+			//First the assignee
+			fprintf(fl, "load ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+
+			//Now the base address
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+			//Then the constant offset
+			fprintf(fl, "["); 
+			print_three_addr_constant(fl, stmt->offset);
+			fprintf(fl, "]"); 
+
+			fprintf(fl, "\n");
+
+			break;
+
+		/**
+		 * These print out like
+		 *
+		 * store x[offset] <- storee
+		 */
+		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
+			//First the assignee
+			fprintf(fl, "load ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- ");
+
+			//Now the base address
+			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+
+			//Then the constant offset
+			fprintf(fl, "["); 
+			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+			fprintf(fl, "]"); 
+
+			fprintf(fl, "\n");
+			break;
+
 		case THREE_ADDR_CODE_JUMP_STMT:
 			//Then print out the block label
 			fprintf(fl, "jmp .L%d\n", ((basic_block_t*)(stmt->if_block))->block_id);
@@ -1603,33 +1819,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_NEG_STATEMENT:
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- neg ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-			fprintf(fl, "\n");
-			break;
-
-		//A load statement takes a variable out of memory and stores
-		//it into a temp
-		case THREE_ADDR_CODE_LOAD_STATEMENT:
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- load ");
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-			fprintf(fl, "\n");
-			break;
-
-		//A load statement takes a variable out of memory and stores
-		//it into a temp
-		case THREE_ADDR_CODE_STORE_CONST_STATEMENT:
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- store ");
-			print_three_addr_constant(fl, stmt->op1_const);
-			fprintf(fl, "\n");
-			break;
-
-		//A store statement takes a value and stores it into a variable's
-		//memory location on the stack
-		case THREE_ADDR_CODE_STORE_STATEMENT:
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- store ");
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
@@ -1821,19 +2010,14 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 */
 		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE:
 		case ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST:
-			for(u_int8_t i = 0; i < instruction->indirection_level; i++){
-				fprintf(fl, "(");
-			}
+			fprintf(fl, "(");
 
 			if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE){
 				print_variable(fl, instruction->source_register, mode);
 			} else {
 				print_variable(fl, instruction->destination_register, mode);
 			}
-
-			for(u_int8_t i = 0; i < instruction->indirection_level; i++){
-				fprintf(fl, ")");
-			}
+			fprintf(fl, ")");
 
 			break;
 
@@ -3620,10 +3804,74 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 	stmt->assignee = assignee;
+
+	//This is being dereferenced
+	stmt->assignee->is_dereferenced = TRUE;
+
 	stmt->op1 = op1;
 	//What function are we in
 	stmt->function = current_function;
 	//And that's it, we'll now just give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a store with offset ir code. We take in a base address(assignee), 
+ * a variable offset(op1), and the value we're storing(op2)
+ */
+instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee){
+	//First allocate
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now populate with values
+	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
+	//The base address that we're assigning to
+	stmt->assignee = base_address;
+
+	//This is being dereferenced
+	stmt->assignee->is_dereferenced = TRUE;
+
+	//The op1 is our offset
+	stmt->op1 = offset;
+
+	//What we're storing
+	stmt->op2 = storee;
+
+	//Save our current function
+	stmt->function = current_function;
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a store with offset ir code. We take in a base address(assignee), 
+ * a constant offset(offset), and the value we're storing(op2)
+ */
+instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee){
+	//First allocate
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now populate with values
+	stmt->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+	//The base address that we're assigning to
+	stmt->assignee = base_address;
+
+	//This is being dereferenced
+	stmt->assignee->is_dereferenced = TRUE;
+
+	//The offset placeholder is used for our offset, not op1_const 
+	stmt->offset = offset;
+
+	//What we're storing
+	stmt->op2 = storee;
+
+	//Save our current function
+	stmt->function = current_function;
+
+	//And give it back
 	return stmt;
 }
 
@@ -3648,20 +3896,53 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 
 
 /**
- * Emit a store statement. This is like an assignment instruction, but we're explicitly
- * using stack memory here
+ * Emit a load with offset ir code. We take in a base address(op1), 
+ * an offset(op2), and the value we're loading into(assignee)
  */
-instruction_t* emit_store_const_ir_code(three_addr_var_t* assignee, three_addr_const_t* op1_const){
-	//First allocate it
+instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset){
+	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Let's now populate it with values
-	stmt->statement_type = THREE_ADDR_CODE_STORE_CONST_STATEMENT;
+	//Now populate with values
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET;
+	//The base address that we're assigning to
 	stmt->assignee = assignee;
-	stmt->op1_const = op1_const;
-	//What function are we in
+	//The op1 is our base address
+	stmt->op1 = base_address;
+
+	//And op2 is our offset
+	stmt->op2 = offset;
+
+	//Save our current function
 	stmt->function = current_function;
-	//And that's it, we'll now just give it back
+
+	//And give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a load with constant offset ir code. We take in a base address(op1), 
+ * an offset(offset), and the value we're loading into(assignee)
+ */
+instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset){
+	//First allocate
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now populate with values
+	stmt->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+	//The assignee that we're loading into
+	stmt->assignee = assignee;
+	//The op1 is our base address
+	stmt->op1 = base_address;
+
+	//Our offset is stored in "offset", not op1_const
+	stmt->offset = offset;
+
+	//Save our current function
+	stmt->function = current_function;
+
+	//And give it back
 	return stmt;
 }
 
@@ -4013,56 +4294,121 @@ instruction_t* copy_instruction(instruction_t* copied){
 
 
 /**
- * Emit the sum of two given constants. The result will overwrite the second constant given
- *
- * The result will be: constant2 = constant1 + constant2
+ * Multiply two constants together
+ * 
+ * NOTE: The result is always stored in the first one
  */
-three_addr_const_t* add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
-	// Switch based on the type
-	switch(constant2->const_type){
-		//If this is a type as such, we'll add the int constant and char constant
-		//from constant 1. We can do this because whatever is unused is set to 0
-		//by the calloc
-		case INT_CONST:
-		case INT_CONST_FORCE_U:
-			//If it's any of these we'll add the int value
-			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
-				constant2->constant_value.integer_constant += constant1->constant_value.integer_constant;
-			//Otherwise add the long value
-			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
-				constant2->constant_value.integer_constant += constant1->constant_value.long_constant;
-			//Only other option is char
-			} else {
-				constant2->constant_value.integer_constant += constant1->constant_value.char_constant;
-			}
-			break;
-		case LONG_CONST:
-		case LONG_CONST_FORCE_U:
-			//If it's any of these we'll add the int value
-			if(constant1->const_type == INT_CONST || constant1->const_type == INT_CONST_FORCE_U){
-				constant2->constant_value.long_constant += constant1->constant_value.integer_constant;
-			//Otherwise add the long value
-			} else if(constant1->const_type == LONG_CONST || constant1->const_type == LONG_CONST_FORCE_U){
-				constant2->constant_value.long_constant += constant1->constant_value.long_constant;
-			//Only other option is char
-			} else {
-				constant2->constant_value.long_constant += constant1->constant_value.char_constant;
-			}
-
-			break;
-		//Can't really see this ever happening, but it won't hurt
-		case CHAR_CONST:
-			//Add the other one's char const
-			constant2->constant_value.char_constant += constant1->constant_value.char_constant;
-			break;
-		//Mainly for us as the programmer
-		default:
-			print_parse_message(PARSE_ERROR, "Attempt to add incompatible constants", 0);
-			break;
+void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Handle our multiplications
+	if(constant1->const_type == INT_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.integer_constant *= constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.integer_constant *= constant2->constant_value.long_constant;
+		}
+	} else if(constant1->const_type == LONG_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.long_constant *= constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.long_constant *= constant2->constant_value.long_constant;
+		}
 	}
+}
 
-	//We always give back constant 2
-	return constant2;
+
+/**
+ * Emit the sum of two given constants. The result will overwrite the first constant given
+ *
+ * NOTE: The result is always stored in the first one
+ */
+void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Handle our multiplications
+	if(constant1->const_type == INT_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.integer_constant += constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.integer_constant += constant2->constant_value.long_constant;
+		}
+	} else if(constant1->const_type == LONG_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.long_constant += constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.long_constant += constant2->constant_value.long_constant;
+		}
+	}
+}
+
+
+/**
+ * Emit the difference of two given constants. The result will overwrite the first constant given
+ *
+ * NOTE: The result is always stored in the first one
+ */
+void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Handle our multiplications
+	if(constant1->const_type == INT_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.integer_constant -= constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.integer_constant -= constant2->constant_value.long_constant;
+		}
+	} else if(constant1->const_type == LONG_CONST){
+		if(constant2->const_type == INT_CONST){
+			constant1->constant_value.long_constant -= constant2->constant_value.integer_constant;
+		} else {
+			constant1->constant_value.long_constant -= constant2->constant_value.long_constant;
+		}
+	}
+}
+
+
+/**
+ * Logical or two constants. The result is always stored in constant1
+ */
+void logical_or_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Determine if they are 0 or not
+	u_int8_t const_1_0 = is_constant_value_zero(constant1);
+	u_int8_t const_2_0 = is_constant_value_zero(constant2);
+
+	//Go through the 4 cases in the truth table
+	if(const_1_0 == TRUE){
+		/* 0 || (non-zero) = 1 */
+		if(const_2_0 == FALSE){
+			constant1->constant_value.long_constant = 1;
+		/* 0 || 0 = 0 */
+		} else {
+			constant1->constant_value.long_constant = 0;
+		}
+
+	//This is non-zero, the other one is irrelevant
+	} else {
+		constant1->constant_value.long_constant = 1;
+	}
+}
+
+
+/**
+ * Logical and two constants. The result is always stored in constant1
+ */
+void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
+	//Determine if they are 0 or not
+	u_int8_t const_1_0 = is_constant_value_zero(constant1);
+	u_int8_t const_2_0 = is_constant_value_zero(constant2);
+
+	//If this one is 0, the other one's result is irrelevant
+	if(const_1_0 == TRUE){
+		constant1->constant_value.long_constant = 0;
+
+	//Nonzero
+	} else {
+		/* (non-zero) && (non-zero) = 1 */
+		if(const_2_0 == FALSE){
+			constant1->constant_value.long_constant = 1;
+		/* (non-zero) && 0 = 0 */
+		} else {
+			constant1->constant_value.long_constant = 0;
+		}
+	}
 }
 
 
@@ -4253,19 +4599,19 @@ u_int8_t is_register_callee_saved(general_purpose_register_t reg){
 /**
  * Are two variables equal? A helper method for searching
  */
-u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level){
+u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection){
 	//Easy way to tell here
 	if(a == NULL || b == NULL){
 		return FALSE;
 	}
 
-	//Another easy way to tell
-	if(a->is_temporary != b->is_temporary){
+	//Are we ignoring indirection? If not, we need to compare the dereference here
+	if(ignore_indirection == FALSE && a->is_dereferenced != b->is_dereferenced){
 		return FALSE;
 	}
 
-	//Another way to tell
-	if(a->indirection_level != b->indirection_level && ignore_indirect_level == FALSE){
+	//Another easy way to tell
+	if(a->is_temporary != b->is_temporary){
 		return FALSE;
 	}
 
@@ -4297,19 +4643,19 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 /**
  * Are two variables equal regardless of their SSA level? A helper method for searching
  */
-u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirect_level){
+u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection){
 	//Easy way to tell here
 	if(a == NULL || b == NULL){
 		return FALSE;
 	}
 
-	//Another easy way to tell
-	if(a->is_temporary != b->is_temporary){
+	//Are we ignoring indirection? If not, we need to compare the dereference here
+	if(ignore_indirection == FALSE && a->is_dereferenced != b->is_dereferenced){
 		return FALSE;
 	}
 
-	//Another way to tell
-	if(a->indirection_level != b->indirection_level && ignore_indirect_level == FALSE){
+	//Another easy way to tell
+	if(a->is_temporary != b->is_temporary){
 		return FALSE;
 	}
 
