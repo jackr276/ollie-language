@@ -4343,6 +4343,69 @@ static void handle_two_instruction_constant_offset_load_operation(instruction_t*
 
 
 /**
+ * Handle a situation like:
+ *
+ * t22 <- t20 + 12
+ * store t19[t22] <- 2
+ *
+ * Can become:
+ * mov(w/l/q) 2, 12(t19, t20)
+ */
+static void handle_two_instruction_variable_offset_store_operation(instruction_t* addition_instruction, instruction_t* store_instruction){
+	//The size is based on the store instruction's type
+	variable_size_t size = get_type_size(store_instruction->assignee->type);
+
+	//Now based on the size, we can select what variety to register/immediate to memory move we have here
+	switch (size) {
+		case BYTE:
+			store_instruction->instruction_type = REG_TO_MEM_MOVB;
+			break;
+		case WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVW;
+			break;
+		case DOUBLE_WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVL;
+			break;
+		case QUAD_WORD:
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+		//WE DO NOT DO FLOATS YET
+		default:
+			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
+			break;
+	}
+
+	//This will always be OFFSET_ONLY
+	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+	//The base address is our assignee
+	store_instruction->address_calc_reg1 = store_instruction->assignee;
+
+	//Extract for our work here
+	three_addr_var_t* address_calc_reg2 = addition_instruction->op1;
+
+	//Do we need to convert here? This can happen
+	if(is_type_address_calculation_compatible(address_calc_reg2->type) == FALSE){
+		 address_calc_reg2 = handle_expanding_move_operation(store_instruction, address_calc_reg2, u64);
+	}
+
+	//Register offset
+	store_instruction->address_calc_reg2 = address_calc_reg2;
+
+	//The offset comes from the addition instruction
+	store_instruction->offset = addition_instruction->op1_const;
+
+	//If we have op1, then our source is op1
+	if(store_instruction->op2 != NULL){
+		store_instruction->source_register = store_instruction->op2;
+	//Otherwise our source is the constant
+	} else {
+		store_instruction->source_immediate = store_instruction->op1_const;
+	}
+}
+
+
+/**
  * Handle an address calculation via multiplication and load with variable offset operation
  *
  * t19 <- x_0 * 4
@@ -5184,6 +5247,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * mov(w/l/q) 'a', 386(stack_pointer_0)
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->is_temporary == TRUE
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
@@ -5210,12 +5274,40 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * mov(w/l/q) 386(stack_pointer_0), t19
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->is_temporary == TRUE
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
 		//Let the helper do it
 		handle_two_instruction_constant_offset_load_operation(window->instruction1, window->instruction2);
+
+		//Once this is done, instruction1 is useless
+		delete_statement(window->instruction1);
+
+		//Rebuild the window based on 2
+		reconstruct_window(window, window->instruction2);
+		
+		return;
+	}
+
+	/**
+	 * Handle a situation like this:
+	 *
+	 * t22 <- t20 + 12
+	 * store t19[t22] <- 2
+	 *
+	 * Can become:
+	 * mov(w/l/q) 2, 12(t19, t20)
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == PLUS
+		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
+
+		//Let the helper do it
+		handle_two_instruction_variable_offset_store_operation(window->instruction1, window->instruction2);
 
 		//Once this is done, instruction1 is useless
 		delete_statement(window->instruction1);
