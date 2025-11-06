@@ -1896,36 +1896,6 @@ static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* gra
 			live_range_t* source_live_range = instruction->source_register->associated_live_range;
 			live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
 
-			/**
-			 * One potential case, we could have done some optimizations where we're left with something
-			 * like movq LR0, LR0. If this is the case, we should just delete that instruction and move
-			 * on, it's entirely pointless
-			 */
-			if(source_live_range == destination_live_range){
-				//Print if we want debug printing
-				if(debug_printing == TRUE){
-					printf("Deleting DUPLICATE:\n");
-					print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
-				}
-
-				//Grab a holder before we delete
-				instruction_t* holder = instruction;
-
-				//Advance it up
-				instruction = instruction->next_statement;
-
-				//Delete the old one
-				delete_statement(holder);
-
-				//Counts as one less use, one less assignment
-				source_live_range->use_count--;
-				destination_live_range->assignment_count--;
-
-				//Onto the next iteration
-				continue;
-			}
-
-
 			//We need to ensure that the two live ranges:
 			//	1.) Do not interfere with one another(and as such they're in separate webs)
 			//	2.) Do not have any pre-coloring that would prevent them from being merged. For example, if the
@@ -2861,6 +2831,16 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 * by letting this rule run every time
 		*/
 		perform_live_range_coalescence(cfg, graph, debug_printing);
+
+
+		/**
+		 * TODO
+		 *
+		 * if we did do some coalescing here - it may have messed up all of our live_in/live_out sets
+		 * and by transfer all of our LIVE_IN/LIVE_OUT sets for other blocks. Once we go through and do all
+		 * of the coalescing(if there was any), we need to recompute the liveness sets to account for all of our
+		 * changes
+		 */
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE && iterations == 0){
