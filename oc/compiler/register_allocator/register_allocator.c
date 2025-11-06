@@ -725,6 +725,23 @@ static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, b
 
 
 /**
+ * Assign a live range to a function parameter variable
+ *
+ * Since function parameters are not explicitly being read from, we do not want to
+ * count this as a use
+ */
+static void assign_live_range_to_function_parameter(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* function_parameter_var){
+	//Just leave if we're null
+	if(function_parameter_var == NULL){
+		return;
+	}
+
+	//Just a wrapper
+	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, function_parameter_var);
+}
+
+
+/**
  * Handle the live range that comes from the source of an instruction
  */
 static void assign_live_range_to_ret_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
@@ -814,8 +831,11 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
 		//Extract it
 		three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
 
-		//This counts as a used live range
-		assign_live_range_to_source_variable(live_ranges, basic_block, parameter);
+		/**
+		 * Because we are not explicitly reading in this instruction, we need a special rule that takes care to not
+		 * add these as used variables. We will instead just assign the appropriate live ranges
+		 */
+		assign_live_range_to_function_parameter(live_ranges, basic_block, parameter);
 	}
 }
 
