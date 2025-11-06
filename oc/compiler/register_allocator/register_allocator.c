@@ -649,6 +649,32 @@ static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_ar
 
 
 /**
+ * Handle all of the special cases that a destination variable can have, depending on
+ * whether it is a source & destination both or not
+ */
+static void update_use_assignment_for_destination_variable(instruction_t* instruction, basic_block_t* block){
+	//Extract the LR
+	live_range_t* live_range = instruction->destination_register->associated_live_range;
+
+	//There are a few things that could happen here in terms of a variable use:
+	//If this is the case, then we need to set this new LR as both used and assigned
+	if(is_destination_also_operand(instruction) == TRUE){
+		//Counts as both
+		add_assigned_live_range(live_range, block);
+		add_used_live_range(live_range, block);
+
+	//If this is being derefenced, then it's not a true assignment, just a use
+	} else if(is_destination_assigned(instruction) == FALSE){
+		add_used_live_range(live_range, block);
+
+	//If we get all the way to here, then it was truly assigned
+	} else {
+		add_assigned_live_range(live_range, block);
+	}
+}
+
+
+/**
  * Handle a live range being assigned to a destination variable,
  * and all of the bookkeeping that comes with it
  */
@@ -667,21 +693,8 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 	//Add this into the live range
 	add_variable_to_live_range(live_range, block, destination_register);
 
-	//There are a few things that could happen here in terms of a variable use:
-	//If this is the case, then we need to set this new LR as both used and assigned
-	if(is_destination_also_operand(instruction) == TRUE){
-		//Counts as both
-		add_assigned_live_range(live_range, block);
-		add_used_live_range(live_range, block);
-
-	//If this is being derefenced, then it's not a true assignment, just a use
-	} else if(is_destination_assigned(instruction) == FALSE){
-		add_used_live_range(live_range, block);
-
-	//If we get all the way to here, then it was truly assigned
-	} else {
-		add_assigned_live_range(live_range, block);
-	}
+	//Invoke the helper for this part
+	update_use_assignment_for_destination_variable(instruction, block);
 
 	//All done
 	if(instruction->destination_register2 == NULL){
@@ -1870,6 +1883,40 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 
 
 /**
+ * Compute the used and assignment sets for a given block
+ *
+ *
+ * TODO NOT YET TIED IN
+ */
+static void compute_block_used_and_assigned_sets(basic_block_t* block){
+	//Wipe these two values out
+	reset_dynamic_array(block->used_variables);
+	reset_dynamic_array(block->assigned_variables);
+
+	//Instruction cursor
+	instruction_t* cursor = block->leader_statement;
+
+	//Now we run through the block to recompute
+	while(cursor != NULL){
+		switch(cursor->instruction_type){
+			//These two have no use associated with them
+			case PHI_FUNCTION:
+			case RET:
+				break;
+
+			default:
+					
+				break;
+
+		}
+
+		//Advance it up
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
  * Perform coalescence at a block level. Remember that if we do end up coalescing, we need to recompute the used and assigned sets for
  * this block as those are affected by coalescing
  */
@@ -1950,6 +1997,7 @@ static u_int8_t perform_block_level_coalescence(basic_block_t* block, interferen
 			//Push this up
 			instruction = instruction->next_statement;
 		}
+	}
 
 	//Return whether or not we did or did not coalesce
 	return coalescence_occured;
@@ -1969,12 +2017,24 @@ static u_int8_t perform_live_range_coalescence(cfg_t* cfg, interference_graph_t*
 
 	//Run through every single block in here
 	basic_block_t* current = cfg->head_block;
+
+	//Run through every block
 	while(current != NULL){
+		//Invoke the helper for the block-level coalescing
+		u_int8_t block_coalesced = perform_block_level_coalescence(current, graph, debug_printing);
+
+		//If it's false - then the new value is what we got. If it's already true, don't bother
+		//setting it again
+		if(coalescence_occured == FALSE){
+			coalescence_occured = block_coalesced;
 		}
 
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
+
+	//Give back whether or not we did coalesce
+	return coalescence_occured;
 }
 
 
