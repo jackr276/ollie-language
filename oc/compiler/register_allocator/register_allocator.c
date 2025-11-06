@@ -738,6 +738,9 @@ static void assign_live_range_to_function_parameter(dynamic_array_t* live_ranges
 
 	//Just a wrapper
 	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, function_parameter_var);
+
+	//We will bump the use count, but this is not officially a read
+	live_range->use_count++;
 }
 
 
@@ -751,7 +754,10 @@ static void assign_live_range_to_ret_variable(dynamic_array_t* live_ranges, basi
 	}
 
 	//Let the helper deal with this
-	assign_live_range_to_variable(live_ranges, block, source_variable);
+	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, source_variable);
+
+	//We will bump the use count, but this is not officially a read
+	live_range->use_count++;
 }
 
 
