@@ -1870,86 +1870,106 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 
 
 /**
+ * Perform coalescence at a block level. Remember that if we do end up coalescing, we need to recompute the used and assigned sets for
+ * this block as those are affected by coalescing
+ */
+static u_int8_t perform_block_level_coalescence(basic_block_t* block, interference_graph_t* graph, u_int8_t debug_printing){
+	//By default assume nothing happened
+	u_int8_t coalescence_occured = FALSE;
+
+	//Now we'll run through every instruction in every block
+	instruction_t* instruction = block->leader_statement;
+
+	//Now run through all of these
+	while(instruction != NULL){
+		//If it's not a pure copy *or* it's marked as non-combinable, just move along
+		if(is_instruction_pure_copy(instruction) == FALSE
+			|| instruction->cannot_be_combined == TRUE){
+			instruction = instruction->next_statement;
+			continue;
+		}
+
+		//Otherwise if we get here, then we know that we have a pure copy instruction
+		live_range_t* source_live_range = instruction->source_register->associated_live_range;
+		live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
+
+		//We need to ensure that the two live ranges:
+		//	1.) Do not interfere with one another(and as such they're in separate webs)
+		//	2.) Do not have any pre-coloring that would prevent them from being merged. For example, if the
+		//	destination register is %rdi because it's a function parameter, we can't just change the register
+		//	it's in
+		if(do_live_ranges_interfere(graph, destination_live_range, source_live_range) == FALSE
+			&& does_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
+
+			//DEBUG LOGS
+			if(debug_printing == TRUE){
+				printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
+				printf("DELETING LR%d\n", destination_live_range->live_range_id);
+			}
+
+			//Perform the actual coalescence
+			coalesce_live_ranges(graph, source_live_range, destination_live_range);
+
+			/**
+			 * Now for our actual bookkeeping here. The destination LR on paper no longer
+			 * exists, but its uses and assignments still do. To fix this, we'll need to
+			 * do some calculations to ensure that we keep our counts accurate
+			 */
+			//Update the source's assignment count. We subtract 1 because the move operation
+			//that we have here will be deleted, so that's 1 less assignment
+			source_live_range->assignment_count += destination_live_range->assignment_count - 1;
+
+			//Our source live range is also used one less time due to this being gone. We will subtract 1
+			//and add the destination use count here
+			source_live_range->use_count = source_live_range->use_count + destination_live_range->use_count - 1;
+
+			//The destination live range is now no longer used or assigned to *at all*
+			destination_live_range->assignment_count = 0;
+			destination_live_range->use_count = 0;
+
+			//Be sure to now set this flag - we have coalesced overall here
+			coalescence_occured = TRUE;
+
+			//Grab a holder to this 
+			instruction_t* holder = instruction;
+
+			//Push this up
+			instruction = instruction->next_statement;
+
+			//DEBUG
+			if(debug_printing == TRUE){
+				printf("Deleting:\n");
+				print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+			}
+
+			//Delete the old one from the graph
+			delete_statement(holder);
+		
+		//All we need do here is advance it up
+		} else {
+			//Push this up
+			instruction = instruction->next_statement;
+		}
+
+	//Return whether or not we did or did not coalesce
+	return coalescence_occured;
+}
+
+
+/**
  * Perform live range coalescing on a given instruction. This sees
  * us merge the source and destination operands's webs(live ranges)
  *
  * We coalesce source to destination. When we're done, the *source* should
  * survive, the destination should NOT
  */
-static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* graph, u_int8_t debug_printing){
+static u_int8_t perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* graph, u_int8_t debug_printing){
+	//By default, assume we did not coalesce anything
+	u_int8_t coalescence_occured = FALSE;
+
 	//Run through every single block in here
 	basic_block_t* current = cfg->head_block;
 	while(current != NULL){
-		//Now we'll run through every instruction in every block
-		instruction_t* instruction = current->leader_statement;
-
-		//Now run through all of these
-		while(instruction != NULL){
-			//If it's not a pure copy *or* it's marked as non-combinable, just move along
-			if(is_instruction_pure_copy(instruction) == FALSE
-				|| instruction->cannot_be_combined == TRUE){
-				instruction = instruction->next_statement;
-				continue;
-			}
-
-			//Otherwise if we get here, then we know that we have a pure copy instruction
-			live_range_t* source_live_range = instruction->source_register->associated_live_range;
-			live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
-
-			//We need to ensure that the two live ranges:
-			//	1.) Do not interfere with one another(and as such they're in separate webs)
-			//	2.) Do not have any pre-coloring that would prevent them from being merged. For example, if the
-			//	destination register is %rdi because it's a function parameter, we can't just change the register
-			//	it's in
-			if(do_live_ranges_interfere(graph, destination_live_range, source_live_range) == FALSE
-				&& does_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
-
-				//DEBUG LOGS
-				if(debug_printing == TRUE){
-					printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
-					printf("DELETING LR%d\n", destination_live_range->live_range_id);
-				}
-
-				//Perform the actual coalescence
-				coalesce_live_ranges(graph, source_live_range, destination_live_range);
-
-				/**
-				 * Now for our actual bookkeeping here. The destination LR on paper no longer
-				 * exists, but its uses and assignments still do. To fix this, we'll need to
-				 * do some calculations to ensure that we keep our counts accurate
-				 */
-				//Update the source's assignment count. We subtract 1 because the move operation
-				//that we have here will be deleted, so that's 1 less assignment
-				source_live_range->assignment_count += destination_live_range->assignment_count - 1;
-
-				//Our source live range is also used one less time due to this being gone. We will subtract 1
-				//and add the destination use count here
-				source_live_range->use_count = source_live_range->use_count + destination_live_range->use_count - 1;
-
-				//The destination live range is now no longer used or assigned to *at all*
-				destination_live_range->assignment_count = 0;
-				destination_live_range->use_count = 0;
-
-				//Grab a holder to this 
-				instruction_t* holder = instruction;
-
-				//Push this up
-				instruction = instruction->next_statement;
-
-				//DEBUG
-				if(debug_printing == TRUE){
-					printf("Deleting:\n");
-					print_instruction(stdout, holder, PRINTING_VAR_INLINE);
-				}
-
-				//Delete the old one from the graph
-				delete_statement(holder);
-			
-			//All we need do here is advance it up
-			} else {
-				//Push this up
-				instruction = instruction->next_statement;
-			}
 		}
 
 		//Advance to the direct successor
