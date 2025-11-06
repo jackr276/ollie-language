@@ -2347,11 +2347,6 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 			continue;
 		}
 
-		//Live range is never used - so why would we ever bother allocating it
-		if(live_range->use_count == 0){
-			continue;
-		}
-
 		//Otherwise put it into our priority queue
 		dynamic_array_priority_insert_live_range(priority_live_ranges, live_range);
 	}
@@ -2360,8 +2355,6 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 	while(dynamic_array_is_empty(priority_live_ranges) == FALSE){
 		//Grab a live range out by deletion
 		live_range_t* range = dynamic_array_delete_from_back(priority_live_ranges);
-
-		printf("ALLOCATING LR%d\n\n", range->live_range_id);
 
 		/**
 		 * This degree being less than the number of registers
