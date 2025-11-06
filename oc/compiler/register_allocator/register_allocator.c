@@ -2332,13 +2332,24 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 
 	//Run through and insert everything into the priority live range
 	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
-		dynamic_array_priority_insert_live_range(priority_live_ranges, dynamic_array_get_at(live_ranges, i));
+		//Extract it
+		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
+
+		//No point in putting this in there, we already know what it will be
+		if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
+			continue;
+		}
+
+		//Otherwise put it into our priority queue
+		dynamic_array_priority_insert_live_range(priority_live_ranges, live_range);
 	}
 
 	//So long as this isn't empty
 	while(dynamic_array_is_empty(priority_live_ranges) == FALSE){
 		//Grab a live range out by deletion
 		live_range_t* range = dynamic_array_delete_from_back(priority_live_ranges);
+
+		//printf("ALLOCATING LR%d\n\n", range->live_range_id);
 
 		/**
 		 * This degree being less than the number of registers
