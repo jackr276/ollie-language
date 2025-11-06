@@ -1397,10 +1397,17 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
 		return FALSE;
 	}
 
-	//Otherwise it was NULL, so we're all set here
-
 	//Assign the register over
 	coloree->reg = reg;
+
+	//We also want to keep track of what registers are used in our function. Since pre-coloring
+	//must use a register, we'll need to flag it here
+	if(reg - 1 < K_COLORS_GEN_USE){
+		//Flag this as used in the function
+		if(coloree->assignment_count > 0){
+			coloree->function_defined_in->assigned_regsiters[reg - 1] = TRUE;
+		}
+	}
 
 	//And mark that it's pre-colored
 	coloree->is_precolored = TRUE;
