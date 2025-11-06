@@ -121,6 +121,13 @@ static void remove_useless_moves(cfg_t* cfg){
 					delete_statement(holder);
 
 				//Otherwise push it up
+				} else if(destination_live_range->use_count == 0) {
+					//Print it out
+					printf("HERE\n\n\n");
+					print_instruction(stdout, current_instruction, PRINTING_LIVE_RANGES);
+					//TODO LOOK AT
+
+					current_instruction = current_instruction->next_statement;
 				} else {
 					current_instruction = current_instruction->next_statement;
 				}
