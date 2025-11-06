@@ -1891,6 +1891,10 @@ static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* gra
 				//Delete the old one
 				delete_statement(holder);
 
+				//Counts as one less use, one less assignment
+				source_live_range->use_count--;
+				destination_live_range->assignment_count--;
+
 				//Onto the next iteration
 				continue;
 			}
@@ -1926,6 +1930,9 @@ static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* gra
 				//and add the destination use count here
 				source_live_range->use_count = source_live_range->use_count + destination_live_range->use_count - 1;
 
+				//The destination live range is now no longer used or assigned to *at all*
+				destination_live_range->assignment_count = 0;
+				destination_live_range->use_count = 0;
 
 				//Grab a holder to this 
 				instruction_t* holder = instruction;
