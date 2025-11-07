@@ -2992,6 +2992,10 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 			//Then - recalculate all liveness sets
 			calculate_liveness_sets(cfg);
 
+			//Finally, recalculate all of the interference now that all of the
+			//prerequisites have been met
+			graph = construct_interference_graph(cfg, live_ranges);
+
 		}
 
 		//Show our live ranges once again if requested
