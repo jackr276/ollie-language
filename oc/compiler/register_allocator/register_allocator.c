@@ -1932,22 +1932,22 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				}
 
 				//And then the usual procedure for source1 
-				if(cursor->source_register->associated_live_range != NULL){
+				if(cursor->source_register != NULL){
 					add_used_live_range(cursor->source_register->associated_live_range, block);
 				}
 
 				//And then the usual procedure for source2
-				if(cursor->source_register2->associated_live_range != NULL){
+				if(cursor->source_register2 != NULL){
 					add_used_live_range(cursor->source_register2->associated_live_range, block);
 				}
 
 				//And then the usual procedure for the address calc reg
-				if(cursor->address_calc_reg1->associated_live_range != NULL){
+				if(cursor->address_calc_reg1 != NULL){
 					add_used_live_range(cursor->address_calc_reg1->associated_live_range, block);
 				}
 
 				//And then the usual procedure for the address calc reg
-				if(cursor->address_calc_reg2->associated_live_range != NULL){
+				if(cursor->address_calc_reg2 != NULL){
 					add_used_live_range(cursor->address_calc_reg2->associated_live_range, block);
 				}
 					
@@ -2973,17 +2973,23 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 * allow for even more coalescence. We will use this to our advantage
 		 * by letting this rule run every time
 		*/
-		perform_live_range_coalescence(cfg, graph, debug_printing);
-
+		u_int8_t could_coalesce = perform_live_range_coalescence(cfg, graph, debug_printing);
 
 		/**
-		 * TODO
+		 * If we were in fact able to coalesce, we will have messed up the liveness sets due
+		 * to merging live ranges, etc. This may mess up allocation down the line. As such, we
+		 * need to come here and recalculate the following:
+		 * 	1.) all of the used & assigned sets
+		 * 	2.) all of the liveness sets(those rely on used & defined entirely)
+		 * 	3.) the interference
 		 *
-		 * if we did do some coalescing here - it may have messed up all of our live_in/live_out sets
-		 * and by transfer all of our LIVE_IN/LIVE_OUT sets for other blocks. Once we go through and do all
-		 * of the coalescing(if there was any), we need to recompute the liveness sets to account for all of our
-		 * changes
+		 * short of this, we will see strange an inaccurate results such as excessive interference
 		 */
+		if(could_coalesce == TRUE){
+			//First step - recalculate all of our used & assigned sets
+			recompute_used_and_assigned_sets(cfg);
+
+		}
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE && iterations == 0){
