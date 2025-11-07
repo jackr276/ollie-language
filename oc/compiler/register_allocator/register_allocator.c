@@ -1094,6 +1094,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 						//If it doesn't already contain this variable, we'll add it in
 						if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
+							printf("Adding live out LR%d for block .L%d from block .L%d\n\n", successor_live_in_var->live_range_id, current->block_id, successor->block_id);
 							dynamic_array_add(current->live_out, successor_live_in_var);
 						}
 					}
