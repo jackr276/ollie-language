@@ -994,6 +994,28 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 
 
 /**
+ * Reset the visited status and the liveness arrays for each block
+ */
+static void reset_blocks_for_liveness(cfg_t* cfg){
+	//Grab a cursor
+	basic_block_t* current = cfg->head_block;
+
+	//Run through them all
+	while(current != NULL){
+		//Reset this
+		current->visited = FALSE;
+
+		//Also reset the liveness sets
+		reset_dynamic_array(current->live_in);
+		reset_dynamic_array(current->live_out);
+
+		//Push it up
+		current = current->direct_successor;
+	}
+}
+
+
+/**
  * Calculate the "live_in" and "live_out" sets for each basic block. More broadly, we can do this for 
  * every single function
  *
@@ -1014,8 +1036,8 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
  *
  */
 static void calculate_liveness_sets(cfg_t* cfg){
-	//Reset the visited status
-	reset_visited_status(cfg, FALSE);
+	//Reset the visited status and liveness sets
+	reset_blocks_for_liveness(cfg);
 
 	//Did we find a difference
 	u_int8_t difference_found;
@@ -1895,8 +1917,6 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 	//Wipe these two values out
 	reset_dynamic_array(block->used_variables);
 	reset_dynamic_array(block->assigned_variables);
-	reset_dynamic_array(block->live_in);
-	reset_dynamic_array(block->live_out);
 
 	//Instruction cursor
 	instruction_t* cursor = block->leader_statement;
@@ -3019,6 +3039,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 
 		//If we were not colorable, then we need to reset everything here
 		if(colorable == FALSE){
+			//Wipe them all out
 			reset_all_live_ranges(live_ranges);
 		}
 
