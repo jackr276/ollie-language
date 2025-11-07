@@ -2989,6 +2989,9 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 			//First step - recalculate all of our used & assigned sets
 			recompute_used_and_assigned_sets(cfg);
 
+			//Then - recalculate all liveness sets
+			calculate_liveness_sets(cfg);
+
 		}
 
 		//Show our live ranges once again if requested
