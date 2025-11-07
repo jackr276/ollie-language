@@ -1169,6 +1169,10 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		//Set the degree to be 0 as well
 		current->degree = 0;
 
+		//These are both now not used and not assigned in our perspective
+		current->use_count = 0;
+		current->assignment_count = 0;
+
 		//And we'll also reset all of the neighbors
 		reset_dynamic_array(current->neighbors);
 	}
@@ -2042,23 +2046,6 @@ static u_int8_t perform_block_level_coalescence(basic_block_t* block, interferen
 
 			//Perform the actual coalescence
 			coalesce_live_ranges(graph, source_live_range, destination_live_range);
-
-			/**
-			 * Now for our actual bookkeeping here. The destination LR on paper no longer
-			 * exists, but its uses and assignments still do. To fix this, we'll need to
-			 * do some calculations to ensure that we keep our counts accurate
-			 */
-			//Update the source's assignment count. We subtract 1 because the move operation
-			//that we have here will be deleted, so that's 1 less assignment
-			source_live_range->assignment_count += destination_live_range->assignment_count - 1;
-
-			//Our source live range is also used one less time due to this being gone. We will subtract 1
-			//and add the destination use count here
-			source_live_range->use_count = source_live_range->use_count + destination_live_range->use_count - 1;
-
-			//The destination live range is now no longer used or assigned to *at all*
-			destination_live_range->assignment_count = 0;
-			destination_live_range->use_count = 0;
 
 			//Be sure to now set this flag - we have coalesced overall here
 			coalescence_occured = TRUE;
