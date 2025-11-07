@@ -1092,6 +1092,11 @@ static void calculate_liveness_sets(cfg_t* cfg){
 						//Let's check to make sure we haven't already added this
 						live_range_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
 
+						//We don't care about the liveness of these - there's no point in analyzing it
+						if(successor_live_in_var == stack_pointer_lr || successor_live_in_var == instruction_pointer_lr){
+							continue;
+						}
+
 						//If it doesn't already contain this variable, we'll add it in
 						if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
 							printf("Adding live out LR%d for block .L%d from block .L%d\n\n", successor_live_in_var->live_range_id, current->block_id, successor->block_id);
@@ -1112,6 +1117,11 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
 					//Grab a reference for our use
 					live_range_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+
+					//We don't care about the liveness of these - there's no point in analyzing it
+					if(live_out_var == stack_pointer_lr || live_out_var == instruction_pointer_lr){
+						continue;
+					}
 
 					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
 					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
