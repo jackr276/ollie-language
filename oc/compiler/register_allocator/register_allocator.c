@@ -1895,6 +1895,8 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 	//Wipe these two values out
 	reset_dynamic_array(block->used_variables);
 	reset_dynamic_array(block->assigned_variables);
+	reset_dynamic_array(block->live_in);
+	reset_dynamic_array(block->live_out);
 
 	//Instruction cursor
 	instruction_t* cursor = block->leader_statement;
