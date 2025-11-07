@@ -1885,10 +1885,13 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 /**
  * Compute the used and assignment sets for a given block
  *
+ * We will tie this into the coalesce block-level function. We will recompute used/assigned
+ * at the block level if we coalesce at the block level
  *
- * TODO NOT YET TIED IN
+ * Actually, we may need to do this for the whole CFG due to the way the live ranges are not tied to their
+ * variables. We will likely need to recompute at CFG level
  */
-static void compute_block_used_and_assigned_sets(basic_block_t* block){
+static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 	//Wipe these two values out
 	reset_dynamic_array(block->used_variables);
 	reset_dynamic_array(block->assigned_variables);
@@ -1912,6 +1915,25 @@ static void compute_block_used_and_assigned_sets(basic_block_t* block){
 
 		//Advance it up
 		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
+ * Recompute the used & assigned sets for the whole CFG
+ * This is done after we coalesce at least one live range
+ */
+static void recompute_used_and_assigned_sets(cfg_t* cfg){
+	//Grab a cursor block
+	basic_block_t* cursor = cfg->head_block;
+
+	//Run through every block
+	while(cursor != NULL){
+		//Invoke the block-level helper
+		compute_block_level_used_and_assigned_sets(cursor);
+
+		//Push it up
+		cursor = cursor->direct_successor;
 	}
 }
 
