@@ -1907,10 +1907,51 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case RET:
 				break;
 
-			default:
-					
+			case INCB:
+			case INCW:
+			case INCL:
+			case INCQ:
+			case DECB:
+			case DECW:
+			case DECL:
+			case DECQ:
+				//This counts as both an assignment and a use
+				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+				add_used_live_range(cursor->destination_register->associated_live_range, block);
 				break;
 
+			default:
+				//Handle destination 1
+				if(cursor->destination_register != NULL){
+					update_use_assignment_for_destination_variable(cursor, block);
+				}
+
+				//Handle destination 2(this is rare but we have it sometimes)
+				if(cursor->destination_register2 != NULL){
+					add_assigned_live_range(cursor->destination_register2->associated_live_range, block);
+				}
+
+				//And then the usual procedure for source1 
+				if(cursor->source_register->associated_live_range != NULL){
+					add_used_live_range(cursor->source_register->associated_live_range, block);
+				}
+
+				//And then the usual procedure for source2
+				if(cursor->source_register2->associated_live_range != NULL){
+					add_used_live_range(cursor->source_register2->associated_live_range, block);
+				}
+
+				//And then the usual procedure for the address calc reg
+				if(cursor->address_calc_reg1->associated_live_range != NULL){
+					add_used_live_range(cursor->address_calc_reg1->associated_live_range, block);
+				}
+
+				//And then the usual procedure for the address calc reg
+				if(cursor->address_calc_reg2->associated_live_range != NULL){
+					add_used_live_range(cursor->address_calc_reg2->associated_live_range, block);
+				}
+					
+				break;
 		}
 
 		//Advance it up
