@@ -1164,15 +1164,12 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		//Grab the live range out
 		live_range_t* current = dynamic_array_get_at(live_ranges, i);
 
-		//Unless we have the stack or instruction pointer, wipe out the coloring
-		if(current != stack_pointer_lr && current != instruction_pointer_lr){
-			//Wipe out the register coloring
-			current->is_precolored = FALSE;
-			current->reg = NO_REG;
-		}
-
 		//Set the degree to be 0 as well
 		current->degree = 0;
+
+		//These are both used and assigned to not at all
+		current->use_count = 0;
+		current->assignment_count = 0;
 
 		//And we'll also reset all of the neighbors
 		reset_dynamic_array(current->neighbors);
@@ -1236,7 +1233,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
 	 * set by a different name for our calculation
 	 */
-	dynamic_array_t* live_now = block->live_out;
+	dynamic_array_t* live_now = clone_dynamic_array(block->live_out);
 
 	//If this is null, we'll just make one for us
 	if(live_now == NULL){
@@ -2571,12 +2568,16 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//Start off with this as the last instruction
 	instruction_t* last_instruction = instruction;
 
+	//printf("Destination LR%d:\n", destination_lr->live_range_id);
+
 	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
 	//we know what is interfering, we can see which registers they use and compare that 
 	//with the register array
 	for(u_int16_t i = 0; destination_lr->neighbors != NULL && i < destination_lr->neighbors->current_index; i++){
 		//Grab the neighbor out
 		live_range_t* lr = dynamic_array_get_at(destination_lr->neighbors, i);
+
+		//printf("Neighbor LR%d\n", lr->live_range_id);
 
 		//And grab it's register out
 		general_purpose_register_t reg = lr->reg;
@@ -2905,145 +2906,132 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	*/
 	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
 
-	do {
-		/**
-		 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
-		 *
-		 * Before we can properly determine interference, we need
-		 * to construct the LIVE_IN and LIVE_OUT sets in each block.
-		 * We cannot simply reuse these from before because they've been so heavily
-		 * modified by this point in the compilation process that starting over
-		 * is easier
-		 *
-		 * We will need to do this every single time we reallocate
-		*/
+	/**
+	 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
+	 *
+	 * Before we can properly determine interference, we need
+	 * to construct the LIVE_IN and LIVE_OUT sets in each block.
+	 * We cannot simply reuse these from before because they've been so heavily
+	 * modified by this point in the compilation process that starting over
+	 * is easier
+	 *
+	 * We will need to do this every single time we reallocate
+	*/
+	calculate_liveness_sets(cfg);
+
+	//Show our IR's here
+	if(print_irs == TRUE){
+		//Show our live ranges once again
+		print_all_live_ranges(live_ranges);
+	}
+
+	/**
+	 * STEP 3: Construct the interference graph
+	 *
+	 * Now that we have the LIVE_IN and LIVE_OUT sets constructed, we're able
+	 * to determine the interference that exists between Live Ranges. This is
+	 * a necessary step in being able to allocate registers in any way at all
+	 * The algorithm is detailed more in the function
+	 *
+	 * Again, this is required every single time we need to retry after a spill
+	*/
+	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
+
+	//If we are printing these now is the time to display
+	if(print_irs == TRUE){
+		printf("============= After Live Range Determination ==============\n");
+		print_blocks_with_live_ranges(cfg);
+		printf("============= After Live Range Determination ==============\n");
+	}
+
+	/**
+	 * STEP 4: Pre-coloring registers
+	 *
+	 * Now that we have the interference calculated, we will "pre-color" live ranges
+	 * whose color is known before allocation. This includes things like:
+	 * return values being in %rax, function parameter 1 being in %rdi, etc.
+	 *
+	 * This has the potential to cause spills
+	 */
+	 colorable = pre_color(cfg, live_ranges);
+
+	/**
+	 * If we couldn't precolor, we'll have spilled a live range and as such must go
+	 * to the "spill loop"
+	 */
+	if(colorable == FALSE){
+		goto spill_loop;
+	}
+
+	/**
+	 * STEP 5: Live range coalescence optimization
+	 *
+	 * One small optimization that we can make is to perform live-range coalescence
+	 * on our given live ranges. We are able to coalesce live ranges if they do
+	 * not interfere and we have a pure copy like movq LR0, LR1. More detail
+	 * is given in the function
+	 *
+	 * Since spilling breaks up large live ranges, it has the opportunity to
+	 * allow for even more coalescence. We will use this to our advantage
+	 * by letting this rule run every time
+	*/
+	u_int8_t could_coalesce = perform_live_range_coalescence(cfg, graph, debug_printing);
+
+	/**
+	 * If we were in fact able to coalesce, we will have messed up the liveness sets due
+	 * to merging live ranges, etc. This may mess up allocation down the line. As such, we
+	 * need to come here and recalculate the following:
+	 * 	1.) all of the used & assigned sets
+	 * 	2.) all of the liveness sets(those rely on used & defined entirely)
+	 * 	3.) the interference
+	 *
+	 * short of this, we will see strange an inaccurate results such as excessive interference
+	 */
+	if(could_coalesce == TRUE){
+		//We need to *reset* all of our live ranges here
+		reset_all_live_ranges(live_ranges);
+
+		//First step - recalculate all of our used & assigned sets
+		recompute_used_and_assigned_sets(cfg, live_ranges);
+
+		//Then - recalculate all liveness sets
 		calculate_liveness_sets(cfg);
 
-		//Mark that we are retrying
-		if(print_irs == TRUE && iterations > 0){
-	 		printf("============= Retrying with ====================\n");
-		    //Show our live ranges once again
-			print_all_live_ranges(live_ranges);
-			print_blocks_with_live_ranges(cfg);
+		//Finally, recalculate all of the interference now that all of the
+		//prerequisites have been met
+		graph = construct_interference_graph(cfg, live_ranges);
+	}
 
-		//Otherwise just the LRs
-		} else if(print_irs == TRUE && iterations == 0){
-			//Print whatever live ranges we did find
-			print_all_live_ranges(live_ranges);
-		}
+	//Show our live ranges once again if requested
+	if(print_irs == TRUE){
+		print_all_live_ranges(live_ranges);
+		printf("================= After Coalescing =======================\n");
+		print_blocks_with_live_ranges(cfg);
+		printf("================= After Coalescing =======================\n");
+	}
 
-		/**
-		 * STEP 3: Construct the interference graph
-		 *
-		 * Now that we have the LIVE_IN and LIVE_OUT sets constructed, we're able
-		 * to determine the interference that exists between Live Ranges. This is
-		 * a necessary step in being able to allocate registers in any way at all
-		 * The algorithm is detailed more in the function
-		 *
-		 * Again, this is required every single time we need to retry after a spill
-		*/
-		interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
+	/**
+	 * STEP 6: Invoke the actual allocator
+	 *
+	 * The allocator will attempt to color the graph. If the graph is not k-colorable, 
+	 * then the allocator will spill the least costly LR and return FALSE, and we will go through
+	 * this whol process again
+	*/
+	colorable = graph_color_and_allocate(cfg, live_ranges);
 
-		//Again if we want to print, now is the time
-		if(print_irs == TRUE && iterations == 0){
-			printf("============= After Live Range Determination ==============\n");
-			print_blocks_with_live_ranges(cfg);
-			printf("============= After Live Range Determination ==============\n");
-		}
+	//If we were not colorable, then we need to reset everything here
+	if(colorable == FALSE){
+		//Wipe them all out
+		reset_all_live_ranges(live_ranges);
+	}
 
-		/**
-		 * STEP 4: Pre-coloring registers
-		 *
-		 * Now that we have the interference calculated, we will "pre-color" live ranges
-		 * whose color is known before allocation. This includes things like:
-		 * return values being in %rax, function parameter 1 being in %rdi, etc.
-		 *
-		 * This has the potential to cause spills
-		 */
-		 colorable = pre_color(cfg, live_ranges);
 
-		/**
-		 * If we were not able to color, we'll have spilled
-		 * a given live range and as such need to redo the entire
-		 * process
-		 */
-		if(colorable == FALSE){
-			//If we were not colorable, then we need to reset everything here
-			reset_all_live_ranges(live_ranges);
-			
-			//One more iteration
-			iterations++;
+spill_loop:
+	while(colorable == FALSE){
+		printf("TODO NOT DONE\n");
+		exit(0);
 
-			//Onto the next iteration
-			continue;
-		}
-
-		/**
-		 * STEP 5: Live range coalescence optimization
-		 *
-		 * One small optimization that we can make is to perform live-range coalescence
-		 * on our given live ranges. We are able to coalesce live ranges if they do
-		 * not interfere and we have a pure copy like movq LR0, LR1. More detail
-		 * is given in the function
-		 *
-		 * Since spilling breaks up large live ranges, it has the opportunity to
-		 * allow for even more coalescence. We will use this to our advantage
-		 * by letting this rule run every time
-		*/
-		u_int8_t could_coalesce = perform_live_range_coalescence(cfg, graph, debug_printing);
-
-		/**
-		 * If we were in fact able to coalesce, we will have messed up the liveness sets due
-		 * to merging live ranges, etc. This may mess up allocation down the line. As such, we
-		 * need to come here and recalculate the following:
-		 * 	1.) all of the used & assigned sets
-		 * 	2.) all of the liveness sets(those rely on used & defined entirely)
-		 * 	3.) the interference
-		 *
-		 * short of this, we will see strange an inaccurate results such as excessive interference
-		 */
-		if(could_coalesce == TRUE){
-			//First step - recalculate all of our used & assigned sets
-			recompute_used_and_assigned_sets(cfg, live_ranges);
-
-			//Then - recalculate all liveness sets
-			calculate_liveness_sets(cfg);
-
-			//Finally, recalculate all of the interference now that all of the
-			//prerequisites have been met
-			graph = construct_interference_graph(cfg, live_ranges);
-
-		}
-
-		//Show our live ranges once again if requested
-		if(print_irs == TRUE && iterations == 0){
-			print_all_live_ranges(live_ranges);
-			printf("================= After Coalescing =======================\n");
-			print_blocks_with_live_ranges(cfg);
-			printf("================= After Coalescing =======================\n");
-		}
-		
-		/**
-		 * STEP 6: Invoke the actual allocator
-		 *
-		 * The allocator will attempt to color the graph. If the graph is not k-colorable, 
-		 * then the allocator will spill the least costly LR and return FALSE, and we will go through
-		 * this whol process again
-		*/
-		colorable = graph_color_and_allocate(cfg, live_ranges);
-
-		//If we were not colorable, then we need to reset everything here
-		if(colorable == FALSE){
-			//Wipe them all out
-			reset_all_live_ranges(live_ranges);
-		}
-
-		//One more iteration
-		iterations++;
-
-	//So long as we can't color, we need to keep going
-	} while(colorable == FALSE);
-
+	}
 
 	/**
 	 * STEP 6: caller/callee saving logic
