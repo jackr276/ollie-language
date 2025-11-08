@@ -1129,7 +1129,6 @@ static void calculate_live_range_liveness_sets(cfg_t* cfg){
 
 						//If it doesn't already contain this variable, we'll add it in
 						if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
-							printf("\n\nAdding LR%d to LIVE_OUT\n", successor_live_in_var->live_range_id);
 							dynamic_array_add(current->live_out, successor_live_in_var);
 						}
 					}
@@ -1148,7 +1147,6 @@ static void calculate_live_range_liveness_sets(cfg_t* cfg){
 					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
 					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND 
 						&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
-						printf("\n\nAdding LR%d to LIVE_IN\n", live_out_var->live_range_id);
 						//If this is true we can add
 						dynamic_array_add(current->live_in, live_out_var);
 					}
@@ -1259,12 +1257,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
 	 * set by a different name for our calculation
 	 */
-	dynamic_array_t* live_now = block->live_out;
-
-	//If this is null, we'll just make one for us
-	if(live_now == NULL){
-		live_now = dynamic_array_alloc();
-	}
+	dynamic_array_t* live_now = clone_dynamic_array(block->live_out);
 	
 	//We will crawl our way up backwards through the CFG
 	instruction_t* operation = block->exit_statement;
