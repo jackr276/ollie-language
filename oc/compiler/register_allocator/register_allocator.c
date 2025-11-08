@@ -2122,9 +2122,6 @@ static void handle_assignment_spill(three_addr_var_t* var, live_range_t* spill_r
 	//Grab the block out too
 	basic_block_t* block = instruction->block_contained_in;
 
-	//This counts as a use
-	add_used_live_range(spill_range, block);
-
 	//Link this in too
 	store->block_contained_in = block;
 
@@ -2159,9 +2156,6 @@ static live_range_t* handle_use_spill(dynamic_array_t* live_ranges, three_addr_v
 
 	//Now we'll want to load from memory
 	instruction_t* load = emit_load_instruction(new_var, stack_pointer, type_symtab, spill_range->stack_region->base_address);
-	
-	//Add this as a used variable
-	add_assigned_live_range(new_var->associated_live_range, instruction->block_contained_in);
 
 	//Link the load instruction with what block it's in
 	load->block_contained_in = block;
