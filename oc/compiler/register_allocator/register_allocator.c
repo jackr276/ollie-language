@@ -485,7 +485,7 @@ static void add_assigned_live_range(live_range_t* live_range, basic_block_t* blo
 	}
 
 	//This counts as an assigned live range - save for tracking
-	(live_range->assignment_count)++;
+	live_range->assignment_count++;
 }
 
 
@@ -505,7 +505,7 @@ static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
 	}
 
 	//No matter what, this increases
-	(live_range->use_count)++;
+	live_range->use_count++;
 }
 
 
@@ -1069,7 +1069,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 		//We'll reset the assigned registers array here because we have not assigned any registers at this
 		//point
-		memset(function_entry->function_defined_in->assigned_regsiters, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+		memset(function_entry->function_defined_in->assigned_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
 		//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
 		do{
@@ -1100,7 +1100,6 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 						//If it doesn't already contain this variable, we'll add it in
 						if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
-							printf("Adding live out LR%d for block .L%d from block .L%d\n\n", successor_live_in_var->live_range_id, current->block_id, successor->block_id);
 							dynamic_array_add(current->live_out, successor_live_in_var);
 						}
 					}
@@ -1477,7 +1476,7 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
 	if(reg - 1 < K_COLORS_GEN_USE){
 		//Flag this as used in the function
 		if(coloree->assignment_count > 0){
-			coloree->function_defined_in->assigned_regsiters[reg - 1] = TRUE;
+			coloree->function_defined_in->assigned_registers[reg - 1] = TRUE;
 		}
 	}
 
@@ -2452,7 +2451,9 @@ static u_int8_t allocate_register(live_range_t* live_range){
 
 		//Flag this as used in the function
 		if(live_range->assignment_count > 0){
-			live_range->function_defined_in->assigned_regsiters[i] = TRUE;
+			live_range->function_defined_in->assigned_registers[i] = TRUE;
+		} else {
+			printf("LR%d is never assigned", live_range->live_range_id);
 		}
 
 		//Return true here
@@ -2516,7 +2517,7 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 		 * means we should be able to allocate no issue
 		 */
 		if(range->degree < K_COLORS_GEN_USE){
-			allocate_register( range);
+			allocate_register(range);
 
 		//Otherwise, we may still be able to allocate here
 		} else {
@@ -2593,7 +2594,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		//If we get a live range like this, we know for a fact that
 		//this register needs to be saved because it's live at the time
 		//of the function call and the function that we're calling uses it
-		if(callee->assigned_regsiters[reg - 1] == TRUE){
+		if(callee->assigned_registers[reg - 1] == TRUE){
 			//Emit a direct push with this live range's register
 			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
 
@@ -2760,7 +2761,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//We don't use this register, so move on
-		if(function->assigned_regsiters[i] == FALSE){
+		if(function->assigned_registers[i] == FALSE){
 			continue;
 		}
 
@@ -2829,7 +2830,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		//Run through all the registers backwards
 		for(int16_t j = K_COLORS_GEN_USE - 1; j >= 0; j--){
 			//If we haven't used this register, then skip it
-			if(function->assigned_regsiters[j] == FALSE){
+			if(function->assigned_registers[j] == FALSE){
 				continue;
 			}
 

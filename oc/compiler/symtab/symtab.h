@@ -89,7 +89,7 @@ struct symtab_function_record_t{
 	//The parameters for the function
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
 	//What registers does the function assign to in its body
-	u_int8_t assigned_regsiters[K_COLORS_GEN_USE];
+	u_int8_t assigned_registers[K_COLORS_GEN_USE];
 	//The name of the function
 	dynamic_string_t func_name;
 	//The data area for the whole function
