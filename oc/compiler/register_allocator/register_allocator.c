@@ -1035,20 +1035,17 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
  * Reset the visited status and the liveness arrays for each block
  */
 static void reset_blocks_for_liveness(cfg_t* cfg){
-	//Grab a cursor
-	basic_block_t* current = cfg->head_block;
+	//Run through all of our blocks
+	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+		//Grab it out
+		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, i);
 
-	//Run through them all
-	while(current != NULL){
 		//Reset this
 		current->visited = FALSE;
 
 		//Also reset the liveness sets
 		reset_dynamic_array(current->live_in);
 		reset_dynamic_array(current->live_out);
-
-		//Push it up
-		current = current->direct_successor;
 	}
 }
 
@@ -1073,7 +1070,7 @@ static void reset_blocks_for_liveness(cfg_t* cfg){
  * As such, we'll go back to front here
  *
  */
-static void calculate_liveness_sets(cfg_t* cfg){
+static void calculate_live_range_liveness_sets(cfg_t* cfg){
 	//Reset the visited status and liveness sets
 	reset_blocks_for_liveness(cfg);
 
@@ -1132,14 +1129,11 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 						//If it doesn't already contain this variable, we'll add it in
 						if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
+							printf("\n\nAdding LR%d to LIVE_OUT\n", successor_live_in_var->live_range_id);
 							dynamic_array_add(current->live_out, successor_live_in_var);
 						}
 					}
 				}
-
-				//The LIVE_IN is a combination of the variables used
-				//at current and the difference of the LIVE_OUT variables defined
-				//ones
 
 				//Since we need all of the used variables, we'll just clone this
 				//dynamic array so that we start off with them all
@@ -1152,9 +1146,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
 					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
-					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND //Ensure not assigned
-						//And not also already in LIVE_IN
+					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND 
 						&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
+						printf("\n\nAdding LR%d to LIVE_IN\n", live_out_var->live_range_id);
 						//If this is true we can add
 						dynamic_array_add(current->live_in, live_out_var);
 					}
@@ -2922,6 +2916,12 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	*/
 	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
 
+	//If we are printing these now is the time to display
+	if(print_irs == TRUE){
+		printf("============= Before Liveness ==============\n");
+		print_blocks_with_live_ranges(cfg);
+		printf("============= Before Liveness ==============\n");
+	}
 	/**
 	 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
 	 *
@@ -2933,7 +2933,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 *
 	 * We will need to do this every single time we reallocate
 	*/
-	calculate_liveness_sets(cfg);
+	calculate_live_range_liveness_sets(cfg);
 
 	//Show our IR's here
 	if(print_irs == TRUE){
@@ -3011,7 +3011,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		recompute_used_and_assigned_sets(cfg);
 
 		//Then - recalculate all liveness sets
-		calculate_liveness_sets(cfg);
+		calculate_live_range_liveness_sets(cfg);
 
 		//Finally, recalculate all of the interference now that all of the
 		//prerequisites have been met
@@ -3062,7 +3062,7 @@ spill_loop:
 		 * Following that, we need to go through and calculate
 		 * all of our liveness sets again
 		 */
-		calculate_liveness_sets(cfg);
+		calculate_live_range_liveness_sets(cfg);
 
 		/**
 		 * Once the liveness sets have been recalculated, we're able
