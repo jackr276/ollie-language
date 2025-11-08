@@ -1174,10 +1174,6 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		//Set the degree to be 0 as well
 		current->degree = 0;
 
-		//These are both now not used and not assigned in our perspective
-		current->use_count = 0;
-		current->assignment_count = 0;
-
 		//And we'll also reset all of the neighbors
 		reset_dynamic_array(current->neighbors);
 	}
@@ -1470,15 +1466,6 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
 
 	//Assign the register over
 	coloree->reg = reg;
-
-	//We also want to keep track of what registers are used in our function. Since pre-coloring
-	//must use a register, we'll need to flag it here
-	if(reg - 1 < K_COLORS_GEN_USE){
-		//Flag this as used in the function
-		if(coloree->assignment_count > 0){
-			coloree->function_defined_in->assigned_registers[reg - 1] = TRUE;
-		}
-	}
 
 	//And mark that it's pre-colored
 	coloree->is_precolored = TRUE;
@@ -1996,7 +1983,17 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
  * Recompute the used & assigned sets for the whole CFG
  * This is done after we coalesce at least one live range
  */
-static void recompute_used_and_assigned_sets(cfg_t* cfg){
+static void recompute_used_and_assigned_sets(cfg_t* cfg, dynamic_array_t* live_ranges){
+	//First we'll need to go through and reset all of the use & assignment values for our live range
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
+
+		//Reset both of these values
+		live_range->use_count = 0;
+		live_range->assignment_count = 0;
+	}
+
+
 	//Grab a cursor block
 	basic_block_t* cursor = cfg->head_block;
 
@@ -2410,6 +2407,11 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 static u_int8_t allocate_register(live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg != NO_REG){
+		//Flag this as used in the function
+		if(live_range->assignment_count > 0){
+			live_range->function_defined_in->assigned_registers[live_range->reg - 1] = TRUE;
+		}
+
 		return TRUE;
 	}
 
@@ -2452,8 +2454,6 @@ static u_int8_t allocate_register(live_range_t* live_range){
 		//Flag this as used in the function
 		if(live_range->assignment_count > 0){
 			live_range->function_defined_in->assigned_registers[i] = TRUE;
-		} else {
-			printf("LR%d is never assigned", live_range->live_range_id);
 		}
 
 		//Return true here
@@ -3004,7 +3004,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		 */
 		if(could_coalesce == TRUE){
 			//First step - recalculate all of our used & assigned sets
-			recompute_used_and_assigned_sets(cfg);
+			recompute_used_and_assigned_sets(cfg, live_ranges);
 
 			//Then - recalculate all liveness sets
 			calculate_liveness_sets(cfg);
