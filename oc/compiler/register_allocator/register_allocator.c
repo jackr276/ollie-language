@@ -295,6 +295,38 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		printf(")\n");
 	}
 
+	if(block->predecessors != NULL){
+		printf("Predecessors: (");
+		for(u_int16_t i = 0; i < block->predecessors->current_index; i++){
+			basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, i);
+
+			printf(".L%d", predecessor->block_id);
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->predecessors->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		printf(")\n");
+	}
+
+	if(block->successors != NULL){
+		printf("Successors: (");
+		for(u_int16_t i = 0; i < block->successors->current_index; i++){
+			basic_block_t* successor = dynamic_array_get_at(block->successors, i);
+
+			printf(".L%d", successor->block_id);
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->successors->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		printf(")\n");
+	}
+
 	//Now grab a cursor and print out every statement that we 
 	//have
 	instruction_t* cursor = block->leader_statement;
@@ -1233,7 +1265,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
 	 * set by a different name for our calculation
 	 */
-	dynamic_array_t* live_now = clone_dynamic_array(block->live_out);
+	dynamic_array_t* live_now = block->live_out;
 
 	//If this is null, we'll just make one for us
 	if(live_now == NULL){
@@ -1980,7 +2012,7 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
  * Recompute the used & assigned sets for the whole CFG
  * This is done after we coalesce at least one live range
  */
-static void recompute_used_and_assigned_sets(cfg_t* cfg, dynamic_array_t* live_ranges){
+static void recompute_used_and_assigned_sets(cfg_t* cfg){
 	//Grab a cursor block
 	basic_block_t* cursor = cfg->head_block;
 
@@ -2976,7 +3008,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		reset_all_live_ranges(live_ranges);
 
 		//First step - recalculate all of our used & assigned sets
-		recompute_used_and_assigned_sets(cfg, live_ranges);
+		recompute_used_and_assigned_sets(cfg);
 
 		//Then - recalculate all liveness sets
 		calculate_liveness_sets(cfg);
@@ -3024,7 +3056,7 @@ spill_loop:
 		 * Once we've reset everything, we'll need
 		 * to recompute all of our used/assigned sets
 		 */
-		recompute_used_and_assigned_sets(cfg, live_ranges);
+		recompute_used_and_assigned_sets(cfg);
 
 		/**
 		 * Following that, we need to go through and calculate
@@ -3037,6 +3069,14 @@ spill_loop:
 		 * to go through and compute all of the interference again
 		 */
 		graph = construct_interference_graph(cfg, live_ranges);
+
+		//Show our live ranges once again if requested
+		if(print_irs == TRUE){
+			print_all_live_ranges(live_ranges);
+			printf("================= After Interference =======================\n");
+			print_blocks_with_live_ranges(cfg);
+			printf("================= After Interference =======================\n");
+		}
 
 		/**
 		 * And finally - once we have our interference, we are
