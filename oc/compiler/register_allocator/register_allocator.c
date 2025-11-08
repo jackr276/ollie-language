@@ -1229,6 +1229,163 @@ static void add_destination_interference(interference_graph_t* graph, dynamic_ar
 
 
 /**
+ * Calculate "live_after" in a given block. "live_after" represents all of the live ranges
+ * that will survive "after" a function runs
+ *
+ * Algorithm:
+ * 	create an interference graph
+ * 	for each block b:
+ * 		LIVEAFTER <- LIVEOUT(b)
+ * 		for each operation with form op LA, LB -> LC:
+* 			if operation = stopper:
+ * 				exit
+ * 			for each LRi in LIVEAFTER:
+ * 				add(LC, LRi) to Interference Graph E 
+ * 			remove LC from LIVEAFTER 
+ * 			Add LA an LB to LIVEAFTER 
+ */
+static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, instruction_t* instruction){
+	/**
+	 * As you can see in the algorithm, the LIVE_NOW set initially starts
+	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
+	 * set by a different name for our calculation
+	 */
+	dynamic_array_t* live_after = clone_dynamic_array(block->live_out);
+	
+	//We will crawl our way up backwards through the CFG
+	instruction_t* operation = block->exit_statement;
+
+	//Run through backwards
+	while(operation != NULL){
+		//If we have an exact copy operation, we can
+		//skip it as it won't create any interference
+		if(operation->instruction_type == PHI_FUNCTION){
+			//Skip it
+			operation = operation->previous_statement;
+			continue;
+		}
+
+		/**
+		 * Step from algorithm:
+		 *
+		 * for each LRi in LIVENOW:
+		 * 	add(DEST, LRi) to Interference Graph E 
+		 * remove LC from LIVENOW
+		 *
+		 * 	Mark that the destination interferes with every LIVE_NOW range
+		 *
+		 * 	This is straightforward in the algorithm, but for us it's not so
+		 * 	straightforward. There are several cases where the destination
+		 * 	register may be present but this step in the algorithm will not 
+		 * 	apply or may apply in a different way
+		 */
+		if(operation->destination_register != NULL){
+			/**
+			 * This is if we have something like add LRa, LRb. LRb
+			 * is a destination but it's also a value. As such, we will
+			 * *not* delete this after we add our interference
+			 */
+			if(is_destination_also_operand(operation) == TRUE){
+				//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any
+				//other way
+				add_live_now_live_range(operation->destination_register->associated_live_range, live_after);
+
+			/**
+			 * If the indirection level is more than 0, this means that we're moving into a memory
+			 * region. Since this is the case, we're not really assigning to the register here. In
+			 * fact, we're using it, so we'll need to add this to LIVE_NOW
+			 */
+			} else if(is_destination_assigned(operation) == FALSE){
+				//Add it to live now and we're done
+				add_live_now_live_range(operation->destination_register->associated_live_range, live_after);
+
+			/**
+			 * The final case here is the ideal case in the algorithm, where we have a simple
+			 * assignment at the end. To satisfy the algorithm, we'll add all of the interference
+			 * between the destination and LIVE_NOW and then delete the destination from live_now
+			 */
+			} else {
+				//And then scrap it from live_now
+				dynamic_array_delete(live_after, operation->destination_register->associated_live_range);
+			}
+		}
+
+		/**
+		 * Some instructions like CXXX and division instructions have 2 destinations. The second destination,
+		 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
+		 */
+		if(operation->destination_register2 != NULL){
+			//And then scrap it from live_now
+			dynamic_array_delete(live_after, operation->destination_register2->associated_live_range);
+		}
+
+		/**
+		 * STEP:
+		 *  Add LA an LB to LIVENOW
+		 *
+		 * This really means add any non-destination variables to LIVENOW. We will take
+		 * into account every special case here, including function calls and INC/DEC instructions
+		 *
+		 * These first few are the obvious cases
+		 */
+		if(operation->source_register != NULL){
+			add_live_now_live_range(operation->source_register->associated_live_range, live_after);
+		}
+
+		if(operation->source_register2 != NULL){
+			add_live_now_live_range(operation->source_register2->associated_live_range, live_after);
+		}
+
+		if(operation->address_calc_reg1 != NULL){
+			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, live_after);
+		}
+
+		if(operation->address_calc_reg2 != NULL){
+			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, live_after);
+		}
+
+		/**
+		 * SPECIAL CASES:
+		 *
+		 * Function calls(direct/indirect) have function parameters that are being used
+		 */
+		switch(operation->instruction_type){
+			case CALL:
+			case INDIRECT_CALL:
+				//No point here
+				if(operation->parameters == NULL){
+					break;
+				}
+				
+				//Grab it out
+				dynamic_array_t* operation_function_parameters = operation->parameters;
+
+				//Let's go through all of these and add them to LIVE_NOW
+				for(u_int16_t i = 0; i < operation_function_parameters->current_index; i++){
+					//Extract the variable
+					three_addr_var_t* variable = dynamic_array_get_at(operation_function_parameters, i);
+
+					//Add it to live_now
+					add_live_now_live_range(variable->associated_live_range, live_after);
+				}
+
+				break;
+
+			//By default do nothing
+			default:
+				break;
+		}
+
+		//Crawl back up by 1
+		operation = operation->previous_statement;
+	}
+
+	//And give it back
+	return live_after;
+}
+
+
+/**
  * NOTE: We must walk the block from bottom to top
  *
  * Algorithm:
