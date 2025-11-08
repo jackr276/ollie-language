@@ -545,6 +545,11 @@ static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
  * Add a LIVE_NOW live range
  */
 static void add_live_now_live_range(live_range_t* live_range, dynamic_array_t* LIVE_NOW){
+	//Don't bother adding these
+	if(live_range == instruction_pointer_lr || live_range == stack_pointer_lr){
+		return;
+	}
+
 	//Avoid duplicate addition
 	if(dynamic_array_contains(LIVE_NOW, live_range) == NOT_FOUND){
 		dynamic_array_add(LIVE_NOW, live_range);
@@ -2560,6 +2565,10 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
  * possible for indirect function calls, which is the reason for the distinction
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* instruction){
+	//Set a flag array to keep track of what we've already saved
+	u_int8_t saved_registers[K_COLORS_GEN_USE];
+	memset(saved_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+
 	//If we get here we know that we have a call instruction. Let's
 	//grab whatever it's calling out. We're able to do this for a direct call,
 	//whereas in an indirect call we are not
@@ -2571,8 +2580,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//Start off with this as the last instruction
 	instruction_t* last_instruction = instruction;
 
-	//printf("Destination LR%d:\n", destination_lr->live_range_id);
-
 	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
 	//we know what is interfering, we can see which registers they use and compare that 
 	//with the register array
@@ -2580,13 +2587,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		//Grab the neighbor out
 		live_range_t* lr = dynamic_array_get_at(destination_lr->neighbors, i);
 
-		//printf("Neighbor LR%d\n", lr->live_range_id);
-
 		//And grab it's register out
 		general_purpose_register_t reg = lr->reg;
 
 		//If it isn't caller saved, we don't care
 		if(is_register_caller_saved(reg) == FALSE){
+			continue;
+		//We've already saved it, so move on
+		} else if(saved_registers[reg - 1] == TRUE){
 			continue;
 		}
 
@@ -2610,6 +2618,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 
 			//Insert the pop instruction directly after the last instruction
 			insert_instruction_after_given(pop_inst, instruction);
+
+			//Flag that we did already save this
+			saved_registers[reg - 1] = TRUE;
 
 			//If the last instruction still is the original instruction. That
 			//means that this is the first pop instruction that we're inserting.
