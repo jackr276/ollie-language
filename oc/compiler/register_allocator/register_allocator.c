@@ -1981,16 +1981,6 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
  * This is done after we coalesce at least one live range
  */
 static void recompute_used_and_assigned_sets(cfg_t* cfg, dynamic_array_t* live_ranges){
-	//First we'll need to go through and reset all of the use & assignment values for our live range
-	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
-		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
-
-		//Reset both of these values
-		live_range->use_count = 0;
-		live_range->assignment_count = 0;
-	}
-
-
 	//Grab a cursor block
 	basic_block_t* cursor = cfg->head_block;
 
@@ -3013,15 +3003,35 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	*/
 	colorable = graph_color_and_allocate(cfg, live_ranges);
 
-	//If we were not colorable, then we need to reset everything here
-	if(colorable == FALSE){
-		//Wipe them all out
-		reset_all_live_ranges(live_ranges);
-	}
-
-
+	/**
+	 * Our so-called "spill loop" essentially repeats most of the steps
+	 * above until we create a colorable graph. Spilling completely disrupts
+	 * the interference, use, assignment and liveness properties of the old graph,
+	 * so we are required to do most of these steps over again after every spill
+	 *
+	 * In reality, usually this will only happen once or twice, even in the most extreme 
+	 * cases
+	 */
 spill_loop:
+	//Keep going so long as we can't color
 	while(colorable == FALSE){
+		/**
+		 * Spill Step 1: wipe everything
+		 */
+		reset_all_live_ranges(live_ranges);
+
+		/**
+		 * Once we've reset everything, we'll need
+		 * to recompute all of our used/assigned sets
+		 */
+		recompute_used_and_assigned_sets(cfg, live_ranges);
+
+		/**
+		 * Following that, we need to go through and calculate
+		 * all of our liveness sets again
+		 */
+		calculate_liveness_sets(cfg);
+
 		printf("TODO NOT DONE\n");
 		exit(0);
 
