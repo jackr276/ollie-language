@@ -3032,9 +3032,19 @@ spill_loop:
 		 */
 		calculate_liveness_sets(cfg);
 
-		printf("TODO NOT DONE\n");
-		exit(0);
+		/**
+		 * Once the liveness sets have been recalculated, we're able
+		 * to go through and compute all of the interference again
+		 */
+		graph = construct_interference_graph(cfg, live_ranges);
 
+		/**
+		 * And finally - once we have our interference, we are
+		 * able to go through and attempt to color once
+		 * again. This loop will keep executing until the
+		 * graph_color_and_allocate returns a successful result
+		 */
+		colorable = graph_color_and_allocate(cfg, live_ranges);
 	}
 
 	/**
