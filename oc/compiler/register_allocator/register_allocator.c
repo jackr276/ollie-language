@@ -2808,8 +2808,54 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 	instruction_t* last_instruction = instruction;
 
 	//Grab the live_after array for up to but not including the actual call
+	dynamic_array_t* live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	//Delete the destination LR from here as it will be assigned by the instruction anyway
+	dynamic_array_delete(live_after, destination_lr);
 
-	//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
+	/**
+	 * Now we will run through every live range in live_after and check if it is caller-saved or not
+	 * We are not able to fine-tune things here like we are in the the direct call unfortunately
+	 */
+	for(u_int16_t i = 0; i < live_after->current_index; i++){
+		//Grab it out
+		live_range_t* lr = dynamic_array_get_at(live_after, i);
+
+		//Extract its register too
+		general_purpose_register_t reg = lr->reg;
+
+		//It's not caller saved, so it's irrelevant
+		if(is_register_caller_saved(reg) == FALSE){
+			continue;
+		}
+
+		//We'll also skip over this too
+		if(reg == destination_lr->reg){
+			continue;
+		}
+
+		//Emit a direct push with this live range's register
+		instruction_t* push_inst = emit_direct_register_push_instruction(reg);
+
+		//Emit the pop instruction for this
+		instruction_t* pop_inst = emit_direct_register_pop_instruction(reg);
+
+		//Insert the push instruction directly before the call instruction
+		insert_instruction_before_given(push_inst, instruction);
+
+		//Insert the pop instruction directly after the last instruction
+		insert_instruction_after_given(pop_inst, instruction);
+
+		//If the last instruction still is the original instruction. That
+		//means that this is the first pop instruction that we're inserting.
+		//As such, we'll set the last instruction to be this pop instruction
+		//to save ourselves time down the line
+		if(last_instruction == instruction){
+			last_instruction = pop_inst;
+		}
+	}
+
+	/*
+		//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
 	for(u_int16_t i = 0; i < destination_lr->neighbors->current_index; i++){
 		//Grab the given live range out
 		live_range_t* interferee = dynamic_array_get_at(destination_lr->neighbors, i);
@@ -2849,6 +2895,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		//Flag that we did already save this
 		saved_registers[interferee->reg - 1] = TRUE;
 	}
+	*/
 
 	//Return the last instruction to save time when drilling
 	return last_instruction;
