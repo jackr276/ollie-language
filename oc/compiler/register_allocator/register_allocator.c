@@ -2739,16 +2739,66 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	instruction_t* last_instruction = instruction;
 
 	dynamic_array_t* live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	//Remove our destination from this
+	dynamic_array_delete(live_after, destination_lr);
 
-	printf("Instruction:\n");
-	print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
-	printf("\nLive After:\n");
-	print_live_range_array(live_after);
+	//printf("Instruction:\n");
+	//print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+	//printf("\nLive After:\n");
+	//print_live_range_array(live_after);
 
+	/**
+	 * Run through everything that is alive after this function runs(live_after)
+	 * and check if we need to save any registers from that set
+	 */
+	for(u_int16_t i = 0; i < live_after->current_index; i++){
+		//Extract it
+		live_range_t* lr = dynamic_array_get_at(live_after, i);
+
+		//And remove its register
+		general_purpose_register_t reg = lr->reg;
+
+		//If it's not caller-saved, it's irrelevant to us
+		if(is_register_caller_saved(reg) == FALSE){
+			continue;
+		}
+
+		/**
+		 * Once we get past here, we know that we need to save this
+		 * register because the callee will also assign it, so whatever
+		 * value it has that we're relying on would not survive the call
+		 */
+		if(callee->assigned_registers[reg - 1] == TRUE){
+			//Emit a direct push with this live range's register
+			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
+
+			//Emit the pop instruction for this
+			instruction_t* pop_inst = emit_direct_register_pop_instruction(reg);
+
+			//Insert the push instruction directly before the call instruction
+			insert_instruction_before_given(push_inst, instruction);
+
+			//Insert the pop instruction directly after the last instruction
+			insert_instruction_after_given(pop_inst, instruction);
+
+			//Flag that we did already save this
+			//saved_registers[reg - 1] = TRUE;
+
+			//If the last instruction still is the original instruction. That
+			//means that this is the first pop instruction that we're inserting.
+			//As such, we'll set the last instruction to be this pop instruction
+			//to save ourselves time down the line
+			if(last_instruction == instruction){
+				last_instruction = pop_inst;
+			}
+		}
+
+	}
 
 	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
 	//we know what is interfering, we can see which registers they use and compare that 
 	//with the register array
+	/*
 	for(u_int16_t i = 0; destination_lr->neighbors != NULL && i < destination_lr->neighbors->current_index; i++){
 		//Grab the neighbor out
 		live_range_t* lr = dynamic_array_get_at(destination_lr->neighbors, i);
@@ -2797,6 +2847,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 			}
 		}
 	}
+	*/
 
 	//Return whatever this ended up being
 	return last_instruction;
