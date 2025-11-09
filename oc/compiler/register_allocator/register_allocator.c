@@ -2816,8 +2816,17 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
  * at the time that the function is called
  */
 static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t* instruction){
-	//Extract this out
-	live_range_t* destination_lr = instruction->destination_register->associated_live_range;
+	//Get the destination LR. Remember that this is nullable
+	live_range_t* destination_lr = NULL;
+	//We'll reassign if it exists
+	general_purpose_register_t destination_reg = NO_REG;
+
+	//Extract if not null
+	if(instruction->destination_register != NULL){
+		destination_lr = instruction->destination_register->associated_live_range;
+		//Extract this too if not null
+		destination_reg = destination_lr->reg;
+	}
 
 	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
 	//have, but will change to be the first pop instruction that we make 
@@ -2845,7 +2854,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		}
 
 		//We'll also skip over this too
-		if(reg == destination_lr->reg){
+		if(reg == destination_reg){
 			continue;
 		}
 
