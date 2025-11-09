@@ -5205,7 +5205,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//We now also need to modify the move instruction. We can do this without creating any new memory
 		variable_size_t destination_size = get_type_size(assignment->assignee->type);
 		variable_size_t source_size = get_type_size(set_instruction->destination_register->type);
-		u_int8_t destination_signed = is_type_signed(assignment->destination_register->type);
+		u_int8_t destination_signed = is_type_signed(assignment->assignee->type);
 
 		assignment->instruction_type = select_register_movement_instruction(destination_size, source_size, destination_signed);
 		//Assignee and destination are the same
