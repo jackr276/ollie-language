@@ -20,8 +20,6 @@ typedef enum{
 	MOVW, //Regular register-to-register or immediate to register
 	MOVL,
 	MOVQ,
-	MOVSX, //Move with sign extension from small to large register
-	MOVZX, //Move with zero extension from small to large register
 	MOVSBW, //Move signed byte to word
 	MOVSBL, //Move signed byte to long 
 	MOVSBQ, //Move signed byte to quad 

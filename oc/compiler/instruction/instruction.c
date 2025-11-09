@@ -715,44 +715,6 @@ instruction_t* emit_direct_register_push_instruction(general_purpose_register_t 
 
 
 /**
- * Emit a movzx(zero extend) instruction
- */
-instruction_t* emit_movzx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
-	//First we allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the instruction type
-	instruction->instruction_type = MOVZX;
-
-	//Set the source and destination
-	instruction->source_register = source;
-	instruction->destination_register = destination;
-
-	//And following that, we're all set
-	return instruction;
-}
-
-
-/**
- * Emit a movsx(sign extend) instruction
- */
-instruction_t* emit_movsx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
-	//First we allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the instruction type
-	instruction->instruction_type = MOVSX;
-
-	//Set the source and destination
-	instruction->source_register = source;
-	instruction->destination_register = destination;
-
-	//And following that, we're all set
-	return instruction;
-}
-
-
-/**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
@@ -2099,14 +2061,6 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 static void print_converting_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
 	switch(instruction->instruction_type){
-		//TODO DEPRECATE
-		case MOVSX:
-			fprintf(fl, "movsx ");
-			break;
-		//TODO DEPRECATE
-		case MOVZX:
-			fprintf(fl, "movzx ");
-			break;
 		case MOVSBW:
 			fprintf(fl, "movsbw ");
 			break;
@@ -3235,8 +3189,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 
 		//Handle a converting move
-		case MOVSX:
-		case MOVZX:
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:

@@ -527,6 +527,44 @@ static instruction_t* emit_appropriate_move_statement(three_addr_var_t* destinat
 
 
 /**
+ * Emit a movzx(zero extend) instruction
+ */
+instruction_t* emit_movzx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the instruction type
+	instruction->instruction_type = MOVZX;
+
+	//Set the source and destination
+	instruction->source_register = source;
+	instruction->destination_register = destination;
+
+	//And following that, we're all set
+	return instruction;
+}
+
+
+/**
+ * Emit a movsx(sign extend) instruction
+ */
+instruction_t* emit_movsx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the instruction type
+	instruction->instruction_type = MOVSX;
+
+	//Set the source and destination
+	instruction->source_register = source;
+	instruction->destination_register = destination;
+
+	//And following that, we're all set
+	return instruction;
+}
+
+
+/**
  * Can we do an inplace constant operation? Currently we only
  * do these for *, + and -
  */

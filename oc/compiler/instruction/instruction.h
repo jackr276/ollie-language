@@ -470,16 +470,6 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee);
 instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg);
 
 /**
- * Emit a movzx(zero extend) instruction
- */
-instruction_t* emit_movzx_instruction(three_addr_var_t* destination, three_addr_var_t* source);
-
-/**
- * Emit a movsx(sign extend) instruction
- */
-instruction_t* emit_movsx_instruction(three_addr_var_t* destination, three_addr_var_t* source);
-
-/**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
