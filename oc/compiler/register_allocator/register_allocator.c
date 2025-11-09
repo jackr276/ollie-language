@@ -1255,8 +1255,9 @@ static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, ins
 	//We will crawl our way up backwards through the CFG
 	instruction_t* operation = block->exit_statement;
 
-	//Run through backwards
-	while(operation != NULL){
+	//Run through backwards until we reach the instruction that
+	//will stop us
+	while(operation != NULL && operation != instruction){
 		//If we have an exact copy operation, we can
 		//skip it as it won't create any interference
 		if(operation->instruction_type == PHI_FUNCTION){
@@ -2736,6 +2737,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 
 	//Start off with this as the last instruction
 	instruction_t* last_instruction = instruction;
+
+	dynamic_array_t* live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+
+	printf("Instruction:\n");
+	print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+	printf("\nLive After:\n");
+	print_live_range_array(live_after);
+
 
 	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
 	//we know what is interfering, we can see which registers they use and compare that 
