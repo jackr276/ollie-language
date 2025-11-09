@@ -120,7 +120,7 @@ static void remove_useless_moves(cfg_t* cfg){
 					//Delete the holder
 					delete_statement(holder);
 
-				//Otherwise push it up
+				//Otherwise just push it up
 				} else {
 					current_instruction = current_instruction->next_statement;
 				}

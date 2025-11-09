@@ -295,6 +295,38 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		printf(")\n");
 	}
 
+	if(block->predecessors != NULL){
+		printf("Predecessors: (");
+		for(u_int16_t i = 0; i < block->predecessors->current_index; i++){
+			basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, i);
+
+			printf(".L%d", predecessor->block_id);
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->predecessors->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		printf(")\n");
+	}
+
+	if(block->successors != NULL){
+		printf("Successors: (");
+		for(u_int16_t i = 0; i < block->successors->current_index; i++){
+			basic_block_t* successor = dynamic_array_get_at(block->successors, i);
+
+			printf(".L%d", successor->block_id);
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->successors->current_index - 1){
+				printf(", ");
+			}
+		}
+
+		printf(")\n");
+	}
+
 	//Now grab a cursor and print out every statement that we 
 	//have
 	instruction_t* cursor = block->leader_statement;
@@ -485,7 +517,7 @@ static void add_assigned_live_range(live_range_t* live_range, basic_block_t* blo
 	}
 
 	//This counts as an assigned live range - save for tracking
-	(live_range->assignment_count)++;
+	live_range->assignment_count++;
 }
 
 
@@ -493,13 +525,19 @@ static void add_assigned_live_range(live_range_t* live_range, basic_block_t* blo
  * Add a used live range to a block
  */
 static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
+	//There is no point in tracking uses here - these live ranges are not impacted
+	//by interference
+	if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
+		return;
+	} 
+
 	//Assigning a live range to a variable means that this variable was *used* in the block
 	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
 		dynamic_array_add(block->used_variables, live_range);
 	}
 
 	//No matter what, this increases
-	(live_range->use_count)++;
+	live_range->use_count++;
 }
 
 
@@ -507,6 +545,11 @@ static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
  * Add a LIVE_NOW live range
  */
 static void add_live_now_live_range(live_range_t* live_range, dynamic_array_t* LIVE_NOW){
+	//Don't bother adding these
+	if(live_range == instruction_pointer_lr || live_range == stack_pointer_lr){
+		return;
+	}
+
 	//Avoid duplicate addition
 	if(dynamic_array_contains(LIVE_NOW, live_range) == NOT_FOUND){
 		dynamic_array_add(LIVE_NOW, live_range);
@@ -649,6 +692,32 @@ static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_ar
 
 
 /**
+ * Handle all of the special cases that a destination variable can have, depending on
+ * whether it is a source & destination both or not
+ */
+static void update_use_assignment_for_destination_variable(instruction_t* instruction, basic_block_t* block){
+	//Extract the LR
+	live_range_t* live_range = instruction->destination_register->associated_live_range;
+
+	//There are a few things that could happen here in terms of a variable use:
+	//If this is the case, then we need to set this new LR as both used and assigned
+	if(is_destination_also_operand(instruction) == TRUE){
+		//Counts as both
+		add_assigned_live_range(live_range, block);
+		add_used_live_range(live_range, block);
+
+	//If this is being derefenced, then it's not a true assignment, just a use
+	} else if(is_destination_assigned(instruction) == FALSE){
+		add_used_live_range(live_range, block);
+
+	//If we get all the way to here, then it was truly assigned
+	} else {
+		add_assigned_live_range(live_range, block);
+	}
+}
+
+
+/**
  * Handle a live range being assigned to a destination variable,
  * and all of the bookkeeping that comes with it
  */
@@ -667,21 +736,8 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 	//Add this into the live range
 	add_variable_to_live_range(live_range, block, destination_register);
 
-	//There are a few things that could happen here in terms of a variable use:
-	//If this is the case, then we need to set this new LR as both used and assigned
-	if(is_destination_also_operand(instruction) == TRUE){
-		//Counts as both
-		add_assigned_live_range(live_range, block);
-		add_used_live_range(live_range, block);
-
-	//If this is being derefenced, then it's not a true assignment, just a use
-	} else if(is_destination_assigned(instruction) == FALSE){
-		add_used_live_range(live_range, block);
-
-	//If we get all the way to here, then it was truly assigned
-	} else {
-		add_assigned_live_range(live_range, block);
-	}
+	//Invoke the helper for this part
+	update_use_assignment_for_destination_variable(instruction, block);
 
 	//All done
 	if(instruction->destination_register2 == NULL){
@@ -725,6 +781,26 @@ static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, b
 
 
 /**
+ * Assign a live range to a function parameter variable
+ *
+ * Since function parameters are not explicitly being read from, we do not want to
+ * count this as a use
+ */
+static void assign_live_range_to_function_parameter(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* function_parameter_var){
+	//Just leave if we're null
+	if(function_parameter_var == NULL){
+		return;
+	}
+
+	//Just a wrapper
+	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, function_parameter_var);
+
+	//We will bump the use count, but this is not officially a read
+	live_range->use_count++;
+}
+
+
+/**
  * Handle the live range that comes from the source of an instruction
  */
 static void assign_live_range_to_ret_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
@@ -734,7 +810,10 @@ static void assign_live_range_to_ret_variable(dynamic_array_t* live_ranges, basi
 	}
 
 	//Let the helper deal with this
-	assign_live_range_to_variable(live_ranges, block, source_variable);
+	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, source_variable);
+
+	//We will bump the use count, but this is not officially a read
+	live_range->use_count++;
 }
 
 
@@ -814,8 +893,11 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
 		//Extract it
 		three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
 
-		//This counts as a used live range
-		assign_live_range_to_source_variable(live_ranges, basic_block, parameter);
+		/**
+		 * Because we are not explicitly reading in this instruction, we need a special rule that takes care to not
+		 * add these as used variables. We will instead just assign the appropriate live ranges
+		 */
+		assign_live_range_to_function_parameter(live_ranges, basic_block, parameter);
 	}
 }
 
@@ -955,6 +1037,25 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 
 
 /**
+ * Reset the visited status and the liveness arrays for each block
+ */
+static void reset_blocks_for_liveness(cfg_t* cfg){
+	//Run through all of our blocks
+	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+		//Grab it out
+		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, i);
+
+		//Reset this
+		current->visited = FALSE;
+
+		//Also reset the liveness sets
+		reset_dynamic_array(current->live_in);
+		reset_dynamic_array(current->live_out);
+	}
+}
+
+
+/**
  * Calculate the "live_in" and "live_out" sets for each basic block. More broadly, we can do this for 
  * every single function
  *
@@ -974,9 +1075,9 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
  * As such, we'll go back to front here
  *
  */
-static void calculate_liveness_sets(cfg_t* cfg){
-	//Reset the visited status
-	reset_visited_status(cfg, FALSE);
+static void calculate_live_range_liveness_sets(cfg_t* cfg){
+	//Reset the visited status and liveness sets
+	reset_blocks_for_liveness(cfg);
 
 	//Did we find a difference
 	u_int8_t difference_found;
@@ -1002,7 +1103,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 		//We'll reset the assigned registers array here because we have not assigned any registers at this
 		//point
-		memset(function_entry->function_defined_in->assigned_regsiters, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+		memset(function_entry->function_defined_in->assigned_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
 		//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
 		do{
@@ -1038,10 +1139,6 @@ static void calculate_liveness_sets(cfg_t* cfg){
 					}
 				}
 
-				//The LIVE_IN is a combination of the variables used
-				//at current and the difference of the LIVE_OUT variables defined
-				//ones
-
 				//Since we need all of the used variables, we'll just clone this
 				//dynamic array so that we start off with them all
 				current->live_in = clone_dynamic_array(current->used_variables);
@@ -1053,8 +1150,7 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
 					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
-					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND //Ensure not assigned
-						//And not also already in LIVE_IN
+					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND 
 						&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
 						//If this is true we can add
 						dynamic_array_add(current->live_in, live_out_var);
@@ -1097,15 +1193,12 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		//Grab the live range out
 		live_range_t* current = dynamic_array_get_at(live_ranges, i);
 
-		//Unless we have the stack or instruction pointer, wipe out the coloring
-		if(current != stack_pointer_lr && current != instruction_pointer_lr){
-			//Wipe out the register coloring
-			current->is_precolored = FALSE;
-			current->reg = NO_REG;
-		}
-
 		//Set the degree to be 0 as well
 		current->degree = 0;
+
+		//These are both used and assigned to not at all
+		current->use_count = 0;
+		current->assignment_count = 0;
 
 		//And we'll also reset all of the neighbors
 		reset_dynamic_array(current->neighbors);
@@ -1132,6 +1225,164 @@ static void add_destination_interference(interference_graph_t* graph, dynamic_ar
 		//Now we'll add this to the graph
 		add_interference(graph, destination_lr, range);
 	}
+}
+
+
+/**
+ * Calculate "live_after" in a given block. "live_after" represents all of the live ranges
+ * that will survive "after" a function runs
+ *
+ * Algorithm:
+ * 	create an interference graph
+ * 	for each block b:
+ * 		LIVEAFTER <- LIVEOUT(b)
+ * 		for each operation with form op LA, LB -> LC:
+* 			if operation = stopper:
+ * 				exit
+ * 			for each LRi in LIVEAFTER:
+ * 				add(LC, LRi) to Interference Graph E 
+ * 			remove LC from LIVEAFTER 
+ * 			Add LA an LB to LIVEAFTER 
+ */
+static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, instruction_t* instruction){
+	/**
+	 * As you can see in the algorithm, the LIVE_NOW set initially starts
+	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
+	 * set by a different name for our calculation
+	 */
+	dynamic_array_t* live_after = clone_dynamic_array(block->live_out);
+	
+	//We will crawl our way up backwards through the CFG
+	instruction_t* operation = block->exit_statement;
+
+	//Run through backwards until we reach the instruction that
+	//will stop us
+	while(operation != NULL && operation != instruction){
+		//If we have an exact copy operation, we can
+		//skip it as it won't create any interference
+		if(operation->instruction_type == PHI_FUNCTION){
+			//Skip it
+			operation = operation->previous_statement;
+			continue;
+		}
+
+		/**
+		 * Step from algorithm:
+		 *
+		 * for each LRi in LIVENOW:
+		 * 	add(DEST, LRi) to Interference Graph E 
+		 * remove LC from LIVENOW
+		 *
+		 * 	Mark that the destination interferes with every LIVE_NOW range
+		 *
+		 * 	This is straightforward in the algorithm, but for us it's not so
+		 * 	straightforward. There are several cases where the destination
+		 * 	register may be present but this step in the algorithm will not 
+		 * 	apply or may apply in a different way
+		 */
+		if(operation->destination_register != NULL){
+			/**
+			 * This is if we have something like add LRa, LRb. LRb
+			 * is a destination but it's also a value. As such, we will
+			 * *not* delete this after we add our interference
+			 */
+			if(is_destination_also_operand(operation) == TRUE){
+				//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any
+				//other way
+				add_live_now_live_range(operation->destination_register->associated_live_range, live_after);
+
+			/**
+			 * If the indirection level is more than 0, this means that we're moving into a memory
+			 * region. Since this is the case, we're not really assigning to the register here. In
+			 * fact, we're using it, so we'll need to add this to LIVE_NOW
+			 */
+			} else if(is_destination_assigned(operation) == FALSE){
+				//Add it to live now and we're done
+				add_live_now_live_range(operation->destination_register->associated_live_range, live_after);
+
+			/**
+			 * The final case here is the ideal case in the algorithm, where we have a simple
+			 * assignment at the end. To satisfy the algorithm, we'll add all of the interference
+			 * between the destination and LIVE_NOW and then delete the destination from live_now
+			 */
+			} else {
+				//And then scrap it from live_now
+				dynamic_array_delete(live_after, operation->destination_register->associated_live_range);
+			}
+		}
+
+		/**
+		 * Some instructions like CXXX and division instructions have 2 destinations. The second destination,
+		 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
+		 */
+		if(operation->destination_register2 != NULL){
+			//And then scrap it from live_now
+			dynamic_array_delete(live_after, operation->destination_register2->associated_live_range);
+		}
+
+		/**
+		 * STEP:
+		 *  Add LA an LB to LIVENOW
+		 *
+		 * This really means add any non-destination variables to LIVENOW. We will take
+		 * into account every special case here, including function calls and INC/DEC instructions
+		 *
+		 * These first few are the obvious cases
+		 */
+		if(operation->source_register != NULL){
+			add_live_now_live_range(operation->source_register->associated_live_range, live_after);
+		}
+
+		if(operation->source_register2 != NULL){
+			add_live_now_live_range(operation->source_register2->associated_live_range, live_after);
+		}
+
+		if(operation->address_calc_reg1 != NULL){
+			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, live_after);
+		}
+
+		if(operation->address_calc_reg2 != NULL){
+			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, live_after);
+		}
+
+		/**
+		 * SPECIAL CASES:
+		 *
+		 * Function calls(direct/indirect) have function parameters that are being used
+		 */
+		switch(operation->instruction_type){
+			case CALL:
+			case INDIRECT_CALL:
+				//No point here
+				if(operation->parameters == NULL){
+					break;
+				}
+				
+				//Grab it out
+				dynamic_array_t* operation_function_parameters = operation->parameters;
+
+				//Let's go through all of these and add them to LIVE_NOW
+				for(u_int16_t i = 0; i < operation_function_parameters->current_index; i++){
+					//Extract the variable
+					three_addr_var_t* variable = dynamic_array_get_at(operation_function_parameters, i);
+
+					//Add it to live_now
+					add_live_now_live_range(variable->associated_live_range, live_after);
+				}
+
+				break;
+
+			//By default do nothing
+			default:
+				break;
+		}
+
+		//Crawl back up by 1
+		operation = operation->previous_statement;
+	}
+
+	//And give it back
+	return live_after;
 }
 
 
@@ -1169,12 +1420,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
 	 * set by a different name for our calculation
 	 */
-	dynamic_array_t* live_now = block->live_out;
-
-	//If this is null, we'll just make one for us
-	if(live_now == NULL){
-		live_now = dynamic_array_alloc();
-	}
+	dynamic_array_t* live_now = clone_dynamic_array(block->live_out);
 	
 	//We will crawl our way up backwards through the CFG
 	instruction_t* operation = block->exit_statement;
@@ -1396,8 +1642,6 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
 		//Whatever we spill the return value here is false
 		return FALSE;
 	}
-
-	//Otherwise it was NULL, so we're all set here
 
 	//Assign the register over
 	coloree->reg = reg;
@@ -1837,103 +2081,204 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 
 
 /**
+ * Compute the used and assignment sets for a given block
+ *
+ * We will tie this into the coalesce block-level function. We will recompute used/assigned
+ * at the block level if we coalesce at the block level
+ *
+ * Actually, we may need to do this for the whole CFG due to the way the live ranges are not tied to their
+ * variables. We will likely need to recompute at CFG level
+ */
+static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
+	//Wipe these two values out
+	reset_dynamic_array(block->used_variables);
+	reset_dynamic_array(block->assigned_variables);
+
+	//Instruction cursor
+	instruction_t* cursor = block->leader_statement;
+
+	//Now we run through the block to recompute
+	while(cursor != NULL){
+		switch(cursor->instruction_type){
+			//These two have no use associated with them
+			case PHI_FUNCTION:
+			case RET:
+				break;
+
+			case INCB:
+			case INCW:
+			case INCL:
+			case INCQ:
+			case DECB:
+			case DECW:
+			case DECL:
+			case DECQ:
+				//This counts as both an assignment and a use
+				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+				add_used_live_range(cursor->destination_register->associated_live_range, block);
+				break;
+
+			default:
+				//Handle destination 1
+				if(cursor->destination_register != NULL){
+					update_use_assignment_for_destination_variable(cursor, block);
+				}
+
+				//Handle destination 2(this is rare but we have it sometimes)
+				if(cursor->destination_register2 != NULL){
+					add_assigned_live_range(cursor->destination_register2->associated_live_range, block);
+				}
+
+				//And then the usual procedure for source1 
+				if(cursor->source_register != NULL){
+					add_used_live_range(cursor->source_register->associated_live_range, block);
+				}
+
+				//And then the usual procedure for source2
+				if(cursor->source_register2 != NULL){
+					add_used_live_range(cursor->source_register2->associated_live_range, block);
+				}
+
+				//And then the usual procedure for the address calc reg
+				if(cursor->address_calc_reg1 != NULL){
+					add_used_live_range(cursor->address_calc_reg1->associated_live_range, block);
+				}
+
+				//And then the usual procedure for the address calc reg
+				if(cursor->address_calc_reg2 != NULL){
+					add_used_live_range(cursor->address_calc_reg2->associated_live_range, block);
+				}
+					
+				break;
+		}
+
+		//Advance it up
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
+ * Recompute the used & assigned sets for the whole CFG
+ * This is done after we coalesce at least one live range
+ */
+static void recompute_used_and_assigned_sets(cfg_t* cfg){
+	//Grab a cursor block
+	basic_block_t* cursor = cfg->head_block;
+
+	//Run through every block
+	while(cursor != NULL){
+		//Invoke the block-level helper
+		compute_block_level_used_and_assigned_sets(cursor);
+
+		//Push it up
+		cursor = cursor->direct_successor;
+	}
+}
+
+
+/**
+ * Perform coalescence at a block level. Remember that if we do end up coalescing, we need to recompute the used and assigned sets for
+ * this block as those are affected by coalescing
+ */
+static u_int8_t perform_block_level_coalescence(basic_block_t* block, interference_graph_t* graph, u_int8_t debug_printing){
+	//By default assume nothing happened
+	u_int8_t coalescence_occured = FALSE;
+
+	//Now we'll run through every instruction in every block
+	instruction_t* instruction = block->leader_statement;
+
+	//Now run through all of these
+	while(instruction != NULL){
+		//If it's not a pure copy *or* it's marked as non-combinable, just move along
+		if(is_instruction_pure_copy(instruction) == FALSE
+			|| instruction->cannot_be_combined == TRUE){
+			instruction = instruction->next_statement;
+			continue;
+		}
+
+		//Otherwise if we get here, then we know that we have a pure copy instruction
+		live_range_t* source_live_range = instruction->source_register->associated_live_range;
+		live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
+
+		//We need to ensure that the two live ranges:
+		//	1.) Do not interfere with one another(and as such they're in separate webs)
+		//	2.) Do not have any pre-coloring that would prevent them from being merged. For example, if the
+		//	destination register is %rdi because it's a function parameter, we can't just change the register
+		//	it's in
+		if(do_live_ranges_interfere(graph, destination_live_range, source_live_range) == FALSE
+			&& does_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
+
+			//DEBUG LOGS
+			if(debug_printing == TRUE){
+				printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
+				printf("DELETING LR%d\n", destination_live_range->live_range_id);
+			}
+
+			//Perform the actual coalescence
+			coalesce_live_ranges(graph, source_live_range, destination_live_range);
+
+			//Be sure to now set this flag - we have coalesced overall here
+			coalescence_occured = TRUE;
+
+			//Grab a holder to this 
+			instruction_t* holder = instruction;
+
+			//Push this up
+			instruction = instruction->next_statement;
+
+			//DEBUG
+			if(debug_printing == TRUE){
+				printf("Deleting:\n");
+				print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+			}
+
+			//Delete the old one from the graph
+			delete_statement(holder);
+		
+		//All we need do here is advance it up
+		} else {
+			//Push this up
+			instruction = instruction->next_statement;
+		}
+	}
+
+	//Return whether or not we did or did not coalesce
+	return coalescence_occured;
+}
+
+
+/**
  * Perform live range coalescing on a given instruction. This sees
  * us merge the source and destination operands's webs(live ranges)
  *
  * We coalesce source to destination. When we're done, the *source* should
  * survive, the destination should NOT
  */
-static void perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* graph, u_int8_t debug_printing){
+static u_int8_t perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* graph, u_int8_t debug_printing){
+	//By default, assume we did not coalesce anything
+	u_int8_t coalescence_occured = FALSE;
+
 	//Run through every single block in here
 	basic_block_t* current = cfg->head_block;
+
+	//Run through every block
 	while(current != NULL){
-		//Now we'll run through every instruction in every block
-		instruction_t* instruction = current->leader_statement;
+		//Invoke the helper for the block-level coalescing
+		u_int8_t block_coalesced = perform_block_level_coalescence(current, graph, debug_printing);
 
-		//Now run through all of these
-		while(instruction != NULL){
-			//If it's not a pure copy *or* it's marked as non-combinable, just move along
-			if(is_instruction_pure_copy(instruction) == FALSE
-				|| instruction->cannot_be_combined == TRUE){
-				instruction = instruction->next_statement;
-				continue;
-			}
-
-			//Otherwise if we get here, then we know that we have a pure copy instruction
-			live_range_t* source_live_range = instruction->source_register->associated_live_range;
-			live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
-
-			/**
-			 * One potential case, we could have done some optimizations where we're left with something
-			 * like movq LR0, LR0. If this is the case, we should just delete that instruction and move
-			 * on, it's entirely pointless
-			 */
-			if(source_live_range == destination_live_range){
-				//Print if we want debug printing
-				if(debug_printing == TRUE){
-					printf("Deleting DUPLICATE:\n");
-					print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
-				}
-
-				//Grab a holder before we delete
-				instruction_t* holder = instruction;
-
-				//Advance it up
-				instruction = instruction->next_statement;
-
-				//Delete the old one
-				delete_statement(holder);
-
-				//Onto the next iteration
-				continue;
-			}
-
-
-			//We need to ensure that the two live ranges:
-			//	1.) Do not interfere with one another(and as such they're in separate webs)
-			//	2.) Do not have any pre-coloring that would prevent them from being merged. For example, if the
-			//	destination register is %rdi because it's a function parameter, we can't just change the register
-			//	it's in
-			if(do_live_ranges_interfere(graph, destination_live_range, source_live_range) == FALSE
-				&& does_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
-
-				//DEBUG LOGS
-				if(debug_printing == TRUE){
-					printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
-					printf("DELETING LR%d\n", destination_live_range->live_range_id);
-				}
-
-				//Perform the actual coalescence
-				coalesce_live_ranges(graph, source_live_range, destination_live_range);
-
-				//No more assignments to this one
-				destination_live_range->assignment_count = 0;
-
-				//Grab a holder to this 
-				instruction_t* holder = instruction;
-
-				//Push this up
-				instruction = instruction->next_statement;
-
-				//DEBUG
-				if(debug_printing == TRUE){
-					printf("Deleting:\n");
-					print_instruction(stdout, holder, PRINTING_VAR_INLINE);
-				}
-
-				//Delete the old one from the graph
-				delete_statement(holder);
-			
-			//All we need do here is advance it up
-			} else {
-				//Push this up
-				instruction = instruction->next_statement;
-			}
+		//If it's false - then the new value is what we got. If it's already true, don't bother
+		//setting it again
+		if(coalescence_occured == FALSE){
+			coalescence_occured = block_coalesced;
 		}
 
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
+
+	//Give back whether or not we did coalesce
+	return coalescence_occured;
 }
 
 
@@ -1948,9 +2293,6 @@ static void handle_assignment_spill(three_addr_var_t* var, live_range_t* spill_r
 
 	//Grab the block out too
 	basic_block_t* block = instruction->block_contained_in;
-
-	//This counts as a use
-	add_used_live_range(spill_range, block);
 
 	//Link this in too
 	store->block_contained_in = block;
@@ -1986,9 +2328,6 @@ static live_range_t* handle_use_spill(dynamic_array_t* live_ranges, three_addr_v
 
 	//Now we'll want to load from memory
 	instruction_t* load = emit_load_instruction(new_var, stack_pointer, type_symtab, spill_range->stack_region->base_address);
-	
-	//Add this as a used variable
-	add_assigned_live_range(new_var->associated_live_range, instruction->block_contained_in);
 
 	//Link the load instruction with what block it's in
 	load->block_contained_in = block;
@@ -2231,6 +2570,11 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 static u_int8_t allocate_register(live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg != NO_REG){
+		//Flag this as used in the function
+		if(live_range->assignment_count > 0){
+			live_range->function_defined_in->assigned_registers[live_range->reg - 1] = TRUE;
+		}
+
 		return TRUE;
 	}
 
@@ -2272,7 +2616,7 @@ static u_int8_t allocate_register(live_range_t* live_range){
 
 		//Flag this as used in the function
 		if(live_range->assignment_count > 0){
-			live_range->function_defined_in->assigned_regsiters[i] = TRUE;
+			live_range->function_defined_in->assigned_registers[i] = TRUE;
 		}
 
 		//Return true here
@@ -2314,7 +2658,16 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 
 	//Run through and insert everything into the priority live range
 	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
-		dynamic_array_priority_insert_live_range(priority_live_ranges, dynamic_array_get_at(live_ranges, i));
+		//Extract it
+		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
+
+		//No point in putting this in there, we already know what it will be
+		if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
+			continue;
+		}
+
+		//Otherwise put it into our priority queue
+		dynamic_array_priority_insert_live_range(priority_live_ranges, live_range);
 	}
 
 	//So long as this isn't empty
@@ -2327,7 +2680,7 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 		 * means we should be able to allocate no issue
 		 */
 		if(range->degree < K_COLORS_GEN_USE){
-			allocate_register( range);
+			allocate_register(range);
 
 		//Otherwise, we may still be able to allocate here
 		} else {
@@ -2375,36 +2728,45 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//whereas in an indirect call we are not
 	symtab_function_record_t* callee = instruction->called_function;
 
-	//Grab out this LR
+	//Grab out this LR for reference later on
 	live_range_t* destination_lr = instruction->destination_register->associated_live_range;
 
 	//Start off with this as the last instruction
 	instruction_t* last_instruction = instruction;
 
-	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
-	//we know what is interfering, we can see which registers they use and compare that 
-	//with the register array
-	for(u_int16_t i = 0; destination_lr->neighbors != NULL && i < destination_lr->neighbors->current_index; i++){
-		//Grab the neighbor out
-		live_range_t* lr = dynamic_array_get_at(destination_lr->neighbors, i);
+	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
+	dynamic_array_t* live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	//We can remove the destination LR from here, there's no point in keeping it in
+	dynamic_array_delete(live_after, destination_lr);
 
-		//And grab it's register out
+	/**
+	 * Run through everything that is alive after this function runs(live_after)
+	 * and check if we need to save any registers from that set
+	 */
+	for(u_int16_t i = 0; i < live_after->current_index; i++){
+		//Extract it
+		live_range_t* lr = dynamic_array_get_at(live_after, i);
+
+		//And remove its register
 		general_purpose_register_t reg = lr->reg;
 
-		//If it isn't caller saved, we don't care
+		//If it's not caller-saved, it's irrelevant to us
 		if(is_register_caller_saved(reg) == FALSE){
 			continue;
 		}
 
-		//If these are the same register - skip pushing it
-		if(destination_lr->reg == reg){
+		//There's also no point in saving this. This could happen
+		//if we have precoloring
+		if(reg == destination_lr->reg){
 			continue;
 		}
 
-		//If we get a live range like this, we know for a fact that
-		//this register needs to be saved because it's live at the time
-		//of the function call and the function that we're calling uses it
-		if(callee->assigned_regsiters[reg - 1] == TRUE){
+		/**
+		 * Once we get past here, we know that we need to save this
+		 * register because the callee will also assign it, so whatever
+		 * value it has that we're relying on would not survive the call
+		 */
+		if(callee->assigned_registers[reg - 1] == TRUE){
 			//Emit a direct push with this live range's register
 			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
 
@@ -2427,6 +2789,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		}
 	}
 
+	//Free it up once done
+	dynamic_array_dealloc(live_after);
+
 	//Return whatever this ended up being
 	return last_instruction;
 }
@@ -2438,63 +2803,62 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
  * at the time that the function is called
  */
 static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t* instruction){
-	//Set a flag array to keep track of what we've already saved
-	u_int8_t saved_registers[K_COLORS_GEN_USE];
-	memset(saved_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
-
 	//Extract this out
 	live_range_t* destination_lr = instruction->destination_register->associated_live_range;
-
-	//This really rarely happens, but we still must account for it. If the neighbors array is NULL
-	//or empty, we leave
-	if(destination_lr->neighbors == NULL || destination_lr->neighbors->current_index == 0){
-		return instruction;
-	}
 
 	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
 	//have, but will change to be the first pop instruction that we make 
 	instruction_t* last_instruction = instruction;
 
-	//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
-	for(u_int16_t i = 0; i < destination_lr->neighbors->current_index; i++){
-		//Grab the given live range out
-		live_range_t* interferee = dynamic_array_get_at(destination_lr->neighbors, i);
+	//Grab the live_after array for up to but not including the actual call
+	dynamic_array_t* live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	//Delete the destination LR from here as it will be assigned by the instruction anyway
+	dynamic_array_delete(live_after, destination_lr);
 
-		//And we'll extract the interfering register
-		general_purpose_register_t interfering_register = interferee->reg;
+	/**
+	 * Now we will run through every live range in live_after and check if it is caller-saved or not
+	 * We are not able to fine-tune things here like we are in the the direct call unfortunately
+	 */
+	for(u_int16_t i = 0; i < live_after->current_index; i++){
+		//Grab it out
+		live_range_t* lr = dynamic_array_get_at(live_after, i);
 
-		//If this is not caller saved, then we don't care about it
-		if(is_register_caller_saved(interfering_register) == FALSE){
-			continue;
-		//We already saved it - no point in going forward
-		} else if(saved_registers[interfering_register - 1] == TRUE){
+		//Extract its register too
+		general_purpose_register_t reg = lr->reg;
+
+		//It's not caller saved, so it's irrelevant
+		if(is_register_caller_saved(reg) == FALSE){
 			continue;
 		}
 
-		//If these are the same register - skip pushing it
-		if(destination_lr->reg == interfering_register){
+		//We'll also skip over this too
+		if(reg == destination_lr->reg){
 			continue;
 		}
 
-		//Otherwise if we get here then we know it is caller saved, so we'll need to 
-		//emit the push/pop pair here
-		instruction_t* push_instruction = emit_direct_register_push_instruction(interfering_register);
-		instruction_t* pop_instruction = emit_direct_register_pop_instruction(interfering_register);
+		//Emit a direct push with this live range's register
+		instruction_t* push_inst = emit_direct_register_push_instruction(reg);
 
-		//Now we'll insert the push directly before the call
-		insert_instruction_before_given(push_instruction, instruction);
-		
-		//And to maintain the stack structure, we'll now put the pop instruction directly after the call
-		insert_instruction_after_given(pop_instruction, instruction);
+		//Emit the pop instruction for this
+		instruction_t* pop_inst = emit_direct_register_pop_instruction(reg);
 
-		//If this is the first pop instruction that we emitted, it will become the new "last_instruction"
+		//Insert the push instruction directly before the call instruction
+		insert_instruction_before_given(push_inst, instruction);
+
+		//Insert the pop instruction directly after the last instruction
+		insert_instruction_after_given(pop_inst, instruction);
+
+		//If the last instruction still is the original instruction. That
+		//means that this is the first pop instruction that we're inserting.
+		//As such, we'll set the last instruction to be this pop instruction
+		//to save ourselves time down the line
 		if(last_instruction == instruction){
-			last_instruction = pop_instruction;
+			last_instruction = pop_inst;
 		}
-
-		//Flag that we did already save this
-		saved_registers[interferee->reg - 1] = TRUE;
 	}
+
+	//Free it up once done
+	dynamic_array_dealloc(live_after);
 
 	//Return the last instruction to save time when drilling
 	return last_instruction;
@@ -2526,7 +2890,9 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 					instruction = insert_caller_saved_logic_for_direct_call(instruction);
 					break;
 					
-				//Use the helper for an indirect call
+				//Use the helper for an indirect call. Indirect calls differ slightly
+				//from direct ones because we have less information, so we'll need a different
+				//helper here
 				case INDIRECT_CALL:
 					instruction = insert_caller_saved_logic_for_indirect_call(instruction);
 					break;
@@ -2571,7 +2937,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//We don't use this register, so move on
-		if(function->assigned_regsiters[i] == FALSE){
+		if(function->assigned_registers[i] == FALSE){
 			continue;
 		}
 
@@ -2640,7 +3006,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		//Run through all the registers backwards
 		for(int16_t j = K_COLORS_GEN_USE - 1; j >= 0; j--){
 			//If we haven't used this register, then skip it
-			if(function->assigned_regsiters[j] == FALSE){
+			if(function->assigned_registers[j] == FALSE){
 				continue;
 			}
 
@@ -2701,9 +3067,6 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//Save the flag that tells us whether or not the graph that we constructed was colorable
 	u_int8_t colorable = FALSE;
 
-	//Keep track of the iterations that we've been through
-	u_int32_t iterations = 0;
-
 	/**
 	 * STEP 1: Build all live ranges from variables:
 	 * 	
@@ -2715,121 +3078,176 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	*/
 	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
 
-	do {
+	//If we are printing these now is the time to display
+	if(print_irs == TRUE){
+		printf("============= Before Liveness ==============\n");
+		print_blocks_with_live_ranges(cfg);
+		printf("============= Before Liveness ==============\n");
+	}
+	/**
+	 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
+	 *
+	 * Before we can properly determine interference, we need
+	 * to construct the LIVE_IN and LIVE_OUT sets in each block.
+	 * We cannot simply reuse these from before because they've been so heavily
+	 * modified by this point in the compilation process that starting over
+	 * is easier
+	 *
+	 * We will need to do this every single time we reallocate
+	*/
+	calculate_live_range_liveness_sets(cfg);
+
+	//Show our IR's here
+	if(print_irs == TRUE){
+		//Show our live ranges once again
+		print_all_live_ranges(live_ranges);
+	}
+
+	/**
+	 * STEP 3: Construct the interference graph
+	 *
+	 * Now that we have the LIVE_IN and LIVE_OUT sets constructed, we're able
+	 * to determine the interference that exists between Live Ranges. This is
+	 * a necessary step in being able to allocate registers in any way at all
+	 * The algorithm is detailed more in the function
+	 *
+	 * Again, this is required every single time we need to retry after a spill
+	*/
+	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
+
+	//If we are printing these now is the time to display
+	if(print_irs == TRUE){
+		printf("============= After Live Range Determination ==============\n");
+		print_blocks_with_live_ranges(cfg);
+		printf("============= After Live Range Determination ==============\n");
+	}
+
+	/**
+	 * STEP 4: Pre-coloring registers
+	 *
+	 * Now that we have the interference calculated, we will "pre-color" live ranges
+	 * whose color is known before allocation. This includes things like:
+	 * return values being in %rax, function parameter 1 being in %rdi, etc.
+	 *
+	 * This has the potential to cause spills
+	 */
+	 colorable = pre_color(cfg, live_ranges);
+
+	/**
+	 * If we couldn't precolor, we'll have spilled a live range and as such must go
+	 * to the "spill loop"
+	 */
+	if(colorable == FALSE){
+		goto spill_loop;
+	}
+
+	/**
+	 * STEP 5: Live range coalescence optimization
+	 *
+	 * One small optimization that we can make is to perform live-range coalescence
+	 * on our given live ranges. We are able to coalesce live ranges if they do
+	 * not interfere and we have a pure copy like movq LR0, LR1. More detail
+	 * is given in the function
+	 *
+	 * Since spilling breaks up large live ranges, it has the opportunity to
+	 * allow for even more coalescence. We will use this to our advantage
+	 * by letting this rule run every time
+	*/
+	u_int8_t could_coalesce = perform_live_range_coalescence(cfg, graph, debug_printing);
+
+	/**
+	 * If we were in fact able to coalesce, we will have messed up the liveness sets due
+	 * to merging live ranges, etc. This may mess up allocation down the line. As such, we
+	 * need to come here and recalculate the following:
+	 * 	1.) all of the used & assigned sets
+	 * 	2.) all of the liveness sets(those rely on used & defined entirely)
+	 * 	3.) the interference
+	 *
+	 * short of this, we will see strange an inaccurate results such as excessive interference
+	 */
+	if(could_coalesce == TRUE){
+		//We need to *reset* all of our live ranges here
+		reset_all_live_ranges(live_ranges);
+
+		//First step - recalculate all of our used & assigned sets
+		recompute_used_and_assigned_sets(cfg);
+
+		//Then - recalculate all liveness sets
+		calculate_live_range_liveness_sets(cfg);
+
+		//Finally, recalculate all of the interference now that all of the
+		//prerequisites have been met
+		graph = construct_interference_graph(cfg, live_ranges);
+	}
+
+	//Show our live ranges once again if requested
+	if(print_irs == TRUE){
+		print_all_live_ranges(live_ranges);
+		printf("================= After Coalescing =======================\n");
+		print_blocks_with_live_ranges(cfg);
+		printf("================= After Coalescing =======================\n");
+	}
+
+	/**
+	 * STEP 6: Invoke the actual allocator
+	 *
+	 * The allocator will attempt to color the graph. If the graph is not k-colorable, 
+	 * then the allocator will spill the least costly LR and return FALSE, and we will go through
+	 * this whol process again
+	*/
+	colorable = graph_color_and_allocate(cfg, live_ranges);
+
+	/**
+	 * Our so-called "spill loop" essentially repeats most of the steps
+	 * above until we create a colorable graph. Spilling completely disrupts
+	 * the interference, use, assignment and liveness properties of the old graph,
+	 * so we are required to do most of these steps over again after every spill
+	 *
+	 * In reality, usually this will only happen once or twice, even in the most extreme 
+	 * cases
+	 */
+spill_loop:
+	//Keep going so long as we can't color
+	while(colorable == FALSE){
 		/**
-		 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
-		 *
-		 * Before we can properly determine interference, we need
-		 * to construct the LIVE_IN and LIVE_OUT sets in each block.
-		 * We cannot simply reuse these from before because they've been so heavily
-		 * modified by this point in the compilation process that starting over
-		 * is easier
-		 *
-		 * We will need to do this every single time we reallocate
-		*/
-		calculate_liveness_sets(cfg);
-
-		//Mark that we are retrying
-		if(print_irs == TRUE && iterations > 0){
-	 		printf("============= Retrying with ====================\n");
-		    //Show our live ranges once again
-			print_all_live_ranges(live_ranges);
-			print_blocks_with_live_ranges(cfg);
-
-		//Otherwise just the LRs
-		} else if(print_irs == TRUE && iterations == 0){
-			//Print whatever live ranges we did find
-			print_all_live_ranges(live_ranges);
-		}
-
-		/**
-		 * STEP 3: Construct the interference graph
-		 *
-		 * Now that we have the LIVE_IN and LIVE_OUT sets constructed, we're able
-		 * to determine the interference that exists between Live Ranges. This is
-		 * a necessary step in being able to allocate registers in any way at all
-		 * The algorithm is detailed more in the function
-		 *
-		 * Again, this is required every single time we need to retry after a spill
-		*/
-		interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
-
-		//Again if we want to print, now is the time
-		if(print_irs == TRUE && iterations == 0){
-			printf("============= After Live Range Determination ==============\n");
-			print_blocks_with_live_ranges(cfg);
-			printf("============= After Live Range Determination ==============\n");
-		}
-
-		/**
-		 * STEP 4: Pre-coloring registers
-		 *
-		 * Now that we have the interference calculated, we will "pre-color" live ranges
-		 * whose color is known before allocation. This includes things like:
-		 * return values being in %rax, function parameter 1 being in %rdi, etc.
-		 *
-		 * This has the potential to cause spills
+		 * Spill Step 1: wipe everything
 		 */
-		 colorable = pre_color(cfg, live_ranges);
+		reset_all_live_ranges(live_ranges);
 
 		/**
-		 * If we were not able to color, we'll have spilled
-		 * a given live range and as such need to redo the entire
-		 * process
+		 * Once we've reset everything, we'll need
+		 * to recompute all of our used/assigned sets
 		 */
-		if(colorable == FALSE){
-			//If we were not colorable, then we need to reset everything here
-			reset_all_live_ranges(live_ranges);
-			
-			//One more iteration
-			iterations++;
-
-			//Onto the next iteration
-			continue;
-		}
+		recompute_used_and_assigned_sets(cfg);
 
 		/**
-		 * STEP 5: Live range coalescence optimization
-		 *
-		 * One small optimization that we can make is to perform live-range coalescence
-		 * on our given live ranges. We are able to coalesce live ranges if they do
-		 * not interfere and we have a pure copy like movq LR0, LR1. More detail
-		 * is given in the function
-		 *
-		 * Since spilling breaks up large live ranges, it has the opportunity to
-		 * allow for even more coalescence. We will use this to our advantage
-		 * by letting this rule run every time
-		*/
-		perform_live_range_coalescence(cfg, graph, debug_printing);
+		 * Following that, we need to go through and calculate
+		 * all of our liveness sets again
+		 */
+		calculate_live_range_liveness_sets(cfg);
+
+		/**
+		 * Once the liveness sets have been recalculated, we're able
+		 * to go through and compute all of the interference again
+		 */
+		graph = construct_interference_graph(cfg, live_ranges);
 
 		//Show our live ranges once again if requested
-		if(print_irs == TRUE && iterations == 0){
+		if(print_irs == TRUE){
 			print_all_live_ranges(live_ranges);
-			printf("================= After Coalescing =======================\n");
+			printf("================= After Interference =======================\n");
 			print_blocks_with_live_ranges(cfg);
-			printf("================= After Coalescing =======================\n");
+			printf("================= After Interference =======================\n");
 		}
-		
+
 		/**
-		 * STEP 6: Invoke the actual allocator
-		 *
-		 * The allocator will attempt to color the graph. If the graph is not k-colorable, 
-		 * then the allocator will spill the least costly LR and return FALSE, and we will go through
-		 * this whol process again
-		*/
+		 * And finally - once we have our interference, we are
+		 * able to go through and attempt to color once
+		 * again. This loop will keep executing until the
+		 * graph_color_and_allocate returns a successful result
+		 */
 		colorable = graph_color_and_allocate(cfg, live_ranges);
-
-		//If we were not colorable, then we need to reset everything here
-		if(colorable == FALSE){
-			reset_all_live_ranges(live_ranges);
-		}
-
-		//One more iteration
-		iterations++;
-
-	//So long as we can't color, we need to keep going
-	} while(colorable == FALSE);
-
+	}
 
 	/**
 	 * STEP 6: caller/callee saving logic
