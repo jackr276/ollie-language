@@ -1925,32 +1925,43 @@ static void simplify(cfg_t* cfg, basic_block_t* head){
 
 
 /**
- * Emit a converting move instruction directly, with no need to do instruction selection afterwards
+ * Select a register movement instruction based on the source and destination sizes
  */
-static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* destination, three_addr_var_t* source){
-	//Allocate it
-	instruction_t* converting_move = calloc(1, sizeof(instruction_t));
-
-	//Extract both of our sizes here
-	variable_size_t source_size = get_type_size(source->type);
-	variable_size_t destination_size = get_type_size(destination->type);
+static instruction_type_t select_register_movement_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
+	//If these are the exact same, then all we need to do is
+	//select a generic move here
+	if(destination_size == source_size){
+		//Go based on size
+		switch(destination_size){
+			case BYTE:
+				return MOVB;
+			case WORD:
+				return MOVW;
+			case DOUBLE_WORD:
+				return MOVL;
+			case QUAD_WORD:
+				return MOVQ;
+			default:
+				return MOVQ;
+		}
+	}
 
 	//Select type based on signedness
-	if(is_type_signed(destination->type) == TRUE){
+	if(is_signed == TRUE){
 		switch(source_size){
 			//Byte conversion
 			case BYTE:
 				//Go based on dest size now
 				switch(destination_size){
 					case WORD:
-						converting_move->instruction_type = MOVSBW;
-						break;
+						return MOVSBW;
+
 					case DOUBLE_WORD:
-						converting_move->instruction_type = MOVSBL;
-						break;
+						return MOVSBL;
+
 					case QUAD_WORD:
-						converting_move->instruction_type = MOVSBQ;
-						break;
+						return MOVSBQ;
+
 					default:
 						printf("Fatal internal compiler error: undefined variable size encountered\n");
 						exit(1);
@@ -1963,11 +1974,11 @@ static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* 
 				//Go based on dest size now
 				switch(destination_size){
 					case DOUBLE_WORD:
-						converting_move->instruction_type = MOVSWL;
-						break;
+						return MOVSWL;
+
 					case QUAD_WORD:
-						converting_move->instruction_type = MOVSWQ;
-						break;
+						return MOVSWQ;
+
 					default:
 						printf("Fatal internal compiler error: undefined variable size encountered\n");
 						exit(1);
@@ -1980,8 +1991,8 @@ static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* 
 				//Go based on dest size now
 				switch(destination_size){
 					case DOUBLE_WORD:
-						converting_move->instruction_type = MOVSLQ;
-						break;
+						return MOVSLQ;
+
 					default:
 						printf("Fatal internal compiler error: undefined variable size encountered\n");
 						exit(1);
@@ -1995,9 +2006,74 @@ static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* 
 				exit(1);
 		}
 
+	//Otherwise, we'll need to work based on our unsigned(zX) instructions
 	} else {
-		converting_move->instruction_type = MOVZX;
+		switch(source_size){
+			//Byte conversion
+			case BYTE:
+				//Go based on dest size now
+				switch(destination_size){
+					case WORD:
+						return MOVZBW;
+
+					case DOUBLE_WORD:
+						return MOVZBL;
+
+					case QUAD_WORD:
+						return MOVZBQ;
+
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+			
+			//Word conversion
+			case WORD:
+				//Go based on dest size now
+				switch(destination_size){
+					case DOUBLE_WORD:
+						return MOVZWL;
+
+					case QUAD_WORD:
+						return MOVZWQ;
+
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+
+			//If we have a double word, we don't need to emit anything besides
+			//a movq because we get the zero extension for free. This requires bookkeeping
+			//on the caller's end to make the source a 64 bit version
+			case DOUBLE_WORD:
+				return MOVQ;
+
+			//Unreachable
+			default:
+				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
+				exit(1);
+		}
 	}
+}
+
+
+/**
+ * Emit a converting move instruction directly, with no need to do instruction selection afterwards
+ */
+static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* destination, three_addr_var_t* source){
+	//Allocate it
+	instruction_t* converting_move = calloc(1, sizeof(instruction_t));
+
+	//Extract both of our sizes here
+	variable_size_t source_size = get_type_size(source->type);
+	variable_size_t destination_size = get_type_size(destination->type);
+
+	//Invoke the helper to do this for us
+	converting_move->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(destination->type));
 
 	//Now load in the registers
 	converting_move->destination_register = destination;
@@ -2021,25 +2097,23 @@ static three_addr_var_t* handle_expanding_move_operation(instruction_t* after_in
 	//zero pad when 32 bit moves happen
 	if(is_type_unsigned_64_bit(desired_type) == TRUE && is_type_32_bit_int(source->type) == TRUE){
 		//Emit a variable copy of the source
-		assignee = emit_var_copy(source);
+		source = emit_var_copy(source);
 
 		//Reassign it's type to be the desired type
-		assignee->type = desired_type;
+		source->type = desired_type;
 
 		//Select the size appropriately after the type is reassigned
-		assignee->variable_size = get_type_size(assignee->type);
-
-	//Otherwise we have a normal case here
-	} else {
-		//Emit the assignment instruction
-		instruction_t* instruction = emit_converting_move_instruction_direct(emit_temp_var(desired_type), source);
-
-		//Now we'll insert it before the "after instruction"
-		insert_instruction_before_given(instruction, after_instruction);
-
-		//Reassign the destination register
-		assignee = instruction->destination_register;
+		source->variable_size = get_type_size(desired_type);
 	}
+
+	//Emit the assignment instruction
+	instruction_t* instruction = emit_converting_move_instruction_direct(emit_temp_var(desired_type), source);
+
+	//Now we'll insert it before the "after instruction"
+	insert_instruction_before_given(instruction, after_instruction);
+
+	//Reassign the destination register
+	assignee = instruction->destination_register;
 
 	//Give back the assignee, in whatever form it may be
 	return assignee;
@@ -2328,151 +2402,6 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 	//And now we'll give it back
 	return instruction;
-}
-
-
-/**
- * Select a register movement instruction based on the source and destination sizes
- */
-static instruction_type_t select_register_movement_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
-	//If these are the exact same, then all we need to do is
-	//select a generic move here
-	if(destination_size == source_size){
-		//Go based on size
-		switch(destination_size){
-			case BYTE:
-				return MOVB;
-			case WORD:
-				return MOVW;
-			case DOUBLE_WORD:
-				return MOVL;
-			case QUAD_WORD:
-				return MOVQ;
-			default:
-				return MOVQ;
-		}
-	}
-
-	//Select type based on signedness
-	if(is_signed == TRUE){
-		switch(source_size){
-			//Byte conversion
-			case BYTE:
-				//Go based on dest size now
-				switch(destination_size){
-					case WORD:
-						return MOVSBW;
-
-					case DOUBLE_WORD:
-						return MOVSBL;
-
-					case QUAD_WORD:
-						return MOVSBQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
-						exit(1);
-				}
-
-				break;
-			
-			//Word conversion
-			case WORD:
-				//Go based on dest size now
-				switch(destination_size){
-					case DOUBLE_WORD:
-						return MOVSWL;
-
-					case QUAD_WORD:
-						return MOVSWQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
-						exit(1);
-				}
-
-				break;
-
-			//Long conversion
-			case DOUBLE_WORD:
-				//Go based on dest size now
-				switch(destination_size){
-					case DOUBLE_WORD:
-						return MOVSLQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
-						exit(1);
-				}
-
-				break;
-
-			//Unreachable
-			default:
-				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
-				exit(1);
-		}
-
-	//Otherwise, we'll need to work based on our unsigned(zX) instructions
-	} else {
-		switch(source_size){
-			//Byte conversion
-			case BYTE:
-				//Go based on dest size now
-				switch(destination_size){
-					case WORD:
-						return MOVZBW;
-
-					case DOUBLE_WORD:
-						return MOVZBL;
-
-					case QUAD_WORD:
-						return MOVZBQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
-						exit(1);
-				}
-
-				break;
-			
-			//Word conversion
-			case WORD:
-				//Go based on dest size now
-				switch(destination_size){
-					case DOUBLE_WORD:
-						return MOVZWL;
-
-					case QUAD_WORD:
-						return MOVZWQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
-						exit(1);
-				}
-
-				break;
-
-			//Long conversion
-			case DOUBLE_WORD:
-				//TODO - this is a unique case
-				//
-				//
-				//
-				//NOT DONE
-				//
-				//
-				//
-				//
-				//
-				return MOVQ;
-
-			//Unreachable
-			default:
-				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
-				exit(1);
-		}
-	}
 }
 
 
