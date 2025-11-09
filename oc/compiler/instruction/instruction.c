@@ -2097,11 +2097,53 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
  * Print a movzx or movsx(converting move) instruction
  */
 static void print_converting_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//First we'll determine what to print
-	if(instruction->instruction_type == MOVZX){
-		fprintf(fl, "movzx ");
-	} else {
-		fprintf(fl, "movsx ");
+	//What we need to print out here
+	switch(instruction->instruction_type){
+		//TODO DEPRECATE
+		case MOVSX:
+			fprintf(fl, "movsx ");
+			break;
+		//TODO DEPRECATE
+		case MOVZX:
+			fprintf(fl, "movzx ");
+			break;
+		case MOVSBW:
+			fprintf(fl, "movsbw ");
+			break;
+		case MOVSBL:
+			fprintf(fl, "movsbl ");
+			break;
+		case MOVSBQ:
+			fprintf(fl, "movsbq ");
+			break;
+		case MOVSWL:
+			fprintf(fl, "movswl ");
+			break;
+		case MOVSWQ:
+			fprintf(fl, "movswq ");
+			break;
+		case MOVSLQ:
+			fprintf(fl, "movslq ");
+			break;
+		case MOVZBW:
+			fprintf(fl, "movzbw ");
+			break;
+		case MOVZBL:
+			fprintf(fl, "movzbl ");
+			break;
+		case MOVZBQ:
+			fprintf(fl, "movzbq ");
+			break;
+		case MOVZWL:
+			fprintf(fl, "movzwl ");
+			break;
+		case MOVZWQ:
+			fprintf(fl, "movzwq ");
+			break;
+		//We should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
 	}
 
 	//Now we'll print the source and destination
@@ -3195,6 +3237,17 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		//Handle a converting move
 		case MOVSX:
 		case MOVZX:
+		case MOVSBW:
+		case MOVSBL:
+		case MOVSBQ:
+		case MOVSWL:
+		case MOVSWQ:
+		case MOVSLQ:
+		case MOVZBW:
+		case MOVZBL:
+		case MOVZBQ:
+		case MOVZWL:
+		case MOVZWQ:
 			print_converting_move(fl, instruction, mode);
 			break;
 
