@@ -1893,9 +1893,70 @@ static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* 
 	//Allocate it
 	instruction_t* converting_move = calloc(1, sizeof(instruction_t));
 
+	//Extract both of our sizes here
+	variable_size_t source_size = get_type_size(source->type);
+	variable_size_t destination_size = get_type_size(destination->type);
+
 	//Select type based on signedness
 	if(is_type_signed(destination->type) == TRUE){
-		converting_move->instruction_type = MOVSX;
+		switch(source_size){
+			//Byte conversion
+			case BYTE:
+				//Go based on dest size now
+				switch(destination_size){
+					case WORD:
+						converting_move->instruction_type = MOVSBW;
+						break;
+					case DOUBLE_WORD:
+						converting_move->instruction_type = MOVSBL;
+						break;
+					case QUAD_WORD:
+						converting_move->instruction_type = MOVSBQ;
+						break;
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+			
+			//Word conversion
+			case WORD:
+				//Go based on dest size now
+				switch(destination_size){
+					case DOUBLE_WORD:
+						converting_move->instruction_type = MOVSWL;
+						break;
+					case QUAD_WORD:
+						converting_move->instruction_type = MOVSWQ;
+						break;
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+
+			//Long conversion
+			case DOUBLE_WORD:
+				//Go based on dest size now
+				switch(destination_size){
+					case DOUBLE_WORD:
+						converting_move->instruction_type = MOVSLQ;
+						break;
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+
+			//Unreachable
+			default:
+				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
+				exit(1);
+		}
+
 	} else {
 		converting_move->instruction_type = MOVZX;
 	}
@@ -2260,7 +2321,7 @@ static instruction_type_t select_register_movement_instruction(variable_size_t d
 	//If these are the exact same, then we can just call the helper and be done
 	if(destination_size == source_size){
 		return select_move_instruction(destination_size);
-	} 
+	}
 
 	//However, if they're not the same, we'll need some kind of converting move here
 	if(is_signed == TRUE){
