@@ -2038,6 +2038,42 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 
 
 /**
+ * Handle a simple movement instruction. In this context, simple just means that
+ * we have a source and a destination, and now address calculation moves in between
+ */
+static void handle_register_movement_instruction(instruction_t* instruction){
+	//Extract the assignee and the op1
+	three_addr_var_t* assignee = instruction->assignee;
+	three_addr_var_t* op1 = instruction->op1;
+
+	//We have both a destination and source size to look at here
+	variable_size_t destination_size = get_type_size(assignee->type);
+	variable_size_t source_size = get_type_size(op1->type);
+
+	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	//zero pad when 32 bit moves happen
+	if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
+		//Emit a variable copy of the source
+		op1 = emit_var_copy(op1);
+
+		//Reassign it's type to be the desired type
+		op1->type = assignee->type;
+
+		//Select the size appropriately after the type is reassigned
+		op1->variable_size = get_type_size(op1->type);
+	}
+
+	//Set the sources and destinations
+	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op1;
+
+	//Use the helper to get the right sized move instruction
+	instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(assignee->type));
+}
+
+
+/**
  * Emit a movX instruction with a constant
  *
  * This is used for when we need extra moves(after a division/modulus)
@@ -3459,24 +3495,6 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 	instruction->destination_register = instruction->assignee;
 	//Set the source immediate here
 	instruction->source_immediate = instruction->op1_const;
-}
-
-
-/**
- * Handle a simple movement instruction. In this context, simple just means that
- * we have a source and a destination, and now address calculation moves in between
- */
-static void handle_simple_movement_instruction(instruction_t* instruction){
-	//We have both a destination and source size to look at here
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	variable_size_t source_size = get_type_size(instruction->op1->type);
-
-	//Set the sources and destinations
-	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op1;
-
-	//Use the helper to get the right sized move instruction
-	instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(instruction->assignee->type));
 }
 
 
@@ -5736,7 +5754,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	//Switch on whatever we have currently
 	switch (instruction->statement_type) {
 		case THREE_ADDR_CODE_ASSN_STMT:
-			handle_simple_movement_instruction(instruction);
+			handle_register_movement_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 			handle_logical_not_instruction(window);
