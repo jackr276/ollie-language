@@ -871,8 +871,11 @@ static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_blo
  * it is using those parameters. We need to keep track of this by recording it as a use
  */
 static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
-	//First let's handle the destination register
-	assign_live_range_to_destination_variable(live_ranges, basic_block, instruction);
+	//First let's handle the destination register. It is possible that this could 
+	//be null
+	if(instruction->destination_register != NULL){
+		assign_live_range_to_destination_variable(live_ranges, basic_block, instruction);
+	}
 
 	/**
 	 * NOTE: For indirect function calls, the variable itself is actually stored in the source register.
