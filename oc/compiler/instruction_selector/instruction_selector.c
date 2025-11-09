@@ -2294,40 +2294,90 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 
 /**
- * A very simple helper function that selects the right move instruction based
- * solely on variable size. Done to avoid code duplication
- */
-static instruction_type_t select_move_instruction(variable_size_t size){
-	//Go based on size
-	switch(size){
-		case BYTE:
-			return MOVB;
-		case WORD:
-			return MOVW;
-		case DOUBLE_WORD:
-			return MOVL;
-		case QUAD_WORD:
-			return MOVQ;
-		default:
-			return MOVQ;
-	}
-}
-
-
-/**
  * Select a register movement instruction based on the source and destination sizes
  */
 static instruction_type_t select_register_movement_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
-	//If these are the exact same, then we can just call the helper and be done
+	//If these are the exact same, then all we need to do is
+	//select a generic move here
 	if(destination_size == source_size){
-		return select_move_instruction(destination_size);
+		//Go based on size
+		switch(destination_size){
+			case BYTE:
+				return MOVB;
+			case WORD:
+				return MOVW;
+			case DOUBLE_WORD:
+				return MOVL;
+			case QUAD_WORD:
+				return MOVQ;
+			default:
+				return MOVQ;
+		}
 	}
 
-	//However, if they're not the same, we'll need some kind of converting move here
+	//Select type based on signedness
 	if(is_signed == TRUE){
-		return MOVSX;
+		switch(source_size){
+			//Byte conversion
+			case BYTE:
+				//Go based on dest size now
+				switch(destination_size){
+					case WORD:
+						return MOVSBW;
+
+					case DOUBLE_WORD:
+						return MOVSBL;
+
+					case QUAD_WORD:
+						return MOVSBQ;
+
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+			
+			//Word conversion
+			case WORD:
+				//Go based on dest size now
+				switch(destination_size){
+					case DOUBLE_WORD:
+						return MOVSWL;
+
+					case QUAD_WORD:
+						return MOVSWQ;
+
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+
+			//Long conversion
+			case DOUBLE_WORD:
+				//Go based on dest size now
+				switch(destination_size){
+					case DOUBLE_WORD:
+						return MOVSLQ;
+
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+
+			//Unreachable
+			default:
+				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
+				exit(1);
+		}
+
+	//Otherwise, we'll need to work based on our unsigned(zX) instructions
 	} else {
-		return MOVZX;
+
 	}
 }
 
