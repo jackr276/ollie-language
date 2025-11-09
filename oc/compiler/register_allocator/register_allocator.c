@@ -2728,7 +2728,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//whereas in an indirect call we are not
 	symtab_function_record_t* callee = instruction->called_function;
 
-	//Grab out this LR
+	//Grab out this LR for reference later on
 	live_range_t* destination_lr = instruction->destination_register->associated_live_range;
 
 	//Start off with this as the last instruction
@@ -2800,22 +2800,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
  * at the time that the function is called
  */
 static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t* instruction){
-	//Set a flag array to keep track of what we've already saved
-	u_int8_t saved_registers[K_COLORS_GEN_USE];
-	memset(saved_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
-
 	//Extract this out
 	live_range_t* destination_lr = instruction->destination_register->associated_live_range;
-
-	//This really rarely happens, but we still must account for it. If the neighbors array is NULL
-	//or empty, we leave
-	if(destination_lr->neighbors == NULL || destination_lr->neighbors->current_index == 0){
-		return instruction;
-	}
 
 	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
 	//have, but will change to be the first pop instruction that we make 
 	instruction_t* last_instruction = instruction;
+
+	//Grab the live_after array for up to but not including the actual call
 
 	//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
 	for(u_int16_t i = 0; i < destination_lr->neighbors->current_index; i++){
@@ -2888,7 +2880,9 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 					instruction = insert_caller_saved_logic_for_direct_call(instruction);
 					break;
 					
-				//Use the helper for an indirect call
+				//Use the helper for an indirect call. Indirect calls differ slightly
+				//from direct ones because we have less information, so we'll need a different
+				//helper here
 				case INDIRECT_CALL:
 					instruction = insert_caller_saved_logic_for_indirect_call(instruction);
 					break;
@@ -3062,9 +3056,6 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 
 	//Save the flag that tells us whether or not the graph that we constructed was colorable
 	u_int8_t colorable = FALSE;
-
-	//Keep track of the iterations that we've been through
-	u_int32_t iterations = 0;
 
 	/**
 	 * STEP 1: Build all live ranges from variables:
