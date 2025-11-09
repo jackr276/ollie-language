@@ -22,6 +22,17 @@ typedef enum{
 	MOVQ,
 	MOVSX, //Move with sign extension from small to large register
 	MOVZX, //Move with zero extension from small to large register
+	MOVSBW, //Move signed byte to word
+	MOVSBL, //Move signed byte to long 
+	MOVSBQ, //Move signed byte to quad 
+	MOVSWL, //Move signed word to long
+	MOVSWQ, //Move signed word to quad 
+	MOVSLQ, //Move signed long to quad 
+	MOVZBW, //Move unsigned byte to word
+	MOVZBL, //Move unsigned byte to long 
+	MOVZBQ, //Move unsigned byte to quad 
+	MOVZWL, //Move unsigned word to long
+	MOVZWQ, //Move unsigned word to quad 
 	REG_TO_MEM_MOVB,
 	REG_TO_MEM_MOVW,
 	REG_TO_MEM_MOVL,
