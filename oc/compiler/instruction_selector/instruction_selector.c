@@ -527,44 +527,6 @@ static instruction_t* emit_appropriate_move_statement(three_addr_var_t* destinat
 
 
 /**
- * Emit a movzx(zero extend) instruction
- */
-instruction_t* emit_movzx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
-	//First we allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the instruction type
-	instruction->instruction_type = MOVZX;
-
-	//Set the source and destination
-	instruction->source_register = source;
-	instruction->destination_register = destination;
-
-	//And following that, we're all set
-	return instruction;
-}
-
-
-/**
- * Emit a movsx(sign extend) instruction
- */
-instruction_t* emit_movsx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
-	//First we allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the instruction type
-	instruction->instruction_type = MOVSX;
-
-	//Set the source and destination
-	instruction->source_register = source;
-	instruction->destination_register = destination;
-
-	//And following that, we're all set
-	return instruction;
-}
-
-
-/**
  * Can we do an inplace constant operation? Currently we only
  * do these for *, + and -
  */
@@ -2062,6 +2024,84 @@ static instruction_type_t select_register_movement_instruction(variable_size_t d
 
 
 /**
+ * Emit a movX instruction
+ *
+ * This is used for when we need extra moves(after a division/modulus)
+ */
+static instruction_t* emit_move_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We set the size based on the destination 
+	variable_size_t size = get_type_size(destination->type);
+
+	switch (size) {
+		case BYTE:
+			instruction->instruction_type = MOVB;
+			break;
+		case WORD:
+			instruction->instruction_type = MOVW;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MOVL;
+			break;
+		case QUAD_WORD:
+			instruction->instruction_type = MOVQ;
+			break;
+		//Should never reach this
+		default:
+			break;
+	}
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_register = source;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a movX instruction with a constant
+ *
+ * This is used for when we need extra moves(after a division/modulus)
+ */
+instruction_t* emit_constant_move_instruciton(three_addr_var_t* destination, three_addr_const_t* source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We set the size based on the destination 
+	variable_size_t size = get_type_size(destination->type);
+
+	switch (size) {
+		case BYTE:
+			instruction->instruction_type = MOVB;
+			break;
+		case WORD:
+			instruction->instruction_type = MOVW;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MOVL;
+			break;
+		case QUAD_WORD:
+			instruction->instruction_type = MOVQ;
+			break;
+		//Should never reach this
+		default:
+			break;
+	}
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_immediate = source;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
  * Emit a converting move instruction directly, with no need to do instruction selection afterwards
  */
 static instruction_t* emit_converting_move_instruction_direct(three_addr_var_t* destination, three_addr_var_t* source){
@@ -2117,6 +2157,17 @@ static three_addr_var_t* handle_expanding_move_operation(instruction_t* after_in
 
 	//Give back the assignee, in whatever form it may be
 	return assignee;
+}
+
+
+/**
+ * Create and insert a converting move operation where the destination's type is the desired type. This handles all of the overhead of creating,
+ * finding the converting moves, and inserting
+ */
+static three_addr_var_t* create_and_insert_expanding_move_operation(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
+	//We have a temp var based on the destination type
+	three_addr_var_t* destination_variable = emit_temp_var(destination_type);
+
 }
 
 
