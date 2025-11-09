@@ -3439,7 +3439,23 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
 	//Select based on size
-	instruction->instruction_type = select_move_instruction(size);
+	switch(size){
+		case BYTE:
+			instruction->instruction_type = MOVB;
+			break;
+		case WORD:
+			instruction->instruction_type = MOVW;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = MOVL;
+			break;
+		case QUAD_WORD:
+			instruction->instruction_type = MOVQ;
+			break;
+		default:
+			printf("Fatal internal compiler error: undefined/incorrect variable size detected\n");
+			exit(1);
+	}
 	
 	//We've already set the sources, now we set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
