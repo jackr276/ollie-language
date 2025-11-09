@@ -4674,10 +4674,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	add_statement(current, func_call_stmt);
 
 	//If this is not a void return type, we'll need to emit this temp assignment
-	//
-	//
-	//TODO is this needed?
-	//
 	if(signature->returns_void == FALSE){
 		//Emit an assignment instruction. This will become very important way down the line in register
 		//allocation to avoid interference
@@ -4688,9 +4684,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				
 		//Reassign this value
 		assignee = assignment->assignee;
-
-		//This cannot be coalesced
-		assignment->cannot_be_combined = TRUE;
 
 		//Add it in
 		add_statement(current, assignment);
@@ -4794,11 +4787,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	add_statement(current, func_call_stmt);
 
 	//If this is not a void return type, we'll need to emit this temp assignment
-	//
-	//
-	//TODO is this needed?
-	//
-	//
 	if(signature->returns_void == FALSE){
 		//Emit an assignment instruction. This will become very important way down the line in register
 		//allocation to avoid interference
@@ -4806,9 +4794,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				
 		//Reassign this value
 		assignee = assignment->assignee;
-
-		//This cannot be coalesced
-		assignment->cannot_be_combined = TRUE;
 
 		//Add it in
 		add_statement(current, assignment);
