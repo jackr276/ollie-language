@@ -2042,7 +2042,7 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
  *
  * This is used for when we need extra moves(after a division/modulus)
  */
-instruction_t* emit_constant_move_instruciton(three_addr_var_t* destination, three_addr_const_t* source){
+instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, three_addr_const_t* source){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -2536,7 +2536,7 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 		//due to a quirk of x86
 		if(instruction->op2->parameter_number > 0){
 			//Move it on over here
-			instruction_t* copy_instruction = emit_movX_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
+			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
 			//Add this instruction to our block
 			insert_instruction_before_given(copy_instruction, instruction);
 
@@ -2609,7 +2609,7 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 		//due to a quirk of x86
 		if(instruction->op2->parameter_number > 0){
 			//Move it on over here
-			instruction_t* copy_instruction = emit_movX_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
+			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
 			//Add this instruction to our block
 			insert_instruction_before_given(copy_instruction, instruction);
 
@@ -2962,7 +2962,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		//Otherwise this can be moved directly
 		} else {
 			//We first need to move the first operand into RAX
-			instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
+			instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(multiplication_instruction->op2->type), multiplication_instruction->op2);
 
 			//Insert the move to rax before the multiplication instruction
 			insert_instruction_before_given(move_to_rax, multiplication_instruction);
@@ -2975,7 +2975,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//here for this to work
 	} else {
 		//Emit the move instruction here
-		instruction_t* move_to_rax = emit_const_movX_instruciton(emit_temp_var(multiplication_instruction->assignee->type), multiplication_instruction->op1_const);
+		instruction_t* move_to_rax = emit_constant_move_instruction(emit_temp_var(multiplication_instruction->assignee->type), multiplication_instruction->op1_const);
 
 		//Put it before our multiplication
 		insert_instruction_before_given(move_to_rax, multiplication_instruction);
@@ -3020,7 +3020,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	multiplication_instruction->destination_register = emit_temp_var(multiplication_instruction->assignee->type);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_movX_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
+	instruction_t* result_movement = emit_move_instruction(multiplication_instruction->assignee, multiplication_instruction->destination_register);
 	//This cannot be combined
 	result_movement->cannot_be_combined = TRUE;
 
@@ -3114,7 +3114,7 @@ static void handle_division_instruction(instruction_window_t* window){
 	//Otherwise this can be moved directly
 	} else {
 		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->op1->type), division_instruction->op1);
 
 		//Insert the move to rax before the multiplication instruction
 		insert_instruction_before_given(move_to_rax, division_instruction);
@@ -3165,7 +3165,7 @@ static void handle_division_instruction(instruction_window_t* window){
 	insert_instruction_before_given(division, division_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_movX_instruction(division_instruction->assignee, quotient);
+	instruction_t* result_movement = emit_move_instruction(division_instruction->assignee, quotient);
 	//This cannot be combined
 	result_movement->cannot_be_combined = TRUE;
 
@@ -3214,7 +3214,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	//Otherwise this can be moved directly
 	} else {
 		//We first need to move the first operand into RAX
-		instruction_t* move_to_rax = emit_movX_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
+		instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(modulus_instruction->op1->type), modulus_instruction->op1);
 
 		//Insert the move to rax before the multiplication instruction
 		insert_instruction_before_given(move_to_rax, modulus_instruction);
@@ -3265,7 +3265,7 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	insert_instruction_before_given(division, modulus_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_movX_instruction(modulus_instruction->assignee, remainder_register);
+	instruction_t* result_movement = emit_move_instruction(modulus_instruction->assignee, remainder_register);
 	//This also cannot be combined
 	result_movement->cannot_be_combined = TRUE;
 
@@ -3728,7 +3728,7 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
 
 	//Following that we'll need the final movzx instruction
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_or->assignee, setne_instruction->destination_register);
+	instruction_t* move_instruction = emit_move_instruction(logical_or->assignee, setne_instruction->destination_register);
 
 	//Select this one's size 
 	logical_or->assignee->variable_size = get_type_size(logical_or->assignee->type);
@@ -3743,10 +3743,10 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	insert_instruction_before_given(setne_instruction, after_logical_or);
 
 	//And finally we need the movzx
-	insert_instruction_before_given(movzx_instruction, after_logical_or);
+	insert_instruction_before_given(move_instruction, after_logical_or);
 
 	//Reconstruct the window starting at the movzbl
-	reconstruct_window(window, movzx_instruction);
+	reconstruct_window(window, move_instruction);
 }
 
 
@@ -3795,7 +3795,7 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
 
 	//The final thing that we need is a movzx
-	instruction_t* movzx_instruction = emit_appropriate_move_statement(logical_and->assignee, and_inst->destination_register);
+	instruction_t* move_instruction = emit_move_instruction(logical_and->assignee, and_inst->destination_register);
 
 	//Select this one's size 
 	logical_and->assignee->variable_size = get_type_size(logical_and->assignee->type);
@@ -3809,10 +3809,10 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	insert_instruction_before_given(second_test, after_logical_and);
 	insert_instruction_before_given(second_set, after_logical_and);
 	insert_instruction_before_given(and_inst, after_logical_and);
-	insert_instruction_before_given(movzx_instruction, after_logical_and);
+	insert_instruction_before_given(move_instruction, after_logical_and);
 	
 	//Reconstruct the window starting at the final move
-	reconstruct_window(window, movzx_instruction);
+	reconstruct_window(window, move_instruction);
 }
 
 
@@ -5194,9 +5194,12 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//We'll now need to insert inbetween here
 		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(lookup_type_name_only(cfg->type_symtab, "u8")->type), type_signed);
 
-		//We now also need to modify the move instruction
-		//It will always be movzx
-		assignment->instruction_type = MOVZX;
+		//We now also need to modify the move instruction. We can do this without creating any new memory
+		variable_size_t destination_size = get_type_size(assignment->assignee->type);
+		variable_size_t source_size = get_type_size(set_instruction->destination_register->type);
+		u_int8_t destination_signed = is_type_signed(assignment->destination_register->type);
+
+		assignment->instruction_type = select_register_movement_instruction(destination_size, source_size, destination_signed);
 		//Assignee and destination are the same
 		assignment->destination_register = assignment->assignee;
 		//The source is now this set instruction's destination
