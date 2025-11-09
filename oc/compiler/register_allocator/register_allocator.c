@@ -2789,6 +2789,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		}
 	}
 
+	//Free it up once done
+	dynamic_array_dealloc(live_after);
+
 	//Return whatever this ended up being
 	return last_instruction;
 }
@@ -2854,48 +2857,8 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		}
 	}
 
-	/*
-		//Once we've extracted it, we'll go through all of the live ranges that interfere with it and see if their registers are caller-saved
-	for(u_int16_t i = 0; i < destination_lr->neighbors->current_index; i++){
-		//Grab the given live range out
-		live_range_t* interferee = dynamic_array_get_at(destination_lr->neighbors, i);
-
-		//And we'll extract the interfering register
-		general_purpose_register_t interfering_register = interferee->reg;
-
-		//If this is not caller saved, then we don't care about it
-		if(is_register_caller_saved(interfering_register) == FALSE){
-			continue;
-		//We already saved it - no point in going forward
-		} else if(saved_registers[interfering_register - 1] == TRUE){
-			continue;
-		}
-
-		//If these are the same register - skip pushing it
-		if(destination_lr->reg == interfering_register){
-			continue;
-		}
-
-		//Otherwise if we get here then we know it is caller saved, so we'll need to 
-		//emit the push/pop pair here
-		instruction_t* push_instruction = emit_direct_register_push_instruction(interfering_register);
-		instruction_t* pop_instruction = emit_direct_register_pop_instruction(interfering_register);
-
-		//Now we'll insert the push directly before the call
-		insert_instruction_before_given(push_instruction, instruction);
-		
-		//And to maintain the stack structure, we'll now put the pop instruction directly after the call
-		insert_instruction_after_given(pop_instruction, instruction);
-
-		//If this is the first pop instruction that we emitted, it will become the new "last_instruction"
-		if(last_instruction == instruction){
-			last_instruction = pop_instruction;
-		}
-
-		//Flag that we did already save this
-		saved_registers[interferee->reg - 1] = TRUE;
-	}
-	*/
+	//Free it up once done
+	dynamic_array_dealloc(live_after);
 
 	//Return the last instruction to save time when drilling
 	return last_instruction;
