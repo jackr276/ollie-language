@@ -1904,11 +1904,9 @@ static instruction_type_t select_register_movement_instruction(variable_size_t d
 						return MOVSBQ;
 
 					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						printf("Fatal internal compiler error: undefined variable size encountered for byte source\n");
 						exit(1);
 				}
-
-				break;
 			
 			//Word conversion
 			case WORD:
@@ -1921,25 +1919,21 @@ static instruction_type_t select_register_movement_instruction(variable_size_t d
 						return MOVSWQ;
 
 					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						printf("Fatal internal compiler error: undefined variable size encountered for word source\n");
 						exit(1);
 				}
-
-				break;
 
 			//Long conversion
 			case DOUBLE_WORD:
 				//Go based on dest size now
 				switch(destination_size){
-					case DOUBLE_WORD:
+					case QUAD_WORD:
 						return MOVSLQ;
 
 					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						printf("Fatal internal compiler error: undefined variable size encountered for long source\n");
 						exit(1);
 				}
-
-				break;
 
 			//Unreachable
 			default:
@@ -1964,11 +1958,9 @@ static instruction_type_t select_register_movement_instruction(variable_size_t d
 						return MOVZBQ;
 
 					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						printf("Fatal internal compiler error: undefined variable size encountered byte source\n");
 						exit(1);
 				}
-
-				break;
 			
 			//Word conversion
 			case WORD:
@@ -1981,11 +1973,9 @@ static instruction_type_t select_register_movement_instruction(variable_size_t d
 						return MOVZWQ;
 
 					default:
-						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						printf("Fatal internal compiler error: undefined variable size encountered word source\n");
 						exit(1);
 				}
-
-				break;
 
 			//If we have a double word, we don't need to emit anything besides
 			//a movq because we get the zero extension for free. This requires bookkeeping
