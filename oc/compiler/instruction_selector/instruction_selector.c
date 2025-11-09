@@ -1067,15 +1067,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 			//Let's now grab what the constant is
 			three_addr_const_t* constant = window->instruction1->op1_const;
-			
-			//What kind of constant do we have?
-			if(constant->const_type == INT_CONST || constant->const_type == INT_CONST_FORCE_U){
-				//If this is a the case, we'll multiply the address const by the int value
-				address_offset *= constant->constant_value.integer_constant;
-			//Otherwise, this has to be a long const
-			} else {
-				address_offset *= constant->constant_value.long_constant;
-			}
+
+			//We can just use the long version here
+			address_offset *= constant->constant_value.long_constant;
 
 			//Once we've done this, the address offset is now properly multiplied. We'll reuse
 			//the constant from operation one, and convert the lea statement into a BIN_OP_WITH_CONST
