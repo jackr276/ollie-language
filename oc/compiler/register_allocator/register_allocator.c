@@ -2723,10 +2723,6 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
  * possible for indirect function calls, which is the reason for the distinction
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* instruction){
-	//Set a flag array to keep track of what we've already saved
-	u_int8_t saved_registers[K_COLORS_GEN_USE];
-	memset(saved_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
-
 	//If we get here we know that we have a call instruction. Let's
 	//grab whatever it's calling out. We're able to do this for a direct call,
 	//whereas in an indirect call we are not
@@ -2738,14 +2734,10 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//Start off with this as the last instruction
 	instruction_t* last_instruction = instruction;
 
+	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
 	dynamic_array_t* live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
-	//Remove our destination from this
+	//We can remove the destination LR from here, there's no point in keeping it in
 	dynamic_array_delete(live_after, destination_lr);
-
-	//printf("Instruction:\n");
-	//print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
-	//printf("\nLive After:\n");
-	//print_live_range_array(live_after);
 
 	/**
 	 * Run through everything that is alive after this function runs(live_after)
@@ -2760,6 +2752,12 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 
 		//If it's not caller-saved, it's irrelevant to us
 		if(is_register_caller_saved(reg) == FALSE){
+			continue;
+		}
+
+		//There's also no point in saving this. This could happen
+		//if we have precoloring
+		if(reg == destination_lr->reg){
 			continue;
 		}
 
@@ -2781,63 +2779,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 			//Insert the pop instruction directly after the last instruction
 			insert_instruction_after_given(pop_inst, instruction);
 
-			//Flag that we did already save this
-			//saved_registers[reg - 1] = TRUE;
-
-			//If the last instruction still is the original instruction. That
-			//means that this is the first pop instruction that we're inserting.
-			//As such, we'll set the last instruction to be this pop instruction
-			//to save ourselves time down the line
-			if(last_instruction == instruction){
-				last_instruction = pop_inst;
-			}
-		}
-
-	}
-
-	//We can crawl this Live Range's neighbors to see what is interefering with it. Once
-	//we know what is interfering, we can see which registers they use and compare that 
-	//with the register array
-	/*
-	for(u_int16_t i = 0; destination_lr->neighbors != NULL && i < destination_lr->neighbors->current_index; i++){
-		//Grab the neighbor out
-		live_range_t* lr = dynamic_array_get_at(destination_lr->neighbors, i);
-
-		//And grab it's register out
-		general_purpose_register_t reg = lr->reg;
-
-		//If it isn't caller saved, we don't care
-		if(is_register_caller_saved(reg) == FALSE){
-			continue;
-		//We've already saved it, so move on
-		} else if(saved_registers[reg - 1] == TRUE){
-			continue;
-		}
-
-		//If these are the same register - skip pushing it
-		if(destination_lr->reg == reg){
-			continue;
-		}
-
-		//If we get a live range like this, we know for a fact that
-		//this register needs to be saved because it's live at the time
-		//of the function call and the function that we're calling uses it
-		if(callee->assigned_registers[reg - 1] == TRUE){
-			//Emit a direct push with this live range's register
-			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
-
-			//Emit the pop instruction for this
-			instruction_t* pop_inst = emit_direct_register_pop_instruction(reg);
-
-			//Insert the push instruction directly before the call instruction
-			insert_instruction_before_given(push_inst, instruction);
-
-			//Insert the pop instruction directly after the last instruction
-			insert_instruction_after_given(pop_inst, instruction);
-
-			//Flag that we did already save this
-			saved_registers[reg - 1] = TRUE;
-
 			//If the last instruction still is the original instruction. That
 			//means that this is the first pop instruction that we're inserting.
 			//As such, we'll set the last instruction to be this pop instruction
@@ -2847,7 +2788,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 			}
 		}
 	}
-	*/
 
 	//Return whatever this ended up being
 	return last_instruction;
