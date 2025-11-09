@@ -4606,9 +4606,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	if(signature->returns_void == FALSE){
 		//Otherwise we have one like this
 		assignee = emit_temp_var(signature->return_type);
-	} else {
-		//We'll have a dummy one here
-		assignee = emit_temp_var(u64);
 	}
 
 	//We first need to emit the function pointer variable
@@ -4688,14 +4685,12 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//Reassign this value
 		assignee = assignment->assignee;
 
-		//This cannot be coalesced
-		assignment->cannot_be_combined = TRUE;
-
 		//Add it in
 		add_statement(current, assignment);
 	}
 
-	//This is always the assignee we gave above
+	//This is always the assignee we gave above. Note that this is nullable,
+	//we do 
 	result_package.assignee = assignee;
 
 	//Give back what we assigned to
@@ -4726,9 +4721,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	if(signature->returns_void == FALSE){
 		//Otherwise we have one like this
 		assignee = emit_temp_var(signature->return_type);
-	} else {
-		//We'll have a dummy one here
-		assignee = emit_temp_var(u64);
 	}
 
 	//Emit the final call here
@@ -4803,14 +4795,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//Reassign this value
 		assignee = assignment->assignee;
 
-		//This cannot be coalesced
-		assignment->cannot_be_combined = TRUE;
-
 		//Add it in
 		add_statement(current, assignment);
 	}
 
-	//This is always the assignee we gave above
+	//This is always the assignee we gave above. It is important to note
+	//that this is nullable, not all functions return something
 	result_package.assignee = assignee;
 
 	//Give back what we assigned to
