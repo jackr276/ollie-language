@@ -2107,6 +2107,23 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
  * finding the converting moves, and inserting
  */
 static three_addr_var_t* create_and_insert_expanding_move_operation(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
+	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	//zero pad when 32 bit moves happen
+	if(is_type_unsigned_64_bit(destination_type) == TRUE && is_type_32_bit_int(source->type) == TRUE){
+		//Emit a variable copy of the source
+		three_addr_var_t* converted = emit_var_copy(source);
+
+		//Reassign it's type to be the desired type
+		converted->type = destination_type;
+
+		//Select the size appropriately after the type is reassigned
+		converted->variable_size = get_type_size(converted->type);
+
+		//We don't need to deal with a move at all in this case, we can just leave here
+		return converted;
+	}
+
 	//We have a temp var based on the destination type
 	three_addr_var_t* destination_variable = emit_temp_var(destination_type);
 
