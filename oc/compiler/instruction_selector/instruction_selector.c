@@ -2377,7 +2377,63 @@ static instruction_type_t select_register_movement_instruction(variable_size_t d
 
 	//Otherwise, we'll need to work based on our unsigned(zX) instructions
 	} else {
+		switch(source_size){
+			//Byte conversion
+			case BYTE:
+				//Go based on dest size now
+				switch(destination_size){
+					case WORD:
+						return MOVZBW;
 
+					case DOUBLE_WORD:
+						return MOVZBL;
+
+					case QUAD_WORD:
+						return MOVZBQ;
+
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+			
+			//Word conversion
+			case WORD:
+				//Go based on dest size now
+				switch(destination_size){
+					case DOUBLE_WORD:
+						return MOVZWL;
+
+					case QUAD_WORD:
+						return MOVZWQ;
+
+					default:
+						printf("Fatal internal compiler error: undefined variable size encountered\n");
+						exit(1);
+				}
+
+				break;
+
+			//Long conversion
+			case DOUBLE_WORD:
+				//TODO - this is a unique case
+				//
+				//
+				//
+				//NOT DONE
+				//
+				//
+				//
+				//
+				//
+				return MOVQ;
+
+			//Unreachable
+			default:
+				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
+				exit(1);
+		}
 	}
 }
 
