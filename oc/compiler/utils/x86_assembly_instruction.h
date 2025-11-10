@@ -8,6 +8,19 @@
 #define X86_ASSEMBLY_INSTRUCTION_H
 
 /**
+ * What memory access type do we have for a given
+ * instruction? By default it's NO_MEMORY_ACCESS(0), 
+ * and the other options WRITE_TO_MEMORY and READ_FROM_MEMORY
+ * represent reads & writes respectively
+ */
+typedef enum {
+	NO_MEMORY_ACCESS = 0,
+	WRITE_TO_MEMORY,
+	READ_FROM_MEMORY
+} memory_access_type_t;
+
+
+/**
  * All x86-64 instructions that Ollie recognizes
  */
 typedef enum{

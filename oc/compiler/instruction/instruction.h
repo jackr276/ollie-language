@@ -289,8 +289,6 @@ struct instruction_t{
 	instruction_type_t instruction_type;
 	//The actual operator, stored as a token for size requirements
 	ollie_token_t op;
-	//Is this a jump table? -- for use in switch statements
-	u_int8_t is_jump_table;
 	//Is this operation critical?
 	u_int8_t mark;
 	//Is this operation a "branch-ending" operation. This would encompass
@@ -298,8 +296,6 @@ struct instruction_t{
 	u_int8_t is_branch_ending;
 	//Cannot be coalesced
 	u_int8_t cannot_be_combined;
-	//Is this a converting move of some kind?
-	u_int8_t is_converting_move;
 	//Does this have a multiplicator
 	u_int8_t has_multiplicator;
 	//Is this a regular or inverse branch
