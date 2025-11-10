@@ -2078,16 +2078,16 @@ static void print_register_to_register_move(FILE* fl, instruction_t* instruction
 static void print_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//First let's print out the appropriate instruction
 	switch(instruction->instruction_type){
-		case REG_TO_MEM_MOVB:
+		case MOVB:
 			fprintf(fl, "movb ");
 			break;
-		case REG_TO_MEM_MOVW:
+		case MOVW:
 			fprintf(fl, "movw ");
 			break;
-		case REG_TO_MEM_MOVL:
+		case MOVL:
 			fprintf(fl, "movl ");
 			break;
-		case REG_TO_MEM_MOVQ:
+		case MOVQ:
 			fprintf(fl, "movq ");
 			break;
 		//Should never hit this
@@ -2117,16 +2117,16 @@ static void print_register_to_memory_move(FILE* fl, instruction_t* instruction, 
 static void print_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//First thing we'll do is print the appropriate move statement
 	switch(instruction->instruction_type){
-		case MEM_TO_REG_MOVB:
+		case MOVB:
 			fprintf(fl, "movb ");
 			break;
-		case MEM_TO_REG_MOVW:
+		case MOVW:
 			fprintf(fl, "movw ");
 			break;
-		case MEM_TO_REG_MOVL:
+		case MOVL:
 			fprintf(fl, "movl ");
 			break;
-		case MEM_TO_REG_MOVQ:
+		case MOVQ:
 			fprintf(fl, "movq ");
 			break;
 		//Should never hit this
