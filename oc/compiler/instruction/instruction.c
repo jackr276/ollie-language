@@ -1978,60 +1978,6 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 
 /**
- * Print a movzx or movsx(converting move) instruction
- */
-static void print_converting_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//What we need to print out here
-	switch(instruction->instruction_type){
-		case MOVSBW:
-			fprintf(fl, "movsbw ");
-			break;
-		case MOVSBL:
-			fprintf(fl, "movsbl ");
-			break;
-		case MOVSBQ:
-			fprintf(fl, "movsbq ");
-			break;
-		case MOVSWL:
-			fprintf(fl, "movswl ");
-			break;
-		case MOVSWQ:
-			fprintf(fl, "movswq ");
-			break;
-		case MOVSLQ:
-			fprintf(fl, "movslq ");
-			break;
-		case MOVZBW:
-			fprintf(fl, "movzbw ");
-			break;
-		case MOVZBL:
-			fprintf(fl, "movzbl ");
-			break;
-		case MOVZBQ:
-			fprintf(fl, "movzbq ");
-			break;
-		case MOVZWL:
-			fprintf(fl, "movzwl ");
-			break;
-		case MOVZWQ:
-			fprintf(fl, "movzwq ");
-			break;
-		//We should never hit this
-		default:
-			printf("Fatal internal compiler error: unreachable path hit\n");
-			exit(1);
-	}
-
-	//Now we'll print the source and destination
-	print_variable(fl, instruction->source_register, mode);
-	fprintf(fl, ", ");
-	print_variable(fl, instruction->destination_register, mode);
-
-	fprintf(fl, "\n");
-}
-
-
-/**
  * Handle a simple register to register or immediate to register move
  */
 static void print_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
@@ -2090,12 +2036,7 @@ static void print_register_to_register_move(FILE* fl, instruction_t* instruction
 
 	//Print the appropriate variable here
 	if(instruction->source_register != NULL){
-		//If we have a source-only dereference print it
-		if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE){
-			print_addressing_mode_expression(fl, instruction, mode);
-		} else {
-			print_variable(fl, instruction->source_register, mode);
-		}
+		print_variable(fl, instruction->source_register, mode);
 	} else {
 		print_immediate_value(fl, instruction->source_immediate);
 	}
@@ -2103,12 +2044,8 @@ static void print_register_to_register_move(FILE* fl, instruction_t* instruction
 	//Needed comma
 	fprintf(fl, ", ");
 
-	//Now print our destination
-	if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST){
-		print_addressing_mode_expression(fl, instruction, mode);
-	} else {
-		print_variable(fl, instruction->destination_register, mode);
-	} 
+	//Finally we print the destination
+	print_variable(fl, instruction->destination_register, mode);
 
 	//A final newline is needed for all instructions
 	fprintf(fl, "\n");
