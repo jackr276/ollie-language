@@ -3062,21 +3062,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_division_instruction(fl, instruction, mode);
 			break;
 
-		//Handle the special addressing modes that we could have here
-		case REG_TO_MEM_MOVB:
-		case REG_TO_MEM_MOVL:
-		case REG_TO_MEM_MOVW:
-		case REG_TO_MEM_MOVQ:
-			print_register_to_memory_move(fl, instruction, mode);
-			break;
-
-		case MEM_TO_REG_MOVB:
-		case MEM_TO_REG_MOVL:
-		case MEM_TO_REG_MOVW:
-		case MEM_TO_REG_MOVQ:
-			print_memory_to_register_move(fl, instruction, mode);
-			break;
-
 		//Handle addition instructions
 		case ADDB:
 		case ADDW:
@@ -3109,8 +3094,25 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVZBQ:
 		case MOVZWL:
 		case MOVZWQ:
-			//Invoke the helper
-			print_register_to_register_move(fl, instruction, mode);
+			/**
+			 * Now we go based on what kind of memory
+			 * access we're doing here. This will determine
+			 * the final output of our move
+			 */
+			switch(instruction->memory_access_type){
+				case NO_MEMORY_ACCESS:
+					print_register_to_register_move(fl, instruction, mode);
+					break;
+
+				case WRITE_TO_MEMORY:
+					print_register_to_memory_move(fl, instruction, mode);
+					break;
+
+				case READ_FROM_MEMORY:
+					print_memory_to_register_move(fl, instruction, mode);
+					break;
+			}
+
 			break;
 
 		//Handle lea printing
@@ -3619,16 +3621,16 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	//Select the appropriate register
 	switch(size){
 		case BYTE:
-			stmt->instruction_type = MEM_TO_REG_MOVB;
+			stmt->instruction_type = MOVB;
 			break;
 		case WORD:
-			stmt->instruction_type = MEM_TO_REG_MOVW;
+			stmt->instruction_type = MOVW;
 			break;
 		case DOUBLE_WORD:
-			stmt->instruction_type = MEM_TO_REG_MOVL;
+			stmt->instruction_type = MOVL;
 			break;
 		case QUAD_WORD:
-			stmt->instruction_type = MEM_TO_REG_MOVQ;
+			stmt->instruction_type = MOVQ;
 			break;
 		default:
 			break;
@@ -3638,6 +3640,8 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	//Stack pointer is source 1
 	stmt->address_calc_reg1 = stack_pointer;
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+	//Loading is reading from memory
+	stmt->memory_access_type = READ_FROM_MEMORY;
 
 	//Emit an integer constant for this offset
 	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);
@@ -3660,16 +3664,16 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	//Select the appropriate register
 	switch(size){
 		case BYTE:
-			stmt->instruction_type = REG_TO_MEM_MOVB;
+			stmt->instruction_type = MOVB;
 			break;
 		case WORD:
-			stmt->instruction_type = REG_TO_MEM_MOVW;
+			stmt->instruction_type = MOVW;
 			break;
 		case DOUBLE_WORD:
-			stmt->instruction_type = REG_TO_MEM_MOVL;
+			stmt->instruction_type = MOVL;
 			break;
 		case QUAD_WORD:
-			stmt->instruction_type = REG_TO_MEM_MOVQ;
+			stmt->instruction_type = MOVQ;
 			break;
 		default:
 			break;
@@ -3681,6 +3685,8 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	//Stack pointer our base address
 	stmt->address_calc_reg1 = stack_pointer;
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+	//Storing is writing to memory
+	stmt->memory_access_type = WRITE_TO_MEMORY;
 
 	//Emit an integer constant for this offset
 	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);
