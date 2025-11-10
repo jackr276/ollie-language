@@ -3938,16 +3938,16 @@ static void handle_load_instruction(instruction_t* instruction){
 	//Select the instruction type accordingly
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = MEM_TO_REG_MOVQ;
+			instruction->instruction_type = MOVQ;
 			break;
 		case DOUBLE_WORD:
-			instruction->instruction_type = MEM_TO_REG_MOVL;
+			instruction->instruction_type = MOVL;
 			break;
 		case WORD:
-			instruction->instruction_type = MEM_TO_REG_MOVW;
+			instruction->instruction_type = MOVW;
 			break;
 		case BYTE:
-			instruction->instruction_type = MEM_TO_REG_MOVB;
+			instruction->instruction_type = MOVB;
 			break;
 		default:
 			break;
@@ -3955,6 +3955,9 @@ static void handle_load_instruction(instruction_t* instruction){
 
 	//This will always be a SOURCE_ONLY
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+
+	//Load is from memory
+	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//The destination is our assignee
 	instruction->destination_register = instruction->assignee;
@@ -3978,16 +3981,16 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	//Select the instruction type accordingly
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = MEM_TO_REG_MOVQ;
+			instruction->instruction_type = MOVQ;
 			break;
 		case DOUBLE_WORD:
-			instruction->instruction_type = MEM_TO_REG_MOVL;
+			instruction->instruction_type = MOVL;
 			break;
 		case WORD:
-			instruction->instruction_type = MEM_TO_REG_MOVW;
+			instruction->instruction_type = MOVW;
 			break;
 		case BYTE:
-			instruction->instruction_type = MEM_TO_REG_MOVB;
+			instruction->instruction_type = MOVB;
 			break;
 		default:
 			break;
@@ -3995,6 +3998,9 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//Load is from memory
+	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//The destination register is always the assignee
 	instruction->destination_register = instruction->assignee;
@@ -4019,16 +4025,16 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	//Select the instruction type accordingly
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = MEM_TO_REG_MOVQ;
+			instruction->instruction_type = MOVQ;
 			break;
 		case DOUBLE_WORD:
-			instruction->instruction_type = MEM_TO_REG_MOVL;
+			instruction->instruction_type = MOVL;
 			break;
 		case WORD:
-			instruction->instruction_type = MEM_TO_REG_MOVW;
+			instruction->instruction_type = MOVW;
 			break;
 		case BYTE:
-			instruction->instruction_type = MEM_TO_REG_MOVB;
+			instruction->instruction_type = MOVB;
 			break;
 		default:
 			break;
@@ -4036,6 +4042,9 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
+	//Load is from memory
+	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//The destination register is always the assignee
 	instruction->destination_register = instruction->assignee;
@@ -4057,16 +4066,16 @@ static void handle_store_instruction(instruction_t* instruction){
 	//Select the instruction type accordingly
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			instruction->instruction_type = MOVQ;
 			break;
 		case DOUBLE_WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVL;
+			instruction->instruction_type = MOVL;
 			break;
 		case WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVW;
+			instruction->instruction_type = MOVW;
 			break;
 		case BYTE:
-			instruction->instruction_type = REG_TO_MEM_MOVB;
+			instruction->instruction_type = MOVB;
 			break;
 		default:
 			break;
@@ -4074,6 +4083,9 @@ static void handle_store_instruction(instruction_t* instruction){
 
 	//This counts for our destination only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+
+	//Store is to memory
+	instruction->memory_access_type = WRITE_TO_MEMORY;
 
 	//This is our destination register
 	instruction->destination_register = instruction->assignee;
