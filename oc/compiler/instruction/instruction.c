@@ -381,13 +381,30 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
  */
 u_int8_t is_destination_assigned(instruction_t* instruction){
 	switch(instruction->instruction_type){
-		//For these operations, the destination
-		//is not assigned
-		case REG_TO_MEM_MOVB:
-		case REG_TO_MEM_MOVL:
-		case REG_TO_MEM_MOVW:
-		case REG_TO_MEM_MOVQ:
-			return FALSE;
+		case MOVQ:
+		case MOVL:
+		case MOVW:
+		case MOVB:
+		case MOVSBW:
+		case MOVSBL:
+		case MOVSBQ:
+		case MOVSWL:
+		case MOVSWQ:
+		case MOVSLQ:
+		case MOVZBW:
+		case MOVZBL:
+		case MOVZBQ:
+		case MOVZWL:
+		case MOVZWQ:
+			//If we have a move where we are writing to memory, the destination
+			//does not count as assigned
+			if(instruction->memory_access_type == WRITE_TO_MEMORY){
+				return FALSE;
+			}
+
+			//Otherwise it is
+			return TRUE;
+
 		//By default yes
 		default:
 			return TRUE;
@@ -519,7 +536,9 @@ u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 		case MOVW:
 		case MOVQ:
 			//If there's a source register we're good
-			if(instruction->source_register != NULL){
+			if(instruction->source_register != NULL
+				//It's only a copy if we're not accessing memory
+				&& instruction->memory_access_type == NO_MEMORY_ACCESS){
 				return TRUE;
 			}
 

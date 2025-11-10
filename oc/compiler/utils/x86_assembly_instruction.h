@@ -44,14 +44,6 @@ typedef enum{
 	MOVZBQ, //Move unsigned byte to quad 
 	MOVZWL, //Move unsigned word to long
 	MOVZWQ, //Move unsigned word to quad 
-	REG_TO_MEM_MOVB,
-	REG_TO_MEM_MOVW,
-	REG_TO_MEM_MOVL,
-	REG_TO_MEM_MOVQ,
-	MEM_TO_REG_MOVB,
-	MEM_TO_REG_MOVW,
-	MEM_TO_REG_MOVL,
-	MEM_TO_REG_MOVQ,
 	LEAW,
 	LEAL,
 	LEAQ,
