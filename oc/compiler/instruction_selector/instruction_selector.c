@@ -4115,16 +4115,16 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 	//Select the instruction type accordingly
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			instruction->instruction_type = MOVQ;
 			break;
 		case DOUBLE_WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVL;
+			instruction->instruction_type = MOVL;
 			break;
 		case WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVB;
+			instruction->instruction_type = MOVW;
 			break;
 		case BYTE:
-			instruction->instruction_type = REG_TO_MEM_MOVB;
+			instruction->instruction_type = MOVB;
 			break;
 		default:
 			break;
@@ -4132,6 +4132,9 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//This is a write
+	instruction->memory_access_type = WRITE_TO_MEMORY;
 
 	//The base address is the assignee
 	instruction->address_calc_reg1 = instruction->assignee;
@@ -4162,16 +4165,16 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 	//Select the instruction type accordingly
 	switch(size){
 		case QUAD_WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVQ;
+			instruction->instruction_type = MOVQ;
 			break;
 		case DOUBLE_WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVL;
+			instruction->instruction_type = MOVL;
 			break;
 		case WORD:
-			instruction->instruction_type = REG_TO_MEM_MOVB;
+			instruction->instruction_type = MOVW;
 			break;
 		case BYTE:
-			instruction->instruction_type = REG_TO_MEM_MOVB;
+			instruction->instruction_type = MOVB;
 			break;
 		default:
 			break;
@@ -4179,6 +4182,9 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
+	//This is a write
+	instruction->memory_access_type = WRITE_TO_MEMORY;
 
 	//The base address is the assignee
 	instruction->address_calc_reg1 = instruction->assignee;
@@ -4257,28 +4263,29 @@ static void handle_two_instruction_constant_offset_store_operation(instruction_t
 	//The size is based on the store instruction's type
 	variable_size_t size = get_type_size(store_instruction->assignee->type);
 
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			store_instruction->instruction_type = REG_TO_MEM_MOVB;
-			break;
-		case WORD:
-			store_instruction->instruction_type = REG_TO_MEM_MOVW;
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			store_instruction->instruction_type = MOVQ;
 			break;
 		case DOUBLE_WORD:
-			store_instruction->instruction_type = REG_TO_MEM_MOVL;
+			store_instruction->instruction_type = MOVL;
 			break;
-		case QUAD_WORD:
-			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
+		case WORD:
+			store_instruction->instruction_type = MOVW;
 			break;
-		//WE DO NOT DO FLOATS YET
+		case BYTE:
+			store_instruction->instruction_type = MOVB;
+			break;
 		default:
-			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
 			break;
 	}
 
 	//This will always be OFFSET_ONLY
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+	
+	//This is a write
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
 
 	//The address calc reg1 is the op1. This would be a base address
 	store_instruction->address_calc_reg1 = addition_instruction->op1;
@@ -4311,28 +4318,29 @@ static void handle_two_instruction_constant_offset_load_operation(instruction_t*
 	//Select the variable size based on the assignee
 	variable_size_t size = get_type_size(load_instruction->assignee->type);
 
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			load_instruction->instruction_type = MEM_TO_REG_MOVB;
-			break;
-		case WORD:
-			load_instruction->instruction_type = MEM_TO_REG_MOVW;
+	//Select the instruction type accordingly
+	switch(size){
+		case QUAD_WORD:
+			load_instruction->instruction_type = MOVQ;
 			break;
 		case DOUBLE_WORD:
-			load_instruction->instruction_type = MEM_TO_REG_MOVL;
+			load_instruction->instruction_type = MOVL;
 			break;
-		case QUAD_WORD:
-			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
+		case WORD:
+			load_instruction->instruction_type = MOVW;
 			break;
-		//WE DO NOT DO FLOATS YET
+		case BYTE:
+			load_instruction->instruction_type = MOVB;
+			break;
 		default:
-			load_instruction->instruction_type = MEM_TO_REG_MOVQ;
 			break;
 	}
 
 	//This will always be OFFSET_ONLY
 	load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+	//This counts as a read
+	load_instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//The address calc reg1 is the op1. This would be a base address
 	load_instruction->address_calc_reg1 = addition_instruction->op1;
@@ -4374,7 +4382,6 @@ static void handle_two_instruction_variable_offset_store_operation(instruction_t
 			break;
 		//WE DO NOT DO FLOATS YET
 		default:
-			store_instruction->instruction_type = REG_TO_MEM_MOVQ;
 			break;
 	}
 
