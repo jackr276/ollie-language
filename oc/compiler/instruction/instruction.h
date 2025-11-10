@@ -304,6 +304,8 @@ struct instruction_t{
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?
 	address_calculation_mode_t calculation_mode;
+	//Do we have a read, write, or no attempt to access memory(default)
+	memory_access_type_t memory_access_type;
 	//The register that we're popping or pushing
 	general_purpose_register_t push_or_pop_reg;
 };
