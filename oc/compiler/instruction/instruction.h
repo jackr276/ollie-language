@@ -470,16 +470,6 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee);
 instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg);
 
 /**
- * Emit a movzx(zero extend) instruction
- */
-instruction_t* emit_movzx_instruction(three_addr_var_t* destination, three_addr_var_t* source);
-
-/**
- * Emit a movsx(sign extend) instruction
- */
-instruction_t* emit_movsx_instruction(three_addr_var_t* destination, three_addr_var_t* source);
-
-/**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
@@ -491,20 +481,6 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee);
  * saves us allocation overhead
  */
 instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg);
-
-/**
- * Emit a movX instruction
- *
- * This is used for when we need extra moves(after a division/modulus)
- */
-instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_var_t* source);
-
-/**
- * Emit a movX instruction with a constant
- *
- * This is used for when we need extra moves(after a division/modulus)
- */
-instruction_t* emit_const_movX_instruciton(three_addr_var_t* destination, three_addr_const_t* source);
 
 /**
  * Emit a lea statement with no type size multiplier on it

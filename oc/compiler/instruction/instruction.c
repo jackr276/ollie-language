@@ -715,44 +715,6 @@ instruction_t* emit_direct_register_push_instruction(general_purpose_register_t 
 
 
 /**
- * Emit a movzx(zero extend) instruction
- */
-instruction_t* emit_movzx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
-	//First we allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the instruction type
-	instruction->instruction_type = MOVZX;
-
-	//Set the source and destination
-	instruction->source_register = source;
-	instruction->destination_register = destination;
-
-	//And following that, we're all set
-	return instruction;
-}
-
-
-/**
- * Emit a movsx(sign extend) instruction
- */
-instruction_t* emit_movsx_instruction(three_addr_var_t* destination, three_addr_var_t* source){
-	//First we allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the instruction type
-	instruction->instruction_type = MOVSX;
-
-	//Set the source and destination
-	instruction->source_register = source;
-	instruction->destination_register = destination;
-
-	//And following that, we're all set
-	return instruction;
-}
-
-
-/**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
@@ -787,84 +749,6 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
 	instruction->push_or_pop_reg = reg;
 
 	//Now give it back
-	return instruction;
-}
-
-
-/**
- * Emit a movX instruction
- *
- * This is used for when we need extra moves(after a division/modulus)
- */
-instruction_t* emit_movX_instruction(three_addr_var_t* destination, three_addr_var_t* source){
-	//First we'll allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//We set the size based on the destination 
-	variable_size_t size = get_type_size(destination->type);
-
-	switch (size) {
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		//Should never reach this
-		default:
-			break;
-	}
-
-	//Finally we set the destination
-	instruction->destination_register = destination;
-	instruction->source_register = source;
-
-	//And now we'll give it back
-	return instruction;
-}
-
-
-/**
- * Emit a movX instruction with a constant
- *
- * This is used for when we need extra moves(after a division/modulus)
- */
-instruction_t* emit_const_movX_instruciton(three_addr_var_t* destination, three_addr_const_t* source){
-	//First we'll allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//We set the size based on the destination 
-	variable_size_t size = get_type_size(destination->type);
-
-	switch (size) {
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		//Should never reach this
-		default:
-			break;
-	}
-
-	//Finally we set the destination
-	instruction->destination_register = destination;
-	instruction->source_immediate = source;
-
-	//And now we'll give it back
 	return instruction;
 }
 
@@ -2097,11 +1981,45 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
  * Print a movzx or movsx(converting move) instruction
  */
 static void print_converting_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//First we'll determine what to print
-	if(instruction->instruction_type == MOVZX){
-		fprintf(fl, "movzx ");
-	} else {
-		fprintf(fl, "movsx ");
+	//What we need to print out here
+	switch(instruction->instruction_type){
+		case MOVSBW:
+			fprintf(fl, "movsbw ");
+			break;
+		case MOVSBL:
+			fprintf(fl, "movsbl ");
+			break;
+		case MOVSBQ:
+			fprintf(fl, "movsbq ");
+			break;
+		case MOVSWL:
+			fprintf(fl, "movswl ");
+			break;
+		case MOVSWQ:
+			fprintf(fl, "movswq ");
+			break;
+		case MOVSLQ:
+			fprintf(fl, "movslq ");
+			break;
+		case MOVZBW:
+			fprintf(fl, "movzbw ");
+			break;
+		case MOVZBL:
+			fprintf(fl, "movzbl ");
+			break;
+		case MOVZBQ:
+			fprintf(fl, "movzbq ");
+			break;
+		case MOVZWL:
+			fprintf(fl, "movzwl ");
+			break;
+		case MOVZWQ:
+			fprintf(fl, "movzwq ");
+			break;
+		//We should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
 	}
 
 	//Now we'll print the source and destination
@@ -3193,8 +3111,17 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 
 		//Handle a converting move
-		case MOVSX:
-		case MOVZX:
+		case MOVSBW:
+		case MOVSBL:
+		case MOVSBQ:
+		case MOVSWL:
+		case MOVSWQ:
+		case MOVSLQ:
+		case MOVZBW:
+		case MOVZBL:
+		case MOVZBQ:
+		case MOVZWL:
+		case MOVZWQ:
 			print_converting_move(fl, instruction, mode);
 			break;
 
