@@ -2035,6 +2035,7 @@ static void print_converting_move(FILE* fl, instruction_t* instruction, variable
  * Handle a simple register to register or immediate to register move
  */
 static void print_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//What we need to print out here
 	switch(instruction->instruction_type){
 		case MOVQ:
 			fprintf(fl, "movq ");
@@ -2048,8 +2049,43 @@ static void print_register_to_register_move(FILE* fl, instruction_t* instruction
 		case MOVB:
 			fprintf(fl, "movb ");
 			break;
-		default:
+		case MOVSBW:
+			fprintf(fl, "movsbw ");
 			break;
+		case MOVSBL:
+			fprintf(fl, "movsbl ");
+			break;
+		case MOVSBQ:
+			fprintf(fl, "movsbq ");
+			break;
+		case MOVSWL:
+			fprintf(fl, "movswl ");
+			break;
+		case MOVSWQ:
+			fprintf(fl, "movswq ");
+			break;
+		case MOVSLQ:
+			fprintf(fl, "movslq ");
+			break;
+		case MOVZBW:
+			fprintf(fl, "movzbw ");
+			break;
+		case MOVZBL:
+			fprintf(fl, "movzbl ");
+			break;
+		case MOVZBQ:
+			fprintf(fl, "movzbq ");
+			break;
+		case MOVZWL:
+			fprintf(fl, "movzwl ");
+			break;
+		case MOVZWQ:
+			fprintf(fl, "movzwq ");
+			break;
+		//We should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
 	}
 
 	//Print the appropriate variable here
@@ -3101,16 +3137,11 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_subtraction_instruction(fl, instruction, mode);
 			break;
 
-		//Handle basic move instructions(no complex addressing)
+		//Handle movement instructions
 		case MOVB:
 		case MOVW:
 		case MOVL:
 		case MOVQ:
-			//Invoke the helper
-			print_register_to_register_move(fl, instruction, mode);
-			break;
-
-		//Handle a converting move
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:
@@ -3122,7 +3153,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVZBQ:
 		case MOVZWL:
 		case MOVZWQ:
-			print_converting_move(fl, instruction, mode);
+			//Invoke the helper
+			print_register_to_register_move(fl, instruction, mode);
 			break;
 
 		//Handle lea printing
