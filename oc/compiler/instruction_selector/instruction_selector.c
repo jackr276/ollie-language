@@ -4272,26 +4272,15 @@ static void handle_two_instruction_constant_offset_store_operation(instruction_t
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_constant_offset_load_operation(instruction_t* addition_instruction, instruction_t* load_instruction){
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_instruction->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			load_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			load_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			load_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			load_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Now we'll use the helper to select the instruction
+	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be OFFSET_ONLY
 	load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -4321,25 +4310,24 @@ static void handle_two_instruction_constant_offset_load_operation(instruction_t*
  */
 static void handle_two_instruction_variable_offset_store_operation(instruction_t* addition_instruction, instruction_t* store_instruction){
 	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
+	variable_size_t destination_size = get_type_size(store_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(store_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size;
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			store_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			store_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			store_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
+	//We have a variable op2, so use it's size
+	if(store_instruction->op2 != NULL){
+		source_size = get_type_size(store_instruction->op2->type);
+
+	//If we do have a constant, we will always just use the destination size
+	//here as opposed to both, because constants do not support converting moves
+	} else {
+		source_size = destination_size;
 	}
+
+	//We will invoke the helper to select the move that we're after
+	store_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be OFFSET_ONLY
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
