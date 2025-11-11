@@ -1862,7 +1862,7 @@ static void simplify(cfg_t* cfg, basic_block_t* head){
 /**
  * Select a register movement instruction based on the source and destination sizes
  */
-static instruction_type_t select_register_movement_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
 	//If these are the exact same, then all we need to do is
 	//select a generic move here
 	if(destination_size == source_size){
@@ -2010,7 +2010,7 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	}
 
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_register_movement_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
+	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -2053,7 +2053,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	instruction->source_register = instruction->op1;
 
 	//Use the helper to get the right sized move instruction
-	instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(assignee->type));
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
 }
 
 
@@ -4261,25 +4261,24 @@ static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stac
  */
 static void handle_two_instruction_constant_offset_store_operation(instruction_t* addition_instruction, instruction_t* store_instruction){
 	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
+	variable_size_t destination_size = get_type_size(store_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(store_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size;
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			store_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			store_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			store_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
+	//We have a variable op1, so use it's size
+	if(store_instruction->op1 != NULL){
+		source_size = get_type_size(store_instruction->op1->type);
+
+	//If we do have a constant, we will always just use the destination size
+	//here as opposed to both, because constants do not support converting moves
+	} else {
+		source_size = destination_size;
 	}
+
+	//We will invoke the helper to select the move that we're after
+	store_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be OFFSET_ONLY
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -5249,7 +5248,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		variable_size_t source_size = get_type_size(set_instruction->destination_register->type);
 		u_int8_t destination_signed = is_type_signed(assignment->assignee->type);
 
-		assignment->instruction_type = select_register_movement_instruction(destination_size, source_size, destination_signed);
+		assignment->instruction_type = select_move_instruction(destination_size, source_size, destination_signed);
 		//Assignee and destination are the same
 		assignment->destination_register = assignment->assignee;
 		//The source is now this set instruction's destination
