@@ -8,6 +8,35 @@
 #define X86_ASSEMBLY_INSTRUCTION_H
 
 /**
+ * What memory access type do we have for a given
+ * instruction? By default it's NO_MEMORY_ACCESS(0), 
+ * and the other options WRITE_TO_MEMORY and READ_FROM_MEMORY
+ * represent reads & writes respectively
+ */
+typedef enum {
+	NO_MEMORY_ACCESS = 0,
+	WRITE_TO_MEMORY,
+	READ_FROM_MEMORY
+} memory_access_type_t;
+
+
+/**
+ * What kind of memory addressing mode do we have?
+ */
+typedef enum{
+	ADDRESS_CALCULATION_MODE_NONE = 0, //default is always none
+	ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE, //(%rax) - only the deref depending on how much indirection
+	ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST, //(%rax) - only the deref depending on how much indirection
+	ADDRESS_CALCULATION_MODE_OFFSET_ONLY, // 4(%rax)
+	ADDRESS_CALCULATION_MODE_REGISTERS_ONLY, // (%rax, %rcx)
+	ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET, // 4(%rax, %rcx)
+	ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE, // (%rax, %rcx, 8)
+	ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE, // 4(%rax, %rcx, 8)
+	ADDRESS_CALCULATION_MODE_GLOBAL_VAR //Super special case, we will use address_calc_reg2 as the offset like this: <val>(%rip)
+} address_calculation_mode_t;
+
+
+/**
  * All x86-64 instructions that Ollie recognizes
  */
 typedef enum{
@@ -31,14 +60,6 @@ typedef enum{
 	MOVZBQ, //Move unsigned byte to quad 
 	MOVZWL, //Move unsigned word to long
 	MOVZWQ, //Move unsigned word to quad 
-	REG_TO_MEM_MOVB,
-	REG_TO_MEM_MOVW,
-	REG_TO_MEM_MOVL,
-	REG_TO_MEM_MOVQ,
-	MEM_TO_REG_MOVB,
-	MEM_TO_REG_MOVW,
-	MEM_TO_REG_MOVL,
-	MEM_TO_REG_MOVQ,
 	LEAW,
 	LEAL,
 	LEAQ,
@@ -81,14 +102,6 @@ typedef enum{
 	IDIVW,
 	IDIVL,
 	IDIVQ,
-	IDIVB_FOR_MOD,
-	IDIVW_FOR_MOD,
-	IDIVL_FOR_MOD,
-	IDIVQ_FOR_MOD,
-	DIVB_FOR_MOD,
-	DIVW_FOR_MOD,
-	DIVL_FOR_MOD,
-	DIVQ_FOR_MOD,
 	SUBB,
 	SUBW,
 	SUBL,

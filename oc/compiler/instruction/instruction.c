@@ -381,13 +381,30 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
  */
 u_int8_t is_destination_assigned(instruction_t* instruction){
 	switch(instruction->instruction_type){
-		//For these operations, the destination
-		//is not assigned
-		case REG_TO_MEM_MOVB:
-		case REG_TO_MEM_MOVL:
-		case REG_TO_MEM_MOVW:
-		case REG_TO_MEM_MOVQ:
-			return FALSE;
+		case MOVQ:
+		case MOVL:
+		case MOVW:
+		case MOVB:
+		case MOVSBW:
+		case MOVSBL:
+		case MOVSBQ:
+		case MOVSWL:
+		case MOVSWQ:
+		case MOVSLQ:
+		case MOVZBW:
+		case MOVZBL:
+		case MOVZBQ:
+		case MOVZWL:
+		case MOVZWQ:
+			//If we have a move where we are writing to memory, the destination
+			//does not count as assigned
+			if(instruction->memory_access_type == WRITE_TO_MEMORY){
+				return FALSE;
+			}
+
+			//Otherwise it is
+			return TRUE;
+
 		//By default yes
 		default:
 			return TRUE;
@@ -519,7 +536,9 @@ u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 		case MOVW:
 		case MOVQ:
 			//If there's a source register we're good
-			if(instruction->source_register != NULL){
+			if(instruction->source_register != NULL
+				//It's only a copy if we're not accessing memory
+				&& instruction->memory_access_type == NO_MEMORY_ACCESS){
 				return TRUE;
 			}
 
@@ -1978,11 +1997,23 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 
 /**
- * Print a movzx or movsx(converting move) instruction
+ * Handle a simple register to register or immediate to register move
  */
-static void print_converting_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static void print_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
 	switch(instruction->instruction_type){
+		case MOVQ:
+			fprintf(fl, "movq ");
+			break;
+		case MOVL:
+			fprintf(fl, "movl ");
+			break;
+		case MOVW:
+			fprintf(fl, "movw ");
+			break;
+		case MOVB:
+			fprintf(fl, "movb ");
+			break;
 		case MOVSBW:
 			fprintf(fl, "movsbw ");
 			break;
@@ -2022,44 +2053,9 @@ static void print_converting_move(FILE* fl, instruction_t* instruction, variable
 			exit(1);
 	}
 
-	//Now we'll print the source and destination
-	print_variable(fl, instruction->source_register, mode);
-	fprintf(fl, ", ");
-	print_variable(fl, instruction->destination_register, mode);
-
-	fprintf(fl, "\n");
-}
-
-
-/**
- * Handle a simple register to register or immediate to register move
- */
-static void print_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	switch(instruction->instruction_type){
-		case MOVQ:
-			fprintf(fl, "movq ");
-			break;
-		case MOVL:
-			fprintf(fl, "movl ");
-			break;
-		case MOVW:
-			fprintf(fl, "movw ");
-			break;
-		case MOVB:
-			fprintf(fl, "movb ");
-			break;
-		default:
-			break;
-	}
-
 	//Print the appropriate variable here
 	if(instruction->source_register != NULL){
-		//If we have a source-only dereference print it
-		if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE){
-			print_addressing_mode_expression(fl, instruction, mode);
-		} else {
-			print_variable(fl, instruction->source_register, mode);
-		}
+		print_variable(fl, instruction->source_register, mode);
 	} else {
 		print_immediate_value(fl, instruction->source_immediate);
 	}
@@ -2067,12 +2063,8 @@ static void print_register_to_register_move(FILE* fl, instruction_t* instruction
 	//Needed comma
 	fprintf(fl, ", ");
 
-	//Now print our destination
-	if(instruction->calculation_mode == ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST){
-		print_addressing_mode_expression(fl, instruction, mode);
-	} else {
-		print_variable(fl, instruction->destination_register, mode);
-	} 
+	//Finally we print the destination
+	print_variable(fl, instruction->destination_register, mode);
 
 	//A final newline is needed for all instructions
 	fprintf(fl, "\n");
@@ -2086,16 +2078,16 @@ static void print_register_to_register_move(FILE* fl, instruction_t* instruction
 static void print_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//First let's print out the appropriate instruction
 	switch(instruction->instruction_type){
-		case REG_TO_MEM_MOVB:
+		case MOVB:
 			fprintf(fl, "movb ");
 			break;
-		case REG_TO_MEM_MOVW:
+		case MOVW:
 			fprintf(fl, "movw ");
 			break;
-		case REG_TO_MEM_MOVL:
+		case MOVL:
 			fprintf(fl, "movl ");
 			break;
-		case REG_TO_MEM_MOVQ:
+		case MOVQ:
 			fprintf(fl, "movq ");
 			break;
 		//Should never hit this
@@ -2125,16 +2117,16 @@ static void print_register_to_memory_move(FILE* fl, instruction_t* instruction, 
 static void print_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//First thing we'll do is print the appropriate move statement
 	switch(instruction->instruction_type){
-		case MEM_TO_REG_MOVB:
+		case MOVB:
 			fprintf(fl, "movb ");
 			break;
-		case MEM_TO_REG_MOVW:
+		case MOVW:
 			fprintf(fl, "movw ");
 			break;
-		case MEM_TO_REG_MOVL:
+		case MOVL:
 			fprintf(fl, "movl ");
 			break;
-		case MEM_TO_REG_MOVQ:
+		case MOVQ:
 			fprintf(fl, "movq ");
 			break;
 		//Should never hit this
@@ -3070,21 +3062,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_division_instruction(fl, instruction, mode);
 			break;
 
-		//Handle the special addressing modes that we could have here
-		case REG_TO_MEM_MOVB:
-		case REG_TO_MEM_MOVL:
-		case REG_TO_MEM_MOVW:
-		case REG_TO_MEM_MOVQ:
-			print_register_to_memory_move(fl, instruction, mode);
-			break;
-
-		case MEM_TO_REG_MOVB:
-		case MEM_TO_REG_MOVL:
-		case MEM_TO_REG_MOVW:
-		case MEM_TO_REG_MOVQ:
-			print_memory_to_register_move(fl, instruction, mode);
-			break;
-
 		//Handle addition instructions
 		case ADDB:
 		case ADDW:
@@ -3101,16 +3078,11 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_subtraction_instruction(fl, instruction, mode);
 			break;
 
-		//Handle basic move instructions(no complex addressing)
+		//Handle movement instructions
 		case MOVB:
 		case MOVW:
 		case MOVL:
 		case MOVQ:
-			//Invoke the helper
-			print_register_to_register_move(fl, instruction, mode);
-			break;
-
-		//Handle a converting move
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:
@@ -3122,7 +3094,25 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVZBQ:
 		case MOVZWL:
 		case MOVZWQ:
-			print_converting_move(fl, instruction, mode);
+			/**
+			 * Now we go based on what kind of memory
+			 * access we're doing here. This will determine
+			 * the final output of our move
+			 */
+			switch(instruction->memory_access_type){
+				case NO_MEMORY_ACCESS:
+					print_register_to_register_move(fl, instruction, mode);
+					break;
+
+				case WRITE_TO_MEMORY:
+					print_register_to_memory_move(fl, instruction, mode);
+					break;
+
+				case READ_FROM_MEMORY:
+					print_memory_to_register_move(fl, instruction, mode);
+					break;
+			}
+
 			break;
 
 		//Handle lea printing
@@ -3631,16 +3621,16 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	//Select the appropriate register
 	switch(size){
 		case BYTE:
-			stmt->instruction_type = MEM_TO_REG_MOVB;
+			stmt->instruction_type = MOVB;
 			break;
 		case WORD:
-			stmt->instruction_type = MEM_TO_REG_MOVW;
+			stmt->instruction_type = MOVW;
 			break;
 		case DOUBLE_WORD:
-			stmt->instruction_type = MEM_TO_REG_MOVL;
+			stmt->instruction_type = MOVL;
 			break;
 		case QUAD_WORD:
-			stmt->instruction_type = MEM_TO_REG_MOVQ;
+			stmt->instruction_type = MOVQ;
 			break;
 		default:
 			break;
@@ -3650,6 +3640,8 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	//Stack pointer is source 1
 	stmt->address_calc_reg1 = stack_pointer;
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+	//Loading is reading from memory
+	stmt->memory_access_type = READ_FROM_MEMORY;
 
 	//Emit an integer constant for this offset
 	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);
@@ -3672,16 +3664,16 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	//Select the appropriate register
 	switch(size){
 		case BYTE:
-			stmt->instruction_type = REG_TO_MEM_MOVB;
+			stmt->instruction_type = MOVB;
 			break;
 		case WORD:
-			stmt->instruction_type = REG_TO_MEM_MOVW;
+			stmt->instruction_type = MOVW;
 			break;
 		case DOUBLE_WORD:
-			stmt->instruction_type = REG_TO_MEM_MOVL;
+			stmt->instruction_type = MOVL;
 			break;
 		case QUAD_WORD:
-			stmt->instruction_type = REG_TO_MEM_MOVQ;
+			stmt->instruction_type = MOVQ;
 			break;
 		default:
 			break;
@@ -3693,6 +3685,8 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	//Stack pointer our base address
 	stmt->address_calc_reg1 = stack_pointer;
 	stmt->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+	//Storing is writing to memory
+	stmt->memory_access_type = WRITE_TO_MEMORY;
 
 	//Emit an integer constant for this offset
 	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);

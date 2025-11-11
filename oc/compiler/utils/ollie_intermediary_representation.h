@@ -9,9 +9,55 @@
 #define OLLIE_INTERMEDIARY_REPRESENTATION_H
 
 /**
+ * Do we want to have a regular branch or an inverse
+ * branch? An inverse branch will down the road set the conditional
+ * to be the opposite of what is put in.
+ *
+ * So for example
+ *
+ * if(x == 3) then A else B
+ *
+ * Regular mode
+ * cmp 3, x
+ * je A <-----  if
+ * jmp B <----- else
+ *
+ * Inverse mode
+ * cmp 3, x
+ * jne A <-----  if(inverted)
+ * jmp B <----- else
+ */
+typedef enum {
+	BRANCH_CATEGORY_NORMAL,
+	BRANCH_CATEGORY_INVERSE
+} branch_category_t;
+
+
+/**
+ * Define the kind of branch that we have in an ollie branch
+ * command
+ */
+typedef enum {
+	NO_BRANCH, //This is the default, and what we get when we have 0
+	BRANCH_NE,
+	BRANCH_E,
+	BRANCH_NZ,
+	BRANCH_Z,
+	BRANCH_L, //Branch LT(SIGNED)
+	BRANCH_G, //Branch GT(SIGNED)
+	BRANCH_GE, //Branch GE(SIGNED)
+	BRANCH_LE, //Branch LE(SIGNED)
+	BRANCH_A, //Branch GT(UNSIGNED)
+	BRANCH_AE, //Branch GE(UNSIGNED)
+	BRANCH_B, //Branch LT(UNSIGNED)
+	BRANCH_BE, //Branch LE(UNSIGNED)
+} branch_type_t;
+
+
+/**
  * All OIR statement types
  */
-typedef enum{
+typedef enum {
 	//Binary op with all vars
 	THREE_ADDR_CODE_BIN_OP_STMT,
 	//A setne statement
