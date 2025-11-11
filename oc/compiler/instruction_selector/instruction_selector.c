@@ -4119,26 +4119,24 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
  * This will always be a REGISTERS_ONLY calculation type
  */
 static void handle_store_with_variable_offset_instruction(instruction_t* instruction){
-	//Size is determined by the assignee
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	//We need the destination and source sizes to determine our movement instruction
+	variable_size_t destination_size = get_type_size(instruction->assignee->type);
+	//Is the destination signed? This is also required inof
+	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
+	//The source size may be knowable here if we have a variable
+	variable_size_t source_size;
+
+	//If we have an op2, use its size. Otherwise, we default to the destination
+	//size
+	if(instruction->op2 != NULL){
+		source_size = get_type_size(instruction->op2->type);
+	} else {
+		source_size = destination_size;
 	}
+
+	//Invoke the helper to do this
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
