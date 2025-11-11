@@ -4473,25 +4473,24 @@ static void handle_two_instruction_multiply_load_with_variable_offset(instructio
  */
 static void handle_two_instruction_multiply_store_with_variable_offset(instruction_t* multiply, instruction_t* store_instruction){
 	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
+	variable_size_t destination_size = get_type_size(store_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(store_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size;
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			store_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			store_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			store_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
+	//We have a variable op2, so use it's size
+	if(store_instruction->op2 != NULL){
+		source_size = get_type_size(store_instruction->op2->type);
+
+	//If we do have a constant, we will always just use the destination size
+	//here as opposed to both, because constants do not support converting moves
+	} else {
+		source_size = destination_size;
 	}
+
+	//Determine the instruction with the helper
+	store_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be REGISTERS_AND_SCALE
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
@@ -4549,25 +4548,24 @@ static void handle_two_instruction_multiply_store_with_variable_offset(instructi
  */
 static void handle_two_instruction_address_calc_and_store(instruction_t* address_calculation, instruction_t* store_instruction){
 	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
+	variable_size_t destination_size = get_type_size(store_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(store_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size;
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			store_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			store_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			store_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
+	//We have a variable op1, so use it's size
+	if(store_instruction->op1 != NULL){
+		source_size = get_type_size(store_instruction->op1->type);
+
+	//If we do have a constant, we will always just use the destination size
+	//here as opposed to both, because constants do not support converting moves
+	} else {
+		source_size = destination_size;
 	}
+
+	//Determine the instruction with the helper
+	store_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is always a memory write
 	store_instruction->memory_access_type = WRITE_TO_MEMORY;
@@ -4646,26 +4644,15 @@ static void handle_two_instruction_address_calc_and_store(instruction_t* address
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_address_calc_and_load(instruction_t* address_calculation, instruction_t* load_instruction){
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_instruction->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			load_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			load_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			load_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			load_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Now we'll use the helper to select the instruction
+	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is a read instruction
 	load_instruction->memory_access_type = READ_FROM_MEMORY;
