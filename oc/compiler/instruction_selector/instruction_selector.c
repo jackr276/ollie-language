@@ -4970,26 +4970,15 @@ static void handle_three_instruction_load_with_address_calculation_operation(ins
 	instruction_t* addition = window->instruction2;
 	instruction_t* load_with_variable_offset = window->instruction3;
 
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_with_variable_offset->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_with_variable_offset->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_with_variable_offset->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_with_variable_offset->op1->type);
 
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			load_with_variable_offset->instruction_type = MOVB;
-			break;
-		case WORD:
-			load_with_variable_offset->instruction_type = MOVW;
-			break;
-		case DOUBLE_WORD:
-			load_with_variable_offset->instruction_type = MOVL;
-			break;
-		case QUAD_WORD:
-			load_with_variable_offset->instruction_type = MOVQ;
-			break;
-		default:
-			break;
-	}
+	//Let the helper select the type
+	load_with_variable_offset->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is a full address calculation here
 	load_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
@@ -5043,26 +5032,25 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
 	instruction_t* addition = window->instruction2;
 	instruction_t* store_with_variable_offset = window->instruction3;
 
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(store_with_variable_offset->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(store_with_variable_offset->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(store_with_variable_offset->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size;
 
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			store_with_variable_offset->instruction_type = MOVB;
-			break;
-		case WORD:
-			store_with_variable_offset->instruction_type = MOVW;
-			break;
-		case DOUBLE_WORD:
-			store_with_variable_offset->instruction_type = MOVL;
-			break;
-		case QUAD_WORD:
-			store_with_variable_offset->instruction_type = MOVQ;
-			break;
-		default:
-			break;
+	//We have a variable op1, so use it's size
+	if(store_with_variable_offset->op2 != NULL){
+		source_size = get_type_size(store_with_variable_offset->op2->type);
+
+	//If we do have a constant, we will always just use the destination size
+	//here as opposed to both, because constants do not support converting moves
+	} else {
+		source_size = destination_size;
 	}
+
+	//Let the helper select the instruction
+	store_with_variable_offset->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is a full address calculation here
 	store_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
