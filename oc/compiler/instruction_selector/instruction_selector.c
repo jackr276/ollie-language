@@ -3938,9 +3938,6 @@ static void handle_load_instruction(instruction_t* instruction){
 	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
 	variable_size_t source_size = get_type_size(instruction->op1->type);
 
-	printf("Destination type is %s\n", instruction->assignee->type->type_name.string);
-	printf("Source type is %s\n", instruction->op1->type->type_name.string);
-
 	//Let the helper select for us
 	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
@@ -3966,26 +3963,14 @@ static void handle_load_instruction(instruction_t* instruction){
  * This will always generate an address calculation mode of OFFSET_ONLY 
  */
 static void handle_load_with_constant_offset_instruction(instruction_t* instruction){
-	//Size is determined by the assignee
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	//We need the destination and source sizes to determine our movement instruction
+	variable_size_t destination_size = get_type_size(instruction->assignee->type);
+	//Is the destination signed? This is also required inof
+	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
+	variable_size_t source_size = get_type_size(instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Let the helper decide for us
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -4010,26 +3995,14 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
  * This will always generate an address calculation mode of OFFSET_ONLY 
  */
 static void handle_load_with_variable_offset_instruction(instruction_t* instruction){
-	//Size is determined by the assignee
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	//We need the destination and source sizes to determine our movement instruction
+	variable_size_t destination_size = get_type_size(instruction->assignee->type);
+	//Is the destination signed? This is also required inof
+	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
+	variable_size_t source_size = get_type_size(instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Let the helper decide for us
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
