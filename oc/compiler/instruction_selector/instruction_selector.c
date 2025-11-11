@@ -1877,7 +1877,8 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 			case QUAD_WORD:
 				return MOVQ;
 			default:
-				return MOVQ;
+				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+				exit(1);
 		}
 	}
 
@@ -2084,7 +2085,8 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 			break;
 		//Should never reach this
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//Finally we set the destination
@@ -2218,7 +2220,8 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 			instruction->instruction_type = CBTW;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//The source register is the so-called "converted" register. In reality,
@@ -2300,7 +2303,8 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 			instruction->instruction_type = ANDB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//Finally we set the destination
@@ -2336,7 +2340,8 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 			instruction->instruction_type = ORB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//Finally we set the destination
@@ -2397,7 +2402,8 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 		//Should never reach this
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//Finally we set the sources
@@ -2433,7 +2439,8 @@ static instruction_type_t select_add_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return ADDQ;
 		default:
-			return ADDQ;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 }
 
@@ -2453,7 +2460,8 @@ static instruction_type_t select_lea_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return LEAQ;
 		default:
-			return LEAQ;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 }
 
@@ -2474,7 +2482,8 @@ static instruction_type_t select_sub_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return SUBQ;
 		default:
-			return SUBQ;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 }
 
@@ -2495,7 +2504,8 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return CMPQ;
 		default:
-			return CMPQ;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 }
 
@@ -2685,7 +2695,8 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 			instruction->instruction_type = ORB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//And we always have a destination register
@@ -2730,7 +2741,8 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
 			instruction->instruction_type = ANDB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//And we always have a destination register
@@ -2775,7 +2787,8 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 			instruction->instruction_type = XORB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 	
 	//And we always have a destination register
@@ -3042,10 +3055,13 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		case DOUBLE_WORD:
 			multiplication_instruction->instruction_type = MULL;
 			break;
-		//Everything else falls here
-		default:
+		case QUAD_WORD:
 			multiplication_instruction->instruction_type = MULQ;
 			break;
+		//Everything else falls here
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//This is the case where we have two source registers
