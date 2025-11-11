@@ -3397,10 +3397,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//This will not be null in the case of structs & arrays
 				if(current_offset != NULL){
 					//Calculate our load here
-					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(original_memory_access_type), base_address, current_offset);
+					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(original_memory_access_type), type_adjusted_base_address, current_offset);
 
 					//Counts as uses for both
-					add_used_variable(current_block, base_address);
+					add_used_variable(current_block, type_adjusted_base_address);
 					add_used_variable(current_block, current_offset);
 
 					//Add it into the block
@@ -3413,10 +3413,18 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//relying on the base address
 				} else {
 					//Emit a regular load here
-					load_instruction = emit_load_ir_code(emit_temp_var(original_memory_access_type), base_address);
+					//
+					//
+					//
+					//TODO change original memory access type to parent_node_type
+					//
+					//
+					//
+					//
+					load_instruction = emit_load_ir_code(emit_temp_var(original_memory_access_type), type_adjusted_base_address);
 
 					//Counts as a use
-					add_used_variable(current_block, base_address);
+					add_used_variable(current_block, type_adjusted_base_address);
 
 					//Add it into the block
 					add_statement(current_block, load_instruction);
