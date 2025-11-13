@@ -3956,7 +3956,33 @@ static void handle_store_instruction_source_assignment(instruction_t* store_inst
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			//The op1 is where we may have conversion issues
 			if(store_instruction->op1 != NULL){
-				store_instruction->source_register = store_instruction->op1;
+				/**
+				 * This is a special edgecase where we are moving from 32 bit to 64 bit
+				 * In the event that we do this, we need to emit a simple copy of the source
+				 * variable and give it the 64 bit type so that we have a quad word register
+				 */
+				if(is_type_unsigned_64_bit(store_instruction->assignee->type) == TRUE
+					&& is_type_32_bit_int(store_instruction->op1->type) == TRUE){
+
+					//First we duplicate it
+					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op1);
+
+					//Then we give it the type that we want
+					duplicate_64_bit->type = store_instruction->assignee->type;
+
+					//And this will be our source
+					store_instruction->source_register = duplicate_64_bit;
+
+					//printf("TYPE IS %s\n", store_instruction->source_register->type->type_name.string);
+
+				/**
+				 * In all other cases, we can just straight assign here
+				 */
+				} else {
+					store_instruction->source_register = store_instruction->op1;
+				}
+
+			//If we get here it's a plain copy
 			} else {
 				store_instruction->source_immediate = store_instruction->op1_const;
 			}
@@ -3967,12 +3993,33 @@ static void handle_store_instruction_source_assignment(instruction_t* store_inst
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 			//The op1 is where we may have conversion issues
 			if(store_instruction->op2 != NULL){
-				store_instruction->source_register = store_instruction->op2;
+				/**
+				 * This is a special edgecase where we are moving from 32 bit to 64 bit
+				 * In the event that we do this, we need to emit a simple copy of the source
+				 * variable and give it the 64 bit type so that we have a quad word register
+				 */
+				if(is_type_unsigned_64_bit(store_instruction->assignee->type) == TRUE
+					&& is_type_32_bit_int(store_instruction->op2->type) == TRUE){
+
+					//First we duplicate it
+					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op2);
+
+					//Then we give it the type that we want
+					duplicate_64_bit->type = store_instruction->assignee->type;
+
+					//And this will be our source
+					store_instruction->source_register = duplicate_64_bit;
+
+				/**
+				 * In all other cases, we can just straight assign here
+				 */
+				} else {
+					store_instruction->source_register = store_instruction->op2;
+				}
+
 			} else {
 				store_instruction->source_immediate = store_instruction->op1_const;
 			}
-			break;
-
 			break;
 
 		//Should never get here
