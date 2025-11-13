@@ -4108,6 +4108,8 @@ static void handle_store_instruction(instruction_t* instruction){
 	//This is our destination register
 	instruction->destination_register = instruction->assignee;
 
+	//Invoke the helper for our source assignment
+	handle_store_instruction_source_assignment(instruction);
 }
 
 
@@ -4149,13 +4151,9 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 	//The base address is the assignee
 	instruction->address_calc_reg1 = instruction->assignee;
 	//Our offset has already been saved at the start - so we're good here
-
-	//And the source register is our op2 or we have an immediate source
-	if(instruction->op2 != NULL){
-		instruction->source_register = instruction->op2;
-	} else {
-		instruction->source_immediate = instruction->op1_const;
-	}
+	
+	//Invoke the helper for our source assignment
+	handle_store_instruction_source_assignment(instruction);
 }
 
 
@@ -4199,12 +4197,8 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 	//Op1 is the address calcu register
 	instruction->address_calc_reg2 = instruction->op1;
 
-	//And the source register is our op2 or we have an immediate source
-	if(instruction->op2 != NULL){
-		instruction->source_register = instruction->op2;
-	} else {
-		instruction->source_immediate = instruction->op1_const;
-	}
+	//Invoke the helper for our source assignment
+	handle_store_instruction_source_assignment(instruction);
 }
 
 
@@ -4300,13 +4294,8 @@ static void handle_two_instruction_constant_offset_store_operation(instruction_t
 	//Combine these 2 constants together. The result will go into the store instruction's offset
 	add_constants(store_instruction->offset, addition_instruction->op1_const);
 
-	//If we have op1, then our source is op1
-	if(store_instruction->op1 != NULL){
-		store_instruction->source_register = store_instruction->op1;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Invoke the helper here
+	handle_store_instruction_source_assignment(store_instruction);
 }
 
 
@@ -4402,13 +4391,8 @@ static void handle_two_instruction_variable_offset_store_operation(instruction_t
 	//The offset comes from the addition instruction
 	store_instruction->offset = addition_instruction->op1_const;
 
-	//If we have op1, then our source is op1
-	if(store_instruction->op2 != NULL){
-		store_instruction->source_register = store_instruction->op2;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Invoke the helper here
+	handle_store_instruction_source_assignment(store_instruction);
 }
 
 
@@ -4565,13 +4549,8 @@ static void handle_two_instruction_multiply_store_with_variable_offset(instructi
 	//The multiplicator comes from the constant multiplication
 	store_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
 	
-	//If we have op1, then our source is op1
-	if(store_instruction->op2 != NULL){
-		store_instruction->source_register = store_instruction->op2;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Invoke the helper here
+	handle_store_instruction_source_assignment(store_instruction);
 }
 
 
@@ -4662,13 +4641,8 @@ static void handle_two_instruction_address_calc_and_store(instruction_t* address
 			break;
 	}
 
-	//If we have op1, then our source is op1
-	if(store_instruction->op1 != NULL){
-		store_instruction->source_register = store_instruction->op1;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Invoke the source assignment helper
+	handle_store_instruction_source_assignment(store_instruction);
 }
 
 
@@ -4854,13 +4828,8 @@ static void handle_two_instruction_lea_and_store_global_var(instruction_t* lea_s
 	//The multiplicator as well
 	store_instruction->lea_multiplicator = lea_statement->lea_multiplicator;
 
-	//If we have op1, then our source is op1
-	if(store_instruction->op1 != NULL){
-		store_instruction->source_register = store_instruction->op1;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Invoke the helper here
+	handle_store_instruction_source_assignment(store_instruction);
 }
 
 
@@ -4987,14 +4956,9 @@ static void handle_three_instruction_store_with_lea_operation(instruction_window
 	//The offset on the outside comes from the constant assignment
 	store_with_variable_offset->offset = constant_assignment->op1_const;
 
-	//If we have op1, then our source is op1
-	if(store_with_variable_offset->op2 != NULL){
-		store_with_variable_offset->source_register = store_with_variable_offset->op2;
-	//Otherwise our source is the constant
-	} else {
-		store_with_variable_offset->source_immediate = store_with_variable_offset->op1_const;
-	}
-	
+	//Invoke the helper here
+	handle_store_instruction_source_assignment(store_with_variable_offset);
+
 	return;
 }
 
@@ -5127,14 +5091,9 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
 	//This comes from the addition
 	store_with_variable_offset->offset = addition->op1_const;
 
-	//If we have op1, then our source is op1
-	if(store_with_variable_offset->op2 != NULL){
-		store_with_variable_offset->source_register = store_with_variable_offset->op2;
-	//Otherwise our source is the constant
-	} else {
-		store_with_variable_offset->source_immediate = store_with_variable_offset->op1_const;
-	}
-	
+	//Invoke the helper here
+	handle_store_instruction_source_assignment(store_with_variable_offset);
+
 	return;
 }
 
