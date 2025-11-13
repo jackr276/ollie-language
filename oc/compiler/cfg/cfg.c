@@ -4317,22 +4317,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//This is our store statement
 		instruction_t* store_statement = current_block->exit_statement;
 
-		//Are we going to need a converting move here?
-		if((last_instruction == NULL || last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT)
-			&& is_converting_move_required(store_statement->assignee->type, final_op1->type) == TRUE){
-			//Converting move
-			instruction_t* converting_move = emit_assignment_instruction(emit_temp_var(store_statement->assignee->type), final_op1);
-			converting_move->is_branch_ending = is_branch_ending;
-			//Counts as a use
-			add_used_variable(current_block, final_op1);
-
-			//Get this in before the store
-			insert_instruction_before_given(converting_move, store_statement);
-
-			//Reassign this
-			final_op1 = converting_move->assignee;
-		}
-
 		/**
 		 * Different store statement types have different areas where the operands go
 		 */
@@ -8065,24 +8049,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//If the last instruction is *not* a constant assignment, we can go ahead like this
 		if(last_instruction == NULL
 			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-
-			//Grab the assignee here
-			three_addr_var_t* assignee = package.assignee;
-
-			//Are we going to need a converting move here?
-			if(is_converting_move_required(store_statement->assignee->type, assignee->type) == TRUE){
-				//Converting move
-				instruction_t* converting_move = emit_assignment_instruction(emit_temp_var(store_statement->assignee->type), assignee);
-				converting_move->is_branch_ending = is_branch_ending;
-				//Counts as a use
-				add_used_variable(current_block, assignee);
-
-				//Get this in before the store
-				insert_instruction_before_given(converting_move, store_statement);
-
-				//Reassign this
-				assignee = converting_move->assignee;
-			}
 
 			//This is now our op1
 			store_statement->op1 = package.assignee;
