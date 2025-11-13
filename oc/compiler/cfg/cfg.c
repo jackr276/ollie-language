@@ -3795,6 +3795,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * side but we're not entirely done with the unary operations yet. Either way, we'll need a load
 			 */
 			} else {
+				printf("Indirect type is %s\n", indirect_version->type->type_name.string);
+
 				//If the side type here is right, we'll need a load instruction
 				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(indirect_version->type), indirect_version);
 
@@ -4326,6 +4328,10 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				//If the last instruction is *not* a constant assignment, we can go ahead like this
 				if(last_instruction == NULL
 					|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+					
+					printf("Final op1 type is %s\n", final_op1->type->type_name.string);
+
+
 					//This is now our op1
 					current_block->exit_statement->op1 = final_op1;
 
