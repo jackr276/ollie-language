@@ -3969,11 +3969,11 @@ static void handle_store_instruction_source_assignment(instruction_t* store_inst
 
 					//Then we give it the type that we want
 					duplicate_64_bit->type = store_instruction->assignee->type;
+					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
 					//And this will be our source
 					store_instruction->source_register = duplicate_64_bit;
 
-					//printf("TYPE IS %s\n", store_instruction->source_register->type->type_name.string);
 
 				/**
 				 * In all other cases, we can just straight assign here
@@ -4006,6 +4006,7 @@ static void handle_store_instruction_source_assignment(instruction_t* store_inst
 
 					//Then we give it the type that we want
 					duplicate_64_bit->type = store_instruction->assignee->type;
+					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
 					//And this will be our source
 					store_instruction->source_register = duplicate_64_bit;
