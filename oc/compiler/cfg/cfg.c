@@ -3763,11 +3763,18 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Update the block
 			current_block = unary_package.final_block;
 
+			//The pointer will be on the unary expression child
+			generic_type_t* pointer_type = unary_expression_child->inferred_type;
+			//And the final type comes from when we dereference it
+			generic_type_t* dereferenced_type = dereference_type(pointer_type);
+
 			//The indiredct version's type is just what we point to
 			three_addr_var_t* indirect_version = emit_var_copy(assignee);
-			indirect_version->type = unary_expression_parent->inferred_type;
 
-			printf("Unary expression type is: %s\n", unary_expression_child->inferred_type->type_name.string);
+			//The type here is what we have after our derference. It is not the inferred type
+			//of the unary node itself, because that type may have undergone type coercion and
+			//is not always accurate to the memory region itself
+			indirect_version->type = dereferenced_type;
 
 			/**
 			 * If we make it here, we will return an *incomplete* store
@@ -3797,8 +3804,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * side but we're not entirely done with the unary operations yet. Either way, we'll need a load
 			 */
 			} else {
-				printf("indirect version type is %s\n", indirect_version->type->type_name.string);
-
 				//If the side type here is right, we'll need a load instruction
 				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(indirect_version->type), indirect_version);
 
