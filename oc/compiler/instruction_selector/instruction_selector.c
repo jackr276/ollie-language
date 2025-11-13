@@ -3943,6 +3943,47 @@ static void handle_test_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle the assignment of the source for a store instruction.
+ *
+ * This function will account for all edge cases(op1 vs op2 vs op1_const), as well
+ * as the unique case where our source is a 32 bit integer *but* we are saving to an
+ * unsigned 64 bit memory region
+ */
+static void handle_store_instruction_source_assignment(instruction_t* store_instruction){
+	//Go based on what we have
+	switch(store_instruction->statement_type){
+		//For stores like this, we either have an op1 or an immediate source
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			//The op1 is where we may have conversion issues
+			if(store_instruction->op1 != NULL){
+				store_instruction->source_register = store_instruction->op1;
+			} else {
+				store_instruction->source_immediate = store_instruction->op1_const;
+			}
+			break;
+
+		//For these kinds of stores, op2 would have our value
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			//The op1 is where we may have conversion issues
+			if(store_instruction->op2 != NULL){
+				store_instruction->source_register = store_instruction->op2;
+			} else {
+				store_instruction->source_immediate = store_instruction->op1_const;
+			}
+			break;
+
+			break;
+
+		//Should never get here
+		default:
+			printf("Fatal internal compiler error: invalid store instruction");
+			exit(1);
+	}
+}
+
+
+/**
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
  */
@@ -4067,12 +4108,6 @@ static void handle_store_instruction(instruction_t* instruction){
 	//This is our destination register
 	instruction->destination_register = instruction->assignee;
 
-	//And the source register is our op1 or we have an immediate
-	if(instruction->op1 != NULL){
-		instruction->source_register = instruction->op1;
-	} else {
-		instruction->source_immediate = instruction->op1_const;
-	}
 }
 
 
