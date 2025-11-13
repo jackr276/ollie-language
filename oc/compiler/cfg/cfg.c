@@ -3397,7 +3397,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//This will not be null in the case of structs & arrays
 				if(current_offset != NULL){
 					//Calculate our load here
-					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(original_memory_access_type), type_adjusted_base_address, current_offset);
+					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(parent_node_type), type_adjusted_base_address, current_offset);
 
 					//Counts as uses for both
 					add_used_variable(current_block, type_adjusted_base_address);
@@ -3412,16 +3412,8 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//Otherwise we have a null current offset, so we're just
 				//relying on the base address
 				} else {
-					//Emit a regular load here
-					//
-					//
-					//
-					//TODO change original memory access type to parent_node_type
-					//
-					//
-					//
-					//
-					load_instruction = emit_load_ir_code(emit_temp_var(original_memory_access_type), type_adjusted_base_address);
+					//Emit the load instruction between the base address and the parent node type
+					load_instruction = emit_load_ir_code(emit_temp_var(parent_node_type), type_adjusted_base_address);
 
 					//Counts as a use
 					add_used_variable(current_block, type_adjusted_base_address);
@@ -3433,27 +3425,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					postfix_results.assignee = load_instruction->assignee;
 				}
 
-
-				/**
-				 * It is possible that through type coercion, casting, etc., we need to do a converting
-				 * move between what we got out of memory and what we're expecting to return from this
-				 * rule. We'll do so here. Remember, the parent node type *may* have been casted/coerced
-				 */
-				if(is_converting_move_required(parent_node_type, original_memory_access_type) == TRUE){
-					//Conversion instruction
-					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parent_node_type), load_instruction->assignee);
-					assignment->is_branch_ending = is_branch_ending;
-
-					//This counts as a use
-					add_used_variable(current_block, load_instruction->assignee);
-
-					//Add it into the block
-					add_statement(current_block, assignment);
-
-					//The final assignee now is this one's
-					postfix_results.assignee = assignment->assignee;
-				}
-				
 				break;
 		}
 
