@@ -8,7 +8,12 @@ pub fn tester(a:i64, ptr:i32*) -> i64 {
 	ret a + *ptr;
 }
 
+pub fn expanding_pointer_tester(mut ptr:i64*, x:i32) -> i32 {
+	//Should trigger expansion
+	*ptr = x;
 
+	ret x;
+}
 
 pub fn main() -> i32 {
 	declare mut arr:i32[30];
