@@ -8,6 +8,11 @@ pub fn tester(a:i64, ptr:i32*) -> i64 {
 	ret a + *ptr;
 }
 
+
+pub fn tester2(a:i64, ptr:i32*) -> i64 {
+	ret *ptr + a;
+}
+
 pub fn expanding_load(ptr:i32*) -> i64 {
 	//Should trigger expansion
 	ret *ptr;

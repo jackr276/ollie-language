@@ -327,6 +327,11 @@ u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_t
 void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
 
 /**
+ * Perform a symbolic dereference of a type
+ */
+generic_type_t* dereference_type(generic_type_t* pointer_type);
+
+/**
  * Select the size based only on a type
  */
 variable_size_t get_type_size(generic_type_t* type);

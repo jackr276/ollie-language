@@ -2137,6 +2137,21 @@ generic_type_t* dealias_type(generic_type_t* type){
 
 
 /**
+ * Perform a symbolic dereference of a type
+ */
+generic_type_t* dereference_type(generic_type_t* pointer_type){
+	//Dev check here
+	if(pointer_type->type_class != 	TYPE_CLASS_POINTER){
+		printf("Fatal internal compiler error: attempt to dereference a non-pointer\n");
+		exit(1);
+	}
+
+	//Otherwise, just use the internal storage to get it
+	return pointer_type->internal_types.points_to;
+}
+
+
+/**
  * Provide a way of destroying a type variable easily
 */
 void type_dealloc(generic_type_t* type){
