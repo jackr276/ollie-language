@@ -3554,21 +3554,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 			//This is our store statement
 			instruction_t* store_statement = current_block->exit_statement;
 
-			//Are we going to need a converting move here?
-			if(is_converting_move_required(store_statement->assignee->type, assignee->type) == TRUE){
-				//Converting move
-				instruction_t* converting_move = emit_assignment_instruction(emit_temp_var(store_statement->assignee->type), assignee);
-				converting_move->is_branch_ending = is_branch_ending;
-				//Counts as a use
-				add_used_variable(current_block, assignee);
-
-				//Get this in before the store
-				insert_instruction_before_given(converting_move, store_statement);
-
-				//Reassign this
-				assignee = converting_move->assignee;
-			}
-
 			/**
 			 * Different store statement types have different areas where the operands go
 			 */
@@ -3721,21 +3706,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				if(is_store_operation(current_block->exit_statement) == TRUE){
 					//This is our store statement
 					instruction_t* store_statement = current_block->exit_statement;
-
-					//Are we going to need a converting move here?
-					if(is_converting_move_required(store_statement->assignee->type, assignee->type) == TRUE){
-						//Converting move
-						instruction_t* converting_move = emit_assignment_instruction(emit_temp_var(store_statement->assignee->type), assignee);
-						converting_move->is_branch_ending = is_branch_ending;
-						//Counts as a use
-						add_used_variable(current_block, assignee);
-
-						//Get this in before the store
-						insert_instruction_before_given(converting_move, store_statement);
-
-						//Reassign this
-						assignee = converting_move->assignee;
-					}
 
 					/**
 					 * Different store statement types have different areas where the operands go
