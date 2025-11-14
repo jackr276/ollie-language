@@ -53,6 +53,12 @@ fn from_32_to_u64_memory_array(mut arr:i32*) -> u64 {
 }
 
 
+//Test going from 32 bit array into a 64 bit value with an index
+fn from_32_to_u64_memory_array_with_index(mut arr:i32*, idx:i32) -> u64 {
+	ret arr[idx];
+}
+
+
 //Just a placeholder
 pub fn main() -> i32 {
 	ret 0;
