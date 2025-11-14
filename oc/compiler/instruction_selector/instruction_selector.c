@@ -4085,14 +4085,11 @@ static void handle_load_instruction(instruction_t* instruction){
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
-	//Invoke the helper to handle the assignee and any edge cases
-	
-
-	//The destination is our assignee
-	instruction->destination_register = instruction->assignee;
-
 	//And the op1 is our source
 	instruction->source_register = instruction->op1;
+
+	//Invoke the helper to handle the assignee and any edge cases
+	handle_load_instruction_destination_assignment(instruction, instruction->source_register->type);
 }
 
 
