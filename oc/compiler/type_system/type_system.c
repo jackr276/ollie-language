@@ -1489,9 +1489,6 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  * In ollie language, static arrays must have their overall size known at compile time.
  */
 generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members){
-	//Grab a string for the dimensions too
-	char dimension[50];
-
 	//Allocate it
 	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
 
@@ -1504,11 +1501,8 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Clone the string
 	type->type_name = clone_dynamic_string(&(points_to->type_name));
 
-	//Print into the dimensions the number of members
-	sprintf(dimension, "[%d]", num_members);
-
 	//Add the dimensions in at the end
-	dynamic_string_concatenate(&(type->type_name), dimension);
+	dynamic_string_concatenate(&(type->type_name), "[]");
 
 	//Store what it points to
 	type->internal_types.member_type = points_to;
