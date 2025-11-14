@@ -4009,6 +4009,26 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					//And this will be our source
 					store_instruction->source_register = duplicate_64_bit;
 
+				/**
+				 * In the event that a converting move is required, we need to insert the converting
+				 * move in before the store instruction because x86 assembly does not allow us
+				 * to do *to memory* converting moves
+				 */
+				} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
+					//Emit a temp var that is the destination's type
+					three_addr_var_t* new_source = emit_temp_var(destination_type);
+
+					//Emit a move instruction where we send the old source(op1) into here
+					instruction_t* converting_move = emit_move_instruction_directly(new_source, store_instruction->op1);
+					
+					//Insert this *right before* the store
+					insert_instruction_before_given(converting_move, store_instruction);
+
+					//Now, our source type is the new source's type
+					source_type = new_source->type;
+
+					//And the source register is the new source, not the old one
+					store_instruction->source_register = new_source;
 
 				/**
 				 * In all other cases, we can just straight assign here
