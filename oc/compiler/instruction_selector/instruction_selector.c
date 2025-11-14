@@ -13,6 +13,7 @@
 #include "../utils/constants.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/select.h>
 #include <sys/types.h>
 
 //We'll need this a lot, so we may as well have it here
@@ -3939,6 +3940,31 @@ static void handle_test_instruction(instruction_t* instruction){
 	//It does have 2 source registers however
 	instruction->source_register = instruction->op1;
 	instruction->source_register2 = instruction->op2;
+}
+
+
+/**
+ * Emit a register to register converting move instruction directly
+ *
+ * This bypasses all register allocation entirely
+ */
+static instruction_t* emit_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
+	//First allocate it
+	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
+
+	//We know what the source and destination are already
+	move_instruction->destination_register = destination_register;
+	move_instruction->source_register = source_register;
+
+	//Grab the types
+	generic_type_t* destination_type = destination_register->type;
+	generic_type_t* source_type = source_register->type;
+
+	//Now we will decide what the move instruction is
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+
+	//Give back the pointer
+	return move_instruction;
 }
 
 
