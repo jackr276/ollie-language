@@ -4235,25 +4235,6 @@ static void handle_store_instruction(instruction_t* instruction){
  * This will always be an OFFSET_ONLY calculation type
  */
 static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
-	//We need the destination and source sizes to determine our movement instruction
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	//Is the destination signed? This is also required inof
-	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-
-	//The source size may be knowable here if we have a variable
-	variable_size_t source_size;
-
-	//If we have an op2, use its size. Otherwise, we default to the destination
-	//size
-	if(instruction->op2 != NULL){
-		source_size = get_type_size(instruction->op2->type);
-	} else {
-		source_size = destination_size;
-	}
-
-	//Invoke the helper to do this
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
@@ -4265,7 +4246,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 	//Our offset has already been saved at the start - so we're good here
 	
 	//Invoke the helper for our source assignment
-	handle_store_instruction_source_assignment(instruction);
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
@@ -4279,25 +4260,6 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
  * This will always be a REGISTERS_ONLY calculation type
  */
 static void handle_store_with_variable_offset_instruction(instruction_t* instruction){
-	//We need the destination and source sizes to determine our movement instruction
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	//Is the destination signed? This is also required inof
-	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-
-	//The source size may be knowable here if we have a variable
-	variable_size_t source_size;
-
-	//If we have an op2, use its size. Otherwise, we default to the destination
-	//size
-	if(instruction->op2 != NULL){
-		source_size = get_type_size(instruction->op2->type);
-	} else {
-		source_size = destination_size;
-	}
-
-	//Invoke the helper to do this
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
@@ -4310,7 +4272,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 	instruction->address_calc_reg2 = instruction->op1;
 
 	//Invoke the helper for our source assignment
-	handle_store_instruction_source_assignment(instruction);
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
@@ -4374,26 +4336,6 @@ static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stac
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_constant_offset_store_operation(instruction_t* addition_instruction, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t destination_size = get_type_size(store_instruction->assignee->type);
-	//Is the destination singed?
-	u_int8_t is_destination_signed = is_type_signed(store_instruction->assignee->type);
-	//We will also need to determine the source's size
-	variable_size_t source_size;
-
-	//We have a variable op1, so use it's size
-	if(store_instruction->op1 != NULL){
-		source_size = get_type_size(store_instruction->op1->type);
-
-	//If we do have a constant, we will always just use the destination size
-	//here as opposed to both, because constants do not support converting moves
-	} else {
-		source_size = destination_size;
-	}
-
-	//We will invoke the helper to select the move that we're after
-	store_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This will always be OFFSET_ONLY
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 	
@@ -4407,7 +4349,7 @@ static void handle_two_instruction_constant_offset_store_operation(instruction_t
 	add_constants(store_instruction->offset, addition_instruction->op1_const);
 
 	//Invoke the helper here
-	handle_store_instruction_source_assignment(store_instruction);
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -4460,26 +4402,6 @@ static void handle_two_instruction_constant_offset_load_operation(instruction_t*
  * mov(w/l/q) 2, 12(t19, t20)
  */
 static void handle_two_instruction_variable_offset_store_operation(instruction_t* addition_instruction, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t destination_size = get_type_size(store_instruction->assignee->type);
-	//Is the destination singed?
-	u_int8_t is_destination_signed = is_type_signed(store_instruction->assignee->type);
-	//We will also need to determine the source's size
-	variable_size_t source_size;
-
-	//We have a variable op2, so use it's size
-	if(store_instruction->op2 != NULL){
-		source_size = get_type_size(store_instruction->op2->type);
-
-	//If we do have a constant, we will always just use the destination size
-	//here as opposed to both, because constants do not support converting moves
-	} else {
-		source_size = destination_size;
-	}
-
-	//We will invoke the helper to select the move that we're after
-	store_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This will always be OFFSET_ONLY
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
@@ -4503,8 +4425,8 @@ static void handle_two_instruction_variable_offset_store_operation(instruction_t
 	//The offset comes from the addition instruction
 	store_instruction->offset = addition_instruction->op1_const;
 
-	//Invoke the helper here
-	handle_store_instruction_source_assignment(store_instruction);
+	//Let the helper deal with the rest
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -4618,26 +4540,6 @@ static void handle_two_instruction_multiply_load_with_variable_offset(instructio
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_multiply_store_with_variable_offset(instruction_t* multiply, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t destination_size = get_type_size(store_instruction->assignee->type);
-	//Is the destination singed?
-	u_int8_t is_destination_signed = is_type_signed(store_instruction->assignee->type);
-	//We will also need to determine the source's size
-	variable_size_t source_size;
-
-	//We have a variable op2, so use it's size
-	if(store_instruction->op2 != NULL){
-		source_size = get_type_size(store_instruction->op2->type);
-
-	//If we do have a constant, we will always just use the destination size
-	//here as opposed to both, because constants do not support converting moves
-	} else {
-		source_size = destination_size;
-	}
-
-	//Determine the instruction with the helper
-	store_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This will always be REGISTERS_AND_SCALE
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
 
@@ -4662,7 +4564,7 @@ static void handle_two_instruction_multiply_store_with_variable_offset(instructi
 	store_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
 	
 	//Invoke the helper here
-	handle_store_instruction_source_assignment(store_instruction);
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -4688,26 +4590,6 @@ static void handle_two_instruction_multiply_store_with_variable_offset(instructi
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_address_calc_and_store(instruction_t* address_calculation, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t destination_size = get_type_size(store_instruction->assignee->type);
-	//Is the destination singed?
-	u_int8_t is_destination_signed = is_type_signed(store_instruction->assignee->type);
-	//We will also need to determine the source's size
-	variable_size_t source_size;
-
-	//We have a variable op1, so use it's size
-	if(store_instruction->op1 != NULL){
-		source_size = get_type_size(store_instruction->op1->type);
-
-	//If we do have a constant, we will always just use the destination size
-	//here as opposed to both, because constants do not support converting moves
-	} else {
-		source_size = destination_size;
-	}
-
-	//Determine the instruction with the helper
-	store_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This is always a memory write
 	store_instruction->memory_access_type = WRITE_TO_MEMORY;
 
@@ -4754,7 +4636,7 @@ static void handle_two_instruction_address_calc_and_store(instruction_t* address
 	}
 
 	//Invoke the source assignment helper
-	handle_store_instruction_source_assignment(store_instruction);
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -4901,26 +4783,6 @@ static void handle_two_instruction_lea_and_load_global_var(instruction_t* lea_st
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_lea_and_store_global_var(instruction_t* lea_statement, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t destination_size = get_type_size(store_instruction->assignee->type);
-	//Is the destination singed?
-	u_int8_t is_destination_signed = is_type_signed(store_instruction->assignee->type);
-	//We will also need to determine the source's size
-	variable_size_t source_size;
-
-	//We have a variable op1, so use it's size
-	if(store_instruction->op1 != NULL){
-		source_size = get_type_size(store_instruction->op1->type);
-
-	//If we do have a constant, we will always just use the destination size
-	//here as opposed to both, because constants do not support converting moves
-	} else {
-		source_size = destination_size;
-	}
-
-	//Let the helper pick the type
-	store_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This is a memory write
 	store_instruction->memory_access_type = WRITE_TO_MEMORY;
 
@@ -4941,7 +4803,7 @@ static void handle_two_instruction_lea_and_store_global_var(instruction_t* lea_s
 	store_instruction->lea_multiplicator = lea_statement->lea_multiplicator;
 
 	//Invoke the helper here
-	handle_store_instruction_source_assignment(store_instruction);
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -5023,26 +4885,6 @@ static void handle_three_instruction_store_with_lea_operation(instruction_window
 	instruction_t* lea_statement = window->instruction2;
 	instruction_t* store_with_variable_offset = window->instruction3;
 
-	//The size is based on the store instruction's type
-	variable_size_t destination_size = get_type_size(store_with_variable_offset->assignee->type);
-	//Is the destination singed?
-	u_int8_t is_destination_signed = is_type_signed(store_with_variable_offset->assignee->type);
-	//We will also need to determine the source's size
-	variable_size_t source_size;
-
-	//We have a variable op1, so use it's size
-	if(store_with_variable_offset->op2 != NULL){
-		source_size = get_type_size(store_with_variable_offset->op2->type);
-
-	//If we do have a constant, we will always just use the destination size
-	//here as opposed to both, because constants do not support converting moves
-	} else {
-		source_size = destination_size;
-	}
-
-	//Let the helper select the instruction
-	store_with_variable_offset->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This is a full address calculation here
 	store_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 	
@@ -5069,7 +4911,7 @@ static void handle_three_instruction_store_with_lea_operation(instruction_window
 	store_with_variable_offset->offset = constant_assignment->op1_const;
 
 	//Invoke the helper here
-	handle_store_instruction_source_assignment(store_with_variable_offset);
+	handle_store_instruction_sources_and_instruction_type(store_with_variable_offset);
 
 	return;
 }
@@ -5158,26 +5000,6 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
 	instruction_t* addition = window->instruction2;
 	instruction_t* store_with_variable_offset = window->instruction3;
 
-	//The size is based on the store instruction's type
-	variable_size_t destination_size = get_type_size(store_with_variable_offset->assignee->type);
-	//Is the destination singed?
-	u_int8_t is_destination_signed = is_type_signed(store_with_variable_offset->assignee->type);
-	//We will also need to determine the source's size
-	variable_size_t source_size;
-
-	//We have a variable op1, so use it's size
-	if(store_with_variable_offset->op2 != NULL){
-		source_size = get_type_size(store_with_variable_offset->op2->type);
-
-	//If we do have a constant, we will always just use the destination size
-	//here as opposed to both, because constants do not support converting moves
-	} else {
-		source_size = destination_size;
-	}
-
-	//Let the helper select the instruction
-	store_with_variable_offset->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This is a full address calculation here
 	store_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 
@@ -5204,7 +5026,7 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
 	store_with_variable_offset->offset = addition->op1_const;
 
 	//Invoke the helper here
-	handle_store_instruction_source_assignment(store_with_variable_offset);
+	handle_store_instruction_sources_and_instruction_type(store_with_variable_offset);
 
 	return;
 }
