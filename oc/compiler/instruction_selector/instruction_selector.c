@@ -3975,19 +3975,28 @@ static instruction_t* emit_move_instruction_directly(three_addr_var_t* destinati
  * as the unique case where our source is a 32 bit integer *but* we are saving to an
  * unsigned 64 bit memory region
  */
-static void handle_store_instruction_source_assignment(instruction_t* store_instruction){
+static void handle_store_instruction_sources_and_instruction_type(instruction_t* store_instruction){
+	//This is always the destination type
+	generic_type_t* destination_type = store_instruction->assignee->type;
+
+	//The source type will be assigned later
+	generic_type_t* source_type;
+
 	//Go based on what we have
 	switch(store_instruction->statement_type){
 		//For stores like this, we either have an op1 or an immediate source
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			//The op1 is where we may have conversion issues
 			if(store_instruction->op1 != NULL){
+				//Mark that the source type is op1
+				source_type = store_instruction->op1->type;
+
 				/**
 				 * This is a special edgecase where we are moving from 32 bit to 64 bit
 				 * In the event that we do this, we need to emit a simple copy of the source
 				 * variable and give it the 64 bit type so that we have a quad word register
 				 */
-				if(is_type_unsigned_64_bit(store_instruction->assignee->type) == TRUE
+				if(is_type_unsigned_64_bit(destination_type) == TRUE
 					&& is_type_32_bit_int(store_instruction->op1->type) == TRUE){
 
 					//First we duplicate it
@@ -4010,8 +4019,12 @@ static void handle_store_instruction_source_assignment(instruction_t* store_inst
 
 			//If we get here it's a plain copy
 			} else {
+				//If we get here, we can just use the destination type
+				source_type = destination_type;
+
 				store_instruction->source_immediate = store_instruction->op1_const;
 			}
+
 			break;
 
 		//For these kinds of stores, op2 would have our value
@@ -4019,6 +4032,9 @@ static void handle_store_instruction_source_assignment(instruction_t* store_inst
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 			//The op1 is where we may have conversion issues
 			if(store_instruction->op2 != NULL){
+				//Mark that the source type is op2
+				source_type = store_instruction->op2->type;
+
 				/**
 				 * This is a special edgecase where we are moving from 32 bit to 64 bit
 				 * In the event that we do this, we need to emit a simple copy of the source
@@ -4045,8 +4061,12 @@ static void handle_store_instruction_source_assignment(instruction_t* store_inst
 				}
 
 			} else {
+				//If we get here, we can just use the destination type
+				source_type = destination_type;
+
 				store_instruction->source_immediate = store_instruction->op1_const;
 			}
+
 			break;
 
 		//Should never get here
@@ -4054,6 +4074,9 @@ static void handle_store_instruction_source_assignment(instruction_t* store_inst
 			printf("Fatal internal compiler error: invalid store instruction");
 			exit(1);
 	}
+
+	//Once we've done all the above assignments, we need to determine what our instruction type is
+	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
 }
 
 
@@ -4188,25 +4211,6 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
  * Handle a store instruction. This will be reorganized into a memory accessing move
  */
 static void handle_store_instruction(instruction_t* instruction){
-	//We need the destination and source sizes to determine our movement instruction
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	//Is the destination signed? This is also required inof
-	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-
-	//The source size may be knowable here if we have a variable
-	variable_size_t source_size;
-
-	//If we have an op1, use its size. Otherwise, we default to the destination
-	//size
-	if(instruction->op1 != NULL){
-		source_size = get_type_size(instruction->op1->type);
-	} else {
-		source_size = destination_size;
-	}
-
-	//Invoke the helper to do this
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This counts for our destination only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
 
@@ -4216,8 +4220,8 @@ static void handle_store_instruction(instruction_t* instruction){
 	//This is our destination register
 	instruction->destination_register = instruction->assignee;
 
-	//Invoke the helper for our source assignment
-	handle_store_instruction_source_assignment(instruction);
+	//Invoke the helper to determine the type and instruction type
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
