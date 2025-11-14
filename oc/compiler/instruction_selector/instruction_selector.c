@@ -4116,12 +4116,12 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
-	//The destination register is always the assignee
-	instruction->destination_register = instruction->assignee;
-
 	//Op1 is our base address
 	instruction->address_calc_reg1 = instruction->op1;
 	//Our offset has already been set at the start - so we're good here
+
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(instruction, instruction->address_calc_reg1->type);
 }
 
 
@@ -4148,13 +4148,13 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
-	//The destination register is always the assignee
-	instruction->destination_register = instruction->assignee;
-
 	//Op1 is our base address
 	instruction->address_calc_reg1 = instruction->op1;
 	//Op2 is the variable offset
 	instruction->address_calc_reg2 = instruction->op2;
+
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(instruction, instruction->address_calc_reg1->type);
 }
 
 
@@ -4415,8 +4415,8 @@ static void handle_two_instruction_constant_offset_load_operation(instruction_t*
 	//Combine these 2 constants together. The result will go into the store instruction's offset
 	add_constants(load_instruction->offset, addition_instruction->op1_const);
 
-	//The destination register is always the assignee
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4521,8 +4521,8 @@ static void handle_two_instruction_variable_offset_load_operation(instruction_t*
 	//The offset comes from the addition instruction
 	load_instruction->offset = addition_instruction->op1_const;
 
-	//The destination is always our assignee
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4571,8 +4571,8 @@ static void handle_two_instruction_multiply_load_with_variable_offset(instructio
 	//The multiplicator comes from the constant multiplication
 	load_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
 
-	//The destination register is always the assignee
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4804,8 +4804,8 @@ static void handle_two_instruction_address_calc_and_load(instruction_t* address_
 			break;
 	}
 
-	//No matter what this is always set
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4851,8 +4851,8 @@ static void handle_two_instruction_lea_and_load_global_var(instruction_t* lea_st
 	//The multiplicator as well
 	load_instruction->lea_multiplicator = lea_statement->lea_multiplicator;
 
-	//No matter what this is always set
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4968,8 +4968,8 @@ static void handle_three_instruction_load_with_lea_operation(instruction_window_
 	//The offset on the outside comes from the constant assignment
 	load_with_variable_offset->offset = constant_assignment->op1_const;
 	
-	//And the destination is always the assignee
-	load_with_variable_offset->destination_register = load_with_variable_offset->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_with_variable_offset, load_with_variable_offset->address_calc_reg1->type);
 	
 	return;
 }
@@ -5101,9 +5101,9 @@ static void handle_three_instruction_load_with_address_calculation_operation(ins
 	//The offset on the outside comes from the constant assignment
 	load_with_variable_offset->offset = addition->op1_const;
 	
-	//And the destination is always the assignee
-	load_with_variable_offset->destination_register = load_with_variable_offset->assignee;
-	
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_with_variable_offset, load_with_variable_offset->address_calc_reg1->type);
+
 	return;
 }
 
