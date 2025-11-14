@@ -4032,6 +4032,40 @@ static void handle_store_instruction_source_assignment(instruction_t* store_inst
 
 
 /**
+ * This helper function will handle the source and destination assignment
+ * of a load instruction. This will also handle the edge case where we are
+ * loading from a 32 bit memory region into an unsigned 64 bit region
+ */
+static void handle_load_instruction_destination_assignment(instruction_t* load_instruction, generic_type_t* memory_region_type){
+	//By default, assume it's the assignee
+	three_addr_var_t* destination_register = load_instruction->assignee;
+
+	//Let's look for the special case here
+	if(is_type_32_bit_int(memory_region_type) == TRUE
+		&& is_type_unsigned_64_bit(destination_register->type) == TRUE){
+
+		//Duplicate the destination
+		three_addr_var_t* type_adjusted_destination = emit_var_copy(destination_register);
+		//Fix the type to be 32 bits
+		type_adjusted_destination->type = memory_region_type;
+		//Be sure to get the size too
+		type_adjusted_destination->variable_size = get_type_size(type_adjusted_destination->type);
+
+		//This is the true destination now
+		load_instruction->destination_register = type_adjusted_destination;
+
+		//And we need to adjust this to be a MOVL type
+		load_instruction->instruction_type = MOVL;
+	
+	//Otherwise, we just assign the destination to be the destination
+	//register
+	} else {
+		load_instruction->destination_register = destination_register;
+	}
+}
+
+
+/**
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
  */
@@ -4050,6 +4084,9 @@ static void handle_load_instruction(instruction_t* instruction){
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
+
+	//Invoke the helper to handle the assignee and any edge cases
+	
 
 	//The destination is our assignee
 	instruction->destination_register = instruction->assignee;
