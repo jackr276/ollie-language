@@ -486,8 +486,8 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
  * Update the estimate on spilling this variable
  */
 static void update_spill_cost(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
-	//Don't bother updating, we'd get an unsigned overflow
-	if(variable->is_stack_pointer == TRUE){
+	//Theres no point in updating either of these because they will never be spilled
+	if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
 		return;
 	}
 
