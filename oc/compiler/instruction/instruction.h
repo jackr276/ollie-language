@@ -94,8 +94,6 @@ struct live_range_t{
 	u_int8_t is_precolored;
 	//What register is this live range in?
 	general_purpose_register_t reg; 
-	//The size of the variable in the live range
-	variable_size_t size;
 };
 
 

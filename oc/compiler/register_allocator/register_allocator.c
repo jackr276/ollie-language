@@ -158,9 +158,6 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
 	//Create the neighbors array as well
 	live_range->neighbors = dynamic_array_alloc();
 
-	//Store the size as well
-	live_range->size = size;
-
 	//Finally we'll return it
 	return live_range;
 }
@@ -2346,6 +2343,88 @@ static u_int8_t allocate_register(live_range_t* live_range){
 	} else {
 		return FALSE;
 	}
+}
+
+
+/**
+ * Does a given instruction use a given LR in any way?
+ */
+
+
+/**
+ * Scan the CFG and get all instructions that we will need to deal with when
+ * spilling
+ */
+static dynamic_array_t* get_spill_instructions(cfg_t* cfg, live_range_t* spill_range){
+	//Allocate the dynamic array that we'll be using
+	dynamic_array_t* instructions = dynamic_array_alloc();
+
+	//Grab a block cursor
+	basic_block_t* cursor = cfg->head_block;
+
+	//So long as this is not NULL, keep going
+	while(cursor != NULL){
+		//Now we'll crawl through every instruction
+		instruction_t* current_instruction = cursor->leader_statement;
+
+		//Run through all instructions here
+		while(current_instruction != NULL){
+
+			//Advance to the next statement
+			current_instruction = current_instruction->next_statement;
+		}
+
+		//Go to the direct successor
+		cursor = cursor->direct_successor;
+	}
+
+	//Give it back
+	return instructions;
+}
+
+/**
+ * Get the largest type in a given Live range. This is used for determining stack allocation
+ * size. We need to do this due to how type coercion can work in OC
+ */
+static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
+	//Seed with 0
+	u_int32_t largest_type_size = 0;
+
+	//Starts off as null
+	generic_type_t* largest_type = NULL;
+
+	//Run through all of the variables
+	for(u_int16_t i = 0; i < target->variables->current_index; i++){
+		//Grab the variable out
+		three_addr_var_t* variable = dynamic_array_get_at(target->variables, i);
+
+		//If we're bigger, reassign
+		if(variable->type->type_size > largest_type_size){
+			//This is now the largest type
+			largest_type = variable->type;
+
+			//And our largest type size is this one's size
+			largest_type_size = largest_type->type_size;
+		}
+	}
+
+	//Give back the largest type
+	return largest_type;
+}
+
+
+/**
+ * Spill a given live range across the entire CFG. Remember that when we spill,
+ * we replace every use of the old live range with a load and every assignment
+ * with a store.
+ */
+static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
+	//Let the helper get every single instruction that we will need to contend with
+	dynamic_array_t* worklist = get_spill_instructions(cfg, spill_range);
+
+	//Let's first create the stack region for our spill range
+	stack_region_t* spill_region = create_stack_region_for_type(spill_range, )
+
 }
 
 
