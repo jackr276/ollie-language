@@ -3805,7 +3805,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
 			} else {
 				//If the side type here is right, we'll need a load instruction
-				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(indirect_version->type), indirect_version);
+				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(unary_expression_parent->inferred_type), indirect_version);
 
 				//The dereferenced variable has been used
 				add_used_variable(current_block, indirect_version);
