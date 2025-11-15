@@ -491,18 +491,12 @@ static void update_spill_cost(live_range_t* live_range, basic_block_t* block, th
 		return;
 	}
 
-	if(variable->is_temporary == TRUE){
-		if(live_range->spill_cost == 0){
-			live_range->spill_cost = 1;
-		}
+	//The cost of spilling a live range is always the assignment count times the cost to store plus
+	//the use count times the cost to use
+	u_int32_t spill_cost = live_range->assignment_count * STORE_COST + live_range->use_count * LOAD_COST;
 
-		//Let's try just doubling for now
-		live_range->spill_cost *= 2;
-
-	} else {
-		//Add this 
-		live_range->spill_cost += LOAD_AND_STORE_COST * block->estimated_execution_frequency; 
-	}
+	//Add it into the live range's existing spill cost
+	live_range->spill_cost += spill_cost;
 }
 
 
