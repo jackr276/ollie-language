@@ -3,6 +3,7 @@
 */
 
 #include "type_system.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -1488,6 +1489,7 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  * In ollie language, static arrays must have their overall size known at compile time.
  */
 generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members){
+	//Allocate it
 	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
 
 	//Array type class
@@ -1499,7 +1501,7 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Clone the string
 	type->type_name = clone_dynamic_string(&(points_to->type_name));
 
-	//Add the star at the end
+	//Add the dimensions in at the end
 	dynamic_string_concatenate(&(type->type_name), "[]");
 
 	//Store what it points to
@@ -2133,6 +2135,21 @@ generic_type_t* dealias_type(generic_type_t* type){
 
 	//Give the stripped down type back
 	return raw_type;
+}
+
+
+/**
+ * Perform a symbolic dereference of a type
+ */
+generic_type_t* dereference_type(generic_type_t* pointer_type){
+	//Dev check here
+	if(pointer_type->type_class != 	TYPE_CLASS_POINTER){
+		printf("Fatal internal compiler error: attempt to dereference a non-pointer\n");
+		exit(1);
+	}
+
+	//Otherwise, just use the internal storage to get it
+	return pointer_type->internal_types.points_to;
 }
 
 

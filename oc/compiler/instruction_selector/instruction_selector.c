@@ -13,6 +13,7 @@
 #include "../utils/constants.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/select.h>
 #include <sys/types.h>
 
 //We'll need this a lot, so we may as well have it here
@@ -913,8 +914,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	//If we have two consecutive assignment statements
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
-		&& is_load_operation(window->instruction1) == TRUE
-		&& can_assignment_instruction_be_removed(window->instruction2) == TRUE){
+		&& is_load_operation(window->instruction1) == TRUE){
 		//Grab these out for convenience
 		instruction_t* load = window->instruction1;
 		instruction_t* move = window->instruction2;
@@ -1862,7 +1862,7 @@ static void simplify(cfg_t* cfg, basic_block_t* head){
 /**
  * Select a register movement instruction based on the source and destination sizes
  */
-static instruction_type_t select_register_movement_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
 	//If these are the exact same, then all we need to do is
 	//select a generic move here
 	if(destination_size == source_size){
@@ -1877,7 +1877,8 @@ static instruction_type_t select_register_movement_instruction(variable_size_t d
 			case QUAD_WORD:
 				return MOVQ;
 			default:
-				return MOVQ;
+				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+				exit(1);
 		}
 	}
 
@@ -2010,7 +2011,7 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	}
 
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_register_movement_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
+	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -2053,7 +2054,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	instruction->source_register = instruction->op1;
 
 	//Use the helper to get the right sized move instruction
-	instruction->instruction_type = select_register_movement_instruction(destination_size, source_size, is_type_signed(assignee->type));
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
 }
 
 
@@ -2084,7 +2085,8 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 			break;
 		//Should never reach this
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//Finally we set the destination
@@ -2218,7 +2220,8 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 			instruction->instruction_type = CBTW;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//The source register is the so-called "converted" register. In reality,
@@ -2300,7 +2303,8 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 			instruction->instruction_type = ANDB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//Finally we set the destination
@@ -2336,7 +2340,8 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 			instruction->instruction_type = ORB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//Finally we set the destination
@@ -2397,7 +2402,8 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 		//Should never reach this
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//Finally we set the sources
@@ -2433,7 +2439,8 @@ static instruction_type_t select_add_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return ADDQ;
 		default:
-			return ADDQ;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 }
 
@@ -2453,7 +2460,8 @@ static instruction_type_t select_lea_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return LEAQ;
 		default:
-			return LEAQ;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 }
 
@@ -2474,7 +2482,8 @@ static instruction_type_t select_sub_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return SUBQ;
 		default:
-			return SUBQ;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 }
 
@@ -2495,7 +2504,8 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return CMPQ;
 		default:
-			return CMPQ;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 }
 
@@ -2685,7 +2695,8 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 			instruction->instruction_type = ORB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//And we always have a destination register
@@ -2730,7 +2741,8 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
 			instruction->instruction_type = ANDB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//And we always have a destination register
@@ -2775,7 +2787,8 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 			instruction->instruction_type = XORB;
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 	
 	//And we always have a destination register
@@ -3042,10 +3055,13 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 		case DOUBLE_WORD:
 			multiplication_instruction->instruction_type = MULL;
 			break;
-		//Everything else falls here
-		default:
+		case QUAD_WORD:
 			multiplication_instruction->instruction_type = MULQ;
 			break;
+		//Everything else falls here
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
 	}
 
 	//This is the case where we have two source registers
@@ -3928,30 +3944,231 @@ static void handle_test_instruction(instruction_t* instruction){
 
 
 /**
+ * Emit a register to register converting move instruction directly
+ *
+ * This bypasses all register allocation entirely
+ */
+static instruction_t* emit_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
+	//First allocate it
+	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
+
+	//We know what the source and destination are already
+	move_instruction->destination_register = destination_register;
+	move_instruction->source_register = source_register;
+
+	//Grab the types
+	generic_type_t* destination_type = destination_register->type;
+	generic_type_t* source_type = source_register->type;
+
+	//Now we will decide what the move instruction is
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+
+	//Give back the pointer
+	return move_instruction;
+}
+
+
+/**
+ * Handle the assignment of the source for a store instruction.
+ *
+ * This function will account for all edge cases(op1 vs op2 vs op1_const), as well
+ * as the unique case where our source is a 32 bit integer *but* we are saving to an
+ * unsigned 64 bit memory region
+ */
+static void handle_store_instruction_sources_and_instruction_type(instruction_t* store_instruction){
+	//This is always the destination type
+	generic_type_t* destination_type = store_instruction->assignee->type;
+
+	//The source type will be assigned later
+	generic_type_t* source_type;
+
+	//Go based on what we have
+	switch(store_instruction->statement_type){
+		//For stores like this, we either have an op1 or an immediate source
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			//The op1 is where we may have conversion issues
+			if(store_instruction->op1 != NULL){
+				//Mark that the source type is op1
+				source_type = store_instruction->op1->type;
+
+				/**
+				 * This is a special edgecase where we are moving from 32 bit to 64 bit
+				 * In the event that we do this, we need to emit a simple copy of the source
+				 * variable and give it the 64 bit type so that we have a quad word register
+				 */
+				if(is_type_unsigned_64_bit(destination_type) == TRUE
+					&& is_type_32_bit_int(store_instruction->op1->type) == TRUE){
+
+					//First we duplicate it
+					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op1);
+
+					//Then we give it the type that we want
+					duplicate_64_bit->type = store_instruction->assignee->type;
+					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
+
+					//And this will be our source
+					store_instruction->source_register = duplicate_64_bit;
+
+				/**
+				 * In the event that a converting move is required, we need to insert the converting
+				 * move in before the store instruction because x86 assembly does not allow us
+				 * to do *to memory* converting moves
+				 */
+				} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
+					//Emit a temp var that is the destination's type
+					three_addr_var_t* new_source = emit_temp_var(destination_type);
+
+					//Emit a move instruction where we send the old source(op1) into here
+					instruction_t* converting_move = emit_move_instruction_directly(new_source, store_instruction->op1);
+					
+					//Insert this *right before* the store
+					insert_instruction_before_given(converting_move, store_instruction);
+
+					//Now, our source type is the new source's type
+					source_type = new_source->type;
+
+					//And the source register is the new source, not the old one
+					store_instruction->source_register = new_source;
+
+				/**
+				 * In all other cases, we can just straight assign here
+				 */
+				} else {
+					store_instruction->source_register = store_instruction->op1;
+				}
+
+			//If we get here it's a plain copy
+			} else {
+				//If we get here, we can just use the destination type
+				source_type = destination_type;
+
+				store_instruction->source_immediate = store_instruction->op1_const;
+			}
+
+			break;
+
+		//For these kinds of stores, op2 would have our value
+		case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+			//The op1 is where we may have conversion issues
+			if(store_instruction->op2 != NULL){
+				//Mark that the source type is op2
+				source_type = store_instruction->op2->type;
+
+				/**
+				 * This is a special edgecase where we are moving from 32 bit to 64 bit
+				 * In the event that we do this, we need to emit a simple copy of the source
+				 * variable and give it the 64 bit type so that we have a quad word register
+				 */
+				if(is_type_unsigned_64_bit(store_instruction->assignee->type) == TRUE
+					&& is_type_32_bit_int(store_instruction->op2->type) == TRUE){
+
+					//First we duplicate it
+					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op2);
+
+					//Then we give it the type that we want
+					duplicate_64_bit->type = store_instruction->assignee->type;
+					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
+
+					//And this will be our source
+					store_instruction->source_register = duplicate_64_bit;
+
+				/**
+				 * In the event that a converting move is required, we need to insert the converting
+				 * move in before the store instruction because x86 assembly does not allow us
+				 * to do *to memory* converting moves
+				 */
+				} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
+					//Emit a temp var that is the destination's type
+					three_addr_var_t* new_source = emit_temp_var(destination_type);
+
+					//Emit a move instruction where we send the old source(op1) into here
+					instruction_t* converting_move = emit_move_instruction_directly(new_source, store_instruction->op2);
+					
+					//Insert this *right before* the store
+					insert_instruction_before_given(converting_move, store_instruction);
+
+					//Now, our source type is the new source's type
+					source_type = new_source->type;
+
+					//And the source register is the new source, not the old one
+					store_instruction->source_register = new_source;
+
+				/**
+				 * In all other cases, we can just straight assign here
+				 */
+				} else {
+					store_instruction->source_register = store_instruction->op2;
+				}
+
+			} else {
+				//If we get here, we can just use the destination type
+				source_type = destination_type;
+
+				//Simple copy over
+				store_instruction->source_immediate = store_instruction->op1_const;
+			}
+
+			break;
+
+		//Should never get here
+		default:
+			printf("Fatal internal compiler error: invalid store instruction");
+			exit(1);
+	}
+
+	//Once we've done all the above assignments, we need to determine what our instruction type is
+	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+}
+
+
+/**
+ * This helper function will handle the source and destination assignment
+ * of a load instruction. This will also handle the edge case where we are
+ * loading from a 32 bit memory region into an unsigned 64 bit region
+ */
+static void handle_load_instruction_destination_assignment(instruction_t* load_instruction, generic_type_t* memory_region_type){
+	//By default, assume it's the assignee
+	three_addr_var_t* destination_register = load_instruction->assignee;
+
+	//Let's look for the special case here
+	if(is_type_32_bit_int(memory_region_type) == TRUE
+		&& is_type_unsigned_64_bit(destination_register->type) == TRUE){
+
+		//Duplicate the destination
+		three_addr_var_t* type_adjusted_destination = emit_var_copy(destination_register);
+		//Fix the type to be 32 bits
+		type_adjusted_destination->type = memory_region_type;
+		//Be sure to get the size too
+		type_adjusted_destination->variable_size = get_type_size(type_adjusted_destination->type);
+
+		//This is the true destination now
+		load_instruction->destination_register = type_adjusted_destination;
+
+		//And we need to adjust this to be a MOVL type
+		load_instruction->instruction_type = MOVL;
+	
+	//Otherwise, we just assign the destination to be the destination
+	//register
+	} else {
+		load_instruction->destination_register = destination_register;
+	}
+}
+
+
+/**
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
  */
 static void handle_load_instruction(instruction_t* instruction){
-	//Size is determined by the assignee
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	//We need the destination and source sizes to determine our movement instruction
+	variable_size_t destination_size = get_type_size(instruction->assignee->type);
+	//Is the destination signed? This is also required inof
+	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
+	variable_size_t source_size = get_type_size(instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Let the helper select for us
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be a SOURCE_ONLY
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
@@ -3959,11 +4176,11 @@ static void handle_load_instruction(instruction_t* instruction){
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
-	//The destination is our assignee
-	instruction->destination_register = instruction->assignee;
-
 	//And the op1 is our source
 	instruction->source_register = instruction->op1;
+
+	//Invoke the helper to handle the assignee and any edge cases
+	handle_load_instruction_destination_assignment(instruction, instruction->source_register->type);
 }
 
 
@@ -3975,26 +4192,14 @@ static void handle_load_instruction(instruction_t* instruction){
  * This will always generate an address calculation mode of OFFSET_ONLY 
  */
 static void handle_load_with_constant_offset_instruction(instruction_t* instruction){
-	//Size is determined by the assignee
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	//We need the destination and source sizes to determine our movement instruction
+	variable_size_t destination_size = get_type_size(instruction->assignee->type);
+	//Is the destination signed? This is also required inof
+	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
+	variable_size_t source_size = get_type_size(instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Let the helper decide for us
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -4002,12 +4207,12 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
-	//The destination register is always the assignee
-	instruction->destination_register = instruction->assignee;
-
 	//Op1 is our base address
 	instruction->address_calc_reg1 = instruction->op1;
 	//Our offset has already been set at the start - so we're good here
+
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(instruction, instruction->address_calc_reg1->type);
 }
 
 
@@ -4019,26 +4224,14 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
  * This will always generate an address calculation mode of OFFSET_ONLY 
  */
 static void handle_load_with_variable_offset_instruction(instruction_t* instruction){
-	//Size is determined by the assignee
-	variable_size_t size = get_type_size(instruction->assignee->type);
+	//We need the destination and source sizes to determine our movement instruction
+	variable_size_t destination_size = get_type_size(instruction->assignee->type);
+	//Is the destination signed? This is also required inof
+	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
+	variable_size_t source_size = get_type_size(instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Let the helper decide for us
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
@@ -4046,13 +4239,13 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
-	//The destination register is always the assignee
-	instruction->destination_register = instruction->assignee;
-
 	//Op1 is our base address
 	instruction->address_calc_reg1 = instruction->op1;
 	//Op2 is the variable offset
 	instruction->address_calc_reg2 = instruction->op2;
+
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(instruction, instruction->address_calc_reg1->type);
 }
 
 
@@ -4060,27 +4253,6 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
  * Handle a store instruction. This will be reorganized into a memory accessing move
  */
 static void handle_store_instruction(instruction_t* instruction){
-	//Size is determined by the assignee
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
-
 	//This counts for our destination only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
 
@@ -4090,12 +4262,8 @@ static void handle_store_instruction(instruction_t* instruction){
 	//This is our destination register
 	instruction->destination_register = instruction->assignee;
 
-	//And the source register is our op1 or we have an immediate
-	if(instruction->op1 != NULL){
-		instruction->source_register = instruction->op1;
-	} else {
-		instruction->source_immediate = instruction->op1_const;
-	}
+	//Invoke the helper to determine the type and instruction type
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
@@ -4109,27 +4277,6 @@ static void handle_store_instruction(instruction_t* instruction){
  * This will always be an OFFSET_ONLY calculation type
  */
 static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
-	//Size is determined by the assignee
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
-
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
@@ -4139,13 +4286,9 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 	//The base address is the assignee
 	instruction->address_calc_reg1 = instruction->assignee;
 	//Our offset has already been saved at the start - so we're good here
-
-	//And the source register is our op2 or we have an immediate source
-	if(instruction->op2 != NULL){
-		instruction->source_register = instruction->op2;
-	} else {
-		instruction->source_immediate = instruction->op1_const;
-	}
+	
+	//Invoke the helper for our source assignment
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
@@ -4159,27 +4302,6 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
  * This will always be a REGISTERS_ONLY calculation type
  */
 static void handle_store_with_variable_offset_instruction(instruction_t* instruction){
-	//Size is determined by the assignee
-	variable_size_t size = get_type_size(instruction->assignee->type);
-
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
-
 	//This will always be offset only
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
@@ -4191,12 +4313,8 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 	//Op1 is the address calcu register
 	instruction->address_calc_reg2 = instruction->op1;
 
-	//And the source register is our op2 or we have an immediate source
-	if(instruction->op2 != NULL){
-		instruction->source_register = instruction->op2;
-	} else {
-		instruction->source_immediate = instruction->op1_const;
-	}
+	//Invoke the helper for our source assignment
+	handle_store_instruction_sources_and_instruction_type(instruction);
 }
 
 
@@ -4260,27 +4378,6 @@ static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stac
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_constant_offset_store_operation(instruction_t* addition_instruction, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
-
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			store_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			store_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			store_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
-
 	//This will always be OFFSET_ONLY
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 	
@@ -4293,13 +4390,8 @@ static void handle_two_instruction_constant_offset_store_operation(instruction_t
 	//Combine these 2 constants together. The result will go into the store instruction's offset
 	add_constants(store_instruction->offset, addition_instruction->op1_const);
 
-	//If we have op1, then our source is op1
-	if(store_instruction->op1 != NULL){
-		store_instruction->source_register = store_instruction->op1;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Invoke the helper here
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -4315,26 +4407,15 @@ static void handle_two_instruction_constant_offset_store_operation(instruction_t
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_constant_offset_load_operation(instruction_t* addition_instruction, instruction_t* load_instruction){
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_instruction->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			load_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			load_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			load_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			load_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Now we'll use the helper to select the instruction
+	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be OFFSET_ONLY
 	load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -4348,8 +4429,8 @@ static void handle_two_instruction_constant_offset_load_operation(instruction_t*
 	//Combine these 2 constants together. The result will go into the store instruction's offset
 	add_constants(load_instruction->offset, addition_instruction->op1_const);
 
-	//The destination register is always the assignee
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4363,27 +4444,6 @@ static void handle_two_instruction_constant_offset_load_operation(instruction_t*
  * mov(w/l/q) 2, 12(t19, t20)
  */
 static void handle_two_instruction_variable_offset_store_operation(instruction_t* addition_instruction, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
-
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			store_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			store_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			store_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
-
 	//This will always be OFFSET_ONLY
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
@@ -4407,13 +4467,8 @@ static void handle_two_instruction_variable_offset_store_operation(instruction_t
 	//The offset comes from the addition instruction
 	store_instruction->offset = addition_instruction->op1_const;
 
-	//If we have op1, then our source is op1
-	if(store_instruction->op2 != NULL){
-		store_instruction->source_register = store_instruction->op2;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Let the helper deal with the rest
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -4427,26 +4482,15 @@ static void handle_two_instruction_variable_offset_store_operation(instruction_t
  * mov(w/l/q) 12(t19, t20), t23
  */
 static void handle_two_instruction_variable_offset_load_operation(instruction_t* addition_instruction, instruction_t* load_instruction){
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_instruction->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			load_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			load_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			load_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			load_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Now we'll use the helper to select the instruction
+	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be OFFSET_ONLY
 	load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
@@ -4471,8 +4515,8 @@ static void handle_two_instruction_variable_offset_load_operation(instruction_t*
 	//The offset comes from the addition instruction
 	load_instruction->offset = addition_instruction->op1_const;
 
-	//The destination is always our assignee
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4488,26 +4532,15 @@ static void handle_two_instruction_variable_offset_load_operation(instruction_t*
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_multiply_load_with_variable_offset(instruction_t* multiply, instruction_t* load_instruction){
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_instruction->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			load_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			load_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			load_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			load_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Now we'll use the helper to select the instruction
+	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This will always be REGISTERS_AND_SCALE
 	load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
@@ -4532,8 +4565,8 @@ static void handle_two_instruction_multiply_load_with_variable_offset(instructio
 	//The multiplicator comes from the constant multiplication
 	load_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
 
-	//The destination register is always the assignee
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4549,27 +4582,6 @@ static void handle_two_instruction_multiply_load_with_variable_offset(instructio
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_multiply_store_with_variable_offset(instruction_t* multiply, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
-
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			store_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			store_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			store_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
-
 	//This will always be REGISTERS_AND_SCALE
 	store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
 
@@ -4593,13 +4605,8 @@ static void handle_two_instruction_multiply_store_with_variable_offset(instructi
 	//The multiplicator comes from the constant multiplication
 	store_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
 	
-	//If we have op1, then our source is op1
-	if(store_instruction->op2 != NULL){
-		store_instruction->source_register = store_instruction->op2;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Invoke the helper here
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -4625,27 +4632,6 @@ static void handle_two_instruction_multiply_store_with_variable_offset(instructi
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_address_calc_and_store(instruction_t* address_calculation, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
-
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			store_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			store_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			store_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
-
 	//This is always a memory write
 	store_instruction->memory_access_type = WRITE_TO_MEMORY;
 
@@ -4691,13 +4677,8 @@ static void handle_two_instruction_address_calc_and_store(instruction_t* address
 			break;
 	}
 
-	//If we have op1, then our source is op1
-	if(store_instruction->op1 != NULL){
-		store_instruction->source_register = store_instruction->op1;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Invoke the source assignment helper
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -4723,26 +4704,15 @@ static void handle_two_instruction_address_calc_and_store(instruction_t* address
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_address_calc_and_load(instruction_t* address_calculation, instruction_t* load_instruction){
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_instruction->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			load_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			load_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			load_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			load_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Now we'll use the helper to select the instruction
+	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is a read instruction
 	load_instruction->memory_access_type = READ_FROM_MEMORY;
@@ -4788,8 +4758,8 @@ static void handle_two_instruction_address_calc_and_load(instruction_t* address_
 			break;
 	}
 
-	//No matter what this is always set
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4806,26 +4776,15 @@ static void handle_two_instruction_address_calc_and_load(instruction_t* address_
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_lea_and_load_global_var(instruction_t* lea_statement, instruction_t* load_instruction){
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_instruction->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_instruction->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_instruction->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_instruction->op1->type);
 
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			load_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			load_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			load_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			load_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
+	//Let the helper select the type
+	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is a memory read
 	load_instruction->memory_access_type = READ_FROM_MEMORY;
@@ -4846,8 +4805,8 @@ static void handle_two_instruction_lea_and_load_global_var(instruction_t* lea_st
 	//The multiplicator as well
 	load_instruction->lea_multiplicator = lea_statement->lea_multiplicator;
 
-	//No matter what this is always set
-	load_instruction->destination_register = load_instruction->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
 }
 
 
@@ -4866,27 +4825,6 @@ static void handle_two_instruction_lea_and_load_global_var(instruction_t* lea_st
  * DOES NOT DO DELETION/WINDOW REORDERING
  */
 static void handle_two_instruction_lea_and_store_global_var(instruction_t* lea_statement, instruction_t* store_instruction){
-	//The size is based on the store instruction's type
-	variable_size_t size = get_type_size(store_instruction->assignee->type);
-
-	//Select the instruction type accordingly
-	switch(size){
-		case QUAD_WORD:
-			store_instruction->instruction_type = MOVQ;
-			break;
-		case DOUBLE_WORD:
-			store_instruction->instruction_type = MOVL;
-			break;
-		case WORD:
-			store_instruction->instruction_type = MOVW;
-			break;
-		case BYTE:
-			store_instruction->instruction_type = MOVB;
-			break;
-		default:
-			break;
-	}
-
 	//This is a memory write
 	store_instruction->memory_access_type = WRITE_TO_MEMORY;
 
@@ -4906,13 +4844,8 @@ static void handle_two_instruction_lea_and_store_global_var(instruction_t* lea_s
 	//The multiplicator as well
 	store_instruction->lea_multiplicator = lea_statement->lea_multiplicator;
 
-	//If we have op1, then our source is op1
-	if(store_instruction->op1 != NULL){
-		store_instruction->source_register = store_instruction->op1;
-	//Otherwise our source is the constant
-	} else {
-		store_instruction->source_immediate = store_instruction->op1_const;
-	}
+	//Invoke the helper here
+	handle_store_instruction_sources_and_instruction_type(store_instruction);
 }
 
 
@@ -4934,26 +4867,15 @@ static void handle_three_instruction_load_with_lea_operation(instruction_window_
 	instruction_t* lea_statement = window->instruction2;
 	instruction_t* load_with_variable_offset = window->instruction3;
 
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_with_variable_offset->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_with_variable_offset->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_with_variable_offset->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_with_variable_offset->op1->type);
 
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			load_with_variable_offset->instruction_type = MOVB;
-			break;
-		case WORD:
-			load_with_variable_offset->instruction_type = MOVW;
-			break;
-		case DOUBLE_WORD:
-			load_with_variable_offset->instruction_type = MOVL;
-			break;
-		case QUAD_WORD:
-			load_with_variable_offset->instruction_type = MOVQ;
-			break;
-		default:
-			break;
-	}
+	//Let the helper select the type
+	load_with_variable_offset->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is a full address calculation here
 	load_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
@@ -4980,8 +4902,8 @@ static void handle_three_instruction_load_with_lea_operation(instruction_window_
 	//The offset on the outside comes from the constant assignment
 	load_with_variable_offset->offset = constant_assignment->op1_const;
 	
-	//And the destination is always the assignee
-	load_with_variable_offset->destination_register = load_with_variable_offset->assignee;
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_with_variable_offset, load_with_variable_offset->address_calc_reg1->type);
 	
 	return;
 }
@@ -5004,27 +4926,6 @@ static void handle_three_instruction_store_with_lea_operation(instruction_window
 	instruction_t* constant_assignment = window->instruction1;
 	instruction_t* lea_statement = window->instruction2;
 	instruction_t* store_with_variable_offset = window->instruction3;
-
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(store_with_variable_offset->assignee->type);
-
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			store_with_variable_offset->instruction_type = MOVB;
-			break;
-		case WORD:
-			store_with_variable_offset->instruction_type = MOVW;
-			break;
-		case DOUBLE_WORD:
-			store_with_variable_offset->instruction_type = MOVL;
-			break;
-		case QUAD_WORD:
-			store_with_variable_offset->instruction_type = MOVQ;
-			break;
-		default:
-			break;
-	}
 
 	//This is a full address calculation here
 	store_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
@@ -5051,14 +4952,9 @@ static void handle_three_instruction_store_with_lea_operation(instruction_window
 	//The offset on the outside comes from the constant assignment
 	store_with_variable_offset->offset = constant_assignment->op1_const;
 
-	//If we have op1, then our source is op1
-	if(store_with_variable_offset->op2 != NULL){
-		store_with_variable_offset->source_register = store_with_variable_offset->op2;
-	//Otherwise our source is the constant
-	} else {
-		store_with_variable_offset->source_immediate = store_with_variable_offset->op1_const;
-	}
-	
+	//Invoke the helper here
+	handle_store_instruction_sources_and_instruction_type(store_with_variable_offset);
+
 	return;
 }
 
@@ -5084,26 +4980,15 @@ static void handle_three_instruction_load_with_address_calculation_operation(ins
 	instruction_t* addition = window->instruction2;
 	instruction_t* load_with_variable_offset = window->instruction3;
 
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(load_with_variable_offset->assignee->type);
+	//The size is based on the store instruction's type
+	variable_size_t destination_size = get_type_size(load_with_variable_offset->assignee->type);
+	//Is the destination singed?
+	u_int8_t is_destination_signed = is_type_signed(load_with_variable_offset->assignee->type);
+	//We will also need to determine the source's size
+	variable_size_t source_size = get_type_size(load_with_variable_offset->op1->type);
 
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			load_with_variable_offset->instruction_type = MOVB;
-			break;
-		case WORD:
-			load_with_variable_offset->instruction_type = MOVW;
-			break;
-		case DOUBLE_WORD:
-			load_with_variable_offset->instruction_type = MOVL;
-			break;
-		case QUAD_WORD:
-			load_with_variable_offset->instruction_type = MOVQ;
-			break;
-		default:
-			break;
-	}
+	//Let the helper select the type
+	load_with_variable_offset->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is a full address calculation here
 	load_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
@@ -5130,9 +5015,9 @@ static void handle_three_instruction_load_with_address_calculation_operation(ins
 	//The offset on the outside comes from the constant assignment
 	load_with_variable_offset->offset = addition->op1_const;
 	
-	//And the destination is always the assignee
-	load_with_variable_offset->destination_register = load_with_variable_offset->assignee;
-	
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(load_with_variable_offset, load_with_variable_offset->address_calc_reg1->type);
+
 	return;
 }
 
@@ -5156,27 +5041,6 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
 	instruction_t* multiplication = window->instruction1;
 	instruction_t* addition = window->instruction2;
 	instruction_t* store_with_variable_offset = window->instruction3;
-
-	//Select the variable size based on the assignee
-	variable_size_t size = get_type_size(store_with_variable_offset->assignee->type);
-
-	//Now based on the size, we can select what variety to register/immediate to memory move we have here
-	switch (size) {
-		case BYTE:
-			store_with_variable_offset->instruction_type = MOVB;
-			break;
-		case WORD:
-			store_with_variable_offset->instruction_type = MOVW;
-			break;
-		case DOUBLE_WORD:
-			store_with_variable_offset->instruction_type = MOVL;
-			break;
-		case QUAD_WORD:
-			store_with_variable_offset->instruction_type = MOVQ;
-			break;
-		default:
-			break;
-	}
 
 	//This is a full address calculation here
 	store_with_variable_offset->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
@@ -5203,14 +5067,9 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
 	//This comes from the addition
 	store_with_variable_offset->offset = addition->op1_const;
 
-	//If we have op1, then our source is op1
-	if(store_with_variable_offset->op2 != NULL){
-		store_with_variable_offset->source_register = store_with_variable_offset->op2;
-	//Otherwise our source is the constant
-	} else {
-		store_with_variable_offset->source_immediate = store_with_variable_offset->op1_const;
-	}
-	
+	//Invoke the helper here
+	handle_store_instruction_sources_and_instruction_type(store_with_variable_offset);
+
 	return;
 }
 
@@ -5249,7 +5108,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		variable_size_t source_size = get_type_size(set_instruction->destination_register->type);
 		u_int8_t destination_signed = is_type_signed(assignment->assignee->type);
 
-		assignment->instruction_type = select_register_movement_instruction(destination_size, source_size, destination_signed);
+		assignment->instruction_type = select_move_instruction(destination_size, source_size, destination_signed);
 		//Assignee and destination are the same
 		assignment->destination_register = assignment->assignee;
 		//The source is now this set instruction's destination

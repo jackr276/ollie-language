@@ -3397,10 +3397,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//This will not be null in the case of structs & arrays
 				if(current_offset != NULL){
 					//Calculate our load here
-					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(original_memory_access_type), base_address, current_offset);
+					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(parent_node_type), type_adjusted_base_address, current_offset);
 
 					//Counts as uses for both
-					add_used_variable(current_block, base_address);
+					add_used_variable(current_block, type_adjusted_base_address);
 					add_used_variable(current_block, current_offset);
 
 					//Add it into the block
@@ -3412,11 +3412,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//Otherwise we have a null current offset, so we're just
 				//relying on the base address
 				} else {
-					//Emit a regular load here
-					load_instruction = emit_load_ir_code(emit_temp_var(original_memory_access_type), base_address);
+					//Emit the load instruction between the base address and the parent node type
+					load_instruction = emit_load_ir_code(emit_temp_var(parent_node_type), type_adjusted_base_address);
 
 					//Counts as a use
-					add_used_variable(current_block, base_address);
+					add_used_variable(current_block, type_adjusted_base_address);
 
 					//Add it into the block
 					add_statement(current_block, load_instruction);
@@ -3425,27 +3425,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					postfix_results.assignee = load_instruction->assignee;
 				}
 
-
-				/**
-				 * It is possible that through type coercion, casting, etc., we need to do a converting
-				 * move between what we got out of memory and what we're expecting to return from this
-				 * rule. We'll do so here. Remember, the parent node type *may* have been casted/coerced
-				 */
-				if(is_converting_move_required(parent_node_type, original_memory_access_type) == TRUE){
-					//Conversion instruction
-					instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parent_node_type), load_instruction->assignee);
-					assignment->is_branch_ending = is_branch_ending;
-
-					//This counts as a use
-					add_used_variable(current_block, load_instruction->assignee);
-
-					//Add it into the block
-					add_statement(current_block, assignment);
-
-					//The final assignee now is this one's
-					postfix_results.assignee = assignment->assignee;
-				}
-				
 				break;
 		}
 
@@ -3574,21 +3553,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		if(is_store_operation(current_block->exit_statement) == TRUE){
 			//This is our store statement
 			instruction_t* store_statement = current_block->exit_statement;
-
-			//Are we going to need a converting move here?
-			if(is_converting_move_required(store_statement->assignee->type, assignee->type) == TRUE){
-				//Converting move
-				instruction_t* converting_move = emit_assignment_instruction(emit_temp_var(store_statement->assignee->type), assignee);
-				converting_move->is_branch_ending = is_branch_ending;
-				//Counts as a use
-				add_used_variable(current_block, assignee);
-
-				//Get this in before the store
-				insert_instruction_before_given(converting_move, store_statement);
-
-				//Reassign this
-				assignee = converting_move->assignee;
-			}
 
 			/**
 			 * Different store statement types have different areas where the operands go
@@ -3743,21 +3707,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//This is our store statement
 					instruction_t* store_statement = current_block->exit_statement;
 
-					//Are we going to need a converting move here?
-					if(is_converting_move_required(store_statement->assignee->type, assignee->type) == TRUE){
-						//Converting move
-						instruction_t* converting_move = emit_assignment_instruction(emit_temp_var(store_statement->assignee->type), assignee);
-						converting_move->is_branch_ending = is_branch_ending;
-						//Counts as a use
-						add_used_variable(current_block, assignee);
-
-						//Get this in before the store
-						insert_instruction_before_given(converting_move, store_statement);
-
-						//Reassign this
-						assignee = converting_move->assignee;
-					}
-
 					/**
 					 * Different store statement types have different areas where the operands go
 					 */
@@ -3814,9 +3763,18 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Update the block
 			current_block = unary_package.final_block;
 
+			//The pointer will be on the unary expression child
+			generic_type_t* pointer_type = unary_expression_child->inferred_type;
+			//And the final type comes from when we dereference it
+			generic_type_t* dereferenced_type = dereference_type(pointer_type);
+
 			//The indiredct version's type is just what we point to
 			three_addr_var_t* indirect_version = emit_var_copy(assignee);
-			indirect_version->type = unary_expression_parent->inferred_type;
+
+			//The type here is what we have after our derference. It is not the inferred type
+			//of the unary node itself, because that type may have undergone type coercion and
+			//is not always accurate to the memory region itself
+			indirect_version->type = dereferenced_type;
 
 			/**
 			 * If we make it here, we will return an *incomplete* store
@@ -3847,7 +3805,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
 			} else {
 				//If the side type here is right, we'll need a load instruction
-				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(indirect_version->type), indirect_version);
+				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(unary_expression_parent->inferred_type), indirect_version);
 
 				//The dereferenced variable has been used
 				add_used_variable(current_block, indirect_version);
@@ -4368,22 +4326,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//This is our store statement
 		instruction_t* store_statement = current_block->exit_statement;
 
-		//Are we going to need a converting move here?
-		if((last_instruction == NULL || last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT)
-			&& is_converting_move_required(store_statement->assignee->type, final_op1->type) == TRUE){
-			//Converting move
-			instruction_t* converting_move = emit_assignment_instruction(emit_temp_var(store_statement->assignee->type), final_op1);
-			converting_move->is_branch_ending = is_branch_ending;
-			//Counts as a use
-			add_used_variable(current_block, final_op1);
-
-			//Get this in before the store
-			insert_instruction_before_given(converting_move, store_statement);
-
-			//Reassign this
-			final_op1 = converting_move->assignee;
-		}
-
 		/**
 		 * Different store statement types have different areas where the operands go
 		 */
@@ -4393,6 +4335,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				//If the last instruction is *not* a constant assignment, we can go ahead like this
 				if(last_instruction == NULL
 					|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+
 					//This is now our op1
 					current_block->exit_statement->op1 = final_op1;
 
@@ -8116,24 +8059,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//If the last instruction is *not* a constant assignment, we can go ahead like this
 		if(last_instruction == NULL
 			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-
-			//Grab the assignee here
-			three_addr_var_t* assignee = package.assignee;
-
-			//Are we going to need a converting move here?
-			if(is_converting_move_required(store_statement->assignee->type, assignee->type) == TRUE){
-				//Converting move
-				instruction_t* converting_move = emit_assignment_instruction(emit_temp_var(store_statement->assignee->type), assignee);
-				converting_move->is_branch_ending = is_branch_ending;
-				//Counts as a use
-				add_used_variable(current_block, assignee);
-
-				//Get this in before the store
-				insert_instruction_before_given(converting_move, store_statement);
-
-				//Reassign this
-				assignee = converting_move->assignee;
-			}
 
 			//This is now our op1
 			store_statement->op1 = package.assignee;
