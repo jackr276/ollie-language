@@ -483,20 +483,28 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 
 
 /**
- * Update the estimate on spilling this variable
+ * Update the cost estimate for all live ranges in the event that we need to spill
+ * them. This step is crucial in determining the ordering of live range values during register
+ * allocation
  */
-static void update_spill_cost(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
-	//Theres no point in updating either of these because they will never be spilled
-	if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
-		return;
+static void update_spill_costs(dynamic_array_t* live_ranges){
+	//Run through every single live range
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		//Extract the given LR
+		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
+
+		//Theres no point in updating either of these because they will never be spilled
+		if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
+			return;
+		}
+
+		//The cost of spilling a live range is always the assignment count times the cost to store plus
+		//the use count times the cost to use
+		u_int32_t spill_cost = live_range->assignment_count * STORE_COST + live_range->use_count * LOAD_COST;
+
+		//Add it into the live range's existing spill cost
+		live_range->spill_cost = spill_cost;
 	}
-
-	//The cost of spilling a live range is always the assignment count times the cost to store plus
-	//the use count times the cost to use
-	u_int32_t spill_cost = live_range->assignment_count * STORE_COST + live_range->use_count * LOAD_COST;
-
-	//Add it into the live range's existing spill cost
-	live_range->spill_cost += spill_cost;
 }
 
 
@@ -555,11 +563,8 @@ static void add_live_now_live_range(live_range_t* live_range, dynamic_array_t* L
  * Add a variable to a live range, if it isn't already in there
  */
 static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
-	//If the literal memory address is already in here, then all we need to do is update
-	//the cost
+	//If the literal memory address is already in here we leave
 	if(dynamic_array_contains(live_range->variables, variable) != NOT_FOUND){
-		//Update the cost
-		update_spill_cost(live_range, block, variable);
 		return;
 	}
 
@@ -573,9 +578,6 @@ static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* 
 
 	//Otherwise we'll add this in here
 	dynamic_array_add(live_range->variables, variable);
-
-	//Update the cost
-	update_spill_cost(live_range, block, variable);
 }
 
 
@@ -612,9 +614,6 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 
 	//We now add this variable back into the live range
 	add_variable_to_live_range(live_range, block, variable);
-
-	//Update the spill cost
-	update_spill_cost(live_range, block, variable);
 
 	//Give it back
 	return live_range;
@@ -1196,6 +1195,9 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		//These are both used and assigned to not at all
 		current->use_count = 0;
 		current->assignment_count = 0;
+
+		//The spill cost is also wiped out now
+		current->spill_cost = 0;
 
 		//And we'll also reset all of the neighbors
 		reset_dynamic_array(current->neighbors);
@@ -3091,8 +3093,18 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 * 	that will be needed for step 2
 	 *
 	 * 	We only need to do this once for the allocation
-	*/
+	 */
 	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
+
+	/**
+	 * STEP 2: Update spill costs for live ranges
+	 *
+	 * Once we've constructed all of our live ranges, we need to go through and
+	 * update the spill cost for each one according to its use and assignment
+	 * counts. Since it is not possible to get an accurate use/assignment count
+	 * until the entire cfg is combed over, we need to do this in a separate step
+	 */
+	update_spill_costs(live_ranges);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
@@ -3100,8 +3112,9 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		print_blocks_with_live_ranges(cfg);
 		printf("============= Before Liveness ==============\n");
 	}
+
 	/**
-	 * STEP 2: Construct LIVE_IN and LIVE_OUT sets
+	 * STEP 3: Construct LIVE_IN and LIVE_OUT sets
 	 *
 	 * Before we can properly determine interference, we need
 	 * to construct the LIVE_IN and LIVE_OUT sets in each block.
@@ -3120,7 +3133,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	}
 
 	/**
-	 * STEP 3: Construct the interference graph
+	 * STEP 4: Construct the interference graph
 	 *
 	 * Now that we have the LIVE_IN and LIVE_OUT sets constructed, we're able
 	 * to determine the interference that exists between Live Ranges. This is
@@ -3139,7 +3152,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	}
 
 	/**
-	 * STEP 4: Pre-coloring registers
+	 * STEP 5: Pre-coloring registers
 	 *
 	 * Now that we have the interference calculated, we will "pre-color" live ranges
 	 * whose color is known before allocation. This includes things like:
@@ -3158,7 +3171,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	}
 
 	/**
-	 * STEP 5: Live range coalescence optimization
+	 * STEP 6: Live range coalescence optimization
 	 *
 	 * One small optimization that we can make is to perform live-range coalescence
 	 * on our given live ranges. We are able to coalesce live ranges if they do
@@ -3205,7 +3218,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	}
 
 	/**
-	 * STEP 6: Invoke the actual allocator
+	 * STEP 7: Invoke the actual allocator
 	 *
 	 * The allocator will attempt to color the graph. If the graph is not k-colorable, 
 	 * then the allocator will spill the least costly LR and return FALSE, and we will go through
@@ -3266,7 +3279,7 @@ spill_loop:
 	}
 
 	/**
-	 * STEP 6: caller/callee saving logic
+	 * STEP 8: caller/callee saving logic
 	 *
 	 * Once we make it down here, we have colored the entire graph successfully. But,
 	 * we still need to insert any caller/callee saving logic that is needed
@@ -3275,7 +3288,7 @@ spill_loop:
 	insert_saving_logic(cfg);
 
 	/**
-	 * STEP 7: final cleanup pass
+	 * STEP 9: final cleanup pass
 	 *
 	 * This is detailed more in the postprocessor.c file that we're invoking
 	 * here
