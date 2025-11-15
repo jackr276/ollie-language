@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/ucontext.h>
 
 //The atomically increasing live range id
 u_int32_t live_range_id = 0;
@@ -141,7 +142,7 @@ static u_int32_t increment_and_get_live_range_id(){
 /**
  * Create a live range
  */
-static live_range_t* live_range_alloc(symtab_function_record_t* function_defined_in, variable_size_t size){
+static live_range_t* live_range_alloc(symtab_function_record_t* function_defined_in){
 	//Calloc it
 	live_range_t* live_range = calloc(1, sizeof(live_range_t));
 
@@ -150,7 +151,6 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
 
 	//And create it's dynamic array
 	live_range->variables = dynamic_array_alloc();
-
 
 	//Store what function this came from
 	live_range->function_defined_in = function_defined_in;
@@ -180,7 +180,7 @@ static live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, bas
 	}
 
 	//Otherwise if we get here, we'll need to make it ourselves
-	live_range = live_range_alloc(block->function_defined_in, get_type_size(variable->type));
+	live_range = live_range_alloc(block->function_defined_in);
 
 	//Add it into the live range
 	dynamic_array_add(live_ranges, live_range);
@@ -597,7 +597,7 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 		//This is a function parameter, we need to make it ourselves
 		if(variable->linked_var != NULL && variable->linked_var->membership == FUNCTION_PARAMETER){
 			//Create it. Since this is a function parameter, we start at line 0
-			live_range = live_range_alloc(block->function_defined_in, variable->variable_size);
+			live_range = live_range_alloc(block->function_defined_in);
 
 			//Finally add this into all of our live ranges
 			dynamic_array_add(live_ranges, live_range);
@@ -623,7 +623,7 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* stack_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the stack pointer. Special case here - stack pointer has no block
-	live_range_t* stack_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
+	live_range_t* stack_pointer_live_range = live_range_alloc(NULL);
 	//This is guaranteed to be RSP - so it's already been allocated
 	stack_pointer_live_range->reg = RSP;
 	//And we absolutely *can not* spill it
@@ -655,7 +655,7 @@ static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t*
 static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* instruction_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the instruction pointer.
-	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL, QUAD_WORD);
+	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL);
 	//This is guaranteed to be RSP - so it's already been allocated
 	instruction_pointer_live_range->reg = RIP;
 	//And we absolutely *can not* spill it
@@ -2347,42 +2347,6 @@ static u_int8_t allocate_register(live_range_t* live_range){
 
 
 /**
- * Does a given instruction use a given LR in any way?
- */
-
-
-/**
- * Scan the CFG and get all instructions that we will need to deal with when
- * spilling
- */
-static dynamic_array_t* get_spill_instructions(cfg_t* cfg, live_range_t* spill_range){
-	//Allocate the dynamic array that we'll be using
-	dynamic_array_t* instructions = dynamic_array_alloc();
-
-	//Grab a block cursor
-	basic_block_t* cursor = cfg->head_block;
-
-	//So long as this is not NULL, keep going
-	while(cursor != NULL){
-		//Now we'll crawl through every instruction
-		instruction_t* current_instruction = cursor->leader_statement;
-
-		//Run through all instructions here
-		while(current_instruction != NULL){
-
-			//Advance to the next statement
-			current_instruction = current_instruction->next_statement;
-		}
-
-		//Go to the direct successor
-		cursor = cursor->direct_successor;
-	}
-
-	//Give it back
-	return instructions;
-}
-
-/**
  * Get the largest type in a given Live range. This is used for determining stack allocation
  * size. We need to do this due to how type coercion can work in OC
  */
@@ -2417,14 +2381,56 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
  * Spill a given live range across the entire CFG. Remember that when we spill,
  * we replace every use of the old live range with a load and every assignment
  * with a store.
+ *
+ * For instance:
+ *
+ * spill_range = LR33
+ *
+ * addb LR10, LR33
+ *
+ * Should become
+ *
+ * movb (LR0), LR35(new)
+ * addb LR10, LR35
+ * movb LR35, (LR0)
+ *
+ * And LR33 is nowhere to be seen anymore
  */
 static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
-	//Let the helper get every single instruction that we will need to contend with
-	dynamic_array_t* worklist = get_spill_instructions(cfg, spill_range);
+	//Extract the function that we're using
+	symtab_function_record_t* function = spill_range->function_defined_in;
 
 	//Let's first create the stack region for our spill range
-	stack_region_t* spill_region = create_stack_region_for_type(spill_range, )
+	stack_region_t* spill_region = create_stack_region_for_type(&(function->data_area), get_largest_type_in_live_range(spill_range));
 
+	//Now that we have our spill region, we need to start crawling through the entire CFG and replacing
+	//all uses/assignments appropriately
+	
+	//Grab a cursor
+	basic_block_t* block_cursor = cfg->head_block;
+
+	//So long as it's not null
+	while(block_cursor != NULL){
+		//Now we need an instruction cursor
+		instruction_t* cursor = block_cursor->leader_statement;
+
+		//So long as this is not NULL, keep going
+		while(cursor != NULL){
+
+			//Push it up to the next instruction
+			cursor = cursor->next_statement;
+		}
+
+		//Push it up
+		block_cursor = block_cursor->direct_successor;
+	}
+
+	//IMPORTANT - the spill range is no longer a live range that we're worrying about so remove
+	//it entirely
+	dynamic_array_delete(live_ranges, spill_range);
+
+	//For now, just bail out
+	exit(1);
 }
 
 
@@ -2468,10 +2474,6 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 		//Otherwise put it into our priority queue
 		dynamic_array_priority_insert_live_range(priority_live_ranges, live_range);
 	}
-
-	printf("PRIORITY LIVE RANGES:\n");
-	print_live_range_array(priority_live_ranges);
-	printf("\n\n\n");
 
 	//So long as this isn't empty
 	while(dynamic_array_is_empty(priority_live_ranges) == FALSE){

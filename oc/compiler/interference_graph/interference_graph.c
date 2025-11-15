@@ -205,11 +205,6 @@ u_int8_t do_live_ranges_interfere(interference_graph_t* graph, live_range_t* a, 
 		return TRUE;
 	}
 
-	//If they have differing sizes we cannot coalesce
-	if(a->size != b->size){
-		return TRUE;
-	}
-
 	//To determine this, we'll first need the offset
 	u_int16_t offset_a_b = a->interference_graph_index * graph->live_range_count + b->interference_graph_index;
 
