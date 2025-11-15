@@ -487,7 +487,7 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
  * them. This step is crucial in determining the ordering of live range values during register
  * allocation
  */
-static void update_spill_costs(dynamic_array_t* live_ranges){
+static void compute_spill_costs(dynamic_array_t* live_ranges){
 	//Run through every single live range
 	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
 		//Extract the given LR
@@ -495,7 +495,7 @@ static void update_spill_costs(dynamic_array_t* live_ranges){
 
 		//Theres no point in updating either of these because they will never be spilled
 		if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
-			return;
+			continue;
 		}
 
 		//The cost of spilling a live range is always the assignment count times the cost to store plus
@@ -630,7 +630,7 @@ static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t*
 	//This is guaranteed to be RSP - so it's already been allocated
 	stack_pointer_live_range->reg = RSP;
 	//And we absolutely *can not* spill it
-	stack_pointer_live_range->spill_cost = INT16_MAX;
+	stack_pointer_live_range->spill_cost = UINT32_MAX;
 
 	//This is precolor
 	stack_pointer_live_range->is_precolored = TRUE;
@@ -662,7 +662,7 @@ static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_ar
 	//This is guaranteed to be RSP - so it's already been allocated
 	instruction_pointer_live_range->reg = RIP;
 	//And we absolutely *can not* spill it
-	instruction_pointer_live_range->spill_cost = INT16_MAX;
+	instruction_pointer_live_range->spill_cost = UINT32_MAX;
 
 	//This is precolor
 	instruction_pointer_live_range->is_precolored = TRUE;
@@ -3096,21 +3096,28 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 */
 	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
 
+	//If we are printing these now is the time to display
+	if(print_irs == TRUE){
+		printf("============= Before Liveness ==============\n");
+		print_blocks_with_live_ranges(cfg);
+		printf("============= Before Liveness ==============\n");
+	}
+
 	/**
-	 * STEP 2: Update spill costs for live ranges
+	 * STEP 2: Compute spill costs for live ranges
 	 *
 	 * Once we've constructed all of our live ranges, we need to go through and
 	 * update the spill cost for each one according to its use and assignment
 	 * counts. Since it is not possible to get an accurate use/assignment count
 	 * until the entire cfg is combed over, we need to do this in a separate step
 	 */
-	update_spill_costs(live_ranges);
+	compute_spill_costs(live_ranges);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
-		printf("============= Before Liveness ==============\n");
-		print_blocks_with_live_ranges(cfg);
-		printf("============= Before Liveness ==============\n");
+		printf("=============== After Cost Update ============\n");
+		print_all_live_ranges(live_ranges);
+		printf("=============== After Cost Update ============\n");
 	}
 
 	/**
@@ -3201,6 +3208,10 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		//First step - recalculate all of our used & assigned sets
 		recompute_used_and_assigned_sets(cfg);
 
+		//After we coalesce, we need to recompute all of the
+		//spill costs
+		compute_spill_costs(live_ranges);
+
 		//Then - recalculate all liveness sets
 		calculate_live_range_liveness_sets(cfg);
 
@@ -3238,6 +3249,8 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 spill_loop:
 	//Keep going so long as we can't color
 	while(colorable == FALSE){
+		exit(1);
+
 		/**
 		 * Spill Step 1: wipe everything
 		 */
@@ -3248,6 +3261,13 @@ spill_loop:
 		 * to recompute all of our used/assigned sets
 		 */
 		recompute_used_and_assigned_sets(cfg);
+
+		/**
+		 * Now that we've recomputed the used and assigned
+		 * sets, we need to go back through and update all of our spill
+		 * costs
+		 */
+		compute_spill_costs(live_ranges);
 
 		/**
 		 * Following that, we need to go through and calculate
