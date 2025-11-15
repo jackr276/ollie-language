@@ -562,7 +562,7 @@ static void add_live_now_live_range(live_range_t* live_range, dynamic_array_t* L
 /**
  * Add a variable to a live range, if it isn't already in there
  */
-static void add_variable_to_live_range(live_range_t* live_range, basic_block_t* block, three_addr_var_t* variable){
+static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_t* variable){
 	//If the literal memory address is already in here we leave
 	if(dynamic_array_contains(live_range->variables, variable) != NOT_FOUND){
 		return;
@@ -613,7 +613,7 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 	}
 
 	//We now add this variable back into the live range
-	add_variable_to_live_range(live_range, block, variable);
+	add_variable_to_live_range(live_range, variable);
 
 	//Give it back
 	return live_range;
@@ -727,7 +727,7 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 	live_range_t* live_range = find_or_create_live_range(live_ranges, block, destination_register);
 
 	//Add this into the live range
-	add_variable_to_live_range(live_range, block, destination_register);
+	add_variable_to_live_range(live_range, destination_register);
 
 	//Invoke the helper for this part
 	update_use_assignment_for_destination_variable(instruction, block);
@@ -749,7 +749,7 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 	live_range = find_or_create_live_range(live_ranges, block, destination_register2);
 
 	//Add this into the live range
-	add_variable_to_live_range(live_range, block, destination_register2);
+	add_variable_to_live_range(live_range, destination_register2);
 
 	//This will *always* be a purely assigned live range
 	add_assigned_live_range(live_range, block);
@@ -821,7 +821,7 @@ static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basi
 	live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, instruction->assignee);
 
 	//Add this into the live range
-	add_variable_to_live_range(live_range, basic_block, instruction->assignee);
+	add_variable_to_live_range(live_range, instruction->assignee);
 }
 
 
@@ -844,13 +844,13 @@ static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_blo
 		live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, instruction->destination_register);
 
 		//Add this into the live range
-		add_variable_to_live_range(live_range, basic_block, instruction->destination_register);
+		add_variable_to_live_range(live_range, instruction->destination_register);
 
 		//This does count as an assigned live range
 		add_assigned_live_range(live_range, basic_block);
 
 		//Assign the live range to op1 in here as well
-		add_variable_to_live_range(live_range, basic_block, instruction->source_register);
+		add_variable_to_live_range(live_range, instruction->source_register);
 
 		//Since we rely on this value being live for the instruction, this also counts
 		//as a use
@@ -2278,285 +2278,6 @@ static u_int8_t perform_live_range_coalescence(cfg_t* cfg, interference_graph_t*
 
 	//Give back whether or not we did coalesce
 	return coalescence_occured;
-}
-
-
-/**
- * Spill an assignment instruction by emitting a store statement to add this into
- * memory. This is easier than a use spill because all we need to do
- * is insert a store instruction right after the use
- */
-static void handle_assignment_spill(three_addr_var_t* var, live_range_t* spill_range, instruction_t* instruction){
-	//Let the helper do this for us
-	instruction_t* store = emit_store_instruction(var, stack_pointer, type_symtab, spill_range->stack_region->base_address);
-
-	//Grab the block out too
-	basic_block_t* block = instruction->block_contained_in;
-
-	//Link this in too
-	store->block_contained_in = block;
-
-	//Insert the store after the assignment
-	insert_instruction_after_given(store, instruction);
-}
-
-
-/**
- * Spill a use into memory and replace the live ranges appropriately
- *
- * We will be emitting a new live range here, so we should give it back as a pointer
- */
-static live_range_t* handle_use_spill(dynamic_array_t* live_ranges, three_addr_var_t* affected_var, live_range_t* spill_range, instruction_t* instruction){
-	//Copy the old variable
-	three_addr_var_t* new_var = emit_var_copy(affected_var);
-
-	//Grab the block out too
-	basic_block_t* block = instruction->block_contained_in;
-
-	//Create a new live range just for this variable
-	new_var->associated_live_range = live_range_alloc(block->function_defined_in, affected_var->variable_size);
-
-	//Add this variable to this live range
-	add_variable_to_live_range(new_var->associated_live_range, block, new_var);
-
-	//Copy the function parameter order over to preserve these details
-	new_var->associated_live_range->function_parameter_order = affected_var->associated_live_range->function_parameter_order;
-
-	//Add this in to our current list of live ranges
-	dynamic_array_add(live_ranges, new_var->associated_live_range);
-
-	//Now we'll want to load from memory
-	instruction_t* load = emit_load_instruction(new_var, stack_pointer, type_symtab, spill_range->stack_region->base_address);
-
-	//Link the load instruction with what block it's in
-	load->block_contained_in = block;
-
-	//Insert the load instruction before the use
-	insert_instruction_before_given(load, instruction);
-
-	//Give back this live range now
-	return new_var->associated_live_range;
-}
-
-
-/**
- * Handle a spill of a source variable. This could include true source variables *or* instances where the destination is also a source
- */
-static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* target_source, live_range_t** currently_spilled, live_range_t* spill_range, instruction_t* instruction){
-	//No point in going on here
-	if(target_source == NULL || target_source->associated_live_range != spill_range){
-		return;
-	}
-
-	//If we make it here, then we know that we've got a match
-	
-	//If we do not already have something in memory that's been spilled,
-	//we will spill again
-	if(*currently_spilled == NULL){
-		//Invoke the helper for a use spill
-		target_source->associated_live_range = handle_use_spill(live_ranges, target_source, spill_range, instruction);
-		
-		//Be sure to flag currently spilled for the next use
-		*currently_spilled = target_source->associated_live_range;
-	}
-
-	target_source->associated_live_range = *currently_spilled;
-}
-
-
-/**
- * Spill a live range to memory to make a graph N-colorable
- *
- * After a live range is spilled, all definitions go to memory, and all uses
- * come from memory(stack memory)
- *
- * RULES:
- * Every assignment must now be followed by a store 
- * Every use must be preceeded by a load
- */
-static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
-	//We just need this for the type
-	three_addr_var_t* var = dynamic_array_get_at(spill_range->variables, 0);
-
-	//Update the spill range to now have a stack region
-	spill_range->stack_region = create_stack_region_for_type(&(spill_range->function_defined_in->data_area), var->type);
-
-	//Now that we've added this in, we'll need to go through and add 
-	//the loads and stores
-	
-	//Optimization - live-ranges are function level, so we'll just go through the function
-	//blocks until we find one that matches this function
-	basic_block_t* function_block;
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-		//Grab the block out
-		function_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
-
-		//We've got our match
-		if(function_block->function_defined_in == spill_range->function_defined_in){
-			break;
-		}
-	}
-
-	/**
-	 * Keep track of what is currently spilled. If something is currently spilled
-	 * and we have not yet modified the value(written to destination), then we
-	 * don't need to keep loading at every use
-	 */
-	live_range_t* currently_spilled = NULL;
-
-	//Now we have our function block, and we'll crawl it until we reach the end
-	while(function_block != NULL){
-		//Now we'll crawl this block and find every place where this live range is used/defined
-		instruction_t* current = function_block->leader_statement;
-
-		//Crawl through every block
-		while(current != NULL){
-			//Handle all of the source spills
-			handle_source_spill(live_ranges, current->source_register, &currently_spilled, spill_range, current);
-			handle_source_spill(live_ranges, current->source_register2, &currently_spilled, spill_range, current);
-			handle_source_spill(live_ranges, current->address_calc_reg1, &currently_spilled, spill_range, current);
-			handle_source_spill(live_ranges, current->address_calc_reg2, &currently_spilled, spill_range, current);
-
-			/**
-			 * We also need to handle source spills for function calls and 
-			 * all of their parameters
-			 */
-			if(current->parameters != NULL && current->instruction_type != PHI_FUNCTION){
-				//Extract for convenience
-				dynamic_array_t* function_parameters = current->parameters;
-
-				//Run through
-				for(u_int16_t i = 0; i < function_parameters->current_index; i++){
-					//Extract it
-					three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
-
-					//This counts as a source
-					handle_source_spill(live_ranges, parameter, &currently_spilled, spill_range, current);
-				}
-			}
-
-			/**
-			 * Destination registers are a unique case because they could be source registers
-			 * as well. Additionally, if the destination register is being dereferenced, then
-			 * it is not truly a destination, and should be treated as a use
-			 */
-			if(current->destination_register != NULL){
-				/**
-				 * Option 1: it could equal the spill range, and as such we have to deal with it
-				 */
-				if(current->destination_register->associated_live_range == spill_range){
-					//This counts as a source spill, and nothing more
-					if(is_destination_assigned(current) == FALSE){
-						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
-
-					//Otherwise, we could also have a case where the destination is also
-					//our operand. This will lead us to having a source spill *and* an assignment
-					//spill afterwards
-					} else if(is_destination_also_operand(current) == TRUE){
-						//Do the source spill first
-						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
-
-						//Now handle the assignment spill
-						handle_assignment_spill(current->destination_register, spill_range, current);
-
-						//And wipe out the currently spilled index
-						currently_spilled = NULL;
-
-						//Advance this up by 1 to get past the statement we just added in
-						current = current->next_statement;
-
-					//Most basic case, just deal with the assignment spill
-					} else {
-						//Now handle the assignment spill
-						handle_assignment_spill(current->destination_register, spill_range, current);
-
-						//And wipe out the currently spilled index
-						currently_spilled = NULL;
-
-						//Advance this up by 1 to get past the statement we just added in
-						current = current->next_statement;
-					}
-
-				//The other option is that our destination live range *is* the currently spilled live
-				//live range. We'll also need to handle events like this if that's the case
-				} else if(current->destination_register->associated_live_range == currently_spilled){
-					//This counts as a source spill, and nothing more
-					if(is_destination_assigned(current) == FALSE){
-						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
-
-					//Otherwise, we could also have a case where the destination is also
-					//our operand. This will lead us to having a source spill *and* an assignment
-					//spill afterwards
-					} else if(is_destination_also_operand(current) == TRUE){
-						//Do the source spill first
-						handle_source_spill(live_ranges, current->destination_register, &currently_spilled, spill_range, current);
-
-						//Now handle the assignment spill
-						handle_assignment_spill(current->destination_register, spill_range, current);
-
-						//And wipe out the currently spilled index
-						currently_spilled = NULL;
-
-						//Advance this up by 1 to get past the statement we just added in
-						current = current->next_statement;
-
-					//Most basic case, just deal with the assignment spill
-					} else {
-						//Now handle the assignment spill
-						handle_assignment_spill(current->destination_register, spill_range, current);
-
-						//And wipe out the currently spilled index
-						currently_spilled = NULL;
-
-						//Advance this up by 1 to get past the statement we just added in
-						current = current->next_statement;
-					}
-				}
-			}
-
-
-			/**
-			 * Destination registers are a unique case because they could be source registers
-			 * as well. Additionally, if the destination register is being dereferenced, then
-			 * it is not truly a destination, and should be treated as a use
-			 */
-			if(current->destination_register2 != NULL){
-				/**
-				 * Option 1: it could equal the spill range, and as such we have to deal with it
-				 */
-				if(current->destination_register2->associated_live_range == spill_range){
-					//Now handle the assignment spill
-					handle_assignment_spill(current->destination_register2, spill_range, current);
-
-					//And wipe out the currently spilled index
-					currently_spilled = NULL;
-
-					//Advance this up by 1 to get past the statement we just added in
-					current = current->next_statement;
-
-				//The other option is that our destination live range *is* the currently spilled live
-				//live range. We'll also need to handle events like this if that's the case
-				} else if(current->destination_register2->associated_live_range == currently_spilled){
-					//Now handle the assignment spill
-					handle_assignment_spill(current->destination_register2, spill_range, current);
-
-					//And wipe out the currently spilled index
-					currently_spilled = NULL;
-
-					//Advance this up by 1 to get past the statement we just added in
-					current = current->next_statement;
-				}
-			}
-
-			//Advance up by 1
-			current = current->next_statement;
-		}
-
-		//Advance it up
-		function_block = function_block->direct_successor;
-	}
-	
-	//Once we're done spilling, this live range is now completely useless to us
 }
 
 
