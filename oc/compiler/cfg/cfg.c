@@ -4569,6 +4569,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		func_call_stmt->parameters = dynamic_array_alloc();
 	}
 
+	//Create a temporary storage array for all of our function parameter results
+	dynamic_array_t* function_parameter_results = dynamic_array_alloc();
+
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
 	u_int8_t current_func_param_idx = 1;
 
@@ -4587,29 +4590,42 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			result_package.final_block = current;
 		}
 
-		//registers before a function call
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
-
-		//The assignee of the package has been used
-		add_used_variable(current, package.assignee);
-
-		//Add this to the block
-		add_statement(current, assignment);
-
-		//Mark this
-		assignment->assignee->parameter_number = current_func_param_idx;
-		
-		//Add the parameter in
-		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
-
-		//The assignment's assignee is also used
-		add_used_variable(current, assignment->assignee);
+		//Add this into our function parameter results array
+		dynamic_array_add(function_parameter_results, package.assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
 
 		//Increment this
 		current_func_param_idx++;
+	}
+
+	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
+	//themselves
+	for(u_int16_t i = 1; i < current_func_param_idx; i++){
+		//Get the result
+		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
+
+		//Extract the parameter type here
+		generic_type_t* paramter_type = signature->parameters[i-1].parameter_type;
+
+		//We need one more assignment here
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
+
+		//Counts as a use
+		add_used_variable(basic_block, result);
+
+		//Mark this parameter order
+		assignment->assignee->parameter_number = current_func_param_idx;
+
+		//Add this into the block
+		add_statement(basic_block, assignment);
+
+		//Add the parameter in
+		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
+
+		//The assignment here is used implicitly by the function call
+		add_used_variable(current, assignment->assignee);
 	}
 
 	//Once we make it here, we should have all of the params stored in temp vars
@@ -4635,6 +4651,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//This is always the assignee we gave above. Note that this is nullable,
 	//we do 
 	result_package.assignee = assignee;
+
+	//Destroy the function parameter results here
+	dynamic_array_dealloc(function_parameter_results);
 
 	//Give back what we assigned to
 	return result_package;
@@ -4717,9 +4736,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	for(u_int16_t i = 1; i < current_func_param_idx; i++){
 		//Get the result
 		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
+		
+		//Extract the parameter type here
+		generic_type_t* paramter_type = signature->parameters[i-1].parameter_type;
 
 		//We need one more assignment here
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(result->type), result);
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
 
 		//Counts as a use
 		add_used_variable(basic_block, result);
