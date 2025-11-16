@@ -2378,6 +2378,29 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
 
 
 /**
+ * Handle spilling a source register. Doing this will generate a "currently spilled"
+ * LR that we can reuse to avoid tons of extra spill instructions
+ *
+ * Note that the *only* kind of instruction that we can generate here is a load. It will not generate
+ * anything else
+ */
+static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, u_int32_t stack_address){
+
+}
+
+
+/**
+ * Handle spilling a destination register. This will generate a store instruction
+ * after the spill has occurred
+ */
+static void handle_instruction_destination_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, u_int32_t stack_address){
+
+}
+
+
+
+
+/**
  * Spill a given live range across the entire CFG. Remember that when we spill,
  * we replace every use of the old live range with a load and every assignment
  * with a store.
@@ -2416,6 +2439,11 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 		//So long as this is not NULL, keep going
 		while(cursor != NULL){
+			/**
+			 * Since loads will always go *above* our instruction, the first
+			 * thing that we need to handle is all load statements that our instruction
+			 * may generate from spilling. We will invoke the helper to do this
+			 */
 
 			//Push it up to the next instruction
 			cursor = cursor->next_statement;
@@ -2506,7 +2534,7 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 				spill(cfg, live_ranges, range);
 
 				//We could not allocate everything here, so we need to return false to
-				//trigger the restart by the process
+				//trigger the restart by the parent process
 				return FALSE;
 			}
 		}
