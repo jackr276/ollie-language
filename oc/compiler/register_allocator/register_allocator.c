@@ -1620,7 +1620,6 @@ static live_range_t* does_precoloring_interference_exist(live_range_t* coloree, 
 
 		//This collision means we do have interference
 		if(neighbor->reg == reg){
-			printf("CLASH BETWEEN LR%d and LR%d\n", coloree->live_range_id, neighbor->live_range_id);
 			return NULL;
 		}
 	}
