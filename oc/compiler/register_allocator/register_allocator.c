@@ -2430,6 +2430,13 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 
 
 /**
+ * Handle all cases for a destination spill
+ */
+static instruction_t* handle_destination_spill(dynamic_array_t* live_ranges, three_addr_var_t* target_destination, live_range_t* spill_range, live_range_t** currently_spilled, instruction_t* target, u_int32_t offset){
+}
+
+
+/**
  * Handle all spilling for a given instruction. This includes source & destination
  * spilling
  */
@@ -2442,8 +2449,26 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 
 	//Run through all function parameters
 	if(instruction->parameters != NULL && instruction->instruction_type != PHI_FUNCTION){
+		//Extract it
+		dynamic_array_t* parameters = instruction->parameters;
+
+		//Run through and check them all
+		for(u_int16_t i = 0; i < parameters->current_index; i++){
+			//Extract it
+			three_addr_var_t* parameter = dynamic_array_get_at(parameters, i);
+
+			//Invoke the helper
+			handle_source_spill(live_ranges, parameter, spill_range, currently_spilled, instruction, spill_region->base_address);
+		}
+	}
+
+
+	//Now let's handle the destination register
+	if(instruction->destination_register != NULL){
+		if(instruction->destination_register->associated_live_range == )
 
 	}
+
 }
 
 
@@ -2500,7 +2525,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 		//So long as this is not NULL, keep going
 		while(cursor != NULL){
 			//Let the helper deal with it
-			cursor = handle_instruction_level_spilling(cursor, live_ranges, spill_range, &currently_spilled);
+			cursor = handle_instruction_level_spilling(cursor, live_ranges, spill_range, &currently_spilled, spill_region);
 
 			//Push it up to the next instruction
 			cursor = cursor->next_statement;
