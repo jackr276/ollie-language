@@ -1206,9 +1206,6 @@ static void destroy_all_live_ranges(dynamic_array_t* live_ranges){
 	//Now we deallocate the entire array and remake it
 	dynamic_array_dealloc(live_ranges);
 
-	//Reallocate
-	live_ranges = dynamic_array_alloc();
-
 	//Let's also reset the live range id
 	live_range_id = 0;
 }
@@ -2422,40 +2419,79 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
  * anything else
  */
 static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, stack_region_t* stack_region){
+	//The variable that we've loaded into
+	three_addr_var_t* spilled_var = NULL;
+
 	//Handle the first source register
 	if(target->source_register != NULL && target->source_register->associated_live_range == spill_range){
+		//Emit the spilled variable
+		spilled_var = emit_temp_var(target->source_register->type);
+
 		//Emit the load instruction like so
-		instruction_t* load = emit_load_instruction(target->source_register, stack_pointer, type_symtab, stack_region->base_address);
+		instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
 
 		//This goes before the use of it
 		insert_instruction_before_given(load, target);
+
+		//Now, the source register *becomes* the spilled variable
+		target->source_register = spilled_var;
 	}
 
 	//Handle the second source register
 	if(target->source_register2 != NULL && target->source_register2->associated_live_range == spill_range){
-		//Emit the load instruction like so
-		instruction_t* load = emit_load_instruction(target->source_register2, stack_pointer, type_symtab, stack_region->base_address);
+		//If we haven't already spilled the variable, 
+		//we'll go from scratch here
+		if(spilled_var == NULL){
+			//Emit the spilled variable
+			spilled_var = emit_temp_var(target->source_register2->type);
 
-		//This goes before the use of it
-		insert_instruction_before_given(load, target);
+			//Emit the load instruction like so
+			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
+
+			//This goes before the use of it
+			insert_instruction_before_given(load, target);
+		}
+		
+		//No matter what, we replace here
+		target->source_register2 = spilled_var;
 	}
 
 	//This is rarer to have but it's possible
 	if(target->address_calc_reg1 != NULL && target->address_calc_reg1->associated_live_range == spill_range){
-		//Emit the load instruction like so
-		instruction_t* load = emit_load_instruction(target->address_calc_reg1, stack_pointer, type_symtab, stack_region->base_address);
+		//If we haven't already spilled the variable, 
+		//we'll go from scratch here
+		if(spilled_var == NULL){
+			//Emit the spilled variable
+			spilled_var = emit_temp_var(target->address_calc_reg1->type);
 
-		//This goes before the use of it
-		insert_instruction_before_given(load, target);
+			//Emit the load instruction like so
+			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
+
+			//This goes before the use of it
+			insert_instruction_before_given(load, target);
+		}
+		
+		//No matter what, we replace here
+		target->address_calc_reg1 = spilled_var;
 	}
 
 	//Same story here
 	if(target->address_calc_reg2 != NULL && target->address_calc_reg2->associated_live_range == spill_range){
-		//Emit the load instruction like so
-		instruction_t* load = emit_load_instruction(target->address_calc_reg2, stack_pointer, type_symtab, stack_region->base_address);
+		//If we haven't already spilled the variable, 
+		//we'll go from scratch here
+		if(spilled_var == NULL){
+			//Emit the spilled variable
+			spilled_var = emit_temp_var(target->address_calc_reg2->type);
 
-		//This goes before the use of it
-		insert_instruction_before_given(load, target);
+			//Emit the load instruction like so
+			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
+
+			//This goes before the use of it
+			insert_instruction_before_given(load, target);
+		}
+		
+		//No matter what, we replace here
+		target->address_calc_reg2 = spilled_var;
 	}
 
 	/**
@@ -2468,11 +2504,25 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 	if(target->destination_register != NULL && target->destination_register->associated_live_range == spill_range){
 		//These are the two special cases where we can emit loads for a destination
 		if(is_destination_also_operand(target) == TRUE || is_destination_assigned(target) == FALSE){
-			//Emit the load
-			instruction_t* load = emit_load_instruction(target->destination_register, stack_pointer, type_symtab, stack_region->base_address);
+			//If we haven't already spilled the variable, 
+			//we'll go from scratch here
+			if(spilled_var == NULL){
+				//Emit the spilled variable
+				spilled_var = emit_temp_var(target->destination_register->type);
 
-			//Put it before the instruction
-			insert_instruction_before_given(load, target);
+				//Emit the load instruction like so
+				instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
+
+				//This goes before the use of it
+				insert_instruction_before_given(load, target);
+			}
+			
+			//No matter what, we replace here
+			target->destination_register = spilled_var;
+
+			//This is *just* for the purposes of the destination spiller. All live ranges will be recomputed in the
+			//end anyways
+			spilled_var->associated_live_range = spill_range;
 		}
 	}
 
@@ -2491,12 +2541,21 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 				continue;
 			}
 
-			//Otherwise if we get here, then we know we have to spill
-			//Emit the load
-			instruction_t* load = emit_load_instruction(parameter, stack_pointer, type_symtab, stack_region->base_address);
+			//If we haven't already spilled the variable, 
+			//we'll go from scratch here
+			if(spilled_var == NULL){
+				//Emit the spilled variable
+				spilled_var = emit_temp_var(parameter->type);
 
-			//Put it before the instruction
-			insert_instruction_before_given(load, target);
+				//Emit the load instruction like so
+				instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
+
+				//This goes before the use of it
+				insert_instruction_before_given(load, target);
+			}
+
+			//Replace what we had with what we now have
+			dynamic_array_set_at(parameters, spilled_var, i);
 		}
 	}
 }
@@ -3234,15 +3293,15 @@ spill_loop:
 	while(colorable == FALSE){
 		count++;
 		/**
-		 * Spill Step 1: wipe everything
+		 * Spill Step 1: wipe everything clean
 		 */
 		destroy_all_live_ranges(live_ranges);
 
 		/**
-		 * Once we've reset everything, we'll need
-		 * to recompute all of our used/assigned sets
+		 * Now we need to recompute all live ranges in
+		 * the graph again from scratch
 		 */
-		recompute_used_and_assigned_sets(cfg);
+		live_ranges = construct_all_live_ranges(cfg);
 
 		/**
 		 * Now that we've recomputed the used and assigned
