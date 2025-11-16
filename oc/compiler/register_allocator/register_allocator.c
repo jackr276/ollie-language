@@ -595,7 +595,7 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 	//For developer flagging
 	if(live_range == NULL){
 		//This is a function parameter, we need to make it ourselves
-		if(variable->linked_var != NULL && variable->linked_var->membership == FUNCTION_PARAMETER){
+		if(variable->membership == FUNCTION_PARAMETER){
 			//Create it. Since this is a function parameter, we start at line 0
 			live_range = live_range_alloc(block->function_defined_in);
 
@@ -2443,7 +2443,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 	//Handle the first source register
 	if(target->source_register != NULL && target->source_register->associated_live_range == spill_range){
 		//Emit the spilled variable
-		spilled_var = emit_temp_var(target->source_register->type);
+		spilled_var = emit_temp_var_for_spill(target->source_register);
 
 		//Emit the load instruction like so
 		instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2461,7 +2461,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 		//we'll go from scratch here
 		if(spilled_var == NULL){
 			//Emit the spilled variable
-			spilled_var = emit_temp_var(target->source_register2->type);
+			spilled_var = emit_temp_var_for_spill(target->source_register2);
 
 			//Emit the load instruction like so
 			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2480,7 +2480,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 		//we'll go from scratch here
 		if(spilled_var == NULL){
 			//Emit the spilled variable
-			spilled_var = emit_temp_var(target->address_calc_reg1->type);
+			spilled_var = emit_temp_var_for_spill(target->address_calc_reg1);
 
 			//Emit the load instruction like so
 			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2499,7 +2499,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 		//we'll go from scratch here
 		if(spilled_var == NULL){
 			//Emit the spilled variable
-			spilled_var = emit_temp_var(target->address_calc_reg2->type);
+			spilled_var = emit_temp_var_for_spill(target->address_calc_reg2);
 
 			//Emit the load instruction like so
 			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2526,7 +2526,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 			//we'll go from scratch here
 			if(spilled_var == NULL){
 				//Emit the spilled variable
-				spilled_var = emit_temp_var(target->destination_register->type);
+				spilled_var = emit_temp_var_for_spill(target->destination_register);
 
 				//Emit the load instruction like so
 				instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2563,7 +2563,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 			//we'll go from scratch here
 			if(spilled_var == NULL){
 				//Emit the spilled variable
-				spilled_var = emit_temp_var(parameter->type);
+				spilled_var = emit_temp_var_for_spill(parameter);
 
 				//Emit the load instruction like so
 				instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
