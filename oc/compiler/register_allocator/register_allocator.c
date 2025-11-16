@@ -578,6 +578,18 @@ static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_
 
 
 /**
+ * Remove a variable from a given live range
+ */
+static void remove_variable_from_live_range(live_range_t* live_range, three_addr_var_t* variable){
+	//If the literal memory address is already in here we leave
+	if(dynamic_array_contains(live_range->variables, variable) == NOT_FOUND){
+		return;
+	}
+
+}
+
+
+/**
  * Figure out which live range a given variable was associated with. 
  *
  * NOTE: We *only* get here if we have used variables. This means that assigned variables do not count
@@ -2379,47 +2391,17 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
 
 
 /**
- * Emit a temp var specifically for use in a spill
- */
-static three_addr_var_t* emit_temp_var_for_spill(three_addr_var_t* source_var, symtab_function_record_t* function, dynamic_array_t* live_ranges){
-	//First emit it
-	three_addr_var_t* var = emit_temp_var(source_var->type);
-
-	//This is needed for function parameters
-	var->membership = source_var->membership;
-
-	//Copy this over as well
-	var->parameter_number = source_var->parameter_number;
-
-	//Create a new LR for us
-	live_range_t* spill_range = live_range_alloc(function);
-
-	//Add this into the array
-	dynamic_array_add(live_ranges, spill_range);
-
-	//Add the variable to it
-	add_variable_to_live_range(spill_range, var);
-
-	//Give back the variable
-	return var;
-}
-
-
-/**
  * Handle spilling a source register. Doing this will generate a "currently spilled"
  * LR that we can reuse to avoid tons of extra spill instructions
  *
  * Note that the *only* kind of instruction that we can generate here is a load. It will not generate
  * anything else
  */
-static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, stack_region_t* stack_region){
-	//The variable that we've loaded into
-	three_addr_var_t* spilled_var = NULL;
-
+static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, stack_region_t* stack_region){
 	//Handle the first source register
 	if(target->source_register != NULL && target->source_register->associated_live_range == spill_range){
-		//Emit the spilled variable
-		spilled_var = emit_temp_var_for_spill(target->source_register, target->function, live_ranges);
+
+
 
 		//Emit the load instruction like so
 		instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2433,30 +2415,20 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 
 	//Handle the second source register
 	if(target->source_register2 != NULL && target->source_register2->associated_live_range == spill_range){
-		//If we haven't already spilled the variable, 
-		//we'll go from scratch here
-		if(spilled_var == NULL){
 			//Emit the spilled variable
-			spilled_var = emit_temp_var_for_spill(target->source_register2, target->function, live_ranges);
+			spilled_var = emit_temp_var_for_spill(target->source_register2, target->function, spill_range);
 
 			//Emit the load instruction like so
 			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
 
 			//This goes before the use of it
 			insert_instruction_before_given(load, target);
-		}
-		
-		//No matter what, we replace here
-		target->source_register2 = spilled_var;
 	}
 
 	//This is rarer to have but it's possible
 	if(target->address_calc_reg1 != NULL && target->address_calc_reg1->associated_live_range == spill_range){
-		//If we haven't already spilled the variable, 
-		//we'll go from scratch here
-		if(spilled_var == NULL){
 			//Emit the spilled variable
-			spilled_var = emit_temp_var_for_spill(target->address_calc_reg1, target->function, live_ranges);
+			spilled_var = emit_temp_var_for_spill(target->address_calc_reg1, target->function, spill_range);
 
 			//Emit the load instruction like so
 			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2464,9 +2436,6 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 			//This goes before the use of it
 			insert_instruction_before_given(load, target);
 		}
-		
-		//No matter what, we replace here
-		target->address_calc_reg1 = spilled_var;
 	}
 
 	//Same story here
@@ -2475,7 +2444,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 		//we'll go from scratch here
 		if(spilled_var == NULL){
 			//Emit the spilled variable
-			spilled_var = emit_temp_var_for_spill(target->address_calc_reg2, target->function, live_ranges);
+			spilled_var = emit_temp_var_for_spill(target->address_calc_reg2, target->function, spill_range);
 
 			//Emit the load instruction like so
 			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2507,7 +2476,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 			//we'll go from scratch here
 			if(spilled_var == NULL){
 				//Emit the spilled variable
-				spilled_var = emit_temp_var_for_spill(parameter, target->function, live_ranges);
+				spilled_var = emit_temp_var_for_spill(parameter, target->function, spill_range);
 
 				//Emit the load instruction like so
 				instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2527,7 +2496,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
  * Handle spilling a destination register. This will generate a store instruction
  * after the spill has occurred
  */
-static instruction_t* handle_instruction_destination_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, stack_region_t* stack_region){
+static instruction_t* handle_instruction_destination_register_spills(instruction_t* target, live_range_t* spill_range, stack_region_t* stack_region){
 	//Whatever the last instruction is
 	//We start off with it as the target
 	instruction_t* last_instruction = target;
@@ -2537,7 +2506,7 @@ static instruction_t* handle_instruction_destination_register_spills(instruction
 		//This is a unique case where we need to emit a load first and then a store afterwards
 		if(is_destination_also_operand(target) == TRUE){
 			//Emit the dummy variable
-			three_addr_var_t* var = emit_temp_var_for_spill(target->destination_register, target->function, live_ranges);
+			three_addr_var_t* var = emit_temp_var_for_spill(target->destination_register, target->function, spill_range);
 
 			//Now we emit the load
 			instruction_t* load_instruction = emit_load_instruction(var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2560,7 +2529,7 @@ static instruction_t* handle_instruction_destination_register_spills(instruction
 		//This is just a store that we're emitting
 		} else if(is_destination_assigned(target) == FALSE){
 			//Emit the dummy variable
-			three_addr_var_t* var = emit_temp_var_for_spill(target->destination_register, target->function, live_ranges);
+			three_addr_var_t* var = emit_temp_var_for_spill(target->destination_register, target->function, spill_range);
 
 			//Now we emit the load
 			instruction_t* load_instruction = emit_load_instruction(var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2601,6 +2570,12 @@ static instruction_t* handle_instruction_destination_register_spills(instruction
 }
 
 
+static instruction_t* handle_instruction_level_spilling(){
+
+}
+
+
+
 /**
  * Spill a given live range across the entire CFG. Remember that when we spill,
  * we replace every use of the old live range with a load and every assignment
@@ -2619,6 +2594,11 @@ static instruction_t* handle_instruction_destination_register_spills(instruction
  * movb LR35, (LR0)
  *
  * And LR33 is nowhere to be seen anymore
+ *
+ *
+ * Spilling principles: Every spill will generate its own brand new live range. This live range
+ * is our "currently spilled" live range. For the example above, once we have spilled into the new
+ * LR35, we need to keep that as active until we load it back up
  */
 static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
 	//Extract the function that we're using
@@ -2640,19 +2620,8 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 
 		//So long as this is not NULL, keep going
 		while(cursor != NULL){
-			/**
-			 * Since loads will always go *above* our instruction, the first
-			 * thing that we need to handle is all load statements that our instruction
-			 * may generate from spilling. We will invoke the helper to do this
-			 */
-			handle_instruction_source_register_spills(cursor, spill_range, live_ranges, spill_region);
-
-			/**
-			 * Once we handle all of the source spills, we need to handle all destination spills
-			 * Destinations always result in store statements being generated *after* the
-			 * instruction, which is why we reassign the cursor variable here
-			 */
-			cursor = handle_instruction_destination_register_spills(cursor, spill_range, live_ranges, spill_region);
+			//Let the helper deal with it
+			cursor = handle_instruction_level_spilling();
 
 			//Push it up to the next instruction
 			cursor = cursor->next_statement;
