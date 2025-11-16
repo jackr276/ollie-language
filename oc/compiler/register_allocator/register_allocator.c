@@ -2428,13 +2428,15 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 	 *
 	 * We can now handle both cases
 	 */
-	if(is_destination_also_operand(target) == TRUE
-		|| is_destination_assigned(target) == FALSE){
-		//Emit the load
-		instruction_t* load = emit_load_instruction(target->destination_register, stack_pointer, type_symtab, stack_region->base_address);
+	if(target->destination_register != NULL && target->destination_register->associated_live_range == spill_range){
+		//These are the two special cases where we can emit loads for a destination
+		if(is_destination_also_operand(target) == TRUE || is_destination_assigned(target) == FALSE){
+			//Emit the load
+			instruction_t* load = emit_load_instruction(target->destination_register, stack_pointer, type_symtab, stack_region->base_address);
 
-		//Put it before the instruction
-		insert_instruction_before_given(load, target);
+			//Put it before the instruction
+			insert_instruction_before_given(load, target);
+		}
 	}
 
 	//Now let's handle the function parameters if there are any
@@ -2568,9 +2570,6 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 		//Push it up
 		block_cursor = block_cursor->direct_successor;
 	}
-
-	//For now, just bail out
-	exit(1);
 }
 
 
