@@ -38,6 +38,8 @@ static live_range_t* instruction_pointer_lr;
 static three_addr_var_t* stack_pointer;
 //And the type symtab
 static type_symtab_t* type_symtab;
+//The u64 type for reference
+static generic_type_t* u64_type;
 
 /**
  * Priority queue insert a live range in here
@@ -2460,10 +2462,7 @@ static void handle_destination_spill(three_addr_var_t* var, instruction_t* instr
  * Can just become
  * movl (LR0), LR100
  */
-static void handle_pure_copy_source_spills(instruction_t* instruction, u_int32_t offset){
-	printf("HERE with:\n");
-	print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
-
+static void handle_pure_copy_source_spill(instruction_t* instruction, u_int32_t offset){
 	//This will always be a read
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
@@ -2482,7 +2481,42 @@ static void handle_pure_copy_source_spills(instruction_t* instruction, u_int32_t
 		instruction->source_register = NULL;
 
 		//Create the offset using a u64
-		instruction->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64")->type);
+		instruction->offset = emit_direct_integer_or_char_constant(offset, u64_type);
+	}
+}
+
+
+/**
+ * Handle a scenario where we have a constant being moved into a destination LR
+ * that's been spilled
+ *
+ * Example:
+ * movl $3, LR100
+ *
+ * Can just become
+ * movl $3, 4(LR0)
+ */
+static void handle_constant_assignment_destination_spill(instruction_t* instruction, u_int32_t offset){
+	//This will always be a write
+	instruction->memory_access_type = WRITE_TO_MEMORY;
+
+	//Offset is 0, we just need to do a dereference
+	if(offset == 0){
+		instruction->destination_register = stack_pointer;
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+
+	//Otherwise, we need to do an offset calculation
+	} else {
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+		//Turn this into a load instruction
+		instruction->address_calc_reg1 = stack_pointer;
+
+		//IMPORTANT - NULL this out so that future steps don't get confused
+		instruction->destination_register = NULL;
+
+		//Create the offset using a u64
+		instruction->offset = emit_direct_integer_or_char_constant(offset, u64_type);
 	}
 }
 
@@ -2501,7 +2535,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 		//Case we want here
 		if(instruction->source_register->associated_live_range == spill_range){
 			//Let the helper deal with it
-			handle_pure_copy_source_spills(instruction, spill_region->base_address);
+			handle_pure_copy_source_spill(instruction, spill_region->base_address);
 
 			//We're done here
 			return instruction;
@@ -2516,11 +2550,11 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 	if(is_instruction_constant_assignment(instruction) == TRUE){
 		//What we're after here
 		if(instruction->destination_register->associated_live_range == spill_range){
-			printf("HERE with: ");
-			print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
-			printf("\n\n\n\n\n");
+			//Let the helper deal with it
+			handle_constant_assignment_destination_spill(instruction, spill_region->base_address);
 
-			//handle_constant_assignment_destination_spills(instruction, spill_region->base_address);
+			//We're done
+			return instruction;
 		}
 
 	}
@@ -3127,6 +3161,8 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//Save these in global state
 	stack_pointer = cfg->stack_pointer;
 	type_symtab = cfg->type_symtab;
+	//Load this in for later use
+	u64_type = lookup_type_name_only(type_symtab, "u64")->type;
 
 	//Save the flag that tells us whether or not the graph that we constructed was colorable
 	u_int8_t colorable = FALSE;
