@@ -2384,7 +2384,7 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
  * Note that the *only* kind of instruction that we can generate here is a load. It will not generate
  * anything else
  */
-static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, stack_region_t* stack_region){
+static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, stack_region_t* stack_region){
 	//Handle the first source register
 	if(target->source_register != NULL && target->source_register->associated_live_range == spill_range){
 		//Emit the load instruction like so
@@ -2428,9 +2428,38 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 	 *
 	 * We can now handle both cases
 	 */
+	if(is_destination_also_operand(target) == TRUE
+		|| is_destination_assigned(target) == FALSE){
+		//Emit the load
+		instruction_t* load = emit_load_instruction(target->destination_register, stack_pointer, type_symtab, stack_region->base_address);
 
+		//Put it before the instruction
+		insert_instruction_before_given(load, target);
+	}
 
+	//Now let's handle the function parameters if there are any
+	if(target->parameters != NULL){
+		//Extract for convenience
+		dynamic_array_t* parameters = target->parameters;
 
+		//Run through all of them
+		for(u_int16_t i = 0; i < parameters->current_index; i++){
+			//Extract it
+			three_addr_var_t* parameter = dynamic_array_get_at(parameters, i);
+
+			//If they're not equal just move on
+			if(parameter->associated_live_range != spill_range){
+				continue;
+			}
+
+			//Otherwise if we get here, then we know we have to spill
+			//Emit the load
+			instruction_t* load = emit_load_instruction(parameter, stack_pointer, type_symtab, stack_region->base_address);
+
+			//Put it before the instruction
+			insert_instruction_before_given(load, target);
+		}
+	}
 }
 
 
