@@ -1178,6 +1178,18 @@ static void calculate_live_range_liveness_sets(cfg_t* cfg){
 
 
 /**
+ * This is only only after we have to spill something. Since spilling
+ * completely changes the program, all of these live ranges that we used
+ * to have are now bunk and we need to recompute everything. The first
+ * step is to get rid of all of them
+ */
+static void destroy_all_live_ranges(dynamic_array_t* live_ranges){
+
+
+}
+
+
+/**
  * Reset all live ranges in the given array
  */
 static void reset_all_live_ranges(dynamic_array_t* live_ranges){
@@ -2384,7 +2396,7 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
  * Note that the *only* kind of instruction that we can generate here is a load. It will not generate
  * anything else
  */
-static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, stack_region_t* stack_region){
+static live_range_t* handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, stack_region_t* stack_region){
 	//Handle the first source register
 	if(target->source_register != NULL && target->source_register->associated_live_range == spill_range){
 		//Emit the load instruction like so
@@ -3199,7 +3211,7 @@ spill_loop:
 		/**
 		 * Spill Step 1: wipe everything
 		 */
-		reset_all_live_ranges(live_ranges);
+		destroy_all_live_ranges(live_ranges);
 
 		/**
 		 * Once we've reset everything, we'll need
@@ -3242,7 +3254,7 @@ spill_loop:
 		 */
 		colorable = graph_color_and_allocate(cfg, live_ranges);
 
-		if(count > 10) exit(1);
+		exit(1);
 	}
 
 	/**
