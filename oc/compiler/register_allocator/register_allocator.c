@@ -2456,6 +2456,35 @@ static void handle_destination_spill(three_addr_var_t* var, instruction_t* instr
  * spilling
  */
 static instruction_t* handle_instruction_level_spilling(instruction_t* instruction, dynamic_array_t* live_ranges, live_range_t* spill_range, live_range_t** currently_spilled, stack_region_t* spill_region){
+	/**
+	 * Optimization: if we have pure copy instructions where we have the source as
+	 * our spill range, we do not need to emit any extra instructions. All that we
+	 * need to do is turn the move into a memory move
+	 */
+	if(is_instruction_pure_copy(instruction) == TRUE){
+		//Case we want here
+		if(instruction->source_register->associated_live_range == spill_range){
+			printf("HERE with:\n");
+			print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+
+
+			instruction->memory_access_type = READ_FROM_MEMORY;
+
+			if(spill_region->base_address == 0){
+				instruction->source_register = stack_pointer;
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+
+			} else {
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+				//Turn this into a load instruction
+				instruction->address_calc_reg1 = stack_pointer;
+				instruction->offset = emit_direct_integer_or_char_constant(spill_region->base_address, lookup_type_name_only(type_symtab, "u64")->type);
+			}
+		}
+
+		return instruction;
+	}
+
 	//By default it's the instruction
 	instruction_t* latest = instruction;
 
@@ -3270,38 +3299,6 @@ spill_loop:
 			printf("================= After Interference =======================\n");
 			print_blocks_with_live_ranges(cfg);
 			printf("================= After Interference =======================\n");
-		}
-
-
-		u_int8_t could_coalesce = perform_live_range_coalescence(cfg, graph, debug_printing);
-
-		/**
-		 * If we were in fact able to coalesce, we will have messed up the liveness sets due
-		 * to merging live ranges, etc. This may mess up allocation down the line. As such, we
-		 * need to come here and recalculate the following:
-		 * 	1.) all of the used & assigned sets
-		 * 	2.) all of the liveness sets(those rely on used & defined entirely)
-		 * 	3.) the interference
-		 *
-		 * short of this, we will see strange an inaccurate results such as excessive interference
-		 */
-		if(could_coalesce == TRUE){
-			//We need to *reset* all of our live ranges here
-			reset_all_live_ranges(live_ranges);
-
-			//First step - recalculate all of our used & assigned sets
-			recompute_used_and_assigned_sets(cfg);
-
-			//After we coalesce, we need to recompute all of the
-			//spill costs
-			compute_spill_costs(live_ranges);
-
-			//Then - recalculate all liveness sets
-			calculate_live_range_liveness_sets(cfg);
-
-			//Finally, recalculate all of the interference now that all of the
-			//prerequisites have been met
-			graph = construct_interference_graph(cfg, live_ranges);
 		}
 
 		/**
