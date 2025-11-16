@@ -14,7 +14,6 @@
 #include "../interference_graph/interference_graph.h"
 #include "../postprocessor/postprocessor.h"
 #include "../cfg/cfg.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

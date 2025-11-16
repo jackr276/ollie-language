@@ -32,7 +32,7 @@
 #define LOAD_COST 2
 
 //Storing also generates 2 instructions
-#define STORE_COST 22
+#define STORE_COST 2
 
 //A large prime for hashing
 #define LARGE_PRIME 611593
