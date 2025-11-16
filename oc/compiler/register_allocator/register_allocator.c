@@ -567,7 +567,7 @@ static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_
 
 	//Most of the time this will just be 0, but when it isn't we'll have it here
 	if(variable->linked_var != NULL){
-		live_range->function_parameter_order = variable->linked_var->function_parameter_order;
+		live_range->function_parameter_order = variable->parameter_number;
 	}
 
 	//Link this live range to the variable
@@ -2412,6 +2412,24 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
 
 
 /**
+ * Emit a temp var specifically for use in a spill
+ */
+static three_addr_var_t* emit_temp_var_for_spill(three_addr_var_t* source_var){
+	//First emit it
+	three_addr_var_t* var = emit_temp_var(source_var->type);
+
+	//This is needed for function parameters
+	var->membership = source_var->membership;
+
+	//Copy this over as well
+	var->parameter_number = source_var->parameter_number;
+
+	//Give back the variable
+	return var;
+}
+
+
+/**
  * Handle spilling a source register. Doing this will generate a "currently spilled"
  * LR that we can reuse to avoid tons of extra spill instructions
  *
@@ -3329,6 +3347,12 @@ spill_loop:
 			print_blocks_with_live_ranges(cfg);
 			printf("================= After Interference =======================\n");
 		}
+
+		/**
+		 * Since our process was destructive, we now need to go back through and
+		 * redo all of our precoloring
+		 */
+		pre_color(cfg, live_ranges);
 
 		/**
 		 * And finally - once we have our interference, we are

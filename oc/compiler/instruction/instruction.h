@@ -136,6 +136,8 @@ struct three_addr_var_t{
 	variable_size_t variable_size;
 	//What register is this in?
 	general_purpose_register_t variable_register;
+	//What membership do we have if any
+	variable_membership_t membership;
 };
 
 
