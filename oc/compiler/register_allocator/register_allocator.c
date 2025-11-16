@@ -2508,6 +2508,23 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 		}
 	}
 
+	/**
+	 * Another optimization: if we have an instruction that is
+	 * just assigning a constant to our spill range, we can bypass
+	 * the spill range entirely and just go right to memory
+	 */
+	if(is_instruction_constant_assignment(instruction) == TRUE){
+		//What we're after here
+		if(instruction->destination_register->associated_live_range == spill_range){
+			printf("HERE with: ");
+			print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+			printf("\n\n\n\n\n");
+
+			//handle_constant_assignment_destination_spills(instruction, spill_region->base_address);
+		}
+
+	}
+
 	//By default it's the instruction
 	instruction_t* latest = instruction;
 
