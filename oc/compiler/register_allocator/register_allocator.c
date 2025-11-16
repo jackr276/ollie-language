@@ -2384,7 +2384,52 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
  * Note that the *only* kind of instruction that we can generate here is a load. It will not generate
  * anything else
  */
-static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, u_int32_t stack_address){
+static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, stack_region_t* stack_region){
+	//Handle the first source register
+	if(target->source_register != NULL && target->source_register->associated_live_range == spill_range){
+		//Emit the load instruction like so
+		instruction_t* load = emit_load_instruction(target->source_register, stack_pointer, type_symtab, stack_region->base_address);
+
+		//This goes before the use of it
+		insert_instruction_before_given(load, target);
+	}
+
+	//Handle the second source register
+	if(target->source_register2 != NULL && target->source_register2->associated_live_range == spill_range){
+		//Emit the load instruction like so
+		instruction_t* load = emit_load_instruction(target->source_register2, stack_pointer, type_symtab, stack_region->base_address);
+
+		//This goes before the use of it
+		insert_instruction_before_given(load, target);
+	}
+
+	//This is rarer to have but it's possible
+	if(target->address_calc_reg1 != NULL && target->address_calc_reg1->associated_live_range == spill_range){
+		//Emit the load instruction like so
+		instruction_t* load = emit_load_instruction(target->address_calc_reg1, stack_pointer, type_symtab, stack_region->base_address);
+
+		//This goes before the use of it
+		insert_instruction_before_given(load, target);
+	}
+
+	//Same story here
+	if(target->address_calc_reg2 != NULL && target->address_calc_reg2->associated_live_range == spill_range){
+		//Emit the load instruction like so
+		instruction_t* load = emit_load_instruction(target->address_calc_reg2, stack_pointer, type_symtab, stack_region->base_address);
+
+		//This goes before the use of it
+		insert_instruction_before_given(load, target);
+	}
+
+	/**
+	 * Some other special cases here:
+	 *  1.) Instructions whose destinations are also/exclusively source registers
+	 *  2.) Instructions that have parameters(function calls)
+	 *
+	 * We can now handle both cases
+	 */
+
+
 
 }
 
@@ -2393,7 +2438,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
  * Handle spilling a destination register. This will generate a store instruction
  * after the spill has occurred
  */
-static void handle_instruction_destination_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, u_int32_t stack_address){
+static void handle_instruction_destination_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, stack_region_t* stack_region){
 
 }
 
@@ -2444,6 +2489,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 			 * thing that we need to handle is all load statements that our instruction
 			 * may generate from spilling. We will invoke the helper to do this
 			 */
+			handle_instruction_source_register_spills(cursor, spill_range, live_ranges, spill_region);
 
 			//Push it up to the next instruction
 			cursor = cursor->next_statement;
@@ -2452,10 +2498,6 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 		//Push it up
 		block_cursor = block_cursor->direct_successor;
 	}
-
-	//IMPORTANT - the spill range is no longer a live range that we're worrying about so remove
-	//it entirely
-	dynamic_array_delete(live_ranges, spill_range);
 
 	//For now, just bail out
 	exit(1);
