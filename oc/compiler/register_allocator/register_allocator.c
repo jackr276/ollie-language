@@ -2467,11 +2467,45 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
  * Handle spilling a destination register. This will generate a store instruction
  * after the spill has occurred
  */
-static void handle_instruction_destination_register_spills(instruction_t* target, live_range_t* spill_range, dynamic_array_t* live_ranges, stack_region_t* stack_region){
+static instruction_t* handle_instruction_destination_register_spills(instruction_t* target, live_range_t* spill_range, stack_region_t* stack_region){
+	//If the destination is never even assigned, we don't need to 
+	//bother looking any further
+	if(is_destination_assigned(target) == FALSE){
+		return target;
+	}
 
+	//Whatever the last instruction is
+	//We start off with it as the target
+	instruction_t* last_instruction = target;
+
+	//First handle the regular destination register
+	if(target->destination_register != NULL && target->destination_register->associated_live_range == spill_range){
+		//Emit the store instruction
+		instruction_t* store = emit_store_instruction(target->destination_register, stack_pointer, type_symtab, stack_region->base_address);
+
+		//We need to insert it after the given value
+		insert_instruction_after_given(store, last_instruction);
+
+		//This now is the last instruction
+		last_instruction = store;
+	}
+
+	//Then handle the second destination register. This is exceedingly rare but we can handle it
+	if(target->destination_register2 != NULL && target->destination_register2->associated_live_range == spill_range){
+		//Emit the store instruction
+		instruction_t* store = emit_store_instruction(target->destination_register2, stack_pointer, type_symtab, stack_region->base_address);
+
+		//We need to insert it after the given value
+		insert_instruction_after_given(store, last_instruction);
+
+		//This now is the last instruction
+		last_instruction = store;
+	}
+
+
+	//Always give back the last instruction
+	return last_instruction;
 }
-
-
 
 
 /**
@@ -2518,7 +2552,14 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 			 * thing that we need to handle is all load statements that our instruction
 			 * may generate from spilling. We will invoke the helper to do this
 			 */
-			handle_instruction_source_register_spills(cursor, spill_range, live_ranges, spill_region);
+			handle_instruction_source_register_spills(cursor, spill_range, spill_region);
+
+			/**
+			 * Once we handle all of the source spills, we need to handle all destination spills
+			 * Destinations always result in store statements being generated *after* the
+			 * instruction, which is why we reassign the cursor variable here
+			 */
+			cursor = handle_instruction_destination_register_spills(cursor, spill_range, spill_region);
 
 			//Push it up to the next instruction
 			cursor = cursor->next_statement;
