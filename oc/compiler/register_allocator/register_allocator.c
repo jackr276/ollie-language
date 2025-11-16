@@ -14,6 +14,7 @@
 #include "../interference_graph/interference_graph.h"
 #include "../postprocessor/postprocessor.h"
 #include "../cfg/cfg.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -491,6 +492,12 @@ static void compute_spill_costs(dynamic_array_t* live_ranges){
 
 		//Theres no point in updating either of these because they will never be spilled
 		if(live_range == stack_pointer_lr || live_range == instruction_pointer_lr){
+			continue;
+		}
+
+		//If this was already spilled, we can't spill it again
+		if(live_range->was_spilled == TRUE){
+			live_range->spill_cost = INT32_MAX;
 			continue;
 		}
 
@@ -2408,6 +2415,9 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 		//Once we have the dummy, we can create the new LR
 		*currently_spilled = live_range_alloc(target->function);
 
+		//Flag that this was once spilled
+		(*currently_spilled)->was_spilled = TRUE;
+
 		//Be sure we copy this over too
 		(*currently_spilled)->function_parameter_order = spill_range->function_parameter_order;
 
@@ -3302,7 +3312,7 @@ spill_loop:
 		 */
 		colorable = graph_color_and_allocate(cfg, live_ranges);
 
-		if(count > 4) exit(1);
+		if(count > 2) exit(1);
 	}
 
 	/**

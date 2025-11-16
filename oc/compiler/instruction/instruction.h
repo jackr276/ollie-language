@@ -92,6 +92,8 @@ struct live_range_t{
 	u_int8_t function_parameter_order;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
+	//Was this live range spilled?
+	u_int8_t was_spilled;
 	//What register is this live range in?
 	general_purpose_register_t reg; 
 };
