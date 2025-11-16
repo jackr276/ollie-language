@@ -434,68 +434,6 @@ static void print_blocks_with_registers(cfg_t* cfg){
 
 
 /**
- * Print a block our for reading
-*/
-static void print_ordered_block(basic_block_t* block){
-	//If this is some kind of switch block, we first print the jump table
-	if(block->jump_table != NULL){
-		print_jump_table(stdout, block->jump_table);
-	}
-
-	//Switch here based on the type of block that we have
-	switch(block->block_type){
-		//Function entry blocks need extra printing
-		case BLOCK_TYPE_FUNC_ENTRY:
-			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_stack_data_area(&(block->function_defined_in->data_area));
-			break;
-
-		//By default just print the name
-		default:
-			printf(".L%d:\n", block->block_id);
-			break;
-	}
-
-	//Now grab a cursor and print out every statement that we 
-	//have
-	instruction_t* cursor = block->leader_statement;
-
-	//So long as it isn't null
-	while(cursor != NULL){
-		print_instruction(stdout, cursor, PRINTING_VAR_IN_INSTRUCTION);
-
-		//Move along to the next one
-		cursor = cursor->next_statement;
-	}
-
-	//For spacing
-	printf("\n");
-}
-
-
-/**
- * Run through using the direct successor strategy and print all ordered blocks.
- * We print much less here than the debug printer in the CFG, because all dominance
- * relations are now useless
- */
-static void print_ordered_blocks(cfg_t* cfg, basic_block_t* head_block){
-	//Run through the direct successors so long as the block is not null
-	basic_block_t* current = head_block;
-
-	//So long as this one isn't NULL
-	while(current != NULL){
-		//Print it
-		print_ordered_block(current);
-		//Advance to the direct successor
-		current = current->direct_successor;
-	}
-
-	//Print all global variables after the blocks
-	print_all_global_variables(stdout, cfg->global_variables);
-}
-
-
-/**
  * Print all live ranges that we have
  */
 static void print_all_live_ranges(dynamic_array_t* live_ranges){
@@ -1237,40 +1175,6 @@ static void calculate_live_range_liveness_sets(cfg_t* cfg){
 		//So long as there is a difference
 		} while(difference_found == TRUE);
 	}
-}
-
-
-/**
- * This is only only after we have to spill something. Since spilling
- * completely changes the program, all of these live ranges that we used
- * to have are now bunk and we need to recompute everything. The first
- * step is to get rid of all of them
- */
-static void destroy_all_live_ranges(dynamic_array_t* live_ranges){
-	//Run through every live range
-	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
-		//Extract it out
-		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
-
-		//Go through all of the variables and unassign them from
-		//live ranges
-		for(u_int16_t i = 0; i < live_range->variables->current_index; i++){
-			//Extract it
-			three_addr_var_t* variable = dynamic_array_get_at(live_range->variables, i);
-
-			//Unassign it
-			variable->associated_live_range = NULL;
-		}
-
-		//Deallocate this live range
-		live_range_dealloc(live_range);
-	}
-
-	//Now we deallocate the entire array and remake it
-	dynamic_array_dealloc(live_ranges);
-
-	//Let's also reset the live range id
-	live_range_id = 0;
 }
 
 
@@ -2477,7 +2381,7 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
 /**
  * Emit a temp var specifically for use in a spill
  */
-static three_addr_var_t* emit_temp_var_for_spill(three_addr_var_t* source_var){
+static three_addr_var_t* emit_temp_var_for_spill(three_addr_var_t* source_var, symtab_function_record_t* function){
 	//First emit it
 	three_addr_var_t* var = emit_temp_var(source_var->type);
 
@@ -2486,6 +2390,12 @@ static three_addr_var_t* emit_temp_var_for_spill(three_addr_var_t* source_var){
 
 	//Copy this over as well
 	var->parameter_number = source_var->parameter_number;
+
+	//Create a new LR for us
+	live_range_t* spill_range = live_range_alloc(function);
+
+	//Add the variable to it
+	add_variable_to_live_range(spill_range, var);
 
 	//Give back the variable
 	return var;
@@ -2506,7 +2416,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 	//Handle the first source register
 	if(target->source_register != NULL && target->source_register->associated_live_range == spill_range){
 		//Emit the spilled variable
-		spilled_var = emit_temp_var_for_spill(target->source_register);
+		spilled_var = emit_temp_var_for_spill(target->source_register, target->function);
 
 		//Emit the load instruction like so
 		instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2524,7 +2434,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 		//we'll go from scratch here
 		if(spilled_var == NULL){
 			//Emit the spilled variable
-			spilled_var = emit_temp_var_for_spill(target->source_register2);
+			spilled_var = emit_temp_var_for_spill(target->source_register2, target->function);
 
 			//Emit the load instruction like so
 			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2543,7 +2453,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 		//we'll go from scratch here
 		if(spilled_var == NULL){
 			//Emit the spilled variable
-			spilled_var = emit_temp_var_for_spill(target->address_calc_reg1);
+			spilled_var = emit_temp_var_for_spill(target->address_calc_reg1, target->function);
 
 			//Emit the load instruction like so
 			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2562,7 +2472,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 		//we'll go from scratch here
 		if(spilled_var == NULL){
 			//Emit the spilled variable
-			spilled_var = emit_temp_var_for_spill(target->address_calc_reg2);
+			spilled_var = emit_temp_var_for_spill(target->address_calc_reg2, target->function);
 
 			//Emit the load instruction like so
 			instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2589,7 +2499,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 			//we'll go from scratch here
 			if(spilled_var == NULL){
 				//Emit the spilled variable
-				spilled_var = emit_temp_var_for_spill(target->destination_register);
+				spilled_var = emit_temp_var_for_spill(target->destination_register, target->function);
 
 				//Emit the load instruction like so
 				instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -2626,7 +2536,7 @@ static void handle_instruction_source_register_spills(instruction_t* target, liv
 			//we'll go from scratch here
 			if(spilled_var == NULL){
 				//Emit the spilled variable
-				spilled_var = emit_temp_var_for_spill(parameter);
+				spilled_var = emit_temp_var_for_spill(parameter, target->function);
 
 				//Emit the load instruction like so
 				instruction_t* load = emit_load_instruction(spilled_var, stack_pointer, type_symtab, stack_region->base_address);
@@ -3374,21 +3284,21 @@ spill_loop:
 	while(colorable == FALSE){
 		if(print_irs == TRUE){
 			printf("============ After Spilling =============== \n");
-			print_ordered_blocks(cfg, cfg->head_block);
+			print_blocks_with_live_ranges(cfg);
 			printf("============ After Spilling =============== \n");
 		}
-
 		count++;
-		/**
-		 * Spill Step 1: wipe everything clean
-		 */
-		destroy_all_live_ranges(live_ranges);
 
 		/**
-		 * Now we need to recompute all live ranges in
-		 * the graph again from scratch
+		 * First reset all of these
 		 */
-		live_ranges = construct_all_live_ranges(cfg);
+		reset_all_live_ranges(live_ranges);
+
+		/**
+		 * Following this, we need to recompute all of our used and assigned
+		 * sets
+		 */
+		recompute_used_and_assigned_sets(cfg);
 
 		/**
 		 * Now that we've recomputed the used and assigned
@@ -3416,12 +3326,6 @@ spill_loop:
 			print_blocks_with_live_ranges(cfg);
 			printf("================= After Interference =======================\n");
 		}
-
-		/**
-		 * Since our process was destructive, we now need to go back through and
-		 * redo all of our precoloring
-		 */
-		pre_color(cfg, live_ranges);
 
 		/**
 		 * And finally - once we have our interference, we are
