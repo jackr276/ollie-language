@@ -29,7 +29,10 @@
 
 //A load and a store generate 2 instructions when we load
 //from the stack
-#define LOAD_AND_STORE_COST 2
+#define LOAD_COST 2
+
+//Storing also generates 2 instructions
+#define STORE_COST 2
 
 //A large prime for hashing
 #define LARGE_PRIME 611593

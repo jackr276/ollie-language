@@ -553,6 +553,36 @@ u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 
 
 /**
+ * Is this a pure constant assignment instruction?
+ */
+u_int8_t is_instruction_constant_assignment(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		//These are our four candidates
+		case MOVB:
+		case MOVL:
+		case MOVW:
+		case MOVQ:
+			//Not a pure constant assignment
+			if(instruction->memory_access_type != NO_MEMORY_ACCESS){
+				return FALSE;
+			}
+
+			//If this is NULL, it also doesn't count
+			if(instruction->source_immediate == NULL){
+				return FALSE;
+			}
+
+			//Otherwise if we survive to here, we're good
+			return TRUE;
+
+		//By default this isn't
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Dynamically allocate and create a temp var
  *
  * Temp Vars do NOT have their lightstack initialized. If ever you are using the stack of a temp
@@ -603,6 +633,9 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 
 	//Store the associate stack region(this is usually null)
 	emitted_var->stack_region = var->stack_region;
+
+	//The membership is also copied
+	emitted_var->membership = var->membership;
 
 	//Copy these over
 	emitted_var->parameter_number = var->function_parameter_order;

@@ -78,24 +78,24 @@ struct live_range_t{
 	symtab_function_record_t* function_defined_in;
 	//Store the id of the live range
 	u_int32_t live_range_id;
+	//Store the heuristic spill cost
+	u_int32_t spill_cost;
 	//Store the assignment count - used for stack pointer fixing
-	u_int16_t assignment_count;
+	u_int32_t assignment_count;
 	//Store the use count as well
-	u_int16_t use_count;
+	u_int32_t use_count;
 	//The degree of this live range
 	u_int16_t degree;
 	//The interference graph index of it
 	u_int16_t interference_graph_index;
-	//Store the heuristic spill cost
-	int16_t spill_cost;
 	//What is the function parameter order here?
 	u_int8_t function_parameter_order;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
+	//Was this live range spilled?
+	u_int8_t was_spilled;
 	//What register is this live range in?
 	general_purpose_register_t reg; 
-	//The size of the variable in the live range
-	variable_size_t size;
 };
 
 
@@ -138,6 +138,8 @@ struct three_addr_var_t{
 	variable_size_t variable_size;
 	//What register is this in?
 	general_purpose_register_t variable_register;
+	//What membership do we have if any
+	variable_membership_t membership;
 };
 
 
@@ -314,6 +316,11 @@ u_int8_t is_destination_assigned(instruction_t* instruction);
  * that moves one register to another?
  */
 u_int8_t is_instruction_pure_copy(instruction_t* instruction);
+
+/**
+ * Is this a pure constant assignment instruction?
+ */
+u_int8_t is_instruction_constant_assignment(instruction_t* instruction);
 
 /**
  * Is this an unsigned multiplication instruction?
