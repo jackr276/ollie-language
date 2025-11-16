@@ -1184,8 +1184,33 @@ static void calculate_live_range_liveness_sets(cfg_t* cfg){
  * step is to get rid of all of them
  */
 static void destroy_all_live_ranges(dynamic_array_t* live_ranges){
+	//Run through every live range
+	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+		//Extract it out
+		live_range_t* live_range = dynamic_array_get_at(live_ranges, i);
 
+		//Go through all of the variables and unassign them from
+		//live ranges
+		for(u_int16_t i = 0; i < live_range->variables->current_index; i++){
+			//Extract it
+			three_addr_var_t* variable = dynamic_array_get_at(live_range->variables, i);
 
+			//Unassign it
+			variable->associated_live_range = NULL;
+		}
+
+		//Deallocate this live range
+		live_range_dealloc(live_range);
+	}
+
+	//Now we deallocate the entire array and remake it
+	dynamic_array_dealloc(live_ranges);
+
+	//Reallocate
+	live_ranges = dynamic_array_alloc();
+
+	//Let's also reset the live range id
+	live_range_id = 0;
 }
 
 
@@ -2396,7 +2421,7 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
  * Note that the *only* kind of instruction that we can generate here is a load. It will not generate
  * anything else
  */
-static live_range_t* handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, stack_region_t* stack_region){
+static void handle_instruction_source_register_spills(instruction_t* target, live_range_t* spill_range, stack_region_t* stack_region){
 	//Handle the first source register
 	if(target->source_register != NULL && target->source_register->associated_live_range == spill_range){
 		//Emit the load instruction like so
