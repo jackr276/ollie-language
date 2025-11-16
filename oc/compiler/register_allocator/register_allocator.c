@@ -2452,6 +2452,42 @@ static void handle_destination_spill(three_addr_var_t* var, instruction_t* instr
 
 
 /**
+ * Handle a scenario where we're just handling a source spill for a pure copy instruction
+ *
+ * Example:
+ * movl LR33, LR100
+ *
+ * Can just become
+ * movl (LR0), LR100
+ */
+static void handle_pure_copy_source_spills(instruction_t* instruction, u_int32_t offset){
+	printf("HERE with:\n");
+	print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+
+	//This will always be a read
+	instruction->memory_access_type = READ_FROM_MEMORY;
+
+	//Offset is 0, we just need to do a dereference
+	if(offset == 0){
+		instruction->source_register = stack_pointer;
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+
+	//Otherwise, we need to do an offset calculation
+	} else {
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		//Turn this into a load instruction
+		instruction->address_calc_reg1 = stack_pointer;
+
+		//IMPORTANT - NULL this out so that future steps don't get confused
+		instruction->source_register = NULL;
+
+		//Create the offset using a u64
+		instruction->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64")->type);
+	}
+}
+
+
+/**
  * Handle all spilling for a given instruction. This includes source & destination
  * spilling
  */
@@ -2464,25 +2500,12 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 	if(is_instruction_pure_copy(instruction) == TRUE){
 		//Case we want here
 		if(instruction->source_register->associated_live_range == spill_range){
-			printf("HERE with:\n");
-			print_instruction(stdout, instruction, PRINTING_LIVE_RANGES);
+			//Let the helper deal with it
+			handle_pure_copy_source_spills(instruction, spill_region->base_address);
 
-
-			instruction->memory_access_type = READ_FROM_MEMORY;
-
-			if(spill_region->base_address == 0){
-				instruction->source_register = stack_pointer;
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
-
-			} else {
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-				//Turn this into a load instruction
-				instruction->address_calc_reg1 = stack_pointer;
-				instruction->offset = emit_direct_integer_or_char_constant(spill_region->base_address, lookup_type_name_only(type_symtab, "u64")->type);
-			}
+			//We're done here
+			return instruction;
 		}
-
-		return instruction;
 	}
 
 	//By default it's the instruction
