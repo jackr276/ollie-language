@@ -3328,7 +3328,6 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 * In reality, usually this will only happen once or twice, even in the most extreme 
 	 * cases
 	 */
-	u_int16_t count = 0;
 spill_loop:
 	//Keep going so long as we can't color
 	while(colorable == FALSE){
@@ -3337,7 +3336,6 @@ spill_loop:
 			print_blocks_with_live_ranges(cfg);
 			printf("============ After Spilling =============== \n");
 		}
-		count++;
 
 		/**
 		 * First reset all of these
@@ -3384,8 +3382,6 @@ spill_loop:
 		 * graph_color_and_allocate returns a successful result
 		 */
 		colorable = graph_color_and_allocate(cfg, live_ranges);
-
-		if(count > 2) exit(1);
 	}
 
 	/**
