@@ -18,7 +18,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/ucontext.h>
 
 //The atomically increasing live range id
 u_int32_t live_range_id = 0;
@@ -435,6 +434,68 @@ static void print_blocks_with_registers(cfg_t* cfg){
 
 
 /**
+ * Print a block our for reading
+*/
+static void print_ordered_block(basic_block_t* block){
+	//If this is some kind of switch block, we first print the jump table
+	if(block->jump_table != NULL){
+		print_jump_table(stdout, block->jump_table);
+	}
+
+	//Switch here based on the type of block that we have
+	switch(block->block_type){
+		//Function entry blocks need extra printing
+		case BLOCK_TYPE_FUNC_ENTRY:
+			printf("%s:\n", block->function_defined_in->func_name.string);
+			print_stack_data_area(&(block->function_defined_in->data_area));
+			break;
+
+		//By default just print the name
+		default:
+			printf(".L%d:\n", block->block_id);
+			break;
+	}
+
+	//Now grab a cursor and print out every statement that we 
+	//have
+	instruction_t* cursor = block->leader_statement;
+
+	//So long as it isn't null
+	while(cursor != NULL){
+		print_instruction(stdout, cursor, PRINTING_VAR_IN_INSTRUCTION);
+
+		//Move along to the next one
+		cursor = cursor->next_statement;
+	}
+
+	//For spacing
+	printf("\n");
+}
+
+
+/**
+ * Run through using the direct successor strategy and print all ordered blocks.
+ * We print much less here than the debug printer in the CFG, because all dominance
+ * relations are now useless
+ */
+static void print_ordered_blocks(cfg_t* cfg, basic_block_t* head_block){
+	//Run through the direct successors so long as the block is not null
+	basic_block_t* current = head_block;
+
+	//So long as this one isn't NULL
+	while(current != NULL){
+		//Print it
+		print_ordered_block(current);
+		//Advance to the direct successor
+		current = current->direct_successor;
+	}
+
+	//Print all global variables after the blocks
+	print_all_global_variables(stdout, cfg->global_variables);
+}
+
+
+/**
  * Print all live ranges that we have
  */
 static void print_all_live_ranges(dynamic_array_t* live_ranges){
@@ -605,6 +666,8 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 		} else {
 			printf("Fatal compiler error: variable found with that has no live range\n");
 			print_variable(stdout, variable, PRINTING_VAR_INLINE);
+			print_function_name(variable->linked_var->function_declared_in);
+			printf("\n\n");
 			exit(0);
 		}
 	}
@@ -3309,6 +3372,12 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 spill_loop:
 	//Keep going so long as we can't color
 	while(colorable == FALSE){
+		if(print_irs == TRUE){
+			printf("============ After Spilling =============== \n");
+			print_ordered_blocks(cfg, cfg->head_block);
+			printf("============ After Spilling =============== \n");
+		}
+
 		count++;
 		/**
 		 * Spill Step 1: wipe everything clean
