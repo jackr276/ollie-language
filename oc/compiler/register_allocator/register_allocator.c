@@ -781,29 +781,9 @@ static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, b
 
 
 /**
- * Assign a live range to a function parameter variable
- *
- * Since function parameters are not explicitly being read from, we do not want to
- * count this as a use
- */
-static void assign_live_range_to_function_parameter(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* function_parameter_var){
-	//Just leave if we're null
-	if(function_parameter_var == NULL){
-		return;
-	}
-
-	//Just a wrapper
-	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, function_parameter_var);
-
-	//We will bump the use count, but this is not officially a read
-	live_range->use_count++;
-}
-
-
-/**
  * Handle the live range that comes from the source of an instruction
  */
-static void assign_live_range_to_ret_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
+static void assign_live_range_to_implicit_source_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
 	//Just leave if it's NULL
 	if(source_variable == NULL){
 		return;
@@ -900,7 +880,7 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
 		 * Because we are not explicitly reading in this instruction, we need a special rule that takes care to not
 		 * add these as used variables. We will instead just assign the appropriate live ranges
 		 */
-		assign_live_range_to_function_parameter(live_ranges, basic_block, parameter);
+		assign_live_range_to_implicit_source_variable(live_ranges, basic_block, parameter);
 	}
 }
 
@@ -936,7 +916,7 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				continue;
 
 			case RET:
-				assign_live_range_to_ret_variable(live_ranges, basic_block, current->source_register);
+				assign_live_range_to_implicit_source_variable(live_ranges, basic_block, current->source_register);
 				
 				current = current->next_statement;
 				continue;
@@ -957,6 +937,27 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				construct_inc_dec_live_range(live_ranges, basic_block, current);
 			
 				//And we're done - no need to go further
+				current = current->next_statement;
+				continue;
+
+			/**
+			 * These are special cases here. We do not want to count the implicit reads
+			 * as explicit uses in our allocation procedure
+			 */
+			case MULQ:
+			case MULL:
+			case MULW:
+			case MULB:
+				//Handle the destination variable
+				assign_live_range_to_destination_variable(live_ranges, basic_block, current);
+
+				//Assign all of the source variable live ranges
+				assign_live_range_to_source_variable(live_ranges, basic_block, current->source_register);
+
+				//For the source variable2, we will assign the live range but *not* add it in
+				//to the used_variable set
+				assign_live_range_to_implicit_source_variable(live_ranges, basic_block, current->source_register2);
+
 				current = current->next_statement;
 				continue;
 
@@ -1619,6 +1620,7 @@ static live_range_t* does_precoloring_interference_exist(live_range_t* coloree, 
 
 		//This collision means we do have interference
 		if(neighbor->reg == reg){
+			printf("CLASH BETWEEN LR%d and LR%d\n", coloree->live_range_id, neighbor->live_range_id);
 			return NULL;
 		}
 	}
@@ -2122,6 +2124,24 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				//This counts as both an assignment and a use
 				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
 				add_used_live_range(cursor->destination_register->associated_live_range, block);
+				break;
+
+			/**
+			 * These live ranges have "implicit sources". Like other implicit values(ret, function calls, etc.),
+			 * We don't count this as an official read so we skip it. The other ones are official reads
+			 */
+			case MULQ:
+			case MULL:
+			case MULW:
+			case MULB:
+				//These are assigned
+				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+
+				//The source is used
+				add_used_live_range(cursor->source_register->associated_live_range, block);
+
+				//source_register2 is an *implicit source*. As such, we do not count it as an official
+				//read here and we skip it
 				break;
 
 			default:
