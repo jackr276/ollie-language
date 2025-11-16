@@ -939,27 +939,6 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 				current = current->next_statement;
 				continue;
 
-			/**
-			 * These are special cases here. We do not want to count the implicit reads
-			 * as explicit uses in our allocation procedure
-			 */
-			case MULQ:
-			case MULL:
-			case MULW:
-			case MULB:
-				//Handle the destination variable
-				assign_live_range_to_destination_variable(live_ranges, basic_block, current);
-
-				//Assign all of the source variable live ranges
-				assign_live_range_to_source_variable(live_ranges, basic_block, current->source_register);
-
-				//For the source variable2, we will assign the live range but *not* add it in
-				//to the used_variable set
-				assign_live_range_to_implicit_source_variable(live_ranges, basic_block, current->source_register2);
-
-				current = current->next_statement;
-				continue;
-
 			//Call and indirect call have hidden parameters that need to be accounted for
 			case CALL:
 			case INDIRECT_CALL:
@@ -2122,24 +2101,6 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 				//This counts as both an assignment and a use
 				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
 				add_used_live_range(cursor->destination_register->associated_live_range, block);
-				break;
-
-			/**
-			 * These live ranges have "implicit sources". Like other implicit values(ret, function calls, etc.),
-			 * We don't count this as an official read so we skip it. The other ones are official reads
-			 */
-			case MULQ:
-			case MULL:
-			case MULW:
-			case MULB:
-				//These are assigned
-				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
-
-				//The source is used
-				add_used_live_range(cursor->source_register->associated_live_range, block);
-
-				//source_register2 is an *implicit source*. As such, we do not count it as an official
-				//read here and we skip it
 				break;
 
 			default:
