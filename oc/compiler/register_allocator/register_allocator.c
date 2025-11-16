@@ -587,18 +587,6 @@ static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_
 
 
 /**
- * Remove a variable from a given live range
- */
-static void remove_variable_from_live_range(live_range_t* live_range, three_addr_var_t* variable){
-	//If the literal memory address is already in here we leave
-	if(dynamic_array_contains(live_range->variables, variable) == NOT_FOUND){
-		return;
-	}
-
-}
-
-
-/**
  * Figure out which live range a given variable was associated with. 
  *
  * NOTE: We *only* get here if we have used variables. This means that assigned variables do not count
