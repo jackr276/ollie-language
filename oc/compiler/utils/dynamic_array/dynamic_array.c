@@ -234,7 +234,7 @@ void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
 	}
 
 	//Null this out
-	array->internal_array[array->current_index] = NULL;
+	array->internal_array[array->current_index - 1] = NULL;
 
 	//We've seen one less of these now
 	(array->current_index)--;
