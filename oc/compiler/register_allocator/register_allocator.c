@@ -2430,9 +2430,14 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 
 
 /**
- * Handle all cases for a destination spill
+ * Handle spilling a destination to memory
  */
-static instruction_t* handle_destination_spill(dynamic_array_t* live_ranges, three_addr_var_t* target_destination, live_range_t* spill_range, live_range_t** currently_spilled, instruction_t* target, u_int32_t offset){
+static void handle_destination_spill(three_addr_var_t* var, instruction_t* instruction, u_int32_t offset){
+	//Let the helper do this for us
+	instruction_t* store = emit_store_instruction(var, stack_pointer, type_symtab, offset);
+
+	//Insert the store after the assignment
+	insert_instruction_after_given(store, instruction);
 }
 
 
@@ -2441,6 +2446,9 @@ static instruction_t* handle_destination_spill(dynamic_array_t* live_ranges, thr
  * spilling
  */
 static instruction_t* handle_instruction_level_spilling(instruction_t* instruction, dynamic_array_t* live_ranges, live_range_t* spill_range, live_range_t** currently_spilled, stack_region_t* spill_region){
+	//By default it's the instruction
+	instruction_t* latest = instruction;
+
 	//Handle all source spills first
 	handle_source_spill(live_ranges, instruction->source_register, spill_range, currently_spilled, instruction, spill_region->base_address);
 	handle_source_spill(live_ranges, instruction->source_register2, spill_range, currently_spilled, instruction, spill_region->base_address);
@@ -2462,13 +2470,63 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 		}
 	}
 
-
-	//Now let's handle the destination register
+	/**
+	 * Let's now handle the destination register. There are 2 things that we need to account for
+	 * in the destination register due to the way that we've been reassigning things. The destination
+	 * register may itself be the spill range, *or* it may also be the "currently spilled" value
+	 * that we've been working with. We will handle both cases
+	 */
 	if(instruction->destination_register != NULL){
-		if(instruction->destination_register->associated_live_range == )
+		//First case - the destination register is the spill range
+		if(instruction->destination_register->associated_live_range == spill_range
+			|| instruction->destination_register->associated_live_range == *currently_spilled){
 
+			//In this case, we need to handle a source spill and a destination store
+			if(is_destination_also_operand(instruction) == TRUE){
+				//Handle the source first
+				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->base_address);
+
+				//Emit the store instruction for this now
+				handle_destination_spill(instruction->destination_register, instruction, spill_region->base_address);
+
+				//Update latest
+				latest = instruction->next_statement;
+
+			//In the case like this, we just need to emit the load
+			} else if(is_destination_assigned(instruction) == FALSE){
+				//Handle the source spill only
+				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->base_address);
+
+			//In all other cases, we just have the store
+			} else {
+				//Emit the store instruction for this now
+				handle_destination_spill(instruction->destination_register, instruction, spill_region->base_address);
+
+				//Update latest
+				latest = instruction->next_statement;
+			}
+		}
 	}
 
+	//Same - but rarer - for destination register 2
+	if(instruction->destination_register2 != NULL){
+		//First case - the destination register is the spill range
+		if(instruction->destination_register2->associated_live_range == spill_range
+			|| instruction->destination_register2->associated_live_range == *currently_spilled){
+
+			//Emit the store instruction for this now
+			handle_destination_spill(instruction->destination_register2, instruction, spill_region->base_address);
+
+			//Update latest
+			latest = instruction->next_statement;
+		}
+	}
+
+	//No matter what, currently spilled gets nulled out here
+	*currently_spilled = NULL;
+
+	//Give back the last instruction
+	return latest;
 }
 
 
