@@ -2391,11 +2391,59 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
 
 
 /**
+ * Handle all source spilling that we need to do
+ */
+static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* target_source, live_range_t* spill_range, live_range_t** currently_spilled, instruction_t* target, u_int32_t offset){
+	//Do we even need to bother here? If not, just leave
+	if(target_source == NULL || target_source->associated_live_range != spill_range){
+		return;
+	}
+
+	//Otherwise, we have a match. Let's first check if we already have this register out as something that is "currently_spilled". If we
+	//don't then we need to generate a load instruction and put it before the target
+	if(*currently_spilled == NULL){
+		//We'll need a dummy var for this
+		three_addr_var_t* dummy = emit_temp_var(target_source->type);
+
+		//Once we have the dummy, we can create the new LR
+		*currently_spilled = live_range_alloc(target->function);
+
+		//Be sure we copy this over too
+		(*currently_spilled)->function_parameter_order = spill_range->function_parameter_order;
+
+		//Add it in
+		dynamic_array_add(live_ranges, *currently_spilled);
+
+		//We can put the dummy in now
+		add_variable_to_live_range(*currently_spilled, dummy);
+
+		//Handle the load instruction
+		instruction_t* load_instruction = emit_load_instruction(dummy, stack_pointer, type_symtab, offset);
+
+		//Insert it before the target
+		insert_instruction_before_given(load_instruction, target);
+	}
+
+	//No matter what happened there, the target source now points to this new currently spilled LR
+	add_variable_to_live_range(*currently_spilled, target_source);
+}
+
+
+/**
  * Handle all spilling for a given instruction. This includes source & destination
  * spilling
  */
-static instruction_t* handle_instruction_level_spilling(instruction_t* instruction, live_range_t* spill_range, live_range_t** currently_spilled){
+static instruction_t* handle_instruction_level_spilling(instruction_t* instruction, dynamic_array_t* live_ranges, live_range_t* spill_range, live_range_t** currently_spilled, stack_region_t* spill_region){
+	//Handle all source spills first
+	handle_source_spill(live_ranges, instruction->source_register, spill_range, currently_spilled, instruction, spill_region->base_address);
+	handle_source_spill(live_ranges, instruction->source_register2, spill_range, currently_spilled, instruction, spill_region->base_address);
+	handle_source_spill(live_ranges, instruction->address_calc_reg1, spill_range, currently_spilled, instruction, spill_region->base_address);
+	handle_source_spill(live_ranges, instruction->address_calc_reg2, spill_range, currently_spilled, instruction, spill_region->base_address);
 
+	//Run through all function parameters
+	if(instruction->parameters != NULL && instruction->instruction_type != PHI_FUNCTION){
+
+	}
 }
 
 
@@ -2417,7 +2465,11 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
  * addb LR10, LR35
  * movb LR35, (LR0)
  *
- * And LR33 is nowhere to be seen anymore
+ * And LR33 is nowhere to be seen anymore.
+ *
+ * By the time that we are done, LR33 should *never* be seen in the CFG again. It should
+ * have no neighbors and nobody should need to contend with it, because it will have been replaced
+ * by a bunch of smaller, shorter live ranges
  *
  *
  * Spilling principles: Every spill will generate its own brand new live range. This live range
@@ -2437,6 +2489,9 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 	//Grab a cursor
 	basic_block_t* block_cursor = cfg->head_block;
 
+	//Initially nothing is spilled
+	live_range_t* currently_spilled = NULL;
+
 	//So long as it's not null
 	while(block_cursor != NULL){
 		//Now we need an instruction cursor
@@ -2445,7 +2500,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
 		//So long as this is not NULL, keep going
 		while(cursor != NULL){
 			//Let the helper deal with it
-			cursor = handle_instruction_level_spilling();
+			cursor = handle_instruction_level_spilling(cursor, live_ranges, spill_range, &currently_spilled);
 
 			//Push it up to the next instruction
 			cursor = cursor->next_statement;
