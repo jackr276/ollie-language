@@ -351,15 +351,18 @@ static void print_block_with_live_ranges(basic_block_t* block){
  * relations are now useless
  */
 static void print_blocks_with_live_ranges(cfg_t* cfg){
-	//Run through the direct successors so long as the block is not null
-	basic_block_t* current = cfg->head_block;
+	//Run through all of the functions individually
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract the given function block
+		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-	//So long as this one isn't NULL
-	while(current != NULL){
-		//Print it
-		print_block_with_live_ranges(current);
-		//Advance to the direct successor
-		current = current->direct_successor;
+		//So long as this one isn't NULL
+		while(current != NULL){
+			//Print it
+			print_block_with_live_ranges(current);
+			//Advance to the direct successor
+			current = current->direct_successor;
+		}
 	}
 
 	//Print all global variables after the blocks
@@ -419,18 +422,21 @@ static void print_block_with_registers(basic_block_t* block){
  * ordered blocks with their registers after allocation
  */
 static void print_blocks_with_registers(cfg_t* cfg){
-	//Run through the direct successors so long as the block is not null
-	basic_block_t* current = cfg->head_block;
+	//Run through all of the functions individually
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract the given function block
+		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-	//So long as this one isn't NULL
-	while(current != NULL){
-		//Print it
-		print_block_with_registers(current);
-		//Advance to the direct successor
-		current = current->direct_successor;
+		//So long as this one isn't NULL
+		while(current != NULL){
+			//Print it
+			print_block_with_live_ranges(current);
+			//Advance to the direct successor
+			current = current->direct_successor;
+		}
 	}
 
-	//Print all global variables after the blocks
+	//Now we'll print all global variables
 	print_all_global_variables(stdout, cfg->global_variables);
 }
 
@@ -3114,6 +3120,12 @@ static void insert_saving_logic(cfg_t* cfg){
 		insert_caller_saved_register_logic(current_function_entry);
 	}
 }
+
+
+/**
+ * Perform our function level allocation
+ */
+
 
 
 /**
