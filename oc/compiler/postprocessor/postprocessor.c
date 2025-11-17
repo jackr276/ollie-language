@@ -372,9 +372,9 @@ static basic_block_t* does_block_end_in_jump_instruction(basic_block_t* block){
  * find a way to reorder the blocks since it is likely that the control flow
  * changed
  */
-static void reorder_blocks(basic_block_t* ){
+static void reorder_blocks(basic_block_t* function_entry_block){
 	//We'll first wipe the visited status on this CFG
-	reset_visited_status(cfg, TRUE);
+	reset_function_visited_status(function_entry_block, TRUE);
 	
 	//We will perform a breadth first search and use the "direct successor" area
 	//of the blocks to store them all in one chain
@@ -382,86 +382,80 @@ static void reorder_blocks(basic_block_t* ){
 	//We'll need to use a queue every time, we may as well just have one big one
 	heap_queue_t* queue = heap_queue_alloc();
 
-	//For each function
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
-		//Grab the function block out
-		basic_block_t* func_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
+	//These are reset for every function we deal with
+	basic_block_t* previous = NULL;
+	//The starting point that all traversals will use
+	basic_block_t* head_block = NULL;
 
-		//These are reset for every function we deal with
-		basic_block_t* previous = NULL;
-		//The starting point that all traversals will use
-		basic_block_t* head_block = NULL;
+	//This function start block is the begging of our BFS	
+	enqueue(queue, function_entry_block);
+	
+	//So long as the queue is not empty
+	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		//Grab this block off of the queue
+		basic_block_t* current = dequeue(queue);
 
-		//This function start block is the begging of our BFS	
-		enqueue(queue, func_block);
-		
-		//So long as the queue is not empty
-		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
-			//Grab this block off of the queue
-			basic_block_t* current = dequeue(queue);
+		//If previous is NULL, this is the first block
+		if(previous == NULL){
+			previous = current;
+			//This is also the head block then
+			head_block = previous;
+		//We need to handle the rare case where we reach two of the same blocks(maybe the block points
+		//to itself) but neither have been visited. We make sure that, in this event, we do not set the
+		//block to be it's own direct successor
+		} else if(previous != current && current->visited == FALSE){
+			//We'll add this in as a direct successor
+			previous->direct_successor = current;
 
-			//If previous is NULL, this is the first block
-			if(previous == NULL){
-				previous = current;
-				//This is also the head block then
-				head_block = previous;
-			//We need to handle the rare case where we reach two of the same blocks(maybe the block points
-			//to itself) but neither have been visited. We make sure that, in this event, we do not set the
-			//block to be it's own direct successor
-			} else if(previous != current && current->visited == FALSE){
-				//We'll add this in as a direct successor
-				previous->direct_successor = current;
+			//Do we end in a jump?
+			basic_block_t* end_jumps_to = does_block_end_in_jump_instruction(previous);
 
-				//Do we end in a jump?
-				basic_block_t* end_jumps_to = does_block_end_in_jump_instruction(previous);
-
-				//If we do AND what we're jumping to is the direct successor, then we'll
-				//delete the jump statement as it is now unnecessary
-				if(end_jumps_to == previous->direct_successor){
-					//Get rid of this jump as it's no longer needed
-					delete_statement(previous->exit_statement);
-				}
-
-				//Add this in as well
-				previous = current;
+			//If we do AND what we're jumping to is the direct successor, then we'll
+			//delete the jump statement as it is now unnecessary
+			if(end_jumps_to == previous->direct_successor){
+				//Get rid of this jump as it's no longer needed
+				delete_statement(previous->exit_statement);
 			}
 
-			//Make sure that we flag this as visited
-			current->visited = TRUE;
+			//Add this in as well
+			previous = current;
+		}
 
-			//Let's first check for our special case - us jumping to a given block as the very last statement. If
-			//this turns back something that isn't null, it'll be the first thing we add in
-			basic_block_t* direct_end_jump = does_block_end_in_jump_instruction(current);
+		//Make sure that we flag this as visited
+		current->visited = TRUE;
 
-			//If this is the case, we'll add it in first
-			if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
-				//Add it into the queue
-				enqueue(queue, direct_end_jump);
+		//Let's first check for our special case - us jumping to a given block as the very last statement. If
+		//this turns back something that isn't null, it'll be the first thing we add in
+		basic_block_t* direct_end_jump = does_block_end_in_jump_instruction(current);
+
+		//If this is the case, we'll add it in first
+		if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
+			//Add it into the queue
+			enqueue(queue, direct_end_jump);
+		}
+
+		//Now we'll go through each of the successors in this node
+		for(u_int16_t idx = 0; current->successors != NULL && idx < current->successors->current_index; idx++){
+			//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
+			//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
+
+			//Grab the successor
+			basic_block_t* successor = dynamic_array_get_at(current->successors, idx);
+
+			//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
+			if(successor == direct_end_jump){
+				continue;
 			}
 
-			//Now we'll go through each of the successors in this node
-			for(u_int16_t idx = 0; current->successors != NULL && idx < current->successors->current_index; idx++){
-				//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
-				//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
+			//If the block is completely empty(function end block), we'll also skip
+			if(successor->leader_statement == NULL){
+				successor->visited = TRUE;
+				continue;
+			}
 
-				//Grab the successor
-				basic_block_t* successor = dynamic_array_get_at(current->successors, idx);
-
-				//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
-				if(successor == direct_end_jump){
-					continue;
-				}
-
-				//If the block is completely empty(function end block), we'll also skip
-				if(successor->leader_statement == NULL){
-					successor->visited = TRUE;
-					continue;
-				}
-
-				//Otherwise it's not, so we'll add it in
-				if(successor->visited == FALSE){
-					enqueue(queue, successor);
-				}
+			//Otherwise it's not, so we'll add it in
+			if(successor->visited == FALSE){
+				enqueue(queue, successor);
 			}
 		}
 	}
@@ -469,8 +463,6 @@ static void reorder_blocks(basic_block_t* ){
 	//Destroy the queue when done
 	heap_queue_dealloc(queue);
 }
-
-
 
 
 /**
@@ -500,13 +492,6 @@ void postprocess(cfg_t* cfg){
 		/**
 		 * PASS 3: final reordering
 		*/
-		//
-		//
-		//
-		//TODO NOT DONE
-		//
-		//
-		//
 		reorder_blocks(function_entry_block);
 	}
 }

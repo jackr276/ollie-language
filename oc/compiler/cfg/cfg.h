@@ -259,6 +259,11 @@ void print_all_cfg_blocks(cfg_t* cfg);
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor);
 
 /**
+ * Reset the visited status inside a particular function in the CFG
+ */
+void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t reset_direct_successor);
+
+/**
  * Allocate a basic block using calloc. NO data assignment
  * happens in this function
 */
