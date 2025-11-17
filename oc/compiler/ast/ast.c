@@ -324,32 +324,22 @@ void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child){
  * Global tree deallocation function
  */
 void ast_dealloc(){
-	//For our own safety here
-	if(head_node == NULL){
-		return;
-	}
-
-	//Store our temp var here
-	generic_ast_node_t* temp;
-
-	while(head_node != NULL){
-		//Grab a reference to it
-		temp = head_node;
-
-		//Advance root along
-		head_node = head_node->next_created_ast_node;
+	//Run through all of the nodes in the created array
+	for(u_int16_t i = 0; i < created_nodes->current_index; i++){
+		//Grab the node out
+		generic_ast_node_t* node = dynamic_array_get_at(created_nodes, i);
 
 		//Some additional freeing may be needed
-		switch(temp->ast_node_type){
+		switch(node->ast_node_type){
 			case AST_NODE_TYPE_IDENTIFIER:
 			case AST_NODE_TYPE_ASM_INLINE_STMT:
-				dynamic_string_dealloc(&(temp->string_value));
+				dynamic_string_dealloc(&(node->string_value));
 				break;
 
 			//We could see a case where this is a string const
 			case AST_NODE_TYPE_CONSTANT:
-				if(temp->constant_type == STR_CONST){
-					dynamic_string_dealloc(&(temp->string_value));
+				if(node->constant_type == STR_CONST){
+					dynamic_string_dealloc(&(node->string_value));
 				}
 				break;
 
@@ -359,6 +349,9 @@ void ast_dealloc(){
 		}
 
 		//Destroy temp here
-		free(temp);
+		free(node);
 	}
+
+	//Finally, we can destroy the entire array as well
+	dynamic_array_dealloc(created_nodes);
 }
