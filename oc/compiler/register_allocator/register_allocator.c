@@ -1007,16 +1007,19 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 	//Construct and add the instruction pointer's LR
 	construct_and_add_instruction_pointer_live_range(live_ranges, cfg->instruction_pointer);
 
-	//Since the blocks are already ordered, this is very simple
-	basic_block_t* current = cfg->head_block;
+	//Run through every function here
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Grab the entry block
+		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-	//Run through every single block
-	while(current != NULL){
-		//Let the helper do this
-		construct_live_ranges_in_block(live_ranges, current);
+		//Run through every single block
+		while(current != NULL){
+			//Let the helper do this
+			construct_live_ranges_in_block(live_ranges, current);
 
-		//Advance to the next
-		current = current->direct_successor;
+			//Advance to the next
+			current = current->direct_successor;
+		}
 	}
 
 	//Give back the array
