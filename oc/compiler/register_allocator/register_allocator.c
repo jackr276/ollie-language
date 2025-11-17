@@ -1693,7 +1693,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 		general_purpose_register_t reg = parameter_registers[instruction->address_calc_reg1->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->address_calc_reg1->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->address_calc_reg1->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -1708,7 +1708,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 		general_purpose_register_t reg = parameter_registers[instruction->address_calc_reg2->associated_live_range->function_parameter_order - 1];
 		
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->address_calc_reg2->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->address_calc_reg2->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -1725,7 +1725,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 			//If it has one, assign it
 			if(instruction->source_register != NULL){
 				//Let the helper do it
-				colorable = precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, RAX);
+				colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register->associated_live_range, RAX);
 
 				//We had to spill here - jump out
 				if(colorable == FALSE){
@@ -1739,7 +1739,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 		case MULL:
 		case MULQ:
 			//When we do an unsigned multiplication, the implicit source register must be in RAX
-			colorable = precolor_live_range(cfg, live_ranges, instruction->source_register2->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1747,7 +1747,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 			}
 
 			//The destination must also be in RAX here
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1779,7 +1779,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 			//Do we have a register source?
 			if(instruction->source_register != NULL){
 				//Due to a quirk in old x86, shift instructions must have their source in RCX
-				colorable = precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, RCX);
+				colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register->associated_live_range, RCX);
 
 				//We had to spill here - jump out
 				if(colorable == FALSE){
@@ -1794,7 +1794,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 		case CWTL:
 		case CBTW:
 			//Source is always %RAX
-			colorable =  precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, RAX);
+			colorable =  precolor_live_range(function_entry, live_ranges, instruction->source_register->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1803,7 +1803,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 
 			//The results are always RDX and RAX 
 			//Lower order bits
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1811,7 +1811,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 			}
 
 			//Higher order bits
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register2->associated_live_range, RDX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1829,7 +1829,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 		case IDIVL:
 		case IDIVQ:
 			//The source register for a division must be in RAX
-			colorable = precolor_live_range(cfg, live_ranges, instruction->source_register2->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1837,7 +1837,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 			}
 
 			//The first destination register is the quotient, and is in RAX
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1845,7 +1845,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 			}
 
 			//The second destination register is the remainder, and is in RDX
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register2->associated_live_range, RDX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1859,7 +1859,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 		case INDIRECT_CALL:
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
-				colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+				colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 				//We had to spill here - jump out
 				if(colorable == FALSE){
@@ -1886,7 +1886,7 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
  					live_range_t* param_live_range = param->associated_live_range;
 
 					//And we'll use the function param list to precolor appropriately
-					colorable = precolor_live_range(cfg, live_ranges, param_live_range, parameter_registers[i]);
+					colorable = precolor_live_range(function_entry, live_ranges, param_live_range, parameter_registers[i]);
 
 					//We had to spill here - jump out
 					if(colorable == FALSE){
@@ -1915,12 +1915,12 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
  *
  * This function returns TRUE if pre-coloring worked, FALSE if not
  */
-static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
+static u_int8_t pre_color(basic_block_t* function_entry, dynamic_array_t* live_ranges){
 	//By default assume that we can precolor it
 	u_int8_t could_be_precolored = TRUE;
 
 	//Grab a cursor to the head block
-	basic_block_t* cursor = cfg->head_block;
+	basic_block_t* cursor = function_entry;
 
 	//Crawl the entire CFG
 	while(cursor != NULL){
@@ -1931,7 +1931,7 @@ static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
 		while(instruction_cursor != NULL){
 			//TODO LINK INTO SPILLER
 			//Invoke the helper to pre-color it
-			could_be_precolored = precolor_instruction(cfg, live_ranges, instruction_cursor);
+			could_be_precolored = precolor_instruction(function_entry, live_ranges, instruction_cursor);
 
 			//Push along to the next statement
 			instruction_cursor = instruction_cursor->next_statement;
@@ -3194,7 +3194,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 *
 	 * This has the potential to cause spills
 	 */
-	 colorable = pre_color(cfg, live_ranges);
+	 colorable = pre_color(function_entry, live_ranges);
 
 	/**
 	 * If we couldn't precolor, we'll have spilled a live range and as such must go
