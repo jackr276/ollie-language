@@ -26,8 +26,8 @@ u_int32_t live_range_id = 0;
 const general_purpose_register_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 
 //Avoid need to rearrange
-static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges);
-static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range);
+static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* live_ranges);
+static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range);
 
 //Just hold the stack pointer live range
 static live_range_t* stack_pointer_lr;
@@ -1538,12 +1538,12 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
  *
  * This function will always invoke a helper that does it for a specific block
  */
-static interference_graph_t* construct_function_level_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges){
+static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* live_ranges){
 	//It starts off as null
 	interference_graph_t* graph = NULL;
 
 	//We'll first need a pointer
-	basic_block_t* current = cfg->head_block;
+	basic_block_t* current = function_entry_block;
 
 	//Run through every block in the CFG's ordered set
 	while(current != NULL){
@@ -1598,7 +1598,7 @@ static live_range_t* does_precoloring_interference_exist(live_range_t* coloree, 
 /**
  * Perform the precoloring. Return TRUE if we can precolor, FALSE if we cannot and had to spill
  */
-static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* coloree, general_purpose_register_t reg){
+static u_int8_t precolor_live_range(basic_block_t* function_entry, dynamic_array_t* live_ranges, live_range_t* coloree, general_purpose_register_t reg){
 	//Returns NULL if there's no interference, the interferee if there is one
 	live_range_t* interferee = does_precoloring_interference_exist(coloree, reg);
 
@@ -1607,9 +1607,9 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
 	//scheme for it
 	if(interferee != NULL){
 		if(coloree->spill_cost < interferee->spill_cost){
-			spill(cfg, live_ranges, coloree);
+			spill_in_function(function_entry, live_ranges, coloree);
 		} else {
-			spill(cfg, live_ranges, interferee);
+			spill_in_function(function_entry, live_ranges, interferee);
 		}
 
 		//Whatever we spill the return value here is false
@@ -1633,7 +1633,7 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
  *
  * Returns TRUE if we could color, false if not
  */
-static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, instruction_t* instruction){
+static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_array_t* live_ranges, instruction_t* instruction){
 	u_int8_t colorable;
 
 	/**
@@ -1648,7 +1648,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		general_purpose_register_t reg = parameter_registers[instruction->destination_register->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -1663,7 +1663,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		general_purpose_register_t reg = parameter_registers[instruction->source_register->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -1678,7 +1678,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		general_purpose_register_t reg = parameter_registers[instruction->source_register2->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->source_register2->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register2->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -2135,9 +2135,9 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
  * Recompute the used & assigned sets for the whole CFG
  * This is done after we coalesce at least one live range
  */
-static void recompute_used_and_assigned_sets(cfg_t* cfg){
+static void recompute_used_and_assigned_sets(basic_block_t* function_entry){
 	//Grab a cursor block
-	basic_block_t* cursor = cfg->head_block;
+	basic_block_t* cursor = function_entry;
 
 	//Run through every block
 	while(cursor != NULL){
@@ -2627,18 +2627,15 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
  * is our "currently spilled" live range. For the example above, once we have spilled into the new
  * LR35, we need to keep that as active until we load it back up
  */
-static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
+static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range){
 	//Extract the function that we're using
-	symtab_function_record_t* function = spill_range->function_defined_in;
+	symtab_function_record_t* function = function_entry_block->function_defined_in;
 
 	//Let's first create the stack region for our spill range
 	stack_region_t* spill_region = create_stack_region_for_type(&(function->data_area), get_largest_type_in_live_range(spill_range));
 
-	//Now that we have our spill region, we need to start crawling through the entire CFG and replacing
-	//all uses/assignments appropriately
-	
 	//Grab a cursor
-	basic_block_t* block_cursor = cfg->head_block;
+	basic_block_t* block_cursor = function_entry_block;
 
 	//Initially nothing is spilled
 	live_range_t* currently_spilled = NULL;
@@ -2685,7 +2682,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
  *
  * Return TRUE if the graph was colorable, FALSE if not
  */
-static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges){
+static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_array_t* live_ranges){
 	//We first need to construct the priority version of the live range arrays
 	//Create a new one
 	dynamic_array_t* priority_live_ranges = dynamic_array_alloc();
@@ -2732,7 +2729,7 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 				 * graph coloring process. This will require a reset. In practice, even
 				 * the most extreme programs only require that this be done once or twice
 				 */
-				spill(cfg, live_ranges, range);
+				spill_in_function(function_entry, live_ranges, range);
 
 				//We could not allocate everything here, so we need to return false to
 				//trigger the restart by the parent process
@@ -3179,7 +3176,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 *
 	 * Again, this is required every single time we need to retry after a spill
 	*/
-	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
+	interference_graph_t* graph = construct_function_level_interference_graph(function_entry, live_ranges);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
@@ -3236,7 +3233,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 		reset_all_live_ranges(live_ranges);
 
 		//First step - recalculate all of our used & assigned sets
-		recompute_used_and_assigned_sets(cfg);
+		recompute_used_and_assigned_sets(function_entry);
 
 		//After we coalesce, we need to recompute all of the
 		//spill costs
@@ -3247,7 +3244,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 
 		//Finally, recalculate all of the interference now that all of the
 		//prerequisites have been met
-		graph = construct_interference_graph(cfg, live_ranges);
+		graph = construct_function_level_interference_graph(function_entry, live_ranges);
 	}
 
 	//Show our live ranges once again if requested
@@ -3265,7 +3262,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 * then the allocator will spill the least costly LR and return FALSE, and we will go through
 	 * this whol process again
 	*/
-	colorable = graph_color_and_allocate(cfg, live_ranges);
+	colorable = graph_color_and_allocate(function_entry, live_ranges);
 
 	/**
 	 * Our so-called "spill loop" essentially repeats most of the steps
@@ -3294,7 +3291,7 @@ spill_loop:
 		 * Following this, we need to recompute all of our used and assigned
 		 * sets
 		 */
-		recompute_used_and_assigned_sets(cfg);
+		recompute_used_and_assigned_sets(function_entry);
 
 		/**
 		 * Now that we've recomputed the used and assigned
@@ -3313,7 +3310,7 @@ spill_loop:
 		 * Once the liveness sets have been recalculated, we're able
 		 * to go through and compute all of the interference again
 		 */
-		graph = construct_interference_graph(cfg, live_ranges);
+		graph = construct_function_level_interference_graph(function_entry, live_ranges);
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE){
@@ -3329,8 +3326,11 @@ spill_loop:
 		 * again. This loop will keep executing until the
 		 * graph_color_and_allocate returns a successful result
 		 */
-		colorable = graph_color_and_allocate(cfg, live_ranges);
+		colorable = graph_color_and_allocate(function_entry, live_ranges);
 	}
+
+
+	//TODO ONCE WE'RE DONE DEALLOCATE THE LR ARRAY
 }
 
 
