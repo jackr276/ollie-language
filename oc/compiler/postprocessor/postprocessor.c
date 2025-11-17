@@ -9,6 +9,7 @@
 #include "postprocessor.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <sys/types.h>
 
 /**
  * Combine two blocks into one. This is different than other combine methods,
@@ -93,9 +94,9 @@ static instruction_t* combine_blocks(cfg_t* cfg, basic_block_t* a, basic_block_t
  *
  * This is akin to mark & sweep in the optimizer, though much more simple
  */
-static void remove_useless_moves(cfg_t* cfg){
+static void remove_useless_moves(basic_block_t* function_entry_block){
 	//Grab the head block
-	basic_block_t* current = cfg->head_block;
+	basic_block_t* current = function_entry_block;
 
 	//So long as we have blocks to traverse
 	while(current != NULL){
@@ -319,32 +320,26 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
  * 	 compute Postorder of CFG
  * 	 branch_reduce_postprocess()
  */
-static void condense(cfg_t* cfg){
-	//For each function in the CFG
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
-		//Have we seen change(modification) at all?
-		u_int8_t changed;
+static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
+	//Have we seen change(modification) at all?
+	u_int8_t changed;
 
-		//Grab the function block out
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, _);
+	//The postorder traversal array
+	dynamic_array_t* postorder;
 
-		//The postorder traversal array
-		dynamic_array_t* postorder;
+	//Now we'll do the actual clean algorithm
+	do {
+		//Compute the new postorder
+		postorder = compute_post_order_traversal(function_entry_block);
 
-		//Now we'll do the actual clean algorithm
-		do {
-			//Compute the new postorder
-			postorder = compute_post_order_traversal(function_entry);
+		//Call onepass() for the reduction
+		changed = branch_reduce_postprocess(cfg, postorder);
 
-			//Call onepass() for the reduction
-			changed = branch_reduce_postprocess(cfg, postorder);
-
-			//We can free up the old postorder now
-			dynamic_array_dealloc(postorder);
-			
-		//We keep going so long as branch_reduce changes something 
-		} while(changed == TRUE);
-	}
+		//We can free up the old postorder now
+		dynamic_array_dealloc(postorder);
+		
+	//We keep going so long as branch_reduce changes something 
+	} while(changed == TRUE);
 }
 
 
@@ -371,25 +366,18 @@ static basic_block_t* does_block_end_in_jump_instruction(basic_block_t* block){
 }
 
 
+
 /**
  * Once we've done all of the reduction that we see fit to do, we'll need to 
  * find a way to reorder the blocks since it is likely that the control flow
  * changed
  */
-static basic_block_t* reorder_blocks(cfg_t* cfg){
+static void reorder_blocks(basic_block_t* ){
 	//We'll first wipe the visited status on this CFG
 	reset_visited_status(cfg, TRUE);
 	
 	//We will perform a breadth first search and use the "direct successor" area
 	//of the blocks to store them all in one chain
-	
-	//The current block
-	basic_block_t* previous;
-	//The starting point that all traversals will use
-	basic_block_t* head_block;
-
-	//Initialize these to null first
-	previous = head_block = NULL;
 	
 	//We'll need to use a queue every time, we may as well just have one big one
 	heap_queue_t* queue = heap_queue_alloc();
@@ -398,6 +386,11 @@ static basic_block_t* reorder_blocks(cfg_t* cfg){
 	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Grab the function block out
 		basic_block_t* func_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
+
+		//These are reset for every function we deal with
+		basic_block_t* previous = NULL;
+		//The starting point that all traversals will use
+		basic_block_t* head_block = NULL;
 
 		//This function start block is the begging of our BFS	
 		enqueue(queue, func_block);
@@ -475,12 +468,6 @@ static basic_block_t* reorder_blocks(cfg_t* cfg){
 
 	//Destroy the queue when done
 	heap_queue_dealloc(queue);
-
-	//Set this for later on
-	cfg->head_block = head_block;
-
-	//Give back the head block
-	return head_block;
 }
 
 
@@ -495,18 +482,31 @@ static basic_block_t* reorder_blocks(cfg_t* cfg){
  * optimizations:
  */
 void postprocess(cfg_t* cfg){
-	/**
-	 * PASS 1: remove any/all useless move operations from the CFG
-	 */
-	remove_useless_moves(cfg);
+	//Run through every function block here separately
+	for(u_int16_t i = 0 ; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract the given function block
+		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-	/**
-	 * PASS 2: perform a modified branch reduction to condense the code
-	*/
-	condense(cfg);
+		/**
+		 * PASS 1: remove any/all useless move operations from the CFG
+		 */
+		remove_useless_moves(function_entry_block);
 
-	/**
-	 * PASS 3: final reordering
-	*/
-	reorder_blocks(cfg);
+		/**
+		 * PASS 2: perform a modified branch reduction to condense the code
+		*/
+		condense(cfg, function_entry_block);
+
+		/**
+		 * PASS 3: final reordering
+		*/
+		//
+		//
+		//
+		//TODO NOT DONE
+		//
+		//
+		//
+		reorder_blocks(function_entry_block);
+	}
 }
