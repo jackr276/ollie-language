@@ -1027,7 +1027,7 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 /**
  * Reset the visited status and the liveness arrays for each block
  */
-static void reset_blocks_for_liveness(cfg_t* cfg){
+static void reset_blocks_for_liveness( cfg){
 	//Run through all of our blocks
 	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
 		//Grab it out
@@ -3123,28 +3123,27 @@ static void insert_saving_logic(cfg_t* cfg){
 
 
 /**
- * Perform our function level allocation
+ * Perform our function level allocation process
  */
-
-
-
-/**
- * Perform our register allocation algorithm on the entire cfg
- */
-void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
+static void allocate_registers_for_function(compiler_options_t* options, cfg_t* cfg, basic_block_t* function_entry){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
-	u_int8_t print_post_allocation = options->print_post_allocation;
 	u_int8_t debug_printing = options->enable_debug_printing;
-
-	//Save these in global state
-	stack_pointer = cfg->stack_pointer;
-	type_symtab = cfg->type_symtab;
-	//Load this in for later use
-	u64_type = lookup_type_name_only(type_symtab, "u64")->type;
 
 	//Save the flag that tells us whether or not the graph that we constructed was colorable
 	u_int8_t colorable = FALSE;
+
+
+	//
+	//
+	//
+	//
+	//
+	//TODO NOT DONE
+	//
+	//
+	//
+	//
 
 	/**
 	 * STEP 1: Build all live ranges from variables:
@@ -3361,6 +3360,32 @@ spill_loop:
 		 * graph_color_and_allocate returns a successful result
 		 */
 		colorable = graph_color_and_allocate(cfg, live_ranges);
+	}
+}
+
+
+/**
+ * Perform our register allocation algorithm on the entire cfg
+ */
+void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
+	//Save whether or not we want to actually print IRs
+	u_int8_t print_irs = options->print_irs;
+	u_int8_t print_post_allocation = options->print_post_allocation;
+
+	//Save these in global state
+	stack_pointer = cfg->stack_pointer;
+	type_symtab = cfg->type_symtab;
+	//Load this in for later use
+	u64_type = lookup_type_name_only(type_symtab, "u64")->type;
+
+	//Run through every function entry block individually and invoke the allocator on
+	//all of them separately
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract the given function entry
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+
+		//Invoke the function-level allocator
+		allocate_registers_for_function(options, cfg, function_entry);
 	}
 
 	/**
