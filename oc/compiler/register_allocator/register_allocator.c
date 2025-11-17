@@ -635,7 +635,7 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 /**
  * Create the stack pointer live range
  */
-static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* stack_pointer){
+static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the stack pointer. Special case here - stack pointer has no block
 	live_range_t* stack_pointer_live_range = live_range_alloc(NULL);
@@ -656,9 +656,6 @@ static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t*
 	//Store it in the global var for convenience
 	stack_pointer_lr = stack_pointer_live_range;
 
-	//Add it into the list of all live ranges
-	dynamic_array_add(live_ranges, stack_pointer_live_range);
-
 	//Give it back
 	return stack_pointer_live_range;
 }
@@ -667,7 +664,7 @@ static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t*
 /**
  * Create the instruction pointer live range
  */
-static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* instruction_pointer){
+static live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* instruction_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the instruction pointer.
 	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL);
@@ -687,9 +684,6 @@ static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_ar
 	
 	//Store this here as well
 	instruction_pointer->associated_live_range = instruction_pointer_live_range;
-
-	//Add the instruction pointer LR in
-	dynamic_array_add(live_ranges, instruction_pointer_lr);
 
 	//Give it back
 	return instruction_pointer_live_range;
@@ -997,29 +991,24 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
  * 		add the variable to the corresponding live range set
  * 		mark said variable 
  */
-static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
+static dynamic_array_t* construct_live_ranges_in_function(basic_block_t* function_entry){
 	//First create the set of live ranges
 	dynamic_array_t* live_ranges = dynamic_array_alloc();
 
-	//Construct and add the stack pointer's LR
-	construct_and_add_stack_pointer_live_range(live_ranges, cfg->stack_pointer);
+	//Add these both in immediately
+	dynamic_array_add(live_ranges, stack_pointer_lr);
+	dynamic_array_add(live_ranges, instruction_pointer_lr);
 
-	//Construct and add the instruction pointer's LR
-	construct_and_add_instruction_pointer_live_range(live_ranges, cfg->instruction_pointer);
+	//Grab the entry block
+	basic_block_t* current = function_entry;
 
-	//Run through every function here
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-		//Grab the entry block
-		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
+	//Run through every single block
+	while(current != NULL){
+		//Let the helper do this
+		construct_live_ranges_in_block(live_ranges, current);
 
-		//Run through every single block
-		while(current != NULL){
-			//Let the helper do this
-			construct_live_ranges_in_block(live_ranges, current);
-
-			//Advance to the next
-			current = current->direct_successor;
-		}
+		//Advance to the next
+		current = current->direct_successor;
 	}
 
 	//Give back the array
@@ -1030,18 +1019,21 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 /**
  * Reset the visited status and the liveness arrays for each block
  */
-static void reset_blocks_for_liveness( cfg){
-	//Run through all of our blocks
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
-		//Grab it out
-		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, i);
+static void reset_function_blocks_for_liveness(basic_block_t* function_entry_block){
+	//This is our initial current
+	basic_block_t* current = function_entry_block;
 
+	//So long as we aren't null
+	while(current != NULL){
 		//Reset this
 		current->visited = FALSE;
 
 		//Also reset the liveness sets
 		reset_dynamic_array(current->live_in);
 		reset_dynamic_array(current->live_out);
+
+		//Push it up
+		current = current->direct_successor;
 	}
 }
 
@@ -1066,7 +1058,7 @@ static void reset_blocks_for_liveness( cfg){
  * As such, we'll go back to front here
  *
  */
-static void calculate_live_range_liveness_sets(cfg_t* cfg){
+static void calculate_live_range_liveness_sets(basic_block_t* function_entry_block){
 	//Reset the visited status and liveness sets
 	reset_blocks_for_liveness(cfg);
 
@@ -3136,18 +3128,6 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//Save the flag that tells us whether or not the graph that we constructed was colorable
 	u_int8_t colorable = FALSE;
 
-
-	//
-	//
-	//
-	//
-	//
-	//TODO NOT DONE
-	//
-	//
-	//
-	//
-
 	/**
 	 * STEP 1: Build all live ranges from variables:
 	 * 	
@@ -3157,7 +3137,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 *
 	 * 	We only need to do this once for the allocation
 	 */
-	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
+	dynamic_array_t* live_ranges = construct_live_ranges_in_function(function_entry);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
@@ -3380,6 +3360,11 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	type_symtab = cfg->type_symtab;
 	//Load this in for later use
 	u64_type = lookup_type_name_only(type_symtab, "u64")->type;
+
+	//Construct these two live ranges off the bat - they are evergreen and will be used
+	//globally
+	stack_pointer_lr = construct_stack_pointer_live_range(stack_pointer);
+	instruction_pointer_lr = construct_instruction_pointer_live_range(cfg->instruction_pointer);
 
 	//Run through every function entry block individually and invoke the allocator on
 	//all of them separately
