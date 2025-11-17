@@ -1060,7 +1060,7 @@ static void reset_function_blocks_for_liveness(basic_block_t* function_entry_blo
  */
 static void calculate_live_range_liveness_sets(basic_block_t* function_entry_block){
 	//Reset the visited status and liveness sets
-	reset_blocks_for_liveness(cfg);
+	reset_function_blocks_for_liveness(function_entry_block);
 
 	//Did we find a difference
 	u_int8_t difference_found;
@@ -1072,98 +1072,85 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 	//A cursor for the current block
 	basic_block_t* current;
 
-	/**
-	 * We will go through all of the function blocks separately first. Since
-	 * the functions are distinct, we do not need to do them all together.
-	 * We can focus on a single function at a time. This way, if certain functions
-	 * are "hot spots" and require multiple iterations, they will not drag the rest of the 
-	 * blocks with them for said recalculation
-	 */
-	//Run through all functions
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-		//Grab the entry block
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+	//We'll reset the assigned registers array here because we have not assigned any registers at this
+	//point
+	memset(function_entry_block->function_defined_in->assigned_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
-		//We'll reset the assigned registers array here because we have not assigned any registers at this
-		//point
-		memset(function_entry->function_defined_in->assigned_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+	//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
+	do{
+		//Assume that we have not found a difference by default
+		difference_found = FALSE;
 
-		//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
-		do{
-			//Assume that we have not found a difference by default
-			difference_found = FALSE;
+		//Now we can go through the entire RPO set
+		for(u_int16_t _ = 0; _ < function_entry_block->reverse_post_order_reverse_cfg->current_index; _++){
+			//The current block is whichever we grab
+			current = dynamic_array_get_at(function_entry_block->reverse_post_order_reverse_cfg, _);
 
-			//Now we can go through the entire RPO set
-			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg->current_index; _++){
-				//The current block is whichever we grab
-				current = dynamic_array_get_at(function_entry->reverse_post_order_reverse_cfg, _);
+			//Transfer the pointers over
+			in_prime = current->live_in;
+			out_prime = current->live_out;
 
-				//Transfer the pointers over
-				in_prime = current->live_in;
-				out_prime = current->live_out;
+			//Set live out to be a new array
+			current->live_out = dynamic_array_alloc();
 
-				//Set live out to be a new array
-				current->live_out = dynamic_array_alloc();
+			//Run through all of the successors
+			for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
+				//Grab the successor out
+				basic_block_t* successor = dynamic_array_get_at(current->successors, k);
 
-				//Run through all of the successors
-				for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
-					//Grab the successor out
-					basic_block_t* successor = dynamic_array_get_at(current->successors, k);
+				//Add everything in his live_in set into the live_out set
+				for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
+					//Let's check to make sure we haven't already added this
+					live_range_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
 
-					//Add everything in his live_in set into the live_out set
-					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
-						//Let's check to make sure we haven't already added this
-						live_range_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
-
-						//If it doesn't already contain this variable, we'll add it in
-						if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
-							dynamic_array_add(current->live_out, successor_live_in_var);
-						}
+					//If it doesn't already contain this variable, we'll add it in
+					if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
+						dynamic_array_add(current->live_out, successor_live_in_var);
 					}
 				}
-
-				//Since we need all of the used variables, we'll just clone this
-				//dynamic array so that we start off with them all
-				current->live_in = clone_dynamic_array(current->used_variables);
-
-				//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-				for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
-					//Grab a reference for our use
-					live_range_t* live_out_var = dynamic_array_get_at(current->live_out, j);
-
-					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
-					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
-					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND 
-						&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
-						//If this is true we can add
-						dynamic_array_add(current->live_in, live_out_var);
-					}
-				}
-				
-			
-				/**
-				 * Now for the final portion of the algorithm. We need to see if the LIVE_IN and LIVE_OUT
-				 * sets that we've computed on this iteration are equal. If they're not equal, then we have
-				 * not yet found the full solution, and we need to go again
-				 */
-				//For efficiency - if there was a difference in one block, it's already done - no use in comparing
-				if(difference_found == FALSE){
-					//So we haven't found a difference so far - let's see if we can find one now
-					if(dynamic_arrays_equal(in_prime, current->live_in) == FALSE
-					  || dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
-						//We have in fact found a difference
-						difference_found = TRUE;
-					}
-				}
-
-				//We made it down here, the prime variables are useless. We'll deallocate them
-				dynamic_array_dealloc(in_prime);
-				dynamic_array_dealloc(out_prime);
 			}
 
-		//So long as there is a difference
-		} while(difference_found == TRUE);
-	}
+			//Since we need all of the used variables, we'll just clone this
+			//dynamic array so that we start off with them all
+			current->live_in = clone_dynamic_array(current->used_variables);
+
+			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
+			for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
+				//Grab a reference for our use
+				live_range_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+
+				//Now we need this block to be not in "assigned" also. If it is in assigned we can't
+				//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
+				if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND 
+					&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
+					//If this is true we can add
+					dynamic_array_add(current->live_in, live_out_var);
+				}
+			}
+			
+		
+			/**
+			 * Now for the final portion of the algorithm. We need to see if the LIVE_IN and LIVE_OUT
+			 * sets that we've computed on this iteration are equal. If they're not equal, then we have
+			 * not yet found the full solution, and we need to go again
+			 */
+			//For efficiency - if there was a difference in one block, it's already done - no use in comparing
+			if(difference_found == FALSE){
+				//So we haven't found a difference so far - let's see if we can find one now
+				if(dynamic_arrays_equal(in_prime, current->live_in) == FALSE
+				  || dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
+					//We have in fact found a difference
+					difference_found = TRUE;
+				}
+			}
+
+			//We made it down here, the prime variables are useless. We'll deallocate them
+			dynamic_array_dealloc(in_prime);
+			dynamic_array_dealloc(out_prime);
+		}
+
+	//So long as there is a difference
+	} while(difference_found == TRUE);
 }
 
 
@@ -1551,7 +1538,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
  *
  * This function will always invoke a helper that does it for a specific block
  */
-static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges){
+static interference_graph_t* construct_function_level_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges){
 	//It starts off as null
 	interference_graph_t* graph = NULL;
 
@@ -3174,7 +3161,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 *
 	 * We will need to do this every single time we reallocate
 	*/
-	calculate_live_range_liveness_sets(cfg);
+	calculate_live_range_liveness_sets(function_entry);
 
 	//Show our IR's here
 	if(print_irs == TRUE){
@@ -3256,7 +3243,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 		compute_spill_costs(live_ranges);
 
 		//Then - recalculate all liveness sets
-		calculate_live_range_liveness_sets(cfg);
+		calculate_live_range_liveness_sets(function_entry);
 
 		//Finally, recalculate all of the interference now that all of the
 		//prerequisites have been met
@@ -3320,7 +3307,7 @@ spill_loop:
 		 * Following that, we need to go through and calculate
 		 * all of our liveness sets again
 		 */
-		calculate_live_range_liveness_sets(cfg);
+		calculate_live_range_liveness_sets(function_entry);
 
 		/**
 		 * Once the liveness sets have been recalculated, we're able
