@@ -91,15 +91,9 @@ static void order_blocks(cfg_t* cfg){
 	reset_visited_status(cfg, TRUE);
 	
 	//We will perform a breadth first search and use the "direct successor" area
-	//of the blocks to store them all in one chain
-	
-	//The current block
-	basic_block_t* previous;
-	//The starting point that all traversals will use
-	basic_block_t* head_block;
-
-	//Initialize these to null first
-	previous = head_block = NULL;
+	//of the blocks to store them all in one chain per function. The functions themselves
+	//are separated and stored individually, because in ollie a function is the smallest unit
+	//of procedures
 	
 	//We'll need to use a queue every time, we may as well just have one big one
 	heap_queue_t* queue = heap_queue_alloc();
@@ -108,6 +102,11 @@ static void order_blocks(cfg_t* cfg){
 	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
 		//Grab the function block out
 		basic_block_t* func_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
+
+		//These get reset for every function because each function has its own
+		//separate ordering
+		basic_block_t* previous = NULL;
+		basic_block_t* head_block = NULL;
 
 		//This function start block is the begging of our BFS	
 		enqueue(queue, func_block);
@@ -241,16 +240,19 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_ordered_blocks(cfg_t* cfg, basic_block_t* head_block, instruction_printing_mode_t mode){
-	//Run through the direct successors so long as the block is not null
-	basic_block_t* current = head_block;
+static void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
+	//Run through all of the functions
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract the entry block. This is our starting point
+		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-	//So long as this one isn't NULL
-	while(current != NULL){
-		//Print it
-		print_ordered_block(current, mode);
-		//Advance to the direct successor
-		current = current->direct_successor;
+		//So long as this one isn't NULL
+		while(current != NULL){
+			//Print it
+			print_ordered_block(current, mode);
+			//Advance to the direct successor
+			current = current->direct_successor;
+		}
 	}
 
 	//Print all global variables after the blocks
