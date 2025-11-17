@@ -1806,9 +1806,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
  * etc. Simplification happens first over the entirety of the OIR using the sliding window
  * technique. Following this, the instruction selector runs over the same area
  */
-static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* head){
-	//First we'll grab the head
-	basic_block_t* current = head;
+static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* entry){
+	//First we'll grab the entry
+	basic_block_t* current = entry;
 
 	u_int8_t window_changed = FALSE;
 	u_int8_t changed;
@@ -1848,10 +1848,19 @@ static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* head){
 
 /**
  * We'll make use of a while change algorithm here. We make passes
- * until we see the first pass where we experience no chnage at all.
+ * until we see the first pass where we experience no change at all.
  */
-static void simplify(cfg_t* cfg, basic_block_t* head){
-	while(simplifier_pass(cfg, head) == TRUE);
+static void simplify(cfg_t* cfg){
+	//We will do each function individually for efficiency reasons. This way, if
+	//one function requires a lot of simplification, it will not drag the rest of the 
+	//functions along with it in each pass
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract it
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+
+		//Let this keep going until we're done changing
+		while(simplifier_pass(cfg, function_entry) == TRUE);
+	}
 }
 
 
@@ -5741,27 +5750,33 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
  * Run through every block and convert each instruction or sequence of instructions
  * from three address code to assembly statements
  */
-static void select_instructions(cfg_t* cfg, basic_block_t* head_block){
-	//Save the current block here
-	basic_block_t* current = head_block;
+static void select_instructions(cfg_t* cfg){
+	//We will again do instruction selection on a per-function level basis
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract the entry
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-	while(current != NULL){
-		//Initialize the sliding window(very basic, more to come)
-		instruction_window_t window = initialize_instruction_window(current);
+		//Save the current block here
+		basic_block_t* current = function_entry;
 
-		//Run through the window so long as we are not at the end
-		do{
-			//Select the instructions
-			select_instruction_patterns(cfg, &window);
+		while(current != NULL){
+			//Initialize the sliding window(very basic, more to come)
+			instruction_window_t window = initialize_instruction_window(current);
 
-			//Slide the window
-			slide_window(&window);
+			//Run through the window so long as we are not at the end
+			do{
+				//Select the instructions
+				select_instruction_patterns(cfg, &window);
 
-		//Keep going if we aren't at the end
-		} while(window.instruction1 != NULL);
+				//Slide the window
+				slide_window(&window);
 
-		//Advance the current up
-		current = current->direct_successor;
+			//Keep going if we aren't at the end
+			} while(window.instruction1 != NULL);
+
+			//Advance the current up
+			current = current->direct_successor;
+		}
 	}
 }
 
