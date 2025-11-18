@@ -26,8 +26,8 @@ u_int32_t live_range_id = 0;
 const general_purpose_register_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 
 //Avoid need to rearrange
-static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges);
-static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range);
+static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* live_ranges);
+static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range);
 
 //Just hold the stack pointer live range
 static live_range_t* stack_pointer_lr;
@@ -350,9 +350,9 @@ static void print_block_with_live_ranges(basic_block_t* block){
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_blocks_with_live_ranges(cfg_t* cfg){
-	//Run through the direct successors so long as the block is not null
-	basic_block_t* current = cfg->head_block;
+static void print_function_blocks_with_live_ranges(basic_block_t* function_entry){
+	//Extract the given function block
+	basic_block_t* current = function_entry;
 
 	//So long as this one isn't NULL
 	while(current != NULL){
@@ -361,9 +361,6 @@ static void print_blocks_with_live_ranges(cfg_t* cfg){
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
-
-	//Print all global variables after the blocks
-	print_all_global_variables(stdout, cfg->global_variables);
 }
 
 
@@ -419,18 +416,21 @@ static void print_block_with_registers(basic_block_t* block){
  * ordered blocks with their registers after allocation
  */
 static void print_blocks_with_registers(cfg_t* cfg){
-	//Run through the direct successors so long as the block is not null
-	basic_block_t* current = cfg->head_block;
+	//Run through all of the functions individually
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract the given function block
+		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-	//So long as this one isn't NULL
-	while(current != NULL){
-		//Print it
-		print_block_with_registers(current);
-		//Advance to the direct successor
-		current = current->direct_successor;
+		//So long as this one isn't NULL
+		while(current != NULL){
+			//Print it
+			print_block_with_registers(current);
+			//Advance to the direct successor
+			current = current->direct_successor;
+		}
 	}
 
-	//Print all global variables after the blocks
+	//Now we'll print all global variables
 	print_all_global_variables(stdout, cfg->global_variables);
 }
 
@@ -629,7 +629,7 @@ static live_range_t* assign_live_range_to_variable(dynamic_array_t* live_ranges,
 /**
  * Create the stack pointer live range
  */
-static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* stack_pointer){
+static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the stack pointer. Special case here - stack pointer has no block
 	live_range_t* stack_pointer_live_range = live_range_alloc(NULL);
@@ -650,9 +650,6 @@ static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t*
 	//Store it in the global var for convenience
 	stack_pointer_lr = stack_pointer_live_range;
 
-	//Add it into the list of all live ranges
-	dynamic_array_add(live_ranges, stack_pointer_live_range);
-
 	//Give it back
 	return stack_pointer_live_range;
 }
@@ -661,7 +658,7 @@ static live_range_t* construct_and_add_stack_pointer_live_range(dynamic_array_t*
 /**
  * Create the instruction pointer live range
  */
-static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_array_t* live_ranges, three_addr_var_t* instruction_pointer){
+static live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* instruction_pointer){
 	//Before we go any further, we'll construct the live
 	//range for the instruction pointer.
 	live_range_t* instruction_pointer_live_range = live_range_alloc(NULL);
@@ -681,9 +678,6 @@ static live_range_t* construct_and_add_instruction_pointer_live_range(dynamic_ar
 	
 	//Store this here as well
 	instruction_pointer->associated_live_range = instruction_pointer_live_range;
-
-	//Add the instruction pointer LR in
-	dynamic_array_add(live_ranges, instruction_pointer_lr);
 
 	//Give it back
 	return instruction_pointer_live_range;
@@ -991,18 +985,16 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
  * 		add the variable to the corresponding live range set
  * 		mark said variable 
  */
-static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
+static dynamic_array_t* construct_live_ranges_in_function(basic_block_t* function_entry){
 	//First create the set of live ranges
 	dynamic_array_t* live_ranges = dynamic_array_alloc();
 
-	//Construct and add the stack pointer's LR
-	construct_and_add_stack_pointer_live_range(live_ranges, cfg->stack_pointer);
+	//Add these both in immediately
+	dynamic_array_add(live_ranges, stack_pointer_lr);
+	dynamic_array_add(live_ranges, instruction_pointer_lr);
 
-	//Construct and add the instruction pointer's LR
-	construct_and_add_instruction_pointer_live_range(live_ranges, cfg->instruction_pointer);
-
-	//Since the blocks are already ordered, this is very simple
-	basic_block_t* current = cfg->head_block;
+	//Grab the entry block
+	basic_block_t* current = function_entry;
 
 	//Run through every single block
 	while(current != NULL){
@@ -1021,18 +1013,21 @@ static dynamic_array_t* construct_all_live_ranges(cfg_t* cfg){
 /**
  * Reset the visited status and the liveness arrays for each block
  */
-static void reset_blocks_for_liveness(cfg_t* cfg){
-	//Run through all of our blocks
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
-		//Grab it out
-		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, i);
+static void reset_function_blocks_for_liveness(basic_block_t* function_entry_block){
+	//This is our initial current
+	basic_block_t* current = function_entry_block;
 
+	//So long as we aren't null
+	while(current != NULL){
 		//Reset this
 		current->visited = FALSE;
 
 		//Also reset the liveness sets
 		reset_dynamic_array(current->live_in);
 		reset_dynamic_array(current->live_out);
+
+		//Push it up
+		current = current->direct_successor;
 	}
 }
 
@@ -1057,9 +1052,9 @@ static void reset_blocks_for_liveness(cfg_t* cfg){
  * As such, we'll go back to front here
  *
  */
-static void calculate_live_range_liveness_sets(cfg_t* cfg){
+static void calculate_live_range_liveness_sets(basic_block_t* function_entry_block){
 	//Reset the visited status and liveness sets
-	reset_blocks_for_liveness(cfg);
+	reset_function_blocks_for_liveness(function_entry_block);
 
 	//Did we find a difference
 	u_int8_t difference_found;
@@ -1071,98 +1066,85 @@ static void calculate_live_range_liveness_sets(cfg_t* cfg){
 	//A cursor for the current block
 	basic_block_t* current;
 
-	/**
-	 * We will go through all of the function blocks separately first. Since
-	 * the functions are distinct, we do not need to do them all together.
-	 * We can focus on a single function at a time. This way, if certain functions
-	 * are "hot spots" and require multiple iterations, they will not drag the rest of the 
-	 * blocks with them for said recalculation
-	 */
-	//Run through all functions
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-		//Grab the entry block
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+	//We'll reset the assigned registers array here because we have not assigned any registers at this
+	//point
+	memset(function_entry_block->function_defined_in->assigned_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
-		//We'll reset the assigned registers array here because we have not assigned any registers at this
-		//point
-		memset(function_entry->function_defined_in->assigned_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+	//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
+	do{
+		//Assume that we have not found a difference by default
+		difference_found = FALSE;
 
-		//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
-		do{
-			//Assume that we have not found a difference by default
-			difference_found = FALSE;
+		//Now we can go through the entire RPO set
+		for(u_int16_t _ = 0; _ < function_entry_block->reverse_post_order_reverse_cfg->current_index; _++){
+			//The current block is whichever we grab
+			current = dynamic_array_get_at(function_entry_block->reverse_post_order_reverse_cfg, _);
 
-			//Now we can go through the entire RPO set
-			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg->current_index; _++){
-				//The current block is whichever we grab
-				current = dynamic_array_get_at(function_entry->reverse_post_order_reverse_cfg, _);
+			//Transfer the pointers over
+			in_prime = current->live_in;
+			out_prime = current->live_out;
 
-				//Transfer the pointers over
-				in_prime = current->live_in;
-				out_prime = current->live_out;
+			//Set live out to be a new array
+			current->live_out = dynamic_array_alloc();
 
-				//Set live out to be a new array
-				current->live_out = dynamic_array_alloc();
+			//Run through all of the successors
+			for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
+				//Grab the successor out
+				basic_block_t* successor = dynamic_array_get_at(current->successors, k);
 
-				//Run through all of the successors
-				for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
-					//Grab the successor out
-					basic_block_t* successor = dynamic_array_get_at(current->successors, k);
+				//Add everything in his live_in set into the live_out set
+				for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
+					//Let's check to make sure we haven't already added this
+					live_range_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
 
-					//Add everything in his live_in set into the live_out set
-					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
-						//Let's check to make sure we haven't already added this
-						live_range_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
-
-						//If it doesn't already contain this variable, we'll add it in
-						if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
-							dynamic_array_add(current->live_out, successor_live_in_var);
-						}
+					//If it doesn't already contain this variable, we'll add it in
+					if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
+						dynamic_array_add(current->live_out, successor_live_in_var);
 					}
 				}
-
-				//Since we need all of the used variables, we'll just clone this
-				//dynamic array so that we start off with them all
-				current->live_in = clone_dynamic_array(current->used_variables);
-
-				//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-				for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
-					//Grab a reference for our use
-					live_range_t* live_out_var = dynamic_array_get_at(current->live_out, j);
-
-					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
-					//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
-					if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND 
-						&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
-						//If this is true we can add
-						dynamic_array_add(current->live_in, live_out_var);
-					}
-				}
-				
-			
-				/**
-				 * Now for the final portion of the algorithm. We need to see if the LIVE_IN and LIVE_OUT
-				 * sets that we've computed on this iteration are equal. If they're not equal, then we have
-				 * not yet found the full solution, and we need to go again
-				 */
-				//For efficiency - if there was a difference in one block, it's already done - no use in comparing
-				if(difference_found == FALSE){
-					//So we haven't found a difference so far - let's see if we can find one now
-					if(dynamic_arrays_equal(in_prime, current->live_in) == FALSE
-					  || dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
-						//We have in fact found a difference
-						difference_found = TRUE;
-					}
-				}
-
-				//We made it down here, the prime variables are useless. We'll deallocate them
-				dynamic_array_dealloc(in_prime);
-				dynamic_array_dealloc(out_prime);
 			}
 
-		//So long as there is a difference
-		} while(difference_found == TRUE);
-	}
+			//Since we need all of the used variables, we'll just clone this
+			//dynamic array so that we start off with them all
+			current->live_in = clone_dynamic_array(current->used_variables);
+
+			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
+			for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
+				//Grab a reference for our use
+				live_range_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+
+				//Now we need this block to be not in "assigned" also. If it is in assigned we can't
+				//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
+				if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND 
+					&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
+					//If this is true we can add
+					dynamic_array_add(current->live_in, live_out_var);
+				}
+			}
+			
+		
+			/**
+			 * Now for the final portion of the algorithm. We need to see if the LIVE_IN and LIVE_OUT
+			 * sets that we've computed on this iteration are equal. If they're not equal, then we have
+			 * not yet found the full solution, and we need to go again
+			 */
+			//For efficiency - if there was a difference in one block, it's already done - no use in comparing
+			if(difference_found == FALSE){
+				//So we haven't found a difference so far - let's see if we can find one now
+				if(dynamic_arrays_equal(in_prime, current->live_in) == FALSE
+				  || dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
+					//We have in fact found a difference
+					difference_found = TRUE;
+				}
+			}
+
+			//We made it down here, the prime variables are useless. We'll deallocate them
+			dynamic_array_dealloc(in_prime);
+			dynamic_array_dealloc(out_prime);
+		}
+
+	//So long as there is a difference
+	} while(difference_found == TRUE);
 }
 
 
@@ -1550,12 +1532,12 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
  *
  * This function will always invoke a helper that does it for a specific block
  */
-static interference_graph_t* construct_interference_graph(cfg_t* cfg, dynamic_array_t* live_ranges){
+static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* live_ranges){
 	//It starts off as null
 	interference_graph_t* graph = NULL;
 
 	//We'll first need a pointer
-	basic_block_t* current = cfg->head_block;
+	basic_block_t* current = function_entry_block;
 
 	//Run through every block in the CFG's ordered set
 	while(current != NULL){
@@ -1610,7 +1592,7 @@ static live_range_t* does_precoloring_interference_exist(live_range_t* coloree, 
 /**
  * Perform the precoloring. Return TRUE if we can precolor, FALSE if we cannot and had to spill
  */
-static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* coloree, general_purpose_register_t reg){
+static u_int8_t precolor_live_range(basic_block_t* function_entry, dynamic_array_t* live_ranges, live_range_t* coloree, general_purpose_register_t reg){
 	//Returns NULL if there's no interference, the interferee if there is one
 	live_range_t* interferee = does_precoloring_interference_exist(coloree, reg);
 
@@ -1619,9 +1601,9 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
 	//scheme for it
 	if(interferee != NULL){
 		if(coloree->spill_cost < interferee->spill_cost){
-			spill(cfg, live_ranges, coloree);
+			spill_in_function(function_entry, live_ranges, coloree);
 		} else {
-			spill(cfg, live_ranges, interferee);
+			spill_in_function(function_entry, live_ranges, interferee);
 		}
 
 		//Whatever we spill the return value here is false
@@ -1645,7 +1627,7 @@ static u_int8_t precolor_live_range(cfg_t* cfg, dynamic_array_t* live_ranges, li
  *
  * Returns TRUE if we could color, false if not
  */
-static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, instruction_t* instruction){
+static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_array_t* live_ranges, instruction_t* instruction){
 	u_int8_t colorable;
 
 	/**
@@ -1660,7 +1642,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		general_purpose_register_t reg = parameter_registers[instruction->destination_register->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -1675,7 +1657,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		general_purpose_register_t reg = parameter_registers[instruction->source_register->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -1690,7 +1672,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		general_purpose_register_t reg = parameter_registers[instruction->source_register2->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->source_register2->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register2->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -1705,7 +1687,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		general_purpose_register_t reg = parameter_registers[instruction->address_calc_reg1->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->address_calc_reg1->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->address_calc_reg1->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -1720,7 +1702,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		general_purpose_register_t reg = parameter_registers[instruction->address_calc_reg2->associated_live_range->function_parameter_order - 1];
 		
 		//Let the helper deal with it
-		colorable = precolor_live_range(cfg, live_ranges, instruction->address_calc_reg2->associated_live_range, reg);
+		colorable = precolor_live_range(function_entry, live_ranges, instruction->address_calc_reg2->associated_live_range, reg);
 
 		//We had a spill - so we'll need to jump out immediately
 		if(colorable == FALSE){
@@ -1737,7 +1719,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 			//If it has one, assign it
 			if(instruction->source_register != NULL){
 				//Let the helper do it
-				colorable = precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, RAX);
+				colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register->associated_live_range, RAX);
 
 				//We had to spill here - jump out
 				if(colorable == FALSE){
@@ -1751,7 +1733,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		case MULL:
 		case MULQ:
 			//When we do an unsigned multiplication, the implicit source register must be in RAX
-			colorable = precolor_live_range(cfg, live_ranges, instruction->source_register2->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1759,7 +1741,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 			}
 
 			//The destination must also be in RAX here
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1791,7 +1773,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 			//Do we have a register source?
 			if(instruction->source_register != NULL){
 				//Due to a quirk in old x86, shift instructions must have their source in RCX
-				colorable = precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, RCX);
+				colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register->associated_live_range, RCX);
 
 				//We had to spill here - jump out
 				if(colorable == FALSE){
@@ -1806,7 +1788,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		case CWTL:
 		case CBTW:
 			//Source is always %RAX
-			colorable =  precolor_live_range(cfg, live_ranges, instruction->source_register->associated_live_range, RAX);
+			colorable =  precolor_live_range(function_entry, live_ranges, instruction->source_register->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1815,7 +1797,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 
 			//The results are always RDX and RAX 
 			//Lower order bits
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1823,7 +1805,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 			}
 
 			//Higher order bits
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register2->associated_live_range, RDX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1841,7 +1823,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		case IDIVL:
 		case IDIVQ:
 			//The source register for a division must be in RAX
-			colorable = precolor_live_range(cfg, live_ranges, instruction->source_register2->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1849,7 +1831,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 			}
 
 			//The first destination register is the quotient, and is in RAX
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1857,7 +1839,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 			}
 
 			//The second destination register is the remainder, and is in RDX
-			colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register2->associated_live_range, RDX);
+			colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
 
 			//We had to spill here - jump out
 			if(colorable == FALSE){
@@ -1871,7 +1853,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
 		case INDIRECT_CALL:
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
-				colorable = precolor_live_range(cfg, live_ranges, instruction->destination_register->associated_live_range, RAX);
+				colorable = precolor_live_range(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 				//We had to spill here - jump out
 				if(colorable == FALSE){
@@ -1898,7 +1880,7 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
  					live_range_t* param_live_range = param->associated_live_range;
 
 					//And we'll use the function param list to precolor appropriately
-					colorable = precolor_live_range(cfg, live_ranges, param_live_range, parameter_registers[i]);
+					colorable = precolor_live_range(function_entry, live_ranges, param_live_range, parameter_registers[i]);
 
 					//We had to spill here - jump out
 					if(colorable == FALSE){
@@ -1927,12 +1909,12 @@ static u_int8_t precolor_instruction(cfg_t* cfg, dynamic_array_t* live_ranges, i
  *
  * This function returns TRUE if pre-coloring worked, FALSE if not
  */
-static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
+static u_int8_t pre_color(basic_block_t* function_entry, dynamic_array_t* live_ranges){
 	//By default assume that we can precolor it
 	u_int8_t could_be_precolored = TRUE;
 
 	//Grab a cursor to the head block
-	basic_block_t* cursor = cfg->head_block;
+	basic_block_t* cursor = function_entry;
 
 	//Crawl the entire CFG
 	while(cursor != NULL){
@@ -1943,7 +1925,7 @@ static u_int8_t pre_color(cfg_t* cfg, dynamic_array_t* live_ranges){
 		while(instruction_cursor != NULL){
 			//TODO LINK INTO SPILLER
 			//Invoke the helper to pre-color it
-			could_be_precolored = precolor_instruction(cfg, live_ranges, instruction_cursor);
+			could_be_precolored = precolor_instruction(function_entry, live_ranges, instruction_cursor);
 
 			//Push along to the next statement
 			instruction_cursor = instruction_cursor->next_statement;
@@ -2147,9 +2129,9 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
  * Recompute the used & assigned sets for the whole CFG
  * This is done after we coalesce at least one live range
  */
-static void recompute_used_and_assigned_sets(cfg_t* cfg){
+static void recompute_used_and_assigned_sets(basic_block_t* function_entry){
 	//Grab a cursor block
-	basic_block_t* cursor = cfg->head_block;
+	basic_block_t* cursor = function_entry;
 
 	//Run through every block
 	while(cursor != NULL){
@@ -2240,12 +2222,12 @@ static u_int8_t perform_block_level_coalescence(basic_block_t* block, interferen
  * We coalesce source to destination. When we're done, the *source* should
  * survive, the destination should NOT
  */
-static u_int8_t perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* graph, u_int8_t debug_printing){
+static u_int8_t perform_live_range_coalescence(basic_block_t* function_entry_block, interference_graph_t* graph, u_int8_t debug_printing){
 	//By default, assume we did not coalesce anything
 	u_int8_t coalescence_occured = FALSE;
 
 	//Run through every single block in here
-	basic_block_t* current = cfg->head_block;
+	basic_block_t* current = function_entry_block;
 
 	//Run through every block
 	while(current != NULL){
@@ -2639,18 +2621,15 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
  * is our "currently spilled" live range. For the example above, once we have spilled into the new
  * LR35, we need to keep that as active until we load it back up
  */
-static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_range){
+static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range){
 	//Extract the function that we're using
-	symtab_function_record_t* function = spill_range->function_defined_in;
+	symtab_function_record_t* function = function_entry_block->function_defined_in;
 
 	//Let's first create the stack region for our spill range
 	stack_region_t* spill_region = create_stack_region_for_type(&(function->data_area), get_largest_type_in_live_range(spill_range));
 
-	//Now that we have our spill region, we need to start crawling through the entire CFG and replacing
-	//all uses/assignments appropriately
-	
 	//Grab a cursor
-	basic_block_t* block_cursor = cfg->head_block;
+	basic_block_t* block_cursor = function_entry_block;
 
 	//Initially nothing is spilled
 	live_range_t* currently_spilled = NULL;
@@ -2697,7 +2676,7 @@ static void spill(cfg_t* cfg, dynamic_array_t* live_ranges, live_range_t* spill_
  *
  * Return TRUE if the graph was colorable, FALSE if not
  */
-static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_ranges){
+static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_array_t* live_ranges){
 	//We first need to construct the priority version of the live range arrays
 	//Create a new one
 	dynamic_array_t* priority_live_ranges = dynamic_array_alloc();
@@ -2744,7 +2723,7 @@ static u_int8_t graph_color_and_allocate(cfg_t* cfg, dynamic_array_t* live_range
 				 * graph coloring process. This will require a reset. In practice, even
 				 * the most extreme programs only require that this be done once or twice
 				 */
-				spill(cfg, live_ranges, range);
+				spill_in_function(function_entry, live_ranges, range);
 
 				//We could not allocate everything here, so we need to return false to
 				//trigger the restart by the parent process
@@ -3117,19 +3096,12 @@ static void insert_saving_logic(cfg_t* cfg){
 
 
 /**
- * Perform our register allocation algorithm on the entire cfg
+ * Perform our function level allocation process
  */
-void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
+static void allocate_registers_for_function(compiler_options_t* options, basic_block_t* function_entry){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
-	u_int8_t print_post_allocation = options->print_post_allocation;
 	u_int8_t debug_printing = options->enable_debug_printing;
-
-	//Save these in global state
-	stack_pointer = cfg->stack_pointer;
-	type_symtab = cfg->type_symtab;
-	//Load this in for later use
-	u64_type = lookup_type_name_only(type_symtab, "u64")->type;
 
 	//Save the flag that tells us whether or not the graph that we constructed was colorable
 	u_int8_t colorable = FALSE;
@@ -3143,12 +3115,12 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 *
 	 * 	We only need to do this once for the allocation
 	 */
-	dynamic_array_t* live_ranges = construct_all_live_ranges(cfg);
+	dynamic_array_t* live_ranges = construct_live_ranges_in_function(function_entry);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("============= Before Liveness ==============\n");
-		print_blocks_with_live_ranges(cfg);
+		print_function_blocks_with_live_ranges(function_entry);
 		printf("============= Before Liveness ==============\n");
 	}
 
@@ -3180,7 +3152,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 *
 	 * We will need to do this every single time we reallocate
 	*/
-	calculate_live_range_liveness_sets(cfg);
+	calculate_live_range_liveness_sets(function_entry);
 
 	//Show our IR's here
 	if(print_irs == TRUE){
@@ -3198,12 +3170,12 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 *
 	 * Again, this is required every single time we need to retry after a spill
 	*/
-	interference_graph_t* graph = construct_interference_graph(cfg, live_ranges);
+	interference_graph_t* graph = construct_function_level_interference_graph(function_entry, live_ranges);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("============= After Live Range Determination ==============\n");
-		print_blocks_with_live_ranges(cfg);
+		print_function_blocks_with_live_ranges(function_entry);
 		printf("============= After Live Range Determination ==============\n");
 	}
 
@@ -3216,7 +3188,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 *
 	 * This has the potential to cause spills
 	 */
-	 colorable = pre_color(cfg, live_ranges);
+	 colorable = pre_color(function_entry, live_ranges);
 
 	/**
 	 * If we couldn't precolor, we'll have spilled a live range and as such must go
@@ -3238,7 +3210,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 * allow for even more coalescence. We will use this to our advantage
 	 * by letting this rule run every time
 	*/
-	u_int8_t could_coalesce = perform_live_range_coalescence(cfg, graph, debug_printing);
+	u_int8_t could_coalesce = perform_live_range_coalescence(function_entry, graph, debug_printing);
 
 	/**
 	 * If we were in fact able to coalesce, we will have messed up the liveness sets due
@@ -3255,25 +3227,25 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		reset_all_live_ranges(live_ranges);
 
 		//First step - recalculate all of our used & assigned sets
-		recompute_used_and_assigned_sets(cfg);
+		recompute_used_and_assigned_sets(function_entry);
 
 		//After we coalesce, we need to recompute all of the
 		//spill costs
 		compute_spill_costs(live_ranges);
 
 		//Then - recalculate all liveness sets
-		calculate_live_range_liveness_sets(cfg);
+		calculate_live_range_liveness_sets(function_entry);
 
 		//Finally, recalculate all of the interference now that all of the
 		//prerequisites have been met
-		graph = construct_interference_graph(cfg, live_ranges);
+		graph = construct_function_level_interference_graph(function_entry, live_ranges);
 	}
 
 	//Show our live ranges once again if requested
 	if(print_irs == TRUE){
 		print_all_live_ranges(live_ranges);
 		printf("================= After Coalescing =======================\n");
-		print_blocks_with_live_ranges(cfg);
+		print_function_blocks_with_live_ranges(function_entry);
 		printf("================= After Coalescing =======================\n");
 	}
 
@@ -3284,7 +3256,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 * then the allocator will spill the least costly LR and return FALSE, and we will go through
 	 * this whol process again
 	*/
-	colorable = graph_color_and_allocate(cfg, live_ranges);
+	colorable = graph_color_and_allocate(function_entry, live_ranges);
 
 	/**
 	 * Our so-called "spill loop" essentially repeats most of the steps
@@ -3300,7 +3272,7 @@ spill_loop:
 	while(colorable == FALSE){
 		if(print_irs == TRUE){
 			printf("============ After Spilling =============== \n");
-			print_blocks_with_live_ranges(cfg);
+			print_function_blocks_with_live_ranges(function_entry);
 			printf("============ After Spilling =============== \n");
 		}
 
@@ -3313,7 +3285,7 @@ spill_loop:
 		 * Following this, we need to recompute all of our used and assigned
 		 * sets
 		 */
-		recompute_used_and_assigned_sets(cfg);
+		recompute_used_and_assigned_sets(function_entry);
 
 		/**
 		 * Now that we've recomputed the used and assigned
@@ -3326,19 +3298,19 @@ spill_loop:
 		 * Following that, we need to go through and calculate
 		 * all of our liveness sets again
 		 */
-		calculate_live_range_liveness_sets(cfg);
+		calculate_live_range_liveness_sets(function_entry);
 
 		/**
 		 * Once the liveness sets have been recalculated, we're able
 		 * to go through and compute all of the interference again
 		 */
-		graph = construct_interference_graph(cfg, live_ranges);
+		graph = construct_function_level_interference_graph(function_entry, live_ranges);
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE){
 			print_all_live_ranges(live_ranges);
 			printf("================= After Interference =======================\n");
-			print_blocks_with_live_ranges(cfg);
+			print_function_blocks_with_live_ranges(function_entry);
 			printf("================= After Interference =======================\n");
 		}
 
@@ -3348,7 +3320,41 @@ spill_loop:
 		 * again. This loop will keep executing until the
 		 * graph_color_and_allocate returns a successful result
 		 */
-		colorable = graph_color_and_allocate(cfg, live_ranges);
+		colorable = graph_color_and_allocate(function_entry, live_ranges);
+	}
+
+	//Destroy this now that we're done
+	dynamic_array_dealloc(live_ranges);
+}
+
+
+/**
+ * Perform our register allocation algorithm on the entire cfg
+ */
+void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
+	//Save whether or not we want to actually print IRs
+	u_int8_t print_irs = options->print_irs;
+	u_int8_t print_post_allocation = options->print_post_allocation;
+
+	//Save these in global state
+	stack_pointer = cfg->stack_pointer;
+	type_symtab = cfg->type_symtab;
+	//Load this in for later use
+	u64_type = lookup_type_name_only(type_symtab, "u64")->type;
+
+	//Construct these two live ranges off the bat - they are evergreen and will be used
+	//globally
+	stack_pointer_lr = construct_stack_pointer_live_range(stack_pointer);
+	instruction_pointer_lr = construct_instruction_pointer_live_range(cfg->instruction_pointer);
+
+	//Run through every function entry block individually and invoke the allocator on
+	//all of them separately
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract the given function entry
+		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+
+		//Invoke the function-level allocator
+		allocate_registers_for_function(options, function_entry);
 	}
 
 	/**
@@ -3357,6 +3363,9 @@ spill_loop:
 	 * Once we make it down here, we have colored the entire graph successfully. But,
 	 * we still need to insert any caller/callee saving logic that is needed
 	 * when appropriate
+	 *
+	 * NOTE: We cannot do this at the individual function step because it does require
+	 * that we have all functions completely allocated before going forward.
 	*/
 	insert_saving_logic(cfg);
 

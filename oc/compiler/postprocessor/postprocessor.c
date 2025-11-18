@@ -9,6 +9,7 @@
 #include "postprocessor.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <sys/types.h>
 
 /**
  * Combine two blocks into one. This is different than other combine methods,
@@ -93,9 +94,9 @@ static instruction_t* combine_blocks(cfg_t* cfg, basic_block_t* a, basic_block_t
  *
  * This is akin to mark & sweep in the optimizer, though much more simple
  */
-static void remove_useless_moves(cfg_t* cfg){
+static void remove_useless_moves(basic_block_t* function_entry_block){
 	//Grab the head block
-	basic_block_t* current = cfg->head_block;
+	basic_block_t* current = function_entry_block;
 
 	//So long as we have blocks to traverse
 	while(current != NULL){
@@ -319,32 +320,26 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
  * 	 compute Postorder of CFG
  * 	 branch_reduce_postprocess()
  */
-static void condense(cfg_t* cfg){
-	//For each function in the CFG
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
-		//Have we seen change(modification) at all?
-		u_int8_t changed;
+static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
+	//Have we seen change(modification) at all?
+	u_int8_t changed;
 
-		//Grab the function block out
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, _);
+	//The postorder traversal array
+	dynamic_array_t* postorder;
 
-		//The postorder traversal array
-		dynamic_array_t* postorder;
+	//Now we'll do the actual clean algorithm
+	do {
+		//Compute the new postorder
+		postorder = compute_post_order_traversal(function_entry_block);
 
-		//Now we'll do the actual clean algorithm
-		do {
-			//Compute the new postorder
-			postorder = compute_post_order_traversal(function_entry);
+		//Call onepass() for the reduction
+		changed = branch_reduce_postprocess(cfg, postorder);
 
-			//Call onepass() for the reduction
-			changed = branch_reduce_postprocess(cfg, postorder);
-
-			//We can free up the old postorder now
-			dynamic_array_dealloc(postorder);
-			
-		//We keep going so long as branch_reduce changes something 
-		} while(changed == TRUE);
-	}
+		//We can free up the old postorder now
+		dynamic_array_dealloc(postorder);
+		
+	//We keep going so long as branch_reduce changes something 
+	} while(changed == TRUE);
 }
 
 
@@ -371,119 +366,101 @@ static basic_block_t* does_block_end_in_jump_instruction(basic_block_t* block){
 }
 
 
+
 /**
  * Once we've done all of the reduction that we see fit to do, we'll need to 
  * find a way to reorder the blocks since it is likely that the control flow
  * changed
  */
-static basic_block_t* reorder_blocks(cfg_t* cfg){
+static void reorder_blocks(basic_block_t* function_entry_block){
 	//We'll first wipe the visited status on this CFG
-	reset_visited_status(cfg, TRUE);
+	reset_function_visited_status(function_entry_block, TRUE);
 	
 	//We will perform a breadth first search and use the "direct successor" area
 	//of the blocks to store them all in one chain
 	
-	//The current block
-	basic_block_t* previous;
-	//The starting point that all traversals will use
-	basic_block_t* head_block;
-
-	//Initialize these to null first
-	previous = head_block = NULL;
-	
 	//We'll need to use a queue every time, we may as well just have one big one
 	heap_queue_t* queue = heap_queue_alloc();
 
-	//For each function
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
-		//Grab the function block out
-		basic_block_t* func_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
+	//These are reset for every function we deal with
+	basic_block_t* previous = NULL;
 
-		//This function start block is the begging of our BFS	
-		enqueue(queue, func_block);
-		
-		//So long as the queue is not empty
-		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
-			//Grab this block off of the queue
-			basic_block_t* current = dequeue(queue);
+	//This function start block is the begging of our BFS	
+	enqueue(queue, function_entry_block);
+	
+	//So long as the queue is not empty
+	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		//Grab this block off of the queue
+		basic_block_t* current = dequeue(queue);
 
-			//If previous is NULL, this is the first block
-			if(previous == NULL){
-				previous = current;
-				//This is also the head block then
-				head_block = previous;
-			//We need to handle the rare case where we reach two of the same blocks(maybe the block points
-			//to itself) but neither have been visited. We make sure that, in this event, we do not set the
-			//block to be it's own direct successor
-			} else if(previous != current && current->visited == FALSE){
-				//We'll add this in as a direct successor
-				previous->direct_successor = current;
+		//If previous is NULL, this is the first block
+		if(previous == NULL){
+			//Set the previous block
+			previous = current;
 
-				//Do we end in a jump?
-				basic_block_t* end_jumps_to = does_block_end_in_jump_instruction(previous);
+		//We need to handle the rare case where we reach two of the same blocks(maybe the block points
+		//to itself) but neither have been visited. We make sure that, in this event, we do not set the
+		//block to be it's own direct successor
+		} else if(previous != current && current->visited == FALSE){
+			//We'll add this in as a direct successor
+			previous->direct_successor = current;
 
-				//If we do AND what we're jumping to is the direct successor, then we'll
-				//delete the jump statement as it is now unnecessary
-				if(end_jumps_to == previous->direct_successor){
-					//Get rid of this jump as it's no longer needed
-					delete_statement(previous->exit_statement);
-				}
+			//Do we end in a jump?
+			basic_block_t* end_jumps_to = does_block_end_in_jump_instruction(previous);
 
-				//Add this in as well
-				previous = current;
+			//If we do AND what we're jumping to is the direct successor, then we'll
+			//delete the jump statement as it is now unnecessary
+			if(end_jumps_to == previous->direct_successor){
+				//Get rid of this jump as it's no longer needed
+				delete_statement(previous->exit_statement);
 			}
 
-			//Make sure that we flag this as visited
-			current->visited = TRUE;
+			//Add this in as well
+			previous = current;
+		}
 
-			//Let's first check for our special case - us jumping to a given block as the very last statement. If
-			//this turns back something that isn't null, it'll be the first thing we add in
-			basic_block_t* direct_end_jump = does_block_end_in_jump_instruction(current);
+		//Make sure that we flag this as visited
+		current->visited = TRUE;
 
-			//If this is the case, we'll add it in first
-			if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
-				//Add it into the queue
-				enqueue(queue, direct_end_jump);
+		//Let's first check for our special case - us jumping to a given block as the very last statement. If
+		//this turns back something that isn't null, it'll be the first thing we add in
+		basic_block_t* direct_end_jump = does_block_end_in_jump_instruction(current);
+
+		//If this is the case, we'll add it in first
+		if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
+			//Add it into the queue
+			enqueue(queue, direct_end_jump);
+		}
+
+		//Now we'll go through each of the successors in this node
+		for(u_int16_t idx = 0; current->successors != NULL && idx < current->successors->current_index; idx++){
+			//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
+			//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
+
+			//Grab the successor
+			basic_block_t* successor = dynamic_array_get_at(current->successors, idx);
+
+			//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
+			if(successor == direct_end_jump){
+				continue;
 			}
 
-			//Now we'll go through each of the successors in this node
-			for(u_int16_t idx = 0; current->successors != NULL && idx < current->successors->current_index; idx++){
-				//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
-				//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
+			//If the block is completely empty(function end block), we'll also skip
+			if(successor->leader_statement == NULL){
+				successor->visited = TRUE;
+				continue;
+			}
 
-				//Grab the successor
-				basic_block_t* successor = dynamic_array_get_at(current->successors, idx);
-
-				//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
-				if(successor == direct_end_jump){
-					continue;
-				}
-
-				//If the block is completely empty(function end block), we'll also skip
-				if(successor->leader_statement == NULL){
-					successor->visited = TRUE;
-					continue;
-				}
-
-				//Otherwise it's not, so we'll add it in
-				if(successor->visited == FALSE){
-					enqueue(queue, successor);
-				}
+			//Otherwise it's not, so we'll add it in
+			if(successor->visited == FALSE){
+				enqueue(queue, successor);
 			}
 		}
 	}
 
 	//Destroy the queue when done
 	heap_queue_dealloc(queue);
-
-	//Set this for later on
-	cfg->head_block = head_block;
-
-	//Give back the head block
-	return head_block;
 }
-
-
 
 
 /**
@@ -495,18 +472,24 @@ static basic_block_t* reorder_blocks(cfg_t* cfg){
  * optimizations:
  */
 void postprocess(cfg_t* cfg){
-	/**
-	 * PASS 1: remove any/all useless move operations from the CFG
-	 */
-	remove_useless_moves(cfg);
+	//Run through every function block here separately
+	for(u_int16_t i = 0 ; i < cfg->function_entry_blocks->current_index; i++){
+		//Extract the given function block
+		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-	/**
-	 * PASS 2: perform a modified branch reduction to condense the code
-	*/
-	condense(cfg);
+		/**
+		 * PASS 1: remove any/all useless move operations from the CFG
+		 */
+		remove_useless_moves(function_entry_block);
 
-	/**
-	 * PASS 3: final reordering
-	*/
-	reorder_blocks(cfg);
+		/**
+		 * PASS 2: perform a modified branch reduction to condense the code
+		*/
+		condense(cfg, function_entry_block);
+
+		/**
+		 * PASS 3: final reordering
+		*/
+		reorder_blocks(function_entry_block);
+	}
 }

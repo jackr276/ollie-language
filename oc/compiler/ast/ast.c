@@ -10,10 +10,16 @@
 #include <string.h>
 #include <sys/types.h>
 
-//The very first created node
-static generic_ast_node_t* head_node = NULL;
-//The current node, this is used for our memory creation scheme
-static generic_ast_node_t* current_ast_node = NULL;
+//Initialize our created nodes array to be empty
+static dynamic_array_t* created_nodes = NULL;
+
+/**
+ * Initialize the AST system by creating the created_nodes
+ * array
+ */
+void initialize_ast_system(){
+	created_nodes = dynamic_array_alloc();
+}
 
 
 /**
@@ -251,21 +257,12 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side){
 	//We don't want to hold onto any of these old references here
 	duplicated->first_child = NULL;
 	duplicated->next_sibling = NULL;
-	duplicated->next_created_ast_node = NULL;
 
 	//Add the appropriate side
 	duplicated->side = side;
 
-	//And now we'll link this in to our linked list here
-	//If we have the very first node
-	if(head_node == NULL){
-		head_node = duplicated;
-		current_ast_node = duplicated;
-	} else {
-		//Add to the back of the list
-		current_ast_node->next_created_ast_node = duplicated;
-		current_ast_node = duplicated;
-	}
+	//Add this into the memory management structure
+	dynamic_array_add(created_nodes, duplicated);
 
 	//Give back the duplicated node
 	return duplicated;
@@ -281,15 +278,9 @@ generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t si
 	//We always have a generic AST node
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
 
-	//If we have the very first node
-	if(head_node == NULL){
-		head_node = node;
-		current_ast_node = node;
-	} else {
-		//Add to the back of the list
-		current_ast_node->next_created_ast_node = node;
-		current_ast_node = node;
-	}
+	//Add this into our memoyr management structure
+	dynamic_array_add(created_nodes, node);
+
 	//Assign the class
 	node->ast_node_type = ast_node_type;
 
@@ -333,32 +324,22 @@ void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child){
  * Global tree deallocation function
  */
 void ast_dealloc(){
-	//For our own safety here
-	if(head_node == NULL){
-		return;
-	}
-
-	//Store our temp var here
-	generic_ast_node_t* temp;
-
-	while(head_node != NULL){
-		//Grab a reference to it
-		temp = head_node;
-
-		//Advance root along
-		head_node = head_node->next_created_ast_node;
+	//Run through all of the nodes in the created array
+	for(u_int16_t i = 0; i < created_nodes->current_index; i++){
+		//Grab the node out
+		generic_ast_node_t* node = dynamic_array_get_at(created_nodes, i);
 
 		//Some additional freeing may be needed
-		switch(temp->ast_node_type){
+		switch(node->ast_node_type){
 			case AST_NODE_TYPE_IDENTIFIER:
 			case AST_NODE_TYPE_ASM_INLINE_STMT:
-				dynamic_string_dealloc(&(temp->string_value));
+				dynamic_string_dealloc(&(node->string_value));
 				break;
 
 			//We could see a case where this is a string const
 			case AST_NODE_TYPE_CONSTANT:
-				if(temp->constant_type == STR_CONST){
-					dynamic_string_dealloc(&(temp->string_value));
+				if(node->constant_type == STR_CONST){
+					dynamic_string_dealloc(&(node->string_value));
 				}
 				break;
 
@@ -368,6 +349,9 @@ void ast_dealloc(){
 		}
 
 		//Destroy temp here
-		free(temp);
+		free(node);
 	}
+
+	//Finally, we can destroy the entire array as well
+	dynamic_array_dealloc(created_nodes);
 }

@@ -9645,6 +9645,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Initialize the lexer first
 	initialize_lexer();
 
+	//Initialize the AST system as well
+	initialize_ast_system();
+
 	//Set the number of errors here
 	num_errors = 0;
 	num_warnings = 0;

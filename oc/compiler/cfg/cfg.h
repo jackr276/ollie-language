@@ -72,8 +72,6 @@ struct cfg_t{
 	//An array of all blocks that are 
 	//All created blocks
 	dynamic_array_t* created_blocks;
-	//The head block
-	basic_block_t* head_block;
 	//We also need to hold onto the stack pointer
 	three_addr_var_t* stack_pointer;
 	//We also need to hold onto the instruction pointer
@@ -259,6 +257,11 @@ void print_all_cfg_blocks(cfg_t* cfg);
  * Reset the visited status of the CFG
  */
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor);
+
+/**
+ * Reset the visited status inside a particular function in the CFG
+ */
+void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t reset_direct_successor);
 
 /**
  * Allocate a basic block using calloc. NO data assignment

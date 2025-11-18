@@ -96,8 +96,6 @@ struct generic_ast_node_t{
 	//The string value could hold an identifier, string constant, or it could hold
 	//an assembly inline statement. It all depends based on context
 	dynamic_string_t string_value;
-	//What is the next created AST NODE? Used for memory deallocation
-	generic_ast_node_t* next_created_ast_node;
 	//What is the inferred type of the node
 	generic_type_t* inferred_type;
 	//These are the two pointers that make up the whole of the tree
@@ -141,6 +139,12 @@ struct generic_ast_node_t{
 	//The type address specifier - for types
 	address_specifier_type_t address_type;
 };
+
+/**
+ * Initialize the AST system by creating the created_nodes
+ * array
+ */
+void initialize_ast_system();
 
 /**
  * This helper function negates a constant node's value
