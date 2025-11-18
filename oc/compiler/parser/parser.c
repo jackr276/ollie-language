@@ -972,6 +972,13 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//Let's look and see if we have a variable for use here. If we do, then
 			//we're done with this exploration
 			if(found_var != NULL){
+				//If this is the right hand side and our variable is not initialized,
+				//this is invalid as we are trying to use before initialization
+				if(side == SIDE_TYPE_RIGHT && found_var->initialized == FALSE){
+					sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
 				//Store the inferred type
 				ident->inferred_type = found_var->type_defined_as;
 				//Store the variable that's associated
@@ -1198,14 +1205,6 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//If it was already intialized, this means that it's been "assigned to"
-	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == TRUE){
-		assignee->assigned_to = TRUE;
-	} else {
-		//Mark that this var was in fact initialized
-		assignee->initialized = TRUE;
-	}
-
 	//Now we are required to see the := terminal
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
@@ -1221,6 +1220,17 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
+	}
+
+	/**
+	 * Once we have processed *both* the left and right hand sides, we can declare the left
+	 * hand variable as either assigned to or initialized
+	 */
+	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == TRUE){
+		assignee->assigned_to = TRUE;
+	} else {
+		//Mark that this var was in fact initialized
+		assignee->initialized = TRUE;
 	}
 
 	//Let's now see if we have compatible types
