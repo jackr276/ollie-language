@@ -384,8 +384,6 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 
 	//These are reset for every function we deal with
 	basic_block_t* previous = NULL;
-	//The starting point that all traversals will use
-	basic_block_t* head_block = NULL;
 
 	//This function start block is the begging of our BFS	
 	enqueue(queue, function_entry_block);
@@ -397,9 +395,9 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 
 		//If previous is NULL, this is the first block
 		if(previous == NULL){
+			//Set the previous block
 			previous = current;
-			//This is also the head block then
-			head_block = previous;
+
 		//We need to handle the rare case where we reach two of the same blocks(maybe the block points
 		//to itself) but neither have been visited. We make sure that, in this event, we do not set the
 		//block to be it's own direct successor
