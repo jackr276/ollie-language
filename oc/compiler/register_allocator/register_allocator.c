@@ -350,23 +350,17 @@ static void print_block_with_live_ranges(basic_block_t* block){
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_blocks_with_live_ranges(cfg_t* cfg){
-	//Run through all of the functions individually
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-		//Extract the given function block
-		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
+static void print_function_blocks_with_live_ranges(basic_block_t* function_entry){
+	//Extract the given function block
+	basic_block_t* current = function_entry;
 
-		//So long as this one isn't NULL
-		while(current != NULL){
-			//Print it
-			print_block_with_live_ranges(current);
-			//Advance to the direct successor
-			current = current->direct_successor;
-		}
+	//So long as this one isn't NULL
+	while(current != NULL){
+		//Print it
+		print_block_with_live_ranges(current);
+		//Advance to the direct successor
+		current = current->direct_successor;
 	}
-
-	//Print all global variables after the blocks
-	print_all_global_variables(stdout, cfg->global_variables);
 }
 
 
@@ -430,7 +424,7 @@ static void print_blocks_with_registers(cfg_t* cfg){
 		//So long as this one isn't NULL
 		while(current != NULL){
 			//Print it
-			print_block_with_live_ranges(current);
+			print_block_with_registers(current);
 			//Advance to the direct successor
 			current = current->direct_successor;
 		}
@@ -3126,7 +3120,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("============= Before Liveness ==============\n");
-		print_blocks_with_live_ranges(cfg);
+		print_function_blocks_with_live_ranges(function_entry);
 		printf("============= Before Liveness ==============\n");
 	}
 
@@ -3181,7 +3175,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("============= After Live Range Determination ==============\n");
-		print_blocks_with_live_ranges(cfg);
+		print_function_blocks_with_live_ranges(function_entry);
 		printf("============= After Live Range Determination ==============\n");
 	}
 
@@ -3251,7 +3245,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	if(print_irs == TRUE){
 		print_all_live_ranges(live_ranges);
 		printf("================= After Coalescing =======================\n");
-		print_blocks_with_live_ranges(cfg);
+		print_function_blocks_with_live_ranges(function_entry);
 		printf("================= After Coalescing =======================\n");
 	}
 
@@ -3278,7 +3272,7 @@ spill_loop:
 	while(colorable == FALSE){
 		if(print_irs == TRUE){
 			printf("============ After Spilling =============== \n");
-			print_blocks_with_live_ranges(cfg);
+			print_function_blocks_with_live_ranges(function_entry);
 			printf("============ After Spilling =============== \n");
 		}
 
@@ -3316,7 +3310,7 @@ spill_loop:
 		if(print_irs == TRUE){
 			print_all_live_ranges(live_ranges);
 			printf("================= After Interference =======================\n");
-			print_blocks_with_live_ranges(cfg);
+			print_function_blocks_with_live_ranges(function_entry);
 			printf("================= After Interference =======================\n");
 		}
 
