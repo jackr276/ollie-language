@@ -61,16 +61,19 @@ static void print_assembly_block(FILE* fl, basic_block_t* block){
  * here, these blocks will all already be in order from the block ordering procedure
  */
 static void print_all_basic_blocks(FILE* fl, cfg_t* cfg){
-	//Grab the head block out
-	basic_block_t* current = cfg->head_block;
+	//Run through all blocks here
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+		//Grab the head block out
+		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
-	//We can use the direct successor strategy here
-	while(current != NULL){
-		//Print it out
-		print_assembly_block(fl, current);
+		//We can use the direct successor strategy here
+		while(current != NULL){
+			//Print it out
+			print_assembly_block(fl, current);
 
-		//Advance the pointer
-		current = current->direct_successor;
+			//Advance the pointer
+			current = current->direct_successor;
+		}
 	}
 }
 
