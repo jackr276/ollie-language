@@ -2228,12 +2228,12 @@ static u_int8_t perform_block_level_coalescence(basic_block_t* block, interferen
  * We coalesce source to destination. When we're done, the *source* should
  * survive, the destination should NOT
  */
-static u_int8_t perform_live_range_coalescence(cfg_t* cfg, interference_graph_t* graph, u_int8_t debug_printing){
+static u_int8_t perform_live_range_coalescence(basic_block_t* function_entry_block, interference_graph_t* graph, u_int8_t debug_printing){
 	//By default, assume we did not coalesce anything
 	u_int8_t coalescence_occured = FALSE;
 
 	//Run through every single block in here
-	basic_block_t* current = cfg->head_block;
+	basic_block_t* current = function_entry_block;
 
 	//Run through every block
 	while(current != NULL){
@@ -3216,7 +3216,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 * allow for even more coalescence. We will use this to our advantage
 	 * by letting this rule run every time
 	*/
-	u_int8_t could_coalesce = perform_live_range_coalescence(cfg, graph, debug_printing);
+	u_int8_t could_coalesce = perform_live_range_coalescence(function_entry, graph, debug_printing);
 
 	/**
 	 * If we were in fact able to coalesce, we will have messed up the liveness sets due
