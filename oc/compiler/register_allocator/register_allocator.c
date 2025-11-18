@@ -3098,7 +3098,7 @@ static void insert_saving_logic(cfg_t* cfg){
 /**
  * Perform our function level allocation process
  */
-static void allocate_registers_for_function(compiler_options_t* options, cfg_t* cfg, basic_block_t* function_entry){
+static void allocate_registers_for_function(compiler_options_t* options, basic_block_t* function_entry){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
 	u_int8_t debug_printing = options->enable_debug_printing;
@@ -3323,8 +3323,8 @@ spill_loop:
 		colorable = graph_color_and_allocate(function_entry, live_ranges);
 	}
 
-
-	//TODO ONCE WE'RE DONE DEALLOCATE THE LR ARRAY
+	//Destroy this now that we're done
+	dynamic_array_dealloc(live_ranges);
 }
 
 
@@ -3354,7 +3354,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 
 		//Invoke the function-level allocator
-		allocate_registers_for_function(options, cfg, function_entry);
+		allocate_registers_for_function(options, function_entry);
 	}
 
 	/**
@@ -3363,6 +3363,9 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 * Once we make it down here, we have colored the entire graph successfully. But,
 	 * we still need to insert any caller/callee saving logic that is needed
 	 * when appropriate
+	 *
+	 * NOTE: We cannot do this at the individual function step because it does require
+	 * that we have all functions completely allocated before going forward.
 	*/
 	insert_saving_logic(cfg);
 

@@ -106,7 +106,6 @@ static void order_blocks(cfg_t* cfg){
 		//These get reset for every function because each function has its own
 		//separate ordering
 		basic_block_t* previous = NULL;
-		basic_block_t* head_block = NULL;
 
 		//This function start block is the begging of our BFS	
 		enqueue(queue, func_block);
@@ -118,9 +117,9 @@ static void order_blocks(cfg_t* cfg){
 
 			//If previous is NULL, this is the first block
 			if(previous == NULL){
+				//Keep track of what previous is
 				previous = current;
-				//This is also the head block then
-				head_block = previous;
+
 			//We need to handle the rare case where we reach two of the same blocks(maybe the block points
 			//to itself) but neither have been visited. We make sure that, in this event, we do not set the
 			//block to be it's own direct successor
