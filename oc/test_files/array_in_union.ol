@@ -12,7 +12,7 @@ define union my_union {
 
 
 pub fn main() -> i32{
-	declare my_union:custom_union;
+	declare mut my_union:custom_union;
 	
 	//Store x
 	my_union.x[2] = 32;

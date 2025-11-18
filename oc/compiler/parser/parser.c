@@ -7639,8 +7639,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
 	declared_var->type_defined_as = dealias_type(type_spec);
-	//It was not initialized
-	declared_var->initialized = FALSE;
 	//It was declared
 	declared_var->declare_or_let = 0;
 	//What function are we in?
@@ -7671,6 +7669,9 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 			//Store the line number
 			declaration_node->line_number = current_line;
 
+			//Since this is a memory region, it counts as being initialized by default
+			declared_var->initialized = TRUE;
+
 			break;
 
 		//Otherwise just leave
@@ -7687,6 +7688,9 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 				//Store the line number
 				declaration_node->line_number = current_line;
 			}
+
+			//Since this is not a memory region, is does not count as being initialized
+			declared_var->initialized = FALSE;
 
 			break;
 	}
