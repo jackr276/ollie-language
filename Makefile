@@ -378,8 +378,18 @@ compiler_test_non_timed: oc
 compiler_test_allocation_only: oc
 	@for input in $(inputs); do \
 		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
-		echo "Running ./oc/out/oc -disa -f $$input -o $$output"; \
+		echo "Running ./oc/out/oc -sra -f $$input -o $$output"; \
 		./oc/out/oc -sra -f $$input -o $$output; \
+	done
+
+# A performance test will skip printing out any extra debug info and just time the compiler to see how our
+# performance does. Printing is costly and slow, which is why we turn most of it off here as to not skew
+# the results
+performance_test: oc
+	@for input in $(inputs); do \
+		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		echo "Running ./oc/out/oc -ts -f $$input -o $$output"; \
+		./oc/out/oc -ts -f $$input -o $$output; \
 	done
 
 array_test: dynamic_array_test
