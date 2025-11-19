@@ -11,19 +11,16 @@ pub fn main() -> i32{
 	
 	
 	//Declare the array
- 	declare arr:i32[32][3];
+ 	declare mut arr:i32[32][3];
 
 	//Let's try and populate
 	arr[1][2] = 23;
 
 	//Now let's try and access
 	b = arr[3][2];
-	
-	
 
-	
 	//Let's do simple access to make sure that it still works
-	declare b_arr:i8[3];
+	declare mut b_arr:i8[3];
 
 	b_arr[2] = 'a';
 

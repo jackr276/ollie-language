@@ -10,7 +10,7 @@ pub fn main() -> i32{
 	
 	let a:i32 = 23;
 	
- 	declare arr:i32[32][3];
+ 	declare mut arr:i32[32][3];
 
 	arr[1][2] = 23;
 
