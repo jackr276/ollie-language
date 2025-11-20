@@ -339,7 +339,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	record->call_graph_node = create_call_graph_node(record);
 
 	//We know that we need to create this immediately
-	record->signature = create_function_pointer_type(is_public, line_number);
+	record->signature = create_function_pointer_type(is_public, line_number, NOT_MUTABLE);
 
 	//And give it back
 	return record;
@@ -517,72 +517,139 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 
 /**
  * A helper function that adds all basic types to the type symtab
+ *
+ * NOTE: This helper creates both *mutable and immutable* versions
+ * of all of our basic types
  */
 void add_all_basic_types(type_symtab_t* symtab){
 	generic_type_t* type;
 
 	//Add in void type
-	type = create_basic_type("void", VOID);
+	type = create_basic_type("void", VOID, NOT_MUTABLE);
 	insert_type(symtab, create_type_record(type));
 
+	// ================================ Immutable versions of our primitive types ================================
 	//s_int8 type
-	type = create_basic_type("i8", I8);
+	type = create_basic_type("i8", I8, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 
 	//u_int8 type
-	type = create_basic_type("u8", U8);
+	type = create_basic_type("u8", U8, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 
 	//Bool type
-	type = create_basic_type("bool", BOOL);
+	type = create_basic_type("bool", BOOL, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 
 	//char type
-	type = create_basic_type("char", CHAR);
+	type = create_basic_type("char", CHAR, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 
 	//Save this for the next one to avoid confusion
 	generic_type_t* char_type = type;
 
 	//char* type
-	type = create_pointer_type(char_type, 0);
+	type = create_pointer_type(char_type, 0, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 
 	//Create "char*" type
-	type = create_pointer_type(type, 0);
+	type = create_pointer_type(type, 0, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 	
 	//u_int16 type
-	type = create_basic_type("u16", U16);
+	type = create_basic_type("u16", U16, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 		
 	//s_int16 type
-	type = create_basic_type("i16", I16);
+	type = create_basic_type("i16", I16, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 	
 	//s_int32 type
-	type = create_basic_type("i32", I32);
+	type = create_basic_type("i32", I32, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 	
 	//u_int32 type
-	type = create_basic_type("u32", U32);
+	type = create_basic_type("u32", U32, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 	
 	//u_int64 type
-	type = create_basic_type("u64", U64);
+	type = create_basic_type("u64", U64, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 	
 	//s_int64 type
-	type = create_basic_type("i64", I64);
+	type = create_basic_type("i64", I64, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 
 	//float32 type
-	type = create_basic_type("f32", F32);
+	type = create_basic_type("f32", F32, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
 	
 	//float64 type
-	type = create_basic_type("f64", F64);
+	type = create_basic_type("f64", F64, NOT_MUTABLE);
 	insert_type(symtab,  create_type_record(type));
+	// ================================ Immutable versions of our primitive types ================================
+	
+	// ================================ Mutable versions of our primitive types ================================
+	//s_int8 type
+	type = create_basic_type("i8", I8, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+
+	//u_int8 type
+	type = create_basic_type("u8", U8, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+
+	//Bool type
+	type = create_basic_type("bool", BOOL, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+
+	//char type
+	type = create_basic_type("char", CHAR, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+
+	//Save this for the next one to avoid confusion
+	char_type = type;
+
+	//char* type
+	type = create_pointer_type(char_type, 0, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+
+	//Create "char*" type
+	type = create_pointer_type(type, 0, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+	
+	//u_int16 type
+	type = create_basic_type("u16", U16, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+		
+	//s_int16 type
+	type = create_basic_type("i16", I16, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+	
+	//s_int32 type
+	type = create_basic_type("i32", I32, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+	
+	//u_int32 type
+	type = create_basic_type("u32", U32, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+	
+	//u_int64 type
+	type = create_basic_type("u64", U64, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+	
+	//s_int64 type
+	type = create_basic_type("i64", I64, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+
+	//float32 type
+	type = create_basic_type("f32", F32, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+	
+	//float64 type
+	type = create_basic_type("f64", F64, MUTABLE);
+	insert_type(symtab,  create_type_record(type));
+
+	// ================================ Mutable versions of our primitive types ==============================
 }
 
 

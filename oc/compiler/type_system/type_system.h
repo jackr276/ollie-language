@@ -293,6 +293,12 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var);
 void finalize_struct_alignment(generic_type_t* type);
 
 /**
+ * Print the full name of a type *into* the char buffer that
+ * is provided
+ */
+void print_full_type_name(generic_type_t* type, char* name);
+
+/**
  * Does this struct contain said member? Return the variable if yes, NULL if not
  */
 void* get_struct_member(generic_type_t* structure, char* name);

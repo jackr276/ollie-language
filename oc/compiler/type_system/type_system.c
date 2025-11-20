@@ -1839,6 +1839,21 @@ void finalize_struct_alignment(generic_type_t* type){
 
 
 /**
+ * Print the full name of a type *into* the char buffer that
+ * is provided
+ */
+void print_full_type_name(generic_type_t* type, char* name){
+	//Mutability printing
+	if(type->mutability == MUTABLE){
+		sprintf(name, "mut ");
+	}
+
+	//Then throw the generated name in there
+	sprintf(name, "%s", type->type_name.string);
+}
+
+
+/**
  * Dynamically allocate and create an aliased type
  */
 generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number){
