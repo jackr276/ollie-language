@@ -1394,14 +1394,8 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 	dynamic_string_t name;
 	dynamic_string_alloc(&name);
 
-	//Add the mut prefix on here
-	if(mutability == TRUE){
-		dynamic_string_set(&name, "mut ");
-		//Set it to be our given name
-		dynamic_string_concatenate(&name, type_name);
-	} else {
-		dynamic_string_set(&name, type_name);
-	}
+	//Set this to be the type name
+	dynamic_string_set(&name, type_name);
 
 	//Set the type's mutability here
 	type->mutability = mutability;
@@ -1466,21 +1460,8 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	//Is this mutable or not?
 	type->mutability = TRUE;
 
-	//Depending on our mutability, the name changes
-	if(mutability == TRUE){
-		//Create it
-		dynamic_string_alloc(&(type->type_name));
-
-		//Now we need to add the mut keyword in
-		dynamic_string_set(&(type->type_name), "mut ");
-
-		//And from here we add the name of what we point to
-		dynamic_string_concatenate(&(type->type_name), points_to->type_name.string);
-		
-	} else {
-		//Clone the string
-		type->type_name = clone_dynamic_string(&(points_to->type_name));
-	}
+	//Clone the string
+	type->type_name = clone_dynamic_string(&(points_to->type_name));
 
 	//Add the star at the end
 	dynamic_string_add_char_to_back(&(type->type_name), '*');
@@ -1520,6 +1501,9 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//Array type class
 	type->type_class = TYPE_CLASS_ARRAY;
 
+	//Is this a mutable type or not?
+	type->mutability = mutability;
+
 	//Where was it declared
 	type->line_number = line_number;
 
@@ -1550,12 +1534,15 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 /**
  * Dynamically allocate and create an enumerated type
  */
-generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number){
+generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
 	//Dynamically allocate, 0 out
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
 	type->type_class = TYPE_CLASS_ENUMERATED;
+
+	//Is this a mutable type or not?
+	type->mutability = mutability;
 	
 	//Where is the declaration?
 	type->line_number = line_number;
@@ -1576,12 +1563,15 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 /**
  * Dynamically allocate and create a constructed type
  */
-generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number){
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
 	type->type_class = TYPE_CLASS_STRUCT;
 	
+	//Is this a mutable type or not?
+	type->mutability = mutability;
+
 	//Where is the declaration?
 	type->line_number = line_number;
 
@@ -1597,7 +1587,7 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 /**
  * Dynamically allocate and create a union type
  */
-generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number){
+generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
 	//Dynamically allocate the union type
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
@@ -1606,6 +1596,9 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 
 	//Move the name over
 	type->type_name = type_name;
+
+	//Save the mutability
+	type->mutability = mutability;
 
 	//The line number where this was created
 	type->line_number = line_number;
@@ -1870,13 +1863,16 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number){
+generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number, mutability_type_t mutability){
 	//First allocate the parent
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class & line number
 	type->type_class = TYPE_CLASS_FUNCTION_SIGNATURE;
 	type->line_number = line_number;
+
+	//Is this type mutable or not?
+	type->mutability = mutability;
 
 	//Now we need to create the internal function pointer type
 	type->internal_types.function_type = calloc(1, sizeof(function_type_t));
@@ -1898,7 +1894,7 @@ generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_
 /**
  * Add a function's parameter in
  */
-u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter, u_int8_t is_mutable){
+u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter){
 	//Extract this for convenience
 	function_type_t* internal_type = function_type->internal_types.function_type;
 
@@ -1908,8 +1904,7 @@ u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_t
 	}
 
 	//Store the mutability level and parameter type
-	internal_type->parameters[internal_type->num_params].is_mutable = is_mutable;
-	internal_type->parameters[internal_type->num_params].parameter_type = parameter;
+	internal_type->parameters[internal_type->num_params] = parameter;
 
 	//Increment this
 	(internal_type->num_params)++;
@@ -2085,13 +2080,8 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	dynamic_string_set(&(function_pointer_type->type_name), "fn(");
 
 	for(u_int16_t i = 0; i < function_type->num_params; i++){
-		if(function_type->parameters[i].is_mutable == TRUE){
-			//Add this in dynamically
-			dynamic_string_concatenate(&(function_pointer_type->type_name), "mut ");
-		} 
-
 		//First put this into the buffer string
-		sprintf(var_string, "%s", basic_type_to_string(function_type->parameters[i].parameter_type));
+		sprintf(var_string, "%s", basic_type_to_string(function_type->parameters[i]));
 
 		//Then concatenate
 		dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
