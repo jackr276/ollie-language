@@ -7,12 +7,9 @@ fn tester(i:u32) -> i32{
  * For switch statement testing
  */
 pub fn main() -> i32{
+	let mut a:i32 = 23;
 	
-	let a:i32 = 23;
-
-
-	
- 	declare arr:i32[32][3];
+ 	declare mut arr:i32[32][3];
 
 	arr[1][2] = 23;
 

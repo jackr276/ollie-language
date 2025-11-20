@@ -2,12 +2,12 @@
 * This program is made for the purposes of testing short circuiting logic
 */
 
-fn tester(arg:i32) -> void{
+fn tester(mut arg:i32) -> void{
 	arg++;
 }
 
 //Dummy
-fn really_long_function(arg:i32) -> i32 {
+fn really_long_function(mut arg:i32) -> i32 {
 	arg++;
 	ret arg;
 }

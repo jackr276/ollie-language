@@ -7,6 +7,10 @@
 declare mut x:i32;
 
 pub fn add_vars(y:i32) -> i64 {
+	//We must assign first
+	x = 3;
+
+	//Then add
 	ret x + y;
 }
 

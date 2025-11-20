@@ -972,6 +972,13 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//Let's look and see if we have a variable for use here. If we do, then
 			//we're done with this exploration
 			if(found_var != NULL){
+				//If this is the right hand side and our variable is not initialized,
+				//this is invalid as we are trying to use before initialization
+				if(side == SIDE_TYPE_RIGHT && found_var->initialized == FALSE){
+					sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
 				//Store the inferred type
 				ident->inferred_type = found_var->type_defined_as;
 				//Store the variable that's associated
@@ -1198,14 +1205,6 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//If it was already intialized, this means that it's been "assigned to"
-	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == TRUE){
-		assignee->assigned_to = TRUE;
-	} else {
-		//Mark that this var was in fact initialized
-		assignee->initialized = TRUE;
-	}
-
 	//Now we are required to see the := terminal
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
@@ -1221,6 +1220,18 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
+	}
+
+	/**
+	 * Once we have processed *both* the left and right hand sides, we can declare the left
+	 * hand variable as either assigned to or initialized
+	 */
+	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == TRUE){
+		//This is a mutation
+		assignee->mutated = TRUE;
+	} else {
+		//Mark that this var was in fact initialized
+		assignee->initialized = TRUE;
 	}
 
 	//Let's now see if we have compatible types
@@ -1706,6 +1717,18 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 		return print_and_return_error(info, parser_line_num);
 	}
 
+	//Necessary checking here
+	if(parent_node->variable != NULL){
+		//This is a mutation - so we need to check it
+		if(parent_node->variable->is_mutable == FALSE){
+			sprintf(info, "Attempt to mutate immutable variable %s", parent_node->variable->var_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//This was assigned to
+		parent_node->variable->mutated = TRUE;
+	}
+
 	//Otherwise let's allocate this
 	generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
 
@@ -1938,8 +1961,9 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	//Assign the operator to this
 	unary_op->unary_operator = lookahead.tok;
 
-	//Following this, we are required to see a valid cast expression
-	generic_ast_node_t* cast_expr = cast_expression(fl, side);
+	//We will process this as if we are on the "right hand side" of an equation, because we are
+	//still reading from items here
+	generic_ast_node_t* cast_expr = cast_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Let's check for errors
 	if(cast_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -2129,7 +2153,14 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//This counts as mutation -- unless it's a constant
 			if(cast_expr->variable != NULL){
-				cast_expr->variable->assigned_to = TRUE;
+				//If this is not mutable, then we cannot change it in this way
+				if(cast_expr->variable->is_mutable == FALSE){
+					sprintf(info, "Attempt to mutate immutable variable %s", cast_expr->variable->var_name.string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				//This is a mutation
+				cast_expr->variable->mutated = TRUE;
 			}
 
 			//Force this to be an rvalue for the cfg constructor
@@ -7629,8 +7660,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
 	declared_var->type_defined_as = dealias_type(type_spec);
-	//It was not initialized
-	declared_var->initialized = FALSE;
 	//It was declared
 	declared_var->declare_or_let = 0;
 	//What function are we in?
@@ -7661,6 +7690,9 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 			//Store the line number
 			declaration_node->line_number = current_line;
 
+			//Since this is a memory region, it counts as being initialized by default
+			declared_var->initialized = TRUE;
+
 			break;
 
 		//Otherwise just leave
@@ -7677,6 +7709,9 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 				//Store the line number
 				declaration_node->line_number = current_line;
 			}
+
+			//Since this is not a memory region, is does not count as being initialized
+			declared_var->initialized = FALSE;
 
 			break;
 	}

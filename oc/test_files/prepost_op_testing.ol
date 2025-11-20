@@ -4,7 +4,7 @@
 * Test handling of postinc/postdec
 */
 
-pub fn struct_testing(arg:i32, argv:char**) -> i32{
+pub fn struct_testing(mut arg:i32, argv:char**) -> i32{
 	/**
 	* Size should be: 1 + 3 pad + 320 + 1 + 3 pad + 4
 	*/

@@ -151,8 +151,8 @@ struct symtab_variable_record_t{
 	u_int16_t struct_offset;
 	//Was it initialized?
 	u_int8_t initialized;
-	//Was it assigned to?
-	u_int8_t assigned_to;
+	//Has this been mutated
+	u_int8_t mutated;
 	//What is the parameter order for this value?
 	u_int8_t function_parameter_order;
 	//Is this mutable?

@@ -2,7 +2,7 @@
 * This program is made for the purposes of testing short circuiting logic
 */
 
-fn tester(arg:i32) -> void{
+fn tester(mut arg:i32) -> void{
 	arg++;
 }
 

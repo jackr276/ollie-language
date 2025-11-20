@@ -39,7 +39,7 @@ fn test_func() -> i32 {
 	} while (i < 232);
 
 	let sample:u32 = 2232;
-	for(let i:u32 = 0; i < 2323; i++) {
+	for(let mut i:u32 = 0; i < 2323; i++) {
 		@test_func();
 		if(i == -1) {
 			ret -1;

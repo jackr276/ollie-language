@@ -32,7 +32,7 @@ pub fn postfix_in_use(arg:i32) -> i32{
 	}
 
 	//Very basic initializer
-	let tester:my_struct = {x, 7, 'a'};
+	let mut tester:my_struct = {x, 7, 'a'};
 
 	//So it isn't optimized away
 	ret tester:x--;
@@ -57,7 +57,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	}
 
 	//Very basic initializer
-	let tester:my_struct = {x, 7, 'a'};
+	let mut tester:my_struct = {x, 7, 'a'};
 
 	//Postincrement this
 	tester:x++;

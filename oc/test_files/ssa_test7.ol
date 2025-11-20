@@ -52,7 +52,7 @@ pub fn main() -> i32{
 let mut glob_x:u32 = 3232;
 let glog_y:i32 = -232;
 	x = 3222;
-	for(let _:i32 = 2; _ < 23; _++) {
+	for(let mut _:i32 = 2; _ < 23; _++) {
 		if(x <= 32) {
 			x = x + 22;
 		} else {

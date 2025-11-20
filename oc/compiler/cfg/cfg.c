@@ -7519,7 +7519,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 /**
  * Go through a function end block and determine/insert the ret statements that we need
  */
-static void determine_and_insert_return_statements(basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+static void determine_and_insert_return_statements(basic_block_t* function_exit_block){
 	//For convenience
 	symtab_function_record_t* function_defined_in = function_exit_block->function_defined_in;
 
@@ -7527,11 +7527,6 @@ static void determine_and_insert_return_statements(basic_block_t* function_entry
 	for(u_int16_t i = 0; i < function_exit_block->predecessors->current_index; i++){
 		//Grab the predecessor out
 		basic_block_t* block = dynamic_array_get_at(function_exit_block->predecessors, i);
-
-		//No point in looking at this if it's null and not the function entry block
-		if(block->exit_statement == NULL && block != function_entry_block){
-			continue;
-		}
 
 		//If the exit statement is not a return statement, we need to know what's happening here
 		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
@@ -7687,7 +7682,7 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	}
 
 	//Determine and insert any needed ret statements
-	determine_and_insert_return_statements(function_starting_block, function_exit_block);
+	determine_and_insert_return_statements(function_exit_block);
 
 	//We'll need to go through and finalize all user defined jump statements if there are any
 	finalize_all_user_defined_jump_statements(current_function_labeled_blocks, current_function_user_defined_jump_statements);
