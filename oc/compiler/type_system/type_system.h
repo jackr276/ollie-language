@@ -115,6 +115,13 @@ struct generic_type_t{
 	//Has this type been fully defined or not? This will be used to avoid 
 	//struct/union member recursive definitions with incomplete types
 	u_int8_t type_complete;
+
+	/**
+	 * Is this a mutable type? We need to take this into account whenever doing
+	 * any kind of operation checking. Mutable versions of the same type are stored
+	 * as separate records
+	 */
+	u_int8_t is_mutable;
 	//Basic types don't need anything crazy - just a token that stores what they are
 	ollie_token_t basic_type_token;
 	//What class of type is it
