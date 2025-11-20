@@ -1948,13 +1948,8 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	//Assign the operator to this
 	unary_op->unary_operator = lookahead.tok;
 
-	//Following this, we are required to see a valid cast expression
-	//
-	//
-	//TODO - we need to check if this "side" handling is correct, because
-	//we can make segfaults/improper results happen
-	//
-	//I changed it for now - BUT THIS IS NOT DONE it needs to be tested
+	//We will process this as if we are on the "right hand side" of an equation, because we are
+	//still reading from items here
 	generic_ast_node_t* cast_expr = cast_expression(fl, SIDE_TYPE_RIGHT);
 
 	//Let's check for errors
@@ -1974,9 +1969,6 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 		case STAR:
 			//Check to see if it's valid
 			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//TODO TESTER HERE
-			if(cast_expr->variable != NULL ) printf("VARIABLE IS %s\n", cast_expr->variable->var_name.string);
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
