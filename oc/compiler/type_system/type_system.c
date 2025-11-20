@@ -1379,7 +1379,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 /**
  * Create a basic type dynamically
 */
-generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
+generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability){
 	//Dynamically allocate
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 	//Store the type class
@@ -1394,8 +1394,17 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
 	dynamic_string_t name;
 	dynamic_string_alloc(&name);
 
-	//Set it to be our given name
-	dynamic_string_set(&name, type_name);
+	//Add the mut prefix on here
+	if(mutability == TRUE){
+		dynamic_string_set(&name, "mut ");
+		//Set it to be our given name
+		dynamic_string_concatenate(&name, type_name);
+	} else {
+		dynamic_string_set(&name, type_name);
+	}
+
+	//Set the type's mutability here
+	type->mutability = mutability;
 
 	//Set the name 
 	type->type_name = name;
@@ -1445,7 +1454,7 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
  * Create a pointer type dynamically. In order to have a pointer type, we must also
  * have what it points to.
  */
-generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_number){
+generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_number, mutability_type_t mutability){
 	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
 
 	//Pointer type class
@@ -1454,8 +1463,24 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	//Where was it declared
 	type->line_number = line_number;
 
-	//Clone the string
-	type->type_name = clone_dynamic_string(&(points_to->type_name));
+	//Is this mutable or not?
+	type->mutability = TRUE;
+
+	//Depending on our mutability, the name changes
+	if(mutability == TRUE){
+		//Create it
+		dynamic_string_alloc(&(type->type_name));
+
+		//Now we need to add the mut keyword in
+		dynamic_string_set(&(type->type_name), "mut ");
+
+		//And from here we add the name of what we point to
+		dynamic_string_concatenate(&(type->type_name), points_to->type_name.string);
+		
+	} else {
+		//Clone the string
+		type->type_name = clone_dynamic_string(&(points_to->type_name));
+	}
 
 	//Add the star at the end
 	dynamic_string_add_char_to_back(&(type->type_name), '*');
@@ -1488,7 +1513,7 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  *
  * In ollie language, static arrays must have their overall size known at compile time.
  */
-generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members){
+generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members, mutability_type_t mutability){
 	//Allocate it
 	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
 

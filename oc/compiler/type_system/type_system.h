@@ -230,7 +230,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 /**
  * Dynamically allocate and create a basic type
 */
-generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type);
+generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability);
 
 /**
  * Strip any aliasing away from a type that we have
@@ -240,22 +240,22 @@ generic_type_t* dealias_type(generic_type_t* type);
 /**
  * Dynamically allocate and create a pointer type
  */
-generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_number);
+generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create an enumerated type
  */
-generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create a struct type
  */
-generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create a union type
  */
-generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Is the given binary operation valid for the type that was specificed?
@@ -305,7 +305,7 @@ void* get_union_member(generic_type_t* union_type, char* name);
 /**
  * Dynamically allocate and create an array type
  */
-generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members);
+generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create an aliased type
@@ -315,12 +315,12 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number);
+generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Add a function's parameter in
  */
-u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter, u_int8_t is_mutable);
+u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter);
 
 /**
  * Print a function pointer type out
