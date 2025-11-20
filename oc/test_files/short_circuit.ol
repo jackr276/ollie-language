@@ -7,7 +7,7 @@ fn tester(mut arg:i32) -> void{
 }
 
 //Dummy
-fn really_long_function(arg:i32) -> i32 {
+fn really_long_function(mut arg:i32) -> i32 {
 	arg++;
 	ret arg;
 }
