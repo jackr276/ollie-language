@@ -1716,6 +1716,15 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 		return print_and_return_error(info, parser_line_num);
 	}
 
+	//Necessary checking here
+	if(parent_node->variable != NULL){
+		//This is a mutation - so we need to check it
+		if(parent_node->variable->is_mutable == FALSE){
+			sprintf(info, "Attempt to mutate immutable variable %s", parent_node->variable->var_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+	}
+
 	//Otherwise let's allocate this
 	generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
 
@@ -2140,6 +2149,12 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 
 			//This counts as mutation -- unless it's a constant
 			if(cast_expr->variable != NULL){
+				//If this is not mutable, then we cannot change it in this way
+				if(cast_expr->variable->is_mutable == FALSE){
+					sprintf(info, "Attempt to mutate immutable variable %s", cast_expr->variable->var_name.string);
+					return print_and_return_error(info, parser_line_num);
+				}
+
 				cast_expr->variable->assigned_to = TRUE;
 			}
 
