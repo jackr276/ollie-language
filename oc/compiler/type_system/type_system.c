@@ -2021,48 +2021,6 @@ variable_size_t get_type_size(generic_type_t* type){
 	return size;
 }
 
-
-/**
- * Convert a generic type to a sring
- */
-static char* basic_type_to_string(generic_type_t* type){
-	if(type->type_class != TYPE_CLASS_BASIC){
-		return type->type_name.string;
-	}
-
-	switch(type->basic_type_token){
-		case I8:
-			return "i8";
-		case U8:
-			return "u8";
-		case I16:
-			return "i16";
-		case U16:
-			return "u16";
-		case I32:
-			return "i32";
-		case U32:
-			return "u32";
-		case I64:
-			return "i64";
-		case U64:
-			return "u64";
-		case CHAR:
-			return "char";
-		case VOID:
-			return "void";
-		case F32:
-			return "f32";
-		case F64:
-			return "f64";
-		case BOOL:
-			return "bool";
-		default:
-			return type->type_name.string;
-	}
-}
-
-
 /**
  * Generate the full name for the function pointer type
  */
@@ -2079,9 +2037,18 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	//Set the type name initially
 	dynamic_string_set(&(function_pointer_type->type_name), "fn(");
 
+	//Run through all of our parameters
 	for(u_int16_t i = 0; i < function_type->num_params; i++){
+		//Extract the parameter type
+		generic_type_t* paramter_type = function_type->parameters[i];
+
+		//Generate the mut value there if we don't have it already
+		if(paramter_type->mutability == MUTABLE){
+			sprintf(var_string, "mut ");
+		}
+
 		//First put this into the buffer string
-		sprintf(var_string, "%s", basic_type_to_string(function_type->parameters[i]));
+		sprintf(var_string, "%s", paramter_type->type_name.string);
 
 		//Then concatenate
 		dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
@@ -2093,8 +2060,15 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 		}
 	}
 
-	//First print this to the buffer
-	sprintf(var_string, ") -> %s", basic_type_to_string(function_type->return_type));
+	//If the return type is mutable, we need to generate the mut keyword on it
+	if(function_type->return_type->mutability == MUTABLE){
+		//First print this to the buffer
+		sprintf(var_string, ") -> mut %s", function_type->return_type->type_name.string);
+	} else {
+		//First print this to the buffer
+		sprintf(var_string, ") -> %s", function_type->return_type->type_name.string);
+	}
+
 
 	//Add the closing sequence
 	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
