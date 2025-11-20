@@ -3,7 +3,7 @@
 */
 
 
-fn println(a:i32) -> void{
+fn println(mut a:i32) -> void{
 	a++;
 	ret;
 }

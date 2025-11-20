@@ -34,7 +34,7 @@ pub fn main() -> i32{
 	}
 	
 	//Phi function should be here
-	let w:i32 = x + y;
+	let mut w:i32 = x + y;
 
 	
 	/*

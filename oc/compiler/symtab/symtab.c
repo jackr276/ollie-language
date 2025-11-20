@@ -1232,7 +1232,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			}
 
 			//If it's mutable but never mutated
-			if(record->is_mutable == 1 && record->assigned_to == 0){
+			if(record->is_mutable == TRUE && record->mutated == FALSE){
 				sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
 				print_warning(info, record->line_number);
 				print_variable_name(record);

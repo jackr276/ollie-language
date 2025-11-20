@@ -1227,7 +1227,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	 * hand variable as either assigned to or initialized
 	 */
 	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == TRUE){
-		assignee->assigned_to = TRUE;
+		//This is a mutation
+		assignee->mutated = TRUE;
 	} else {
 		//Mark that this var was in fact initialized
 		assignee->initialized = TRUE;
@@ -1725,7 +1726,7 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 		}
 
 		//This was assigned to
-		parent_node->variable->assigned_to = TRUE;
+		parent_node->variable->mutated = TRUE;
 	}
 
 	//Otherwise let's allocate this
@@ -2158,7 +2159,8 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 					return print_and_return_error(info, parser_line_num);
 				}
 
-				cast_expr->variable->assigned_to = TRUE;
+				//This is a mutation
+				cast_expr->variable->mutated = TRUE;
 			}
 
 			//Force this to be an rvalue for the cfg constructor

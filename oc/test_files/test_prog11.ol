@@ -3,9 +3,9 @@
  * For multi-layer array access
  */
 pub fn main() -> i32{
-	let a:i32 = 23;
+	let mut a:i32 = 23;
 	let mut b:i32 = 3232;
-	let c:i32 = 322322;
+	let mut c:i32 = 322322;
 
 	c++;
 	

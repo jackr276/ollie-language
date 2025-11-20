@@ -32,7 +32,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	}
 
 	//Very basic initializer
-	let tester:my_struct = {x, 7, 'a'};
+	let mut tester:my_struct = {x, 7, 'a'};
 
 	// This should FAIL
 	++tester:x = 3;
