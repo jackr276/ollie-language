@@ -18,14 +18,20 @@
 typedef struct generic_type_t generic_type_t;
 //A function type
 typedef struct function_type_t function_type_t;
-//A function type's individual parameter
-typedef struct function_type_parameter_t function_type_parameter_t;
 
 //A type for which side we're on
 typedef enum{
 	SIDE_TYPE_LEFT,
 	SIDE_TYPE_RIGHT,
 } side_type_t;
+
+/**
+ * Is a type mutable or not
+ */
+typedef enum {
+	NOT_MUTABLE = 0,
+	MUTABLE
+} mutability_type_t;
 
 /**
  * What kind of word length do we have -- used for instructions
@@ -64,7 +70,6 @@ typedef enum type_class_t {
 struct generic_type_t{
 	//The name of the type
 	dynamic_string_t type_name;
-
 	/**
 	 * All fields in this union are
 	 * mutually exclusive with one another.
@@ -115,13 +120,12 @@ struct generic_type_t{
 	//Has this type been fully defined or not? This will be used to avoid 
 	//struct/union member recursive definitions with incomplete types
 	u_int8_t type_complete;
-
 	/**
 	 * Is this a mutable type? We need to take this into account whenever doing
 	 * any kind of operation checking. Mutable versions of the same type are stored
 	 * as separate records
 	 */
-	u_int8_t is_mutable;
+	mutability_type_t mutability;
 	//Basic types don't need anything crazy - just a token that stores what they are
 	ollie_token_t basic_type_token;
 	//What class of type is it
@@ -130,23 +134,13 @@ struct generic_type_t{
 
 
 /**
- * A type for storing the individual function parameters themselves
- */
-struct function_type_parameter_t{
-	//What's the type
-	generic_type_t* parameter_type;
-	//Is this mutable
-	u_int8_t is_mutable;
-};
-
-
-/**
  * A function type is a function signature that is used for function pointers
  * For a function type, we simply need a list of parameters and a return type
  */
 struct function_type_t{
-	//A list of function parameters. Limited to 6
-	function_type_parameter_t parameters[MAX_FUNCTION_TYPE_PARAMS];
+	//A list of parameters which are just types - since we encode everything
+	//that we need to into the type system
+	generic_type_t* parameters[MAX_FUNCTION_TYPE_PARAMS];
 	//The return type
 	generic_type_t* return_type;
 	//Store the number of parameters
