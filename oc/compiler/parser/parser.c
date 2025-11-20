@@ -1723,6 +1723,9 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 			sprintf(info, "Attempt to mutate immutable variable %s", parent_node->variable->var_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//This was assigned to
+		parent_node->variable->assigned_to = TRUE;
 	}
 
 	//Otherwise let's allocate this
