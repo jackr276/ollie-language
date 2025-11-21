@@ -1458,7 +1458,7 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	type->line_number = line_number;
 
 	//Is this mutable or not?
-	type->mutability = TRUE;
+	type->mutability = mutability;
 
 	//Clone the string
 	type->type_name = clone_dynamic_string(&(points_to->type_name));

@@ -79,15 +79,15 @@ static void test_types(){
 	//Initialize our type symtab
 	type_symtab_t* type_symtab = type_symtab_alloc();
 
+	//Initialize the given type scope
+	initialize_type_scope(type_symtab);
+
 	//Add all immutable and non-immutable version of our basic type
 	//into the type system
 	u_int16_t basic_type_collision_count = add_all_basic_types(type_symtab);
 
 	//We can try asserting this - will see how it works out
-	assert(basic_type_collision_count <= 3);
-
-	//TODO NOT DONE
-
+	assert(basic_type_collision_count == 0);
 
 	//Deinitialize it down here
 	type_symtab_dealloc(type_symtab);
