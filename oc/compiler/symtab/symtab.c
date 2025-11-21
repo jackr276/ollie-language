@@ -195,6 +195,37 @@ static u_int16_t hash(char* name){
 
 
 /**
+ * A helper function that will hash the name of a type
+ */
+static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
+	u_int32_t key = 37;
+	
+	char* cursor = type_name;
+	//Two primes(this should be good enough for us)
+	u_int32_t a = 54059;
+	u_int32_t b = 76963;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		//Sum this up for our key
+		key = (key * a) ^ (*cursor * b);
+	}
+
+	//If this is mutable, we will keep going by adding
+	//a duplicated version of the type's first character
+	//onto the hash. This should(in most cases) make the hash
+	//entirely different from the non-mutable version
+	if(mutability == MUTABLE){
+		//Update the key
+		key = (key * a) ^ ((*type_name) * b);
+	}
+
+	//Cut it down to our keyspace
+	return key % KEYSPACE;
+}
+
+
+/**
  * For arrays, type hashing will include their values
  *
  * For *mutable types*, the type hasher concatenates a
@@ -701,7 +732,7 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 
 	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name);
 	//Set this type as a label(address)
-	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;
+	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
 	//Give it back
 	return stack_pointer;
@@ -721,7 +752,7 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 
 	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name);
 	//Set this type as a label(address)
-	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;
+	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
 	//Give it back
 	return instruction_pointer;
@@ -894,7 +925,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
  * Lookup a type name in the symtab by the name only. This does not
  * do the array bound comparison that we need for strict equality
  */
-symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
+symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability){
 	//Grab the hash
 	u_int16_t h = hash(name);
 
@@ -909,7 +940,11 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->type->type_name.string, name) == 0){
+			if(strcmp(records_cursor->type->type_name.string, name) == 0
+				//The mutability must also match
+				&& records_cursor->type->mutability == mutability){
+
+				//Give it back
 				return records_cursor;
 			}
 			//Advance it

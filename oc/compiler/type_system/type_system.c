@@ -2180,7 +2180,8 @@ void type_dealloc(generic_type_t* type){
 			break;
 	}
 
-	//TODO I LEAK
+	//Destroy the internal type name
+	dynamic_string_dealloc(&(type->type_name));
 
 	//Finally just free the overall pointer
 	free(type);

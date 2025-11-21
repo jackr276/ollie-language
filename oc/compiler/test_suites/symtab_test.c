@@ -87,7 +87,18 @@ static void test_types(){
 	u_int16_t basic_type_collision_count = add_all_basic_types(type_symtab);
 
 	//We really should be seeing no collisions for basic type insertion
-	//assert(basic_type_collision_count == 0);
+	assert(basic_type_collision_count == 0);
+
+	//Print it out
+	printf("Collisions for basic types: %d\n", basic_type_collision_count);
+
+	//Now let's see if we can get it
+	symtab_type_record_t* mutable_u64 = lookup_type_name_only(type_symtab, "u64", MUTABLE);
+	assert(mutable_u64 != NULL);
+
+	//Now let's see if we can get it
+	symtab_type_record_t* mutable_i64 = lookup_type_name_only(type_symtab, "i64", MUTABLE);
+	assert(mutable_i64 != NULL);
 
 	//Finalize the type scope
 	finalize_type_scope(type_symtab);

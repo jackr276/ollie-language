@@ -426,8 +426,10 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type);
 /**
  * Lookup a type name in the symtab by the name only. This does not
  * do the array bound comparison that we need for strict equality
+ *
+ * Looking up a type by name only also requires that we know the mutability that we desire
  */
-symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name);
+symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
 
 /**
  * Create a local constant
