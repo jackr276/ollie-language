@@ -115,6 +115,29 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 
 
 /**
+ * Determine whether or not a variable is able to be assigned to
+ */
+static u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
+	//Extract the type - it contains the mutability information
+	generic_type_t* type = variable->type_defined_as;
+
+	//If this hasn't been initialized then yes
+	//we can assign to it
+	if(variable->initialized == FALSE){
+		return TRUE;
+	}
+
+	//Otherwise, let's see if the type allows us to be mutated 
+	//If so - then we're fine. If not, then we fail
+	if(type->mutability == MUTABLE){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * Determine whether or not something is an assignment operator
  */
 static u_int8_t is_assignment_operator(ollie_token_t op){
@@ -1200,10 +1223,9 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Extract the variable from the left side
 	symtab_variable_record_t* assignee = left_hand_unary->variable;
 
-	//Now if we get here, there is the chance that this left hand unary is constant. If it is, then
-	//this assignment is illegal
-	if(assignee->initialized == TRUE && assignee->is_mutable == FALSE){
-		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
+	//Are we able to assign to it? If not, we fail out here
+	if(can_variable_be_assigned_to(assignee) == FALSE){
+		sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
