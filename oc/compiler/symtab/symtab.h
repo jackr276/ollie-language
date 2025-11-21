@@ -20,7 +20,7 @@
 
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
-#define KEYSPACE 1013
+#define KEYSPACE 997
 //The maximum number of function paramaters
 #define MAX_FUNCTION_PARAMS 6
 

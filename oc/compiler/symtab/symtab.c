@@ -234,13 +234,15 @@ static u_int16_t hash_type(generic_type_t* type){
 	}
 
 	//If this is mutable, we will keep going by adding
-	//"mut" onto the end
+	//a duplicated version of the type's first character
+	//onto the hash. This should(in most cases) make the hash
+	//entirely different from the non-mutable version
 	if(type->mutability == MUTABLE){
-		//We act as if "mut" was tacked onto
-		//the end to completely differentiate
-		key = (key * a) ^ ('m' * b);
-		key = (key * a) ^ ('u' * b);
-		key = (key * a) ^ ('t' * b);
+		//Extract the first character
+		char first_character = *(type->type_name.string);
+
+		//Update the key
+		key = (key * a) ^ (first_character * b);
 	}
 
 	//Cut it down to our keyspace
@@ -584,7 +586,7 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	//Create "char*" type
 	type = create_pointer_type(type, 0, NOT_MUTABLE);
 	num_collisions += insert_type(symtab,  create_type_record(type));
-	
+
 	//u_int16 type
 	type = create_basic_type("u16", U16, NOT_MUTABLE);
 	num_collisions += insert_type(symtab,  create_type_record(type));
