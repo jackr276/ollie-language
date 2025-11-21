@@ -149,6 +149,24 @@ static void test_types(){
 	symtab_type_record_t* mutable_i64 = lookup_type_name_only(type_symtab, "i64", MUTABLE);
 	assert(mutable_i64 != NULL);
 
+	//These all need to be *distinct*, so assert that they are not equal
+	assert(mutable_i8 != immutable_i8);
+	assert(mutable_u8 != immutable_u8);
+	assert(mutable_i16 != immutable_i16);
+	assert(mutable_u16 != immutable_u16);
+	assert(mutable_i32 != immutable_i32);
+	assert(mutable_u32 != immutable_u32);
+	assert(mutable_i64 != immutable_i64);
+	assert(mutable_u64 != immutable_u64);
+	assert(mutable_char != immutable_char);
+
+	//Grab these more complex ones while we're at it
+	symtab_type_record_t* mutable_char_ptr = lookup_type_name_only(type_symtab, "char*", MUTABLE);
+	assert(mutable_char_ptr != NULL);
+
+	symtab_type_record_t* immutable_char_ptr = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE);
+	assert(immutable_char_ptr != NULL);
+
 	//Finalize the type scope
 	finalize_type_scope(type_symtab);
 
