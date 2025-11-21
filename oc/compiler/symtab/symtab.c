@@ -1090,7 +1090,7 @@ void print_function_name(symtab_function_record_t* record){
 	//Print out the params
 	for(u_int8_t i = 0; i < record->number_of_params; i++){
 		//Print if it's mutable
-		if(record->func_params[i]->is_mutable == 1){
+		if(record->func_params[i]->type_defined_as->mutability == MUTABLE){
 			printf("mut ");
 		}
 
@@ -1145,7 +1145,7 @@ void print_variable_name(symtab_variable_record_t* record){
 			record->declare_or_let == 0 ? printf("declare ") : printf("let ");
 
 			//If it's mutable print that
-			if(record->is_mutable == 1){
+			if(record->type_defined_as->mutability == MUTABLE){
 				printf(" mut ");
 			}
 
@@ -1323,7 +1323,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			}
 
 			//If it's mutable but never mutated
-			if(record->is_mutable == TRUE && record->mutated == FALSE){
+			if(record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE){
 				sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
 				print_warning(info, record->line_number);
 				print_variable_name(record);
