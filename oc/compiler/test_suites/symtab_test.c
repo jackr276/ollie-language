@@ -4,13 +4,14 @@
 
 //Link to the symtab
 #include "../symtab/symtab.h"
+#include <assert.h>
 #include <stdio.h>
 #include <sys/types.h>
 
 /**
- * Just run through some simple tests
-*/
-int main(){
+ * Run through and test the variable subsystem first
+ */
+static void test_variables(){
 	u_int16_t num_collisions = 0;
 
 	//Level one identifiers
@@ -67,4 +68,25 @@ int main(){
 
 	//Destroy it with the top reference
 	variable_symtab_dealloc(symtab);
+}
+
+
+/**
+ * Test our ability to handle types and type lookups
+ * This is especially important for mutable and immutable types
+ */
+static void test_types(){
+	//TODO IMPLEMENTME
+}
+
+
+/**
+ * Just run through some simple tests
+*/
+int main(){
+	//Run the variable test first
+	test_variables();
+
+	//Now test our type system
+	test_types();
 }

@@ -155,8 +155,6 @@ struct symtab_variable_record_t{
 	u_int8_t mutated;
 	//What is the parameter order for this value?
 	u_int8_t function_parameter_order;
-	//Is this mutable?
-	u_int8_t is_mutable;
 	//What type structure or language concept does this variable belong to?
 	variable_membership_t membership;
 	//Where does this variable get stored? By default we assume register, so

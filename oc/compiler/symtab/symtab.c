@@ -195,7 +195,11 @@ static u_int16_t hash(char* name){
 
 
 /**
- * Type hashing also includes the bounds of arrays, if we have them
+ * For arrays, type hashing will include their values
+ *
+ * For *mutable types*, the type hasher concatenates a
+ * "mut" onto the end to make the hash *different* from
+ * the non-mutable version. This should allow for a faster lookup
  *
  * Hash a name before entry/search into the hash table
  *
@@ -227,6 +231,16 @@ static u_int16_t hash_type(generic_type_t* type){
 	//If this is an array, we'll add the bounds in
 	if(type->type_class == TYPE_CLASS_ARRAY){
 		key += type->internal_values.num_members;
+	}
+
+	//If this is mutable, we will keep going by adding
+	//"mut" onto the end
+	if(type->mutability == MUTABLE){
+		//We act as if "mut" was tacked onto
+		//the end to completely differentiate
+		key = (key * a) ^ ('m' * b);
+		key = (key * a) ^ ('u' * b);
+		key = (key * a) ^ ('t' * b);
 	}
 
 	//Cut it down to our keyspace
@@ -348,6 +362,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 
 /**
  * Dynamically allocate and create a type record
+ *
+ * The hash_type function automatically allows us to distinguish between
+ * mutable and immutable values
  */
 symtab_type_record_t* create_type_record(generic_type_t* type){
 	//Allocate it
