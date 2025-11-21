@@ -204,25 +204,27 @@ static u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_node_t* 
  * 	If we shift left by 16 and have 0, then we can fit in 16 bits
  * 	If we shift left by 32 and have 0, then we can fit in 32 bits
  * 	Anything else -> 64 bits
+ *
+ * All of these will have types that are immutable because we don't expect to be changing them
  */
 static generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value){
 	//The case where we can use a u8
 	if(value >> 8 == 0){
-		return lookup_type_name_only(type_symtab, "u8")->type;
+		return lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
 	}
 
 	//We'll use u16
 	if(value >> 16 == 0){
-		return lookup_type_name_only(type_symtab, "u16")->type;
+		return lookup_type_name_only(type_symtab, "u16", NOT_MUTABLE)->type;
 	}
 
 	//We'll use u32
 	if(value >> 32 == 0){
-		return lookup_type_name_only(type_symtab, "u32")->type;
+		return lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE)->type;
 	}
 
 	//Otherwise, we need 64 bits
-	return lookup_type_name_only(type_symtab, "u64")->type;
+	return lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
 }
 
 
