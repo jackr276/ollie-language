@@ -81,7 +81,12 @@ static void test_types(){
 
 	//Add all immutable and non-immutable version of our basic type
 	//into the type system
-	add_all_basic_types(type_symtab);
+	u_int16_t basic_type_collision_count = add_all_basic_types(type_symtab);
+
+	//We can try asserting this - will see how it works out
+	assert(basic_type_collision_count <= 3);
+
+	//TODO NOT DONE
 
 
 	//Deinitialize it down here

@@ -540,136 +540,140 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
  */
 u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	//Store the number of collisions that we have
-	u_int16_t num_collisions;
+	u_int16_t num_collisions = 0;
 
 	generic_type_t* type;
 
 	//Add in void type
 	type = create_basic_type("void", VOID, NOT_MUTABLE);
-	insert_type(symtab, create_type_record(type));
+	num_collisions += insert_type(symtab, create_type_record(type));
 
 	// ================================ Immutable versions of our primitive types ================================
 	//s_int8 type
 	type = create_basic_type("i8", I8, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//u_int8 type
 	type = create_basic_type("u8", U8, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//Bool type
 	type = create_basic_type("bool", BOOL, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//char type
 	type = create_basic_type("char", CHAR, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//Save this for the next one to avoid confusion
 	generic_type_t* char_type = type;
 
 	//char* type
 	type = create_pointer_type(char_type, 0, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//Create "char*" type
 	type = create_pointer_type(type, 0, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//u_int16 type
 	type = create_basic_type("u16", U16, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 		
 	//s_int16 type
 	type = create_basic_type("i16", I16, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//s_int32 type
 	type = create_basic_type("i32", I32, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//u_int32 type
 	type = create_basic_type("u32", U32, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//u_int64 type
 	type = create_basic_type("u64", U64, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//s_int64 type
 	type = create_basic_type("i64", I64, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//float32 type
 	type = create_basic_type("f32", F32, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//float64 type
 	type = create_basic_type("f64", F64, NOT_MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	// ================================ Immutable versions of our primitive types ================================
 	
 	// ================================ Mutable versions of our primitive types ================================
 	//s_int8 type
 	type = create_basic_type("i8", I8, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//u_int8 type
 	type = create_basic_type("u8", U8, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//Bool type
 	type = create_basic_type("bool", BOOL, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//char type
 	type = create_basic_type("char", CHAR, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//Save this for the next one to avoid confusion
 	char_type = type;
 
 	//char* type
 	type = create_pointer_type(char_type, 0, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab, create_type_record(type));
 
 	//Create "char*" type
 	type = create_pointer_type(type, 0, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//u_int16 type
 	type = create_basic_type("u16", U16, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 		
 	//s_int16 type
 	type = create_basic_type("i16", I16, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//s_int32 type
 	type = create_basic_type("i32", I32, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//u_int32 type
 	type = create_basic_type("u32", U32, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//u_int64 type
 	type = create_basic_type("u64", U64, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//s_int64 type
 	type = create_basic_type("i64", I64, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//float32 type
 	type = create_basic_type("f32", F32, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//float64 type
 	type = create_basic_type("f64", F64, MUTABLE);
-	insert_type(symtab,  create_type_record(type));
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	// ================================ Mutable versions of our primitive types ==============================
+	
+	// This is for observability in the test suites - if we have 
+	// more than 1 or 2 collisions here, then we have a serious problem
+	return num_collisions;
 }
 
 
