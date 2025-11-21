@@ -382,7 +382,7 @@ u_int8_t insert_constant(constants_symtab_t* symtab, symtab_constant_record_t* r
 /**
  * A helper function that adds all basic types to the type symtab
  */
-void add_all_basic_types(type_symtab_t* symtab);
+u_int16_t add_all_basic_types(type_symtab_t* symtab);
 
 /**
  * Initialize the global stack pointer variable for us to use

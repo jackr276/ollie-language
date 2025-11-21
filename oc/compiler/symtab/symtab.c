@@ -538,7 +538,10 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
  * NOTE: This helper creates both *mutable and immutable* versions
  * of all of our basic types
  */
-void add_all_basic_types(type_symtab_t* symtab){
+u_int16_t add_all_basic_types(type_symtab_t* symtab){
+	//Store the number of collisions that we have
+	u_int16_t num_collisions;
+
 	generic_type_t* type;
 
 	//Add in void type

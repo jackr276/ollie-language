@@ -76,7 +76,16 @@ static void test_variables(){
  * This is especially important for mutable and immutable types
  */
 static void test_types(){
-	//TODO IMPLEMENTME
+	//Initialize our type symtab
+	type_symtab_t* type_symtab = type_symtab_alloc();
+
+	//Add all immutable and non-immutable version of our basic type
+	//into the type system
+	add_all_basic_types(type_symtab);
+
+
+	//Deinitialize it down here
+	type_symtab_dealloc(type_symtab);
 }
 
 
