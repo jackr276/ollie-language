@@ -1,8 +1,6 @@
 /**
  * The symbol table that is build by the compiler. This is implemented as a hash table
 */
-
-
 #ifndef SYMTAB_H
 #define SYMTAB_H
 
@@ -22,7 +20,7 @@
 
 //We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
-#define KEYSPACE 997
+#define KEYSPACE 1013
 //The maximum number of function paramaters
 #define MAX_FUNCTION_PARAMS 6
 

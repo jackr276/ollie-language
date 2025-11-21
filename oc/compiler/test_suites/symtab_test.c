@@ -86,7 +86,7 @@ static void test_types(){
 	//into the type system
 	u_int16_t basic_type_collision_count = add_all_basic_types(type_symtab);
 
-	//We can try asserting this - will see how it works out
+	//We really should be seeing no collisions for basic type insertion
 	assert(basic_type_collision_count == 0);
 
 	//Deinitialize it down here
