@@ -927,7 +927,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
  */
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability){
 	//Grab the hash
-	u_int16_t h = hash(name);
+	u_int16_t h = hash_type_name(name, mutability);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_type_sheaf_t* cursor = symtab->current;
