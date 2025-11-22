@@ -1287,6 +1287,17 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//
+		//
+		//
+		//
+		//TODO SPECIAL ATTENTION NEEDED HERE
+		//
+		//
+		//
+		//
+		//
+
 		//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 		if(expr->inferred_type->type_class == TYPE_CLASS_POINTER){
 			if(expr->variable->is_mutable == FALSE && left_hand_unary->variable->is_mutable == TRUE){
@@ -1685,7 +1696,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 	}
 
 	//We use a u_int64 as our reference
-	generic_type_t* reference_type = lookup_type_name_only(type_symtab, "u64")->type;
+	generic_type_t* reference_type = immut_u64;
 
 	//Find the final type here. If it's not currently a U64, we'll need to coerce it
 	generic_type_t* final_type = types_assignable(reference_type, expr->inferred_type);
@@ -1751,7 +1762,7 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 	//Necessary checking here
 	if(parent_node->variable != NULL){
 		//This is a mutation - so we need to check it
-		if(parent_node->variable->is_mutable == FALSE){
+		if(parent_node->variable->type_defined_as->mutability  == NOT_MUTABLE){
 			sprintf(info, "Attempt to mutate immutable variable %s", parent_node->variable->var_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -2078,7 +2089,12 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			}
 
 			//Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was
-			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num);
+			//
+			//
+			//TODO INVESTIGATE - currently just using the child's mutability
+			//
+			//
+			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num, cast_expr->inferred_type->mutability);
 
 			//We'll check to see if this type is already in existence
 			symtab_type_record_t* type_record = lookup_type(type_symtab, pointer);
@@ -2111,7 +2127,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			}
 
 			//The return type of a logical not is a boolean
-			return_type = lookup_type_name_only(type_symtab, "bool")->type;
+			return_type = lookup_type_name_only(type_symtab, "bool", NOT_MUTABLE)->type;
 			
 			//This is not assignable
 			is_assignable = FALSE;
@@ -2185,7 +2201,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			//This counts as mutation -- unless it's a constant
 			if(cast_expr->variable != NULL){
 				//If this is not mutable, then we cannot change it in this way
-				if(cast_expr->variable->is_mutable == FALSE){
+				if(cast_expr->variable->type_defined_as->mutability == NOT_MUTABLE){
 					sprintf(info, "Attempt to mutate immutable variable %s", cast_expr->variable->var_name.string);
 					return print_and_return_error(info, parser_line_num);
 				}
@@ -3704,8 +3720,11 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 		return FAILURE;
 	}
 
+	//Determine our mutability type here
+	mutability_type_t mutability = is_mutable ? MUTABLE : NOT_MUTABLE;
+
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string, mutability);
 
 	//Fail out here
 	if(found_type!= NULL){
@@ -3771,8 +3790,6 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	member_record->line_number = parser_line_num;
 	//Store what the type is
 	member_record->type_defined_as = type_spec;
-	//Is it mutable or not
-	member_record->is_mutable = is_mutable;
 
 	//Add it to the construct
 	add_struct_member(construct, member_record);
@@ -3888,7 +3905,14 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 	//Once we've gotten past this point, we're safe to allocate this type. Function
 	//pointers are always private
-	generic_type_t* function_type = create_function_pointer_type(FALSE, parser_line_num); 
+	//
+	//
+	//TODO INVESTIGATE - this may or may not be mutable
+	//
+	//
+	//
+	//
+	generic_type_t* function_type = create_function_pointer_type(FALSE, parser_line_num, NOT_MUTABLE);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -3939,7 +3963,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		}
 
 		//Let the helper add the type in
-		u_int8_t status = add_parameter_to_function_type(function_type, type, is_mutable);
+		u_int8_t status = add_parameter_to_function_type(function_type, type);
 
 		//This means that we have been given too many parameters
 		if(status == FAILURE){
@@ -4063,7 +4087,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name.string);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name.string, NOT_MUTABLE);
 
 	//Fail out here
 	if(found_type!= NULL){
