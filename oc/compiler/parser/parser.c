@@ -48,10 +48,11 @@ static heap_queue_t* current_function_jump_statements = NULL;
 static lex_stack_t* grouping_stack = NULL;
 
 //Generic types here for us to repeatedly reference
-static generic_type_t* immut_u8;
-static generic_type_t* immut_u32;
-static generic_type_t* immut_i32;
-static generic_type_t* immut_u64;
+static generic_type_t* immut_char = NULL;
+static generic_type_t* immut_u8 = NULL;
+static generic_type_t* immut_u32 = NULL;
+static generic_type_t* immut_i32 = NULL;
+static generic_type_t* immut_u64 = NULL;
 
 //THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
 static nesting_stack_t* nesting_stack = NULL; 
@@ -9752,6 +9753,14 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Add all basic types into the type symtab
 	add_all_basic_types(type_symtab);
+
+	//Keep these at hand because we use them so frequently, that repeatedly 
+	//searching is needlessly expensive
+	immut_char = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE);
+	immut_u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE);
+	immut_u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE);
+	immut_i32 = lookup_type_name_only(type_symtab, "i32", NOT_MUTABLE);
+	immut_u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE);
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	if(grouping_stack == NULL){

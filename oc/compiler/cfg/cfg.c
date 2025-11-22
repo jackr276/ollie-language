@@ -37,29 +37,24 @@ three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 variable_symtab_t* variable_symtab;
 //Store for use
-generic_type_t* char_type = NULL;
-//Store this for usage
-generic_type_t* u8 = NULL;
-//Store this for usage
-generic_type_t* i32 = NULL;
-//Store this for usage
-generic_type_t* u32 = NULL;
-//Store this for usage
-generic_type_t* u64 = NULL;
-//Store this for usage
-generic_type_t* i64 = NULL;
+static generic_type_t* char_type = NULL;
+static generic_type_t* u8 = NULL;
+static generic_type_t* i32 = NULL;
+static generic_type_t* u32 = NULL;
+static generic_type_t* u64 = NULL;
+static generic_type_t* i64 = NULL;
 //The break and continue stack will
 //hold values that we can break & continue
 //to. This is done here to avoid the need
 //to send value packages at each rule
-heap_stack_t* break_stack = NULL;
-heap_stack_t* continue_stack = NULL;
+static heap_stack_t* break_stack = NULL;
+static heap_stack_t* continue_stack = NULL;
 //Keep a list of all lable statements in the function(block jumps are internal only)
-dynamic_array_t* current_function_labeled_blocks = NULL;
+static dynamic_array_t* current_function_labeled_blocks = NULL;
 //Also keep a list of all custom jumps in the function
-dynamic_array_t* current_function_user_defined_jump_statements = NULL;
+static dynamic_array_t* current_function_user_defined_jump_statements = NULL;
 //The current stack offset for any given function
-u_int64_t stack_offset = 0;
+static u_int64_t stack_offset = 0;
 //For any/all error printing
 char error_info[1500];
 
