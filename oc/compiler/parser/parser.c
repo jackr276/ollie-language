@@ -56,7 +56,7 @@ static u_int32_t num_errors;
 static u_int32_t num_warnings;
 
 //The current parser line number
-static u_int16_t parser_line_num = 1;
+static u_int32_t parser_line_num = 1;
 
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;

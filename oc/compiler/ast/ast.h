@@ -123,7 +123,7 @@ struct generic_ast_node_t{
 	int32_t lower_bound;
 	int32_t upper_bound;
 	//What line number is this from
-	u_int16_t line_number;
+	u_int32_t line_number;
 	//Store a binary operator(if one exists)
 	ollie_token_t binary_operator;
 	//Store a unary operator(if one exists)

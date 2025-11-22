@@ -103,10 +103,10 @@ struct symtab_function_record_t{
 	//The local constants array. Not all functions 
 	//have this populated
 	dynamic_array_t* local_constants;
+	//The line number
+	u_int32_t line_number;
 	//The hash that we have
 	u_int16_t hash;
-	//The line number
-	u_int16_t line_number;
 	//Number of parameters
 	u_int8_t number_of_params;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
@@ -135,6 +135,8 @@ struct symtab_variable_record_t{
 	u_int64_t enum_member_value;
 	//The associate region that this variable is stored in
 	stack_region_t* stack_region;
+	//The line number
+	u_int32_t line_number;
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The hash of it
@@ -143,8 +145,6 @@ struct symtab_variable_record_t{
 	int16_t lexical_level;
 	//Current generation level(for SSA)
 	u_int16_t counter;
-	//Line number
-	u_int16_t line_number;
 	//What is the struct offset for this variable
 	u_int16_t struct_offset;
 	//Was it initialized?
@@ -172,11 +172,12 @@ struct symtab_type_record_t{
 	symtab_type_record_t* next;
 	//What type is it?
 	generic_type_t* type;
+	//THe link number
+	u_int32_t line_number;
+	//The hash(special for types)
 	u_int16_t hash;
 	//The lexical level of it
 	int16_t lexical_level;
-	//Line number
-	u_int16_t line_number;
 };
 
 
@@ -191,9 +192,10 @@ struct symtab_constant_record_t{
 	void* constant_node;
 	//For linked list functionality
 	symtab_constant_record_t* next;
+	//Line number of declaration
+	u_int32_t line_number;
+	//The hash for lookups
 	u_int16_t hash;
-	//Line number
-	u_int16_t line_number;
 };
 
 
