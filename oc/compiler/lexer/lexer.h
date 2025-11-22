@@ -48,7 +48,7 @@ lexitem_t get_next_assembly_statement(FILE* fl);
 /**
  * Generic token grabbing function
  */
-lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search);
+lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t const_search);
 
 /**
  * Push a token back to the stream

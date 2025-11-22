@@ -38,7 +38,7 @@ typedef enum {
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 //Current line num
-u_int16_t line_num = 0;
+u_int32_t line_num = 0;
 
 //Our lexer stack
 static lex_stack_t* pushed_back_tokens = NULL;
@@ -65,7 +65,7 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 /**
  * Helper that will determine if we have whitespace(ws) 
  */
-static u_int8_t is_ws(char ch, u_int16_t* line_num, u_int16_t* parser_line_num){
+static u_int8_t is_ws(char ch, u_int32_t* line_num, u_int32_t* parser_line_num){
 	u_int8_t is_ws = ch == ' ' || ch == '\n' || ch == '\t';
 	
 	//Count if we have a higher line number
@@ -186,7 +186,7 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 /**
  * Constantly iterate through the file and grab the next token that we have
 */
-lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search){
+lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t const_search){
 	//IF we have pushed back tokens, we need to return them first
 	if(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
 		//Just pop this and leave

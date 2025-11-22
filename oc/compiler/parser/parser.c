@@ -47,6 +47,12 @@ static heap_queue_t* current_function_jump_statements = NULL;
 //Our stack for storing variables, etc
 static lex_stack_t* grouping_stack = NULL;
 
+//Generic types here for us to repeatedly reference
+static generic_type_t* immut_u8;
+static generic_type_t* immut_u32;
+static generic_type_t* immut_i32;
+static generic_type_t* immut_u64;
+
 //THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
 static nesting_stack_t* nesting_stack = NULL; 
 
@@ -265,21 +271,21 @@ static generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_i
 static generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value){
 	//The case where we can use an i8
 	if(value >> 8 == 0 || value >> 8 == -1){
-		return lookup_type_name_only(type_symtab, "i8")->type;
+		return lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE)->type;
 	}
 
 	//We'll use an i16
 	if(value >> 16 == 0 || value >> 16 == -1){
-		return lookup_type_name_only(type_symtab, "i16")->type;
+		return lookup_type_name_only(type_symtab, "i16", NOT_MUTABLE)->type;
 	}
 
 	//We'll use an i32
 	if(value >> 32 == 0 || value >> 32 == -1){
-		return lookup_type_name_only(type_symtab, "i32")->type;
+		return lookup_type_name_only(type_symtab, "i32", NOT_MUTABLE)->type;
 	}
 
 	//Otherwise, we need 64 bits
-	return lookup_type_name_only(type_symtab, "i64")->type;
+	return lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE)->type;
 }
 
 
