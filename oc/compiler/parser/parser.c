@@ -47,6 +47,19 @@ static heap_queue_t* current_function_jump_statements = NULL;
 //Our stack for storing variables, etc
 static lex_stack_t* grouping_stack = NULL;
 
+//Generic types here for us to repeatedly reference
+static generic_type_t* immut_char = NULL;
+static generic_type_t* immut_u8 = NULL;
+static generic_type_t* immut_i8 = NULL;
+static generic_type_t* immut_u16 = NULL;
+static generic_type_t* immut_i16 = NULL;
+static generic_type_t* immut_u32 = NULL;
+static generic_type_t* immut_i32 = NULL;
+static generic_type_t* immut_u64 = NULL;
+static generic_type_t* immut_i64 = NULL;
+static generic_type_t* immut_f32 = NULL;
+static generic_type_t* immut_f64 = NULL;
+
 //THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
 static nesting_stack_t* nesting_stack = NULL; 
 
@@ -56,7 +69,7 @@ static u_int32_t num_errors;
 static u_int32_t num_warnings;
 
 //The current parser line number
-static u_int16_t parser_line_num = 1;
+static u_int32_t parser_line_num = 1;
 
 //The overall node that holds all deferred statements for a function
 generic_ast_node_t* deferred_stmts_node = NULL;
@@ -111,6 +124,29 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int16_
 
 	//Print this out on a single line
 	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_name, parse_message.line_num, type[parse_message.message], parse_message.info);
+}
+
+
+/**
+ * Determine whether or not a variable is able to be assigned to
+ */
+static u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
+	//Extract the type - it contains the mutability information
+	generic_type_t* type = variable->type_defined_as;
+
+	//If this hasn't been initialized then yes
+	//we can assign to it
+	if(variable->initialized == FALSE){
+		return TRUE;
+	}
+
+	//Otherwise, let's see if the type allows us to be mutated 
+	//If so - then we're fine. If not, then we fail
+	if(type->mutability == MUTABLE){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
 }
 
 
@@ -204,25 +240,27 @@ static u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_node_t* 
  * 	If we shift left by 16 and have 0, then we can fit in 16 bits
  * 	If we shift left by 32 and have 0, then we can fit in 32 bits
  * 	Anything else -> 64 bits
+ *
+ * All of these will have types that are immutable because we don't expect to be changing them
  */
 static generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value){
 	//The case where we can use a u8
 	if(value >> 8 == 0){
-		return lookup_type_name_only(type_symtab, "u8")->type;
+		return immut_u8;
 	}
 
 	//We'll use u16
 	if(value >> 16 == 0){
-		return lookup_type_name_only(type_symtab, "u16")->type;
+		return immut_u16;
 	}
 
 	//We'll use u32
 	if(value >> 32 == 0){
-		return lookup_type_name_only(type_symtab, "u32")->type;
+		return immut_u32;
 	}
 
 	//Otherwise, we need 64 bits
-	return lookup_type_name_only(type_symtab, "u64")->type;
+	return immut_u64;
 }
 
 
@@ -240,21 +278,21 @@ static generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_i
 static generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value){
 	//The case where we can use an i8
 	if(value >> 8 == 0 || value >> 8 == -1){
-		return lookup_type_name_only(type_symtab, "i8")->type;
+		return immut_i8;
 	}
 
 	//We'll use an i16
 	if(value >> 16 == 0 || value >> 16 == -1){
-		return lookup_type_name_only(type_symtab, "i16")->type;
+		return immut_i16;
 	}
 
 	//We'll use an i32
 	if(value >> 32 == 0 || value >> 32 == -1){
-		return lookup_type_name_only(type_symtab, "i32")->type;
+		return immut_i32;
 	}
 
 	//Otherwise, we need 64 bits
-	return lookup_type_name_only(type_symtab, "i64")->type;
+	return immut_i64;
 }
 
 
@@ -292,8 +330,8 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
 	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->internal_types.points_to->type_size;
-	//Ensure that we give this a type
-	constant_multiplicand->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
+	//This one's type is always an immutable u64
+	constant_multiplicand->inferred_type = immut_u64; 
 
 	//Allocate an adjustment node
 	generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
@@ -375,7 +413,7 @@ static generic_ast_node_t* emit_direct_constant(int32_t constant){
 	constant_node->constant_type = INT_CONST;
 	
 	//Just make this one a signed 32 bit integer
-	constant_node->inferred_type = lookup_type_name_only(type_symtab, "i32")->type;
+	constant_node->inferred_type = immut_i32;
 
 	//Give it the value
 	constant_node->constant_value.signed_int_value = constant;
@@ -453,7 +491,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_value.signed_long_value = atol(lookahead.lexeme.string);
 
 			//This is a signed i64
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "i64")->type;
+			constant_node->inferred_type = immut_i64;
 
 			break;
 
@@ -466,7 +504,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_value.unsigned_long_value = atol(lookahead.lexeme.string);
 
 			//By default, int constants are of type s_int64 
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "u64")->type;
+			constant_node->inferred_type = immut_u64;
 
 			break;
 
@@ -479,7 +517,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_value.float_value = float_val;
 
 			//By default, float constants are of type float32
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f32")->type;
+			constant_node->inferred_type = immut_f32;
 			break;
 
 		case DOUBLE_CONST:
@@ -491,7 +529,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_value.double_value = double_value;
 
 			//Double constants are always an f64
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "f64")->type;
+			constant_node->inferred_type = immut_f64;
 
 			break;
 
@@ -504,13 +542,13 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_value.char_value = char_val;
 
 			//Char consts are of type char(obviously)
-			constant_node->inferred_type = lookup_type_name_only(type_symtab, "char")->type;
+			constant_node->inferred_type = immut_char;
 			break;
 
 		case STR_CONST:
 			constant_node->constant_type = STR_CONST;
 			//Let's find the type if it's in the symtab
-			symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, "char*");
+			symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE);
 			constant_node->inferred_type = found_type->type;
 			
 			//The dynamic string is our value
@@ -679,9 +717,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//A node to hold our current parameter
 	generic_ast_node_t* current_param;
 
-	//To hold the function's parameters from it's signature
-	function_type_parameter_t defined_parameter;
-
 
 	//So long as we don't see the R_PAREN we aren't done
 	do {
@@ -704,7 +739,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		}
 
 		//Grab the current function param
-		defined_parameter = function_signature->parameters[num_params - 1];
+		generic_type_t* param_type = function_signature->parameters[num_params - 1];
 
 		//Parameters are in the form of a conditional expression
 		current_param = ternary_expression(fl, side);
@@ -713,9 +748,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Bad parameter passed to function call", current_line);
 		}
-	
-		//Let's grab these to check for compatibility
-		generic_type_t* param_type = defined_parameter.parameter_type;
 
 		//Let's see if we're even able to assign this here
 		generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
@@ -1198,10 +1230,9 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Extract the variable from the left side
 	symtab_variable_record_t* assignee = left_hand_unary->variable;
 
-	//Now if we get here, there is the chance that this left hand unary is constant. If it is, then
-	//this assignment is illegal
-	if(assignee->initialized == TRUE && assignee->is_mutable == FALSE){
-		sprintf(info, "Variable \"%s\" is not mutable. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
+	//Are we able to assign to it? If not, we fail out here
+	if(can_variable_be_assigned_to(assignee) == FALSE){
+		sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1255,6 +1286,17 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//
+		//
+		//
+		//
+		//TODO SPECIAL ATTENTION NEEDED HERE
+		//
+		//
+		//
+		//
+		//
 
 		//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 		if(expr->inferred_type->type_class == TYPE_CLASS_POINTER){
@@ -1654,7 +1696,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 	}
 
 	//We use a u_int64 as our reference
-	generic_type_t* reference_type = lookup_type_name_only(type_symtab, "u64")->type;
+	generic_type_t* reference_type = immut_u64;
 
 	//Find the final type here. If it's not currently a U64, we'll need to coerce it
 	generic_type_t* final_type = types_assignable(reference_type, expr->inferred_type);
@@ -1720,7 +1762,7 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 	//Necessary checking here
 	if(parent_node->variable != NULL){
 		//This is a mutation - so we need to check it
-		if(parent_node->variable->is_mutable == FALSE){
+		if(parent_node->variable->type_defined_as->mutability  == NOT_MUTABLE){
 			sprintf(info, "Attempt to mutate immutable variable %s", parent_node->variable->var_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -2047,7 +2089,12 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			}
 
 			//Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was
-			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num);
+			//
+			//
+			//TODO INVESTIGATE - currently just using the child's mutability
+			//
+			//
+			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num, cast_expr->inferred_type->mutability);
 
 			//We'll check to see if this type is already in existence
 			symtab_type_record_t* type_record = lookup_type(type_symtab, pointer);
@@ -2080,7 +2127,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			}
 
 			//The return type of a logical not is a boolean
-			return_type = lookup_type_name_only(type_symtab, "bool")->type;
+			return_type = lookup_type_name_only(type_symtab, "bool", NOT_MUTABLE)->type;
 			
 			//This is not assignable
 			is_assignable = FALSE;
@@ -2154,7 +2201,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			//This counts as mutation -- unless it's a constant
 			if(cast_expr->variable != NULL){
 				//If this is not mutable, then we cannot change it in this way
-				if(cast_expr->variable->is_mutable == FALSE){
+				if(cast_expr->variable->type_defined_as->mutability == NOT_MUTABLE){
 					sprintf(info, "Attempt to mutate immutable variable %s", cast_expr->variable->var_name.string);
 					return print_and_return_error(info, parser_line_num);
 				}
@@ -3673,8 +3720,11 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 		return FAILURE;
 	}
 
+	//Determine our mutability type here
+	mutability_type_t mutability = is_mutable ? MUTABLE : NOT_MUTABLE;
+
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string, mutability);
 
 	//Fail out here
 	if(found_type!= NULL){
@@ -3740,8 +3790,6 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	member_record->line_number = parser_line_num;
 	//Store what the type is
 	member_record->type_defined_as = type_spec;
-	//Is it mutable or not
-	member_record->is_mutable = is_mutable;
 
 	//Add it to the construct
 	add_struct_member(construct, member_record);
@@ -3857,7 +3905,14 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 	//Once we've gotten past this point, we're safe to allocate this type. Function
 	//pointers are always private
-	generic_type_t* function_type = create_function_pointer_type(FALSE, parser_line_num); 
+	//
+	//
+	//TODO INVESTIGATE - this may or may not be mutable
+	//
+	//
+	//
+	//
+	generic_type_t* function_type = create_function_pointer_type(FALSE, parser_line_num, NOT_MUTABLE);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -3908,7 +3963,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		}
 
 		//Let the helper add the type in
-		u_int8_t status = add_parameter_to_function_type(function_type, type, is_mutable);
+		u_int8_t status = add_parameter_to_function_type(function_type, type);
 
 		//This means that we have been given too many parameters
 		if(status == FAILURE){
@@ -4032,7 +4087,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name.string);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name.string, NOT_MUTABLE);
 
 	//Fail out here
 	if(found_type!= NULL){
@@ -9722,6 +9777,20 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Add all basic types into the type symtab
 	add_all_basic_types(type_symtab);
+
+	//Keep these at hand because we use them so frequently, that repeatedly 
+	//searching is needlessly expensive
+	immut_char = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE);
+	immut_u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE);
+	immut_i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE);
+	immut_u16 = lookup_type_name_only(type_symtab, "u16", NOT_MUTABLE);
+	immut_i16 = lookup_type_name_only(type_symtab, "i16", NOT_MUTABLE);
+	immut_u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE);
+	immut_i32 = lookup_type_name_only(type_symtab, "i32", NOT_MUTABLE);
+	immut_u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE);
+	immut_i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE);
+	immut_f32 = lookup_type_name_only(type_symtab, "f32", NOT_MUTABLE);
+	immut_f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE);
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	if(grouping_stack == NULL){

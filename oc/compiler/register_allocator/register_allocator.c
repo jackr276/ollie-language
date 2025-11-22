@@ -3340,7 +3340,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	stack_pointer = cfg->stack_pointer;
 	type_symtab = cfg->type_symtab;
 	//Load this in for later use
-	u64_type = lookup_type_name_only(type_symtab, "u64")->type;
+	u64_type = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
 
 	//Construct these two live ranges off the bat - they are evergreen and will be used
 	//globally

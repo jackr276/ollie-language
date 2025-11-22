@@ -576,23 +576,23 @@ static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generi
 	switch(type->basic_type_token){
 		//Char is already unsigned
 		case CHAR:
-			return lookup_type_name_only(symtab, "char")->type;
+			return lookup_type_name_only(symtab, "char", type->mutability)->type;
 		case U8:
 		case I8:
 		case BOOL:
-			return lookup_type_name_only(symtab, "u8")->type;
+			return lookup_type_name_only(symtab, "u8", type->mutability)->type;
 		case U16:
 		case I16:
-			return lookup_type_name_only(symtab, "u16")->type;
+			return lookup_type_name_only(symtab, "u16", type->mutability)->type;
 		case U32:
 		case I32:
-			return lookup_type_name_only(symtab, "u32")->type;
+			return lookup_type_name_only(symtab, "u32", type->mutability)->type;
 		case U64:
 		case I64:
-			return lookup_type_name_only(symtab, "u64")->type;
+			return lookup_type_name_only(symtab, "u64", type->mutability)->type;
 		//We should never get here
 		default:
-			return lookup_type_name_only(symtab, "u32")->type;
+			return lookup_type_name_only(symtab, "u32", type->mutability)->type;
 	}
 }
 
@@ -656,12 +656,12 @@ static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a)
 		case I16:
 		case U32:
 		case I32:
-			*a = lookup_type_name_only(symtab, "f32")->type;
+			*a = lookup_type_name_only(symtab, "f32", (*a)->mutability)->type;
 
 		//These become f64's
 		case U64:
 		case I64:
-			*a = lookup_type_name_only(symtab, "f64")->type;
+			*a = lookup_type_name_only(symtab, "f64", (*a)->mutability)->type;
 		default:
 			return;
 	}
@@ -730,7 +730,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*b = lookup_type_name_only(symtab, "u64")->type;
+				*b = lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
 
 				//Give back the pointer type as the result
 				return *a;
@@ -757,7 +757,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*a = lookup_type_name_only(symtab, "u64")->type;
+				*a = lookup_type_name_only(symtab, "u64", (*b)->mutability)->type;
 
 				//Give back the pointer type as the result
 				return *b;
@@ -795,7 +795,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If b is a another pointer, then that's fine
 				if((*b)->type_class == TYPE_CLASS_POINTER){
 					//We'll return a final comparison type of u64
-					return lookup_type_name_only(symtab, "u64")->type;
+					return lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
 				}
 
 				//If this is not a basic type, all other conversion is bad
@@ -811,10 +811,10 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*b = lookup_type_name_only(symtab, "u64")->type;
+				*b = lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
 
 				//Give back the u64 type as the result
-				return lookup_type_name_only(symtab, "bool")->type;
+				return lookup_type_name_only(symtab, "bool", (*a)->mutability)->type;
 			}
 			
 			//If b is a pointer type. This is teh exact same scenario as a
@@ -822,7 +822,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If b is a another pointer, then that's fine
 				if((*a)->type_class == TYPE_CLASS_POINTER){
 					//We'll return a final comparison type of u64
-					return lookup_type_name_only(symtab, "u64")->type;
+					return lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
 				}
 
 				//If this is not a basic type, all other conversion is bad
@@ -838,10 +838,10 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*a = lookup_type_name_only(symtab, "u64")->type;
+				*a = lookup_type_name_only(symtab, "u64", (*b)->mutability)->type;
 
 				//Give back the u64 type as the result
-				return lookup_type_name_only(symtab, "bool")->type;
+				return lookup_type_name_only(symtab, "bool", (*b)->mutability)->type;
 			}
 
 			//At this point if these are not basic types, we're done
@@ -859,7 +859,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			basic_type_widening_type_coercion(a, b);
 
 			//Give back a
-			return lookup_type_name_only(symtab, "bool")->type;
+			return lookup_type_name_only(symtab, "bool", (*a)->mutability)->type;
 
 		/**
 		 * Modulus types only have integers to worry about. As always, we will
@@ -921,7 +921,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If b is a another pointer, then that's fine
 				if((*b)->type_class == TYPE_CLASS_POINTER){
 					//We'll return a final comparison type of u64
-					return lookup_type_name_only(symtab, "u64")->type;
+					return lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
 				}
 
 				//If this is not a basic type, all other conversion is bad
@@ -937,7 +937,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*b = lookup_type_name_only(symtab, "u64")->type;
+				*b = lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
 
 				return *b;
 			}
@@ -947,7 +947,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If b is a another pointer, then that's fine
 				if((*a)->type_class == TYPE_CLASS_POINTER){
 					//We'll return a final comparison type of bool 
-					return lookup_type_name_only(symtab, "u64")->type;
+					return lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
 				}
 
 				//If this is not a basic type, all other conversion is bad
@@ -963,7 +963,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*a = lookup_type_name_only(symtab, "u64")->type;
+				*a = lookup_type_name_only(symtab, "u64", (*b)->mutability)->type;
 
 				//We'll return a final comparison type of bool 
 				return *a;
@@ -1008,7 +1008,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If b is a another pointer, then that's fine
 				if((*b)->type_class == TYPE_CLASS_POINTER){
 					//We'll return a final comparison type of u64
-					return lookup_type_name_only(symtab, "bool")->type;
+					return lookup_type_name_only(symtab, "bool", (*a)->mutability)->type;
 				}
 
 				//If this is not a basic type, all other conversion is bad
@@ -1024,10 +1024,10 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*b = lookup_type_name_only(symtab, "u64")->type;
+				*b = lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
 
 				//This will always return a boolean
-				return lookup_type_name_only(symtab, "bool")->type;
+				return lookup_type_name_only(symtab, "bool", (*a)->mutability)->type;
 			}
 			
 			//If b is a pointer type. This is teh exact same scenario as a
@@ -1035,7 +1035,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				//If b is a another pointer, then that's fine
 				if((*a)->type_class == TYPE_CLASS_POINTER){
 					//We'll return a final comparison type of bool 
-					return lookup_type_name_only(symtab, "bool")->type;
+					return lookup_type_name_only(symtab, "bool", (*a)->mutability)->type;
 				}
 
 				//If this is not a basic type, all other conversion is bad
@@ -1051,10 +1051,10 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
-				*a = lookup_type_name_only(symtab, "u64")->type;
+				*a = lookup_type_name_only(symtab, "u64", (*b)->mutability)->type;
 
 				//We'll return a final comparison type of bool 
-				return lookup_type_name_only(symtab, "bool")->type;
+				return lookup_type_name_only(symtab, "bool", (*b)->mutability)->type;
 			}
 
 			//At this point if these are not basic types, we're done
@@ -1084,9 +1084,9 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 
 			//Is it signed? If so use the i8
 			if(is_type_signed(*a) == TRUE){
-				return_type = lookup_type_name_only(symtab, "i8")->type;
+				return_type = lookup_type_name_only(symtab, "i8", (*a)->mutability)->type;
 			} else {
-				return_type = lookup_type_name_only(symtab, "bool")->type;
+				return_type = lookup_type_name_only(symtab, "bool", (*a)->mutability)->type;
 			}
 
 			//We'll return a final comparison type of bool 
@@ -1379,7 +1379,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 /**
  * Create a basic type dynamically
 */
-generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
+generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability){
 	//Dynamically allocate
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 	//Store the type class
@@ -1394,8 +1394,11 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
 	dynamic_string_t name;
 	dynamic_string_alloc(&name);
 
-	//Set it to be our given name
+	//Set this to be the type name
 	dynamic_string_set(&name, type_name);
+
+	//Set the type's mutability here
+	type->mutability = mutability;
 
 	//Set the name 
 	type->type_name = name;
@@ -1445,7 +1448,7 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type){
  * Create a pointer type dynamically. In order to have a pointer type, we must also
  * have what it points to.
  */
-generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_number){
+generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_number, mutability_type_t mutability){
 	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
 
 	//Pointer type class
@@ -1453,6 +1456,9 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 
 	//Where was it declared
 	type->line_number = line_number;
+
+	//Is this mutable or not?
+	type->mutability = mutability;
 
 	//Clone the string
 	type->type_name = clone_dynamic_string(&(points_to->type_name));
@@ -1488,12 +1494,15 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
  *
  * In ollie language, static arrays must have their overall size known at compile time.
  */
-generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members){
+generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members, mutability_type_t mutability){
 	//Allocate it
 	generic_type_t* type = calloc(1,  sizeof(generic_type_t));
 
 	//Array type class
 	type->type_class = TYPE_CLASS_ARRAY;
+
+	//Is this a mutable type or not?
+	type->mutability = mutability;
 
 	//Where was it declared
 	type->line_number = line_number;
@@ -1525,12 +1534,15 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 /**
  * Dynamically allocate and create an enumerated type
  */
-generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number){
+generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
 	//Dynamically allocate, 0 out
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
 	type->type_class = TYPE_CLASS_ENUMERATED;
+
+	//Is this a mutable type or not?
+	type->mutability = mutability;
 	
 	//Where is the declaration?
 	type->line_number = line_number;
@@ -1551,12 +1563,15 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 /**
  * Dynamically allocate and create a constructed type
  */
-generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number){
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
 	type->type_class = TYPE_CLASS_STRUCT;
 	
+	//Is this a mutable type or not?
+	type->mutability = mutability;
+
 	//Where is the declaration?
 	type->line_number = line_number;
 
@@ -1572,7 +1587,7 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 /**
  * Dynamically allocate and create a union type
  */
-generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number){
+generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
 	//Dynamically allocate the union type
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
@@ -1581,6 +1596,9 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 
 	//Move the name over
 	type->type_name = type_name;
+
+	//Save the mutability
+	type->mutability = mutability;
 
 	//The line number where this was created
 	type->line_number = line_number;
@@ -1821,6 +1839,21 @@ void finalize_struct_alignment(generic_type_t* type){
 
 
 /**
+ * Print the full name of a type *into* the char buffer that
+ * is provided
+ */
+void print_full_type_name(generic_type_t* type, char* name){
+	//Mutability printing
+	if(type->mutability == MUTABLE){
+		sprintf(name, "mut ");
+	}
+
+	//Then throw the generated name in there
+	sprintf(name, "%s", type->type_name.string);
+}
+
+
+/**
  * Dynamically allocate and create an aliased type
  */
 generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number){
@@ -1845,13 +1878,16 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number){
+generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number, mutability_type_t mutability){
 	//First allocate the parent
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class & line number
 	type->type_class = TYPE_CLASS_FUNCTION_SIGNATURE;
 	type->line_number = line_number;
+
+	//Is this type mutable or not?
+	type->mutability = mutability;
 
 	//Now we need to create the internal function pointer type
 	type->internal_types.function_type = calloc(1, sizeof(function_type_t));
@@ -1873,7 +1909,7 @@ generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_
 /**
  * Add a function's parameter in
  */
-u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter, u_int8_t is_mutable){
+u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter){
 	//Extract this for convenience
 	function_type_t* internal_type = function_type->internal_types.function_type;
 
@@ -1883,8 +1919,7 @@ u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_t
 	}
 
 	//Store the mutability level and parameter type
-	internal_type->parameters[internal_type->num_params].is_mutable = is_mutable;
-	internal_type->parameters[internal_type->num_params].parameter_type = parameter;
+	internal_type->parameters[internal_type->num_params] = parameter;
 
 	//Increment this
 	(internal_type->num_params)++;
@@ -2001,48 +2036,6 @@ variable_size_t get_type_size(generic_type_t* type){
 	return size;
 }
 
-
-/**
- * Convert a generic type to a sring
- */
-static char* basic_type_to_string(generic_type_t* type){
-	if(type->type_class != TYPE_CLASS_BASIC){
-		return type->type_name.string;
-	}
-
-	switch(type->basic_type_token){
-		case I8:
-			return "i8";
-		case U8:
-			return "u8";
-		case I16:
-			return "i16";
-		case U16:
-			return "u16";
-		case I32:
-			return "i32";
-		case U32:
-			return "u32";
-		case I64:
-			return "i64";
-		case U64:
-			return "u64";
-		case CHAR:
-			return "char";
-		case VOID:
-			return "void";
-		case F32:
-			return "f32";
-		case F64:
-			return "f64";
-		case BOOL:
-			return "bool";
-		default:
-			return type->type_name.string;
-	}
-}
-
-
 /**
  * Generate the full name for the function pointer type
  */
@@ -2059,14 +2052,18 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	//Set the type name initially
 	dynamic_string_set(&(function_pointer_type->type_name), "fn(");
 
+	//Run through all of our parameters
 	for(u_int16_t i = 0; i < function_type->num_params; i++){
-		if(function_type->parameters[i].is_mutable == TRUE){
-			//Add this in dynamically
-			dynamic_string_concatenate(&(function_pointer_type->type_name), "mut ");
-		} 
+		//Extract the parameter type
+		generic_type_t* paramter_type = function_type->parameters[i];
+
+		//Generate the mut value there if we don't have it already
+		if(paramter_type->mutability == MUTABLE){
+			sprintf(var_string, "mut ");
+		}
 
 		//First put this into the buffer string
-		sprintf(var_string, "%s", basic_type_to_string(function_type->parameters[i].parameter_type));
+		sprintf(var_string, "%s", paramter_type->type_name.string);
 
 		//Then concatenate
 		dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
@@ -2078,8 +2075,15 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 		}
 	}
 
-	//First print this to the buffer
-	sprintf(var_string, ") -> %s", basic_type_to_string(function_type->return_type));
+	//If the return type is mutable, we need to generate the mut keyword on it
+	if(function_type->return_type->mutability == MUTABLE){
+		//First print this to the buffer
+		sprintf(var_string, ") -> mut %s", function_type->return_type->type_name.string);
+	} else {
+		//First print this to the buffer
+		sprintf(var_string, ") -> %s", function_type->return_type->type_name.string);
+	}
+
 
 	//Add the closing sequence
 	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
@@ -2175,6 +2179,9 @@ void type_dealloc(generic_type_t* type){
 		default:
 			break;
 	}
+
+	//Destroy the internal type name
+	dynamic_string_dealloc(&(type->type_name));
 
 	//Finally just free the overall pointer
 	free(type);

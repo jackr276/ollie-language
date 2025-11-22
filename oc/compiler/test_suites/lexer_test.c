@@ -17,7 +17,8 @@ int main(int argc, char** argv){
 
 	FILE* fl;
 	lexitem_t l;
-	u_int16_t parser_line_num;
+	//Line number must be 32 bit
+	u_int32_t parser_line_num;
 
 	for(int32_t i = 1; i < argc; i++){
 		//Open the file for reading only
