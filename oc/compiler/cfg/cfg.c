@@ -4607,7 +4607,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
 
 		//Extract the parameter type here
-		generic_type_t* paramter_type = signature->parameters[i-1].parameter_type;
+		generic_type_t* paramter_type = signature->parameters[i];
 
 		//We need one more assignment here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
@@ -4738,7 +4738,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
 		
 		//Extract the parameter type here
-		generic_type_t* paramter_type = signature->parameters[i-1].parameter_type;
+		generic_type_t* paramter_type = signature->parameters[i];
 
 		//We need one more assignment here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
@@ -8398,12 +8398,12 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	continue_stack = heap_stack_alloc(); 
 
 	//Keep these on hand
-	u64 = lookup_type_name_only(type_symtab, "u64")->type;
-	i64 = lookup_type_name_only(type_symtab, "i64")->type;
-	u32 = lookup_type_name_only(type_symtab, "u32")->type;
-	i32 = lookup_type_name_only(type_symtab, "i32")->type;
-	u8 = lookup_type_name_only(type_symtab, "u8")->type;
-	char_type = lookup_type_name_only(type_symtab, "char")->type;
+	u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
+	i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE)->type;
+	u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE)->type;
+	i32 = lookup_type_name_only(type_symtab, "i32", NOT_MUTABLE)->type;
+	u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
+	char_type = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));
