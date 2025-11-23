@@ -5151,6 +5151,12 @@ static symtab_type_record_t* type_name(FILE* fl, mutability_type_t mutability){
  * The type specifier also contains all of the mutability information needed for a type
  *
  * BNF Rule: <type-specifier> ::= {mut}? <type-name>{<type-address-specifier>}*
+ *
+ *
+ * Array type mutability rules:
+ *
+ * mut i32[35] -> this creates a mutable array(so the actual arr var is mutable) of mutable i32's(every single member
+ * is also mutable)
  */
 static generic_type_t* type_specifier(FILE* fl){
 	//We always assume immutability
@@ -8386,7 +8392,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
  * This rule will return a symtab variable record that represents the parameter it made. If will return
  * NULL if an error occurs
  *
- * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
+ * BNF Rule: <parameter-declaration> ::= <identifier> : <type-specifier>
  */
 static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
 	//Lookahead token
@@ -8898,7 +8904,7 @@ after_rparen:
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= {pub}? fn <identifer> {<parameter-list> -> {mut}? <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= {pub}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
  */
 static generic_ast_node_t* function_definition(FILE* fl){
 	//Freeze the line number
