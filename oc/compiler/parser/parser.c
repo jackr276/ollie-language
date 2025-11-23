@@ -4617,7 +4617,7 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FAILURE;
 	}
-	
+
 	//Rewind our position
 	reconsume_tokens(fl, type_start);
 
@@ -4634,10 +4634,6 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 		num_errors++;
 		return FAILURE;
 	}
-
-	//TODO DELETEME
-	printf("MUTABLE VERSION: %s\n", mutable_type->type_name.string);
-	printf("IMMUTABLE VERSION: %s\n", immutable_type->type_name.string);
 
 	//Finally we can create our members
 	//First goes the mutable one
@@ -4762,7 +4758,7 @@ static u_int8_t union_definer(FILE* fl){
 	insert_type(type_symtab, create_type_record(mutable_union_type));
 
 	//And now create the immutable version
-	generic_type_t* immutable_union_type = create_union_type(union_name, parser_line_num, NOT_MUTABLE);
+	generic_type_t* immutable_union_type = create_union_type(clone_dynamic_string(&(union_name)), parser_line_num, NOT_MUTABLE);
 
 	//Add the immutable one in
 	insert_type(type_symtab, create_type_record(immutable_union_type));

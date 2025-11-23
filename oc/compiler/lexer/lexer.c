@@ -139,6 +139,12 @@ static void put_back_char(FILE* fl){
 void reconsume_tokens(FILE* fl, int64_t reconsume_start){
 	//Seek back to where the user wanted to reconsume from
 	fseek(fl, reconsume_start, SEEK_SET);
+
+	//We need to clear the stack out too. We can do this by
+	//deallocating and reallocating it
+	lex_stack_dealloc(&pushed_back_tokens);
+	//Reallocate it
+	pushed_back_tokens = lex_stack_alloc();
 }
 
 
