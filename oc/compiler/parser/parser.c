@@ -4555,18 +4555,11 @@ static u_int8_t union_definer(FILE* fl){
 	//Add the ident into our overall name
 	dynamic_string_concatenate(&union_name, lookahead.lexeme.string);
 
-	//Now we'll need to scan through the type database to ensure that this isn't already in there
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, union_name.string);
-
-	//If we were able to find it, then someone has already declared this in scope. We'll print
-	//an appropriate message and leave
-	if(found_type != NULL){
-		sprintf(info, "Type %s has already been declared. First declare here:", union_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_type_name(found_type);
+	//Check for type duplication
+	if(do_duplicate_types_exist(union_name.string) == TRUE){
 		return FAILURE;
 	}
-	
+
 	//TODO WHEN WE CREATE, WE NEED TO CREATE BOTH IMMUT AND MUT VERSIONS
 
 	//Create the union type now that we have enough information
@@ -4688,17 +4681,8 @@ static u_int8_t enum_definer(FILE* fl){
 	//Now if we get here we know that we found a valid ident, so we'll add it to the name
 	dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
-	//Now we need to check that this name isn't already currently in use. We only need to check against the
-	//type symtable, because nothing else could have enum in the name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, type_name.string);
-
-	//If we found something, that's an illegal redefintion
-	if(found_type != NULL){
-		sprintf(info, "Type \"%s\" has already been defined. First defined here:", type_name.string); 
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Print out the actual type too
-		print_type_name(found_type);
-		num_errors++;
+	//If these duplicates exist, we need to fail out
+	if(do_duplicate_types_exist(type_name.string) == TRUE){
 		return FAILURE;
 	}
 
@@ -4758,18 +4742,9 @@ static u_int8_t enum_definer(FILE* fl){
 			return FAILURE;
 		}
 
-		//Finally check that it isn't a duplicated type name
-		found_type = lookup_type_name_only(type_symtab, member_name);
-
-		//Fail out here
-		if(found_type!= NULL){
-			sprintf(info, "Attempt to redefine type \"%s\". First defined here:", member_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			//Also print out the original declaration
-			print_type_name(found_type);
-			num_errors++;
-			//Fail out
-			return FAILURE;
+		//CHeck for duplicated types
+		if(do_duplicate_types_exist(member_name) == TRUE){
+			return FALSE;
 		}
 
 		//If we make it here, then all of our checks passed and we don't have a duplicate name. We're now good
@@ -4972,17 +4947,8 @@ static u_int8_t enum_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Finally check that it isn't a duplicated type name
-	found_type = lookup_type_name_only(type_symtab, alias_name.string);
-
-	//Fail out here
-	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Fail out
+	//Now duplicate types
+	if(do_duplicate_types_exist(alias_name.string) == TRUE){
 		return FAILURE;
 	}
 
@@ -5025,6 +4991,19 @@ static u_int8_t enum_definer(FILE* fl){
  * 						   | struct <identifier>
  * 						   | <identifier>
  */
+
+//
+//
+//
+//
+//
+//TODO THIS NEEDS MUTABILITY CHECKING
+//
+//
+//
+//
+//
+//
 static symtab_type_record_t* type_name(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
@@ -5055,7 +5034,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		case CHAR:
 		case BOOL:
 			//We will now grab this record from the symtable to make our life easier
-			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
+			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
 
 			//Sanity check, if this is null something is very wrong
 			if(record == NULL){
@@ -5086,7 +5065,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name.string);
+			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name.string, NOT_MUTABLE);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
@@ -5120,7 +5099,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name.string);
+			record = lookup_type_name_only(type_symtab, type_name.string, NOT_MUTABLE);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
@@ -5154,7 +5133,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name.string);
+			record = lookup_type_name_only(type_symtab, type_name.string, NOT_MUTABLE);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
@@ -5171,7 +5150,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		//This is an identifier
 		case IDENT:
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string);
+			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
@@ -8468,7 +8447,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 		//If we have two, we need to validate the type of each parameter
 		case 2:
 			//Extract the first parameter
-			parameter_type = signature->parameters[0].parameter_type;
+			parameter_type = signature->parameters[0];
 			
 			//If it isn't a basic type and it isn't an i32, we fail
 			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
@@ -8478,7 +8457,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			}
 
 			//Now let's grab the second parameter
-			parameter_type = signature->parameters[1].parameter_type;
+			parameter_type = signature->parameters[1];
 
 			//This must be a char** type. If it's not, we fail out
 			if(is_type_string_array(parameter_type) == FALSE){
@@ -8560,17 +8539,8 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 		return NULL;
 	}
 
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
-
-	//Fail out here
-	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Return NULL to signify failure
+	//Check for a duplicated type
+	if(do_duplicate_types_exist(name.string) == TRUE){
 		return NULL;
 	}
 
@@ -8617,8 +8587,6 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 	param_record->initialized = TRUE;
 	//Add the line number
 	param_record->line_number = parser_line_num;
-	//If it is mutable
-	param_record->is_mutable = is_mut;
 	//Store the type as well, very important
 	param_record->type_defined_as = type;
 	//Store the current parameter number of it
@@ -8750,7 +8718,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 		//If we're not defining a predeclared function, we need to add this parameter in
 		if(defining_predeclared_function == FALSE){
 			//Let the helper do it
-			status = add_parameter_to_function_type(function_type, parameter->type_defined_as, parameter->is_mutable);
+			status = add_parameter_to_function_type(function_type, parameter->type_defined_as);
 
 			//This means that we exceeded the number of parameters
 			if(status == FAILURE){
@@ -8772,14 +8740,14 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			}
 
 			//We need to ensure that the mutability levels match here
-			if(internal_function_type->parameters[function_parameter_number - 1].is_mutable == TRUE && parameter->is_mutable == FALSE){
+			if(internal_function_type->parameters[function_parameter_number - 1]->mutability == MUTABLE && parameter->type_defined_as->mutability == NOT_MUTABLE){
 				sprintf(info, "Parameter %s was defined as immutable, but predeclared as mutable", parameter->var_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 
 			//The other option for a mismatch
-			} else if(internal_function_type->parameters[function_parameter_number - 1].is_mutable == FALSE && parameter->is_mutable == TRUE){
+			} else if(internal_function_type->parameters[function_parameter_number - 1]->mutability == NOT_MUTABLE && parameter->type_defined_as->mutability == MUTABLE){
 				sprintf(info, "Parameter %s was defined as mutable, but predeclared as immutable", parameter->var_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
@@ -8787,7 +8755,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			}
 
 			//If the mutability levels are off, we fail out
-			if(internal_function_type->parameters[function_parameter_number-1].is_mutable != parameter->is_mutable){
+			if(internal_function_type->parameters[function_parameter_number-1]->mutability != parameter->type_defined_as->mutability){
 				sprintf(info, "Mutability mismatch for parameter %d", function_parameter_number);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
@@ -8795,7 +8763,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			}
 
 			//Grab the defined type out
-			generic_type_t* declared_type = dealias_type(internal_function_type->parameters[function_parameter_number-1].parameter_type);
+			generic_type_t* declared_type = dealias_type(internal_function_type->parameters[function_parameter_number-1]);
 			//And this type
 			generic_type_t* defined_type = dealias_type(parameter->type_defined_as);
 
@@ -8906,15 +8874,8 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	} 
 
-	//Check for duplicated type names
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name.string);
-
-	//Fail out if duplicate has been found
-	if(found_type != NULL){
-		sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_type_name(found_type);
-		num_errors++;
+	//Check for duplicate types
+	if(do_duplicate_types_exist(function_name.string) == TRUE){
 		//Create and return an error node
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
@@ -9008,7 +8969,7 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 		}
 
 		//Let the helper add the type in
-		u_int8_t status = add_parameter_to_function_type(function_record->signature, type, is_mutable);
+		u_int8_t status = add_parameter_to_function_type(function_record->signature, type);
 
 		//This means that we have been given too many parameters
 		if(status == FAILURE){
@@ -9164,15 +9125,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
-		//Check for duplicated type names
-		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name.string);
-
-		//Fail out if duplicate has been found
-		if(found_type != NULL){
-			sprintf(info, "A type with name \"%s\" has already been defined. First defined here:", found_type->type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, current_line);
-			print_type_name(found_type);
-			num_errors++;
+		//Check for duplicate types
+		if(do_duplicate_types_exist(function_name.string) == TRUE){
 			//Create and return an error node
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
