@@ -5,12 +5,12 @@
 
 //Declare the union type
 define union my_union {
-	mut x:i32;
-	mut y:i16;
-	mut ch:char;
+	x:mut i32;
+	y:mut i16;
+	ch:mut char;
 } as custom_union;
 
-pub fn mut_union(mut x:custom_union*) -> i32 {
+pub fn mut_union(x:mut custom_union*) -> i32 {
 	//We'll use the special union pointer accessor here
 	x->x = 4;
 	x->y = 2;
@@ -20,6 +20,10 @@ pub fn mut_union(mut x:custom_union*) -> i32 {
 
 
 pub fn main() -> i32{
+	//
+	// TODO
+	//
+	// 
 	declare mut my_union:custom_union;
 	
 	//Store x
