@@ -11,7 +11,6 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
-#include <complex.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -4165,7 +4164,11 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	insert_type(type_symtab, type_record);
 
 	//Now that we've done that part, we also need to create the alias type and insert it
-	generic_type_t* alias_type = create_aliased_type(identifier_name, function_type, parser_line_num);
+	//
+	//
+	//TODO NOT DONE
+	//
+	generic_type_t* alias_type = create_aliased_type(identifier_name, function_type, parser_line_num, NOT_MUTABLE);
 
 	//Once we've created this, we'll add this into the symtab
 	insert_type(type_symtab, create_type_record(alias_type));
@@ -4237,6 +4240,14 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//Once we get here, the struct type's size is known and as such it is complete
 	immutable_struct_type->type_complete = TRUE;
+
+	/**
+	 * Now that we've created the immutable version of the struct, we need to also create the mutable version
+	 */
+	generic_type_t* mutable_struct_type = create_mutable_version_of_type(immutable_struct_type);
+
+	//Insert it into the symtab
+	insert_type(type_symtab, create_type_record(mutable_struct_type));
 	
 	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
 	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
@@ -4245,6 +4256,7 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//We're out of here, just return the node that we made
 	if(lookahead.tok == SEMICOLON){
+		//No aliasing here so we're done
 		return SUCCESS;
 	}
 	
@@ -4305,11 +4317,11 @@ static u_int8_t struct_definer(FILE* fl){
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(immutable_aliased_type));
 
-	/**
-	 * Now that we've created the immutable version of the struct, we need to also create the mutable version
-	 */
-	generic_type_t* mutable_struct_type = create_mutable_version_of_type(immutable_struct_type);
+	//Now that we've made the immutable alias, we must also make the mutable alias
+	generic_type_t* mutable_aliased_type = create_aliased_type(alias_name, mutable_struct_type, parser_line_num, MUTABLE);
 
+	//Add this into the symtab too
+	insert_type(type_symtab, create_type_record(mutable_aliased_type));
 
 	//Succeeded so
 	return SUCCESS;
@@ -4578,7 +4590,10 @@ static u_int8_t union_definer(FILE* fl){
 	}
 
 	//Let's construct the final alias here
-	generic_type_t* alias_type = create_aliased_type(alias_name, union_type, parser_line_num);
+	//
+	//TODO NOT DONE
+	//
+	generic_type_t* alias_type = create_aliased_type(alias_name, union_type, parser_line_num, NOT_MUTABLE);
 
 	//Add it into the type symtab
 	insert_type(type_symtab, create_type_record(alias_type));
@@ -4899,7 +4914,9 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_name, enum_type, parser_line_num);
+	//
+	//TODO NOT DONE
+	generic_type_t* aliased_type = create_aliased_type(alias_name, enum_type, parser_line_num, NOT_MUTABLE);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -8171,7 +8188,8 @@ static u_int8_t alias_statement(FILE* fl){
 	}
 
 	//If we get here, we know that it actually worked, so we can create the alias
-	generic_type_t* aliased_type = create_aliased_type(name, type_spec, parser_line_num);
+	//The alias type's mutability is that of the type specifier's mutability
+	generic_type_t* aliased_type = create_aliased_type(name, type_spec, parser_line_num, type_spec->mutability);
 
 	//Let's now create the aliased record
 	symtab_type_record_t* aliased_record = create_type_record(aliased_type);

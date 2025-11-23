@@ -1614,6 +1614,27 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 
 
 /**
+ * Clone and create a mutable copy of the exact type that we pass in
+ *
+ * This creates an exact copy of the type that we're after, only changing
+ * the mutability level
+ */
+generic_type_t* create_mutable_version_of_type(generic_type_t* type){
+	//Alloc it
+	generic_type_t* cloned = calloc(1, sizeof(generic_type_t));
+
+	//Copy the memory over
+	memcpy(cloned, type, sizeof(generic_type_t));
+
+	//The only thing that we change is the mutability
+	cloned->mutability = MUTABLE;
+
+	//And give it back
+	return cloned;
+}
+
+
+/**
  * Does this struct contain said member? Return the variable if yes, NULL if not
  */
 void* get_struct_member(generic_type_t* structure, char* name){

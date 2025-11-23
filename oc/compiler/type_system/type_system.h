@@ -261,6 +261,11 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
+ * Clone and create a mutable copy of the exact type that we pass in
+ */
+generic_type_t* create_mutable_version_of_type(generic_type_t* type);
+
+/**
  * Is the given binary operation valid for the type that was specificed?
  */
 u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t binary_op, side_type_t side);
