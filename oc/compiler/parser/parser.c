@@ -5160,6 +5160,12 @@ static generic_type_t* type_specifier(FILE* fl){
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//If we see the mut keyword, flag that we're mutable
+	if(lookahead.tok == MUT){
+		mutability = MUTABLE;
+	} else {
+		//Put it back if not
+		push_back_token(lookahead);
+	}
 
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
 	//return a record of the node that the type name has. If the type name function could not
