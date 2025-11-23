@@ -208,6 +208,33 @@ static u_int8_t do_duplicate_variables_exist(char* name){
 
 
 /**
+ * Determine whether or not a duplicate *member variable* exists.
+ * This is done by looking in the local scope only
+ *
+ * Returns TRUE if successful, FALSE if not. This function handles
+ * all error printing
+ */
+static u_int8_t do_duplicate_member_variables_exist(char* name, generic_type_t* current_type){
+	//Look it up
+	symtab_variable_record_t* found = lookup_variable_local_scope(variable_symtab, name);
+
+	//Means that we have a duplicate
+	if(found != NULL){
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, current_type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_variable_name(found);
+		num_errors++;
+
+		//Give back true, they do exist
+		return TRUE;
+	}
+
+	//Otherwise just return FALSE
+	return FALSE;
+}
+
+
+/**
  * Check if a duplicate type record exists
  *
  * We will check for both mutable & immutable types
@@ -4370,15 +4397,8 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 	//Otherwise we did find it, so let's grab the name out
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Let's validate that this is not a duplicated name
-	symtab_variable_record_t* duplicate = lookup_variable_local_scope(variable_symtab, name.string);
-
-	//Is this a duplicate? If so, we fail out
-	if(duplicate != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, union_type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_variable_name(duplicate);
-		num_errors++;
+	//Check for duplicate member vars
+	if(do_duplicate_member_variables_exist(name.string, union_type) == TRUE){
 		return FAILURE;
 	}
 
@@ -4546,6 +4566,8 @@ static u_int8_t union_definer(FILE* fl){
 		print_type_name(found_type);
 		return FAILURE;
 	}
+	
+	//TODO WHEN WE CREATE, WE NEED TO CREATE BOTH IMMUT AND MUT VERSIONS
 
 	//Create the union type now that we have enough information
 	generic_type_t* union_type = create_union_type(union_name, parser_line_num);
