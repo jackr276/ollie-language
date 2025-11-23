@@ -17,7 +17,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <utility>
 #include "parser.h"
 #include "../utils/stack/lexstack.h"
 #include "../utils/stack/nesting_stack.h"
@@ -212,21 +211,43 @@ static u_int8_t do_duplicate_variables_exist(char* name){
  * Check if a duplicate type record exists
  *
  * We will check for both mutable & immutable types
+ *
+ * Returns TRUE if successful, FALSE if not. This function handles
+ * all error printing
  */
-static symtab_type_record_t* get_all_types_by_name(char* name){
+static u_int8_t do_duplicate_types_exist(char* name){
 	//Look it up
 	symtab_type_record_t* found = lookup_type_name_only(type_symtab, name, NOT_MUTABLE);
 
 	//If the immutable one was found, we can leave out
 	if(found != NULL){
-		return found;
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found);
+		num_errors++;
+
+		//We got a duplicate so we leave
+		return TRUE;
 	}
 
 	//Otherwise let's check the mutable one as well
-	found = lookup_type_name_only(type_symtab, name, NOT_MUTABLE);
+	found = lookup_type_name_only(type_symtab, name, MUTABLE);
 
-	//Return whatever we got
-	return found;
+	//If the immutable one was found, we can leave out
+	if(found != NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found);
+		num_errors++;
+
+		//We got a duplicate so we leave
+		return TRUE;
+	}
+
+	//If we make it down here then we're good
+	return FALSE;
 }
 
 
@@ -3801,34 +3822,13 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 		return FAILURE;
 	}
 
-	//Determine our mutability type here
-	mutability_type_t mutability = is_mutable ? MUTABLE : NOT_MUTABLE;
-
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string, mutability);
-
-	//Fail out here
-	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Return a fresh error node
+	//Are we defining a duplicated type?
+	if(do_duplicate_types_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
-	//Check that it's not a duplicate function
-	symtab_function_record_t* found_function = lookup_function(function_symtab, name.string);
-
-	//Fail out here
-	if(found_function != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_function_name(found_function);
-		num_errors++;
-		//Return a fresh error node
+	//Look for duplicated functions too
+	if(do_duplicate_functions_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
@@ -4139,45 +4139,18 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, identifier_name.string);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", identifier_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Fail out
+	//Check for function name duplications
+	if(do_duplicate_functions_exist(identifier_name.string) == TRUE){
 		return FALSE;
 	}
 
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = 
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", identifier_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Fail out
+	//Check for duplicate variables
+	if(do_duplicate_variables_exist(identifier_name.string) == TRUE){
 		return FALSE;
 	}
 
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, identifier_name.string, NOT_MUTABLE);
-
-	//Fail out here
-	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", identifier_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Fail out
+	//Finally check for type duplication
+	if(do_duplicate_types_exist(identifier_name.string) == TRUE){
 		return FALSE;
 	}
 
@@ -4239,34 +4212,8 @@ static u_int8_t struct_definer(FILE* fl){
 	//Add the name on the end
 	dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
-	//Once we have this, the actual node is useless so we'll free it
-
-	//Now we will reference against the symtab to see if this type name has ever been used before. We only need
-	//to check against the type symtab because that is the only place where anything else could start with "enumerated"
-	symtab_type_record_t* found = lookup_type_name_only(type_symtab, type_name.string, NOT_MUTABLE);
-
-	//This means that we are attempting to redefine a type
-	if(found != NULL){
-		sprintf(info, "Type with name \"%s\" was already defined. First defined here:", type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the type
-		print_type_name(found);
-		num_errors++;
-		//Fail out
-		return FAILURE;
-	}
-
-	//Check against it with all mutable types too
-	found = lookup_type_name_only(type_symtab, type_name.string, MUTABLE);
-
-	//This means that we are attempting to redefine a type
-	if(found != NULL){
-		sprintf(info, "Type with name \"%s\" was already defined. First defined here:", type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the type
-		print_type_name(found);
-		num_errors++;
-		//Fail out
+	//Check that there are no duplicated types
+	if(do_duplicate_types_exist(type_name.string) == TRUE){
 		return FAILURE;
 	}
 
@@ -4435,31 +4382,13 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 		return FAILURE;
 	}
 
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
-
-	//Fail out here
-	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Return a fresh error node
+	//Check for duplicated functions
+	if(do_duplicate_functions_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
-	//Check that it's not a duplicate function
-	symtab_function_record_t* found_function = lookup_function(function_symtab, name.string);
-
-	//Fail out here
-	if(found_function != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_function_name(found_function);
-		num_errors++;
-		//Return a fresh error node
+	//If we have duplicate types, that is also a failure
+	if(do_duplicate_types_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
@@ -4505,8 +4434,6 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 	symtab_variable_record_t* union_member = create_variable_record(name);
 	//Give it its type
 	union_member->type_defined_as = type;
-	//Store the mutability
-	union_member->is_mutable = is_mutable;
 	//And we'll let the helper add it into the union type
 	add_union_member(union_type, union_member);
 
@@ -4679,33 +4606,18 @@ static u_int8_t union_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Check for duplicate functions
-	u_int8_t duplicate_functions = do_duplicate_functions_exist(alias_name.string);
-
-	//Fail out if so
-	if(duplicate_functions == TRUE){
+	//Check for function duplication
+	if(do_duplicate_functions_exist(alias_name.string) == TRUE){
 		return FAILURE;
 	}
 
-	//Check for var duplicates
-	u_int8_t duplicate_variable = do_duplicate_variables_exist(alias_name.string);
-
-	//Fail out
-	if(duplicate_variable == TRUE){
+	//Check for variable duplication
+	if(do_duplicate_variables_exist(alias_name.string) == TRUE){
 		return FAILURE;
 	}
 
-	//Finally check that it isn't a duplicated type name
-	found_type = lookup_type_name_only(type_symtab, alias_name.string);
-
-	//Fail out here
-	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Fail out
+	//Check for type duplication
+	if(do_duplicate_types_exist(alias_name.string) == TRUE){
 		return FAILURE;
 	}
 
