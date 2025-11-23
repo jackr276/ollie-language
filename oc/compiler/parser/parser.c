@@ -4331,9 +4331,16 @@ static u_int8_t struct_definer(FILE* fl){
 /**
  * Parse and add a union member into our union type
  *
- * BNF Rule: <union-member> ::= {mut}? <identifier>:<type-specifier>;
+ * It is important to remember that union types do not allow for 
+ * their variables to individually be mutable/immutable. This is because
+ * a union type shares all memory, so it makes no sense to have a mutable 
+ * member and a non-mutable member. It is for this reason that each union member is given a
+ * mutable and immutable version
+ *
+ *
+ * BNF Rule: <union-member> ::= <identifier>:<union-type-specifier>;
  */
-static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
+static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, generic_type_t* immutable_union_type){
 	//Our lookahead token
 	lexitem_t lookahead;
 
@@ -4350,8 +4357,9 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 	//Otherwise we did find it, so let's grab the name out
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Check for duplicate member vars
-	if(do_duplicate_member_variables_exist(name.string, union_type) == TRUE){
+	//Check for duplicate member vars. We only need to check one of the lists,
+	//both lists have the same physical variables
+	if(do_duplicate_member_variables_exist(name.string, mutable_union_type) == TRUE){
 		return FAILURE;
 	}
 
@@ -4420,7 +4428,7 @@ static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
  *
  * BNF RULE: <union-member-list> ::= { {<union-member>}+ }
  */
-static u_int8_t union_member_list(FILE* fl, generic_type_t* union_type){
+static u_int8_t union_member_list(FILE* fl, generic_type_t* mutable_union_type, generic_type_t* immutable_union_type){
 	//Initialize a new variable scope to help with duplicate checks
 	initialize_variable_scope(variable_symtab);
 
@@ -4513,17 +4521,21 @@ static u_int8_t union_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//TODO WHEN WE CREATE, WE NEED TO CREATE BOTH IMMUT AND MUT VERSIONS
-
-	//Create the union type now that we have enough information
-	generic_type_t* union_type = create_union_type(union_name, parser_line_num, NOT_MUTABLE);
+	//Creat the mutable version
+	generic_type_t* mutable_union_type = create_union_type(union_name, parser_line_num, MUTABLE);
 
 	//Insert into symtab
-	insert_type(type_symtab, create_type_record(union_type));
+	insert_type(type_symtab, create_type_record(mutable_union_type));
+
+	//And now create the immutable version
+	generic_type_t* immutable_union_type = create_union_type(union_name, parser_line_num, NOT_MUTABLE);
+
+	//Add the immutable one in
+	insert_type(type_symtab, create_type_record(immutable_union_type));
 
 	//Once we've created it, we can begin parsing the internals. We'll call the union member list 
 	//and let it handle everything else
-	u_int8_t status = union_member_list(fl, union_type);
+	u_int8_t status = union_member_list(fl, mutable_union_type, immutable_union_type);
 
 	//If this fails then we're done
 	if(status == FAILURE){
@@ -4531,7 +4543,8 @@ static u_int8_t union_definer(FILE* fl){
 	}
 
 	//Once we've gotten here, the union type is officially considered complete
-	union_type->type_complete = TRUE;
+	mutable_union_type->type_complete = TRUE;
+	immutable_union_type->type_complete = TRUE;
 
 	//Now let's see what we have at the end. We could either see a semicolon
 	//or an immediate alias statement
@@ -4591,8 +4604,8 @@ static u_int8_t union_definer(FILE* fl){
 
 	//Let's construct the final alias here
 	//
-	//TODO NOT DONE
 	//
+	//TODO NEED MUTABLE & IMMUTABLE VERSIONS
 	generic_type_t* alias_type = create_aliased_type(alias_name.string, union_type, parser_line_num, NOT_MUTABLE);
 
 	//Add it into the type symtab
