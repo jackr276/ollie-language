@@ -1032,3 +1032,11 @@ void reset_file(FILE* fl){
 	fseek(fl, 0, SEEK_SET);
 	//Now we've reset
 }
+
+
+/**
+ * Get the current file pointer position
+ */
+int64_t get_current_file_position(FILE* fl){
+	return ftell(fl);
+}

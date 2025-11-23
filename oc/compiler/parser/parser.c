@@ -2223,6 +2223,9 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			//TODO INVESTIGATE - currently just using the child's mutability
 			//
 			//
+			//
+			//
+			//
 			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num, cast_expr->inferred_type->mutability);
 
 			//We'll check to see if this type is already in existence
@@ -4586,14 +4589,22 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 		return FAILURE;
 	}
 
-	//TODO NEED MUT/IMMUT TYPES
+	/**
+	 * Unique strategy here - we need to get a mutable and immutable version of this
+	 * type for our mutable and immutable union type. To do this, we'll simply
+	 * consume the data twice, once as mutable and once as not mutable
+	 *
+	 * We will do this by hanging onto where we started consuming from
+	 */
 
+	//Where did we start consuming from
+	int64_t type_start = get_current_file_position(fl);
 
 	//Now we need to see a valid type-specifier
-	generic_type_t* type = union_type_specifier(fl);
+	generic_type_t* mutable_type = union_type_specifier(fl, MUTABLE);
 
 	//If this is NULL we've failed
-	if(type == NULL){
+	if(mutable_type == NULL){
 		print_parse_message(PARSE_ERROR, "Invalid type given to union type", parser_line_num);
 		num_errors++;
 		return FAILURE;
@@ -4601,8 +4612,29 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 
 	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
 	//the user from adding a field the mut a:char[] that is unknown at compile time
-	if(type->type_complete == FALSE){
-		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
+	if(mutable_type->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", mutable_type->type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		return FAILURE;
+	}
+	
+	//Rewind our position
+	reconsume_tokens(fl, type_start);
+
+	//Now we do the exact same consumption for the immutable version
+	generic_type_t* immutable_type = union_type_specifier(fl, NOT_MUTABLE);
+
+	//If this is NULL we've failed
+	if(mutable_type == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid type given to union type", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
+	//the user from adding a field the mut a:char[] that is unknown at compile time
+	if(mutable_type->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", mutable_type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		return FAILURE;
 	}

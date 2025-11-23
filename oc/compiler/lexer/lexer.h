@@ -41,6 +41,11 @@ struct lexitem_t{
 void reset_file(FILE* fl);
 
 /**
+ * Get the current file pointer position
+ */
+int64_t get_current_file_position(FILE* fl);
+
+/**
  * Reconsume the tokens starting from a given seek
  */
 void reconsume_tokens(FILE* fl, int64_t reconsume_start);

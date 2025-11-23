@@ -38,7 +38,7 @@ int main(int argc, char** argv){
 		print_token(&l);
 
 		//The current seek head
-		int64_t first_token_seek = ftell(fl);
+		int64_t first_token_seek = get_current_file_position(fl);
 
 		//Very rudimentary here
 		while((l = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT)).tok != DONE){
