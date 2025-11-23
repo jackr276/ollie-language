@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <utility>
 #include "parser.h"
 #include "../utils/stack/lexstack.h"
 #include "../utils/stack/nesting_stack.h"
@@ -4678,31 +4679,19 @@ static u_int8_t union_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name.string);
+	//Check for duplicate functions
+	u_int8_t duplicate_functions = do_duplicate_functions_exist(alias_name.string);
 
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Fail out
+	//Fail out if so
+	if(duplicate_functions == TRUE){
 		return FAILURE;
 	}
 
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name.string);
+	//Check for var duplicates
+	u_int8_t duplicate_variable = do_duplicate_variables_exist(alias_name.string);
 
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Fail out
+	//Fail out
+	if(duplicate_variable == TRUE){
 		return FAILURE;
 	}
 
@@ -4825,31 +4814,13 @@ static u_int8_t enum_definer(FILE* fl){
 		//Grab this out for convenience
 		char* member_name = lookahead.lexeme.string;
 
-		//Check that it isn't some duplicated function name
-		symtab_function_record_t* found_func = lookup_function(function_symtab, member_name);
-
-		//Fail out here
-		if(found_func != NULL){
-			sprintf(info, "Attempt to redefine function \"%s\". First defined here:", member_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			//Also print out the function declaration
-			print_function_name(found_func);
-			num_errors++;
-			//Fail out
+		//Check for duplicated functions first
+		if(do_duplicate_functions_exist(member_name) == TRUE){
 			return FAILURE;
 		}
 
-		//Check that it isn't some duplicated variable name
-		symtab_variable_record_t* found_var = lookup_variable(variable_symtab, member_name);
-
-		//Fail out here
-		if(found_var != NULL){
-			sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", member_name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			//Also print out the original declaration
-			print_variable_name(found_var);
-			num_errors++;
-			//Fail out
+		//Now check for duplicated vars
+		if(do_duplicate_variables_exist(member_name) == TRUE){
 			return FAILURE;
 		}
 
@@ -5057,31 +5028,13 @@ static u_int8_t enum_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name.string);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Fail out
+	//Check for duplicate functions first
+	if(do_duplicate_functions_exist(alias_name.string) == TRUE){
 		return FAILURE;
 	}
 
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name.string);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Fail out
+	//Now duplicate vars
+	if(do_duplicate_variables_exist(alias_name.string) == TRUE){
 		return FAILURE;
 	}
 
@@ -5638,16 +5591,8 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//We now need to make sure that it isn't a duplicate
-	symtab_function_record_t* found_function = lookup_function(function_symtab, label_name.string);
-
-	//If we did find it, that's bad
-	if(found_function != NULL){
-		sprintf(info, "Identifier %s has already been declared as a function. First declared here: ", label_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_function_name(found_function);
-		num_errors++;
-		//give back an error node
+	//If this function already exists, we fail out
+	if(do_duplicate_functions_exist(label_name.string) == TRUE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
@@ -8409,31 +8354,13 @@ static u_int8_t alias_statement(FILE* fl){
 		return FAILURE;
 	}
 
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Fail out
+	//First check for duplicate functions
+	if(do_duplicate_functions_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, name.string);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Fail out
+	//Now check for duplicate variables
+	if(do_duplicate_variables_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
@@ -9035,32 +8962,15 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 	//Now we need to check for duplicated names. We'll do this for
 	dynamic_string_t function_name = lookahead.lexeme;
 
-	//Go through all the steps of a fresh definition here
-	//Check for duplicated variables
-	symtab_function_record_t* found_function = lookup_function(function_symtab, function_name.string);
-
-	//Fail out if duplicate is found
-	if(found_function != NULL){
-		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_function_name(found_function);
-		num_errors++;
-		//Create and return an error node
+	//Check for duplicated functions
+	if(do_duplicate_functions_exist(function_name.string) == TRUE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Check for duplicated variables
-	symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name.string);
-
-	//Fail out if duplicate is found
-	if(found_variable != NULL){
-		sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_variable_name(found_variable);
-		num_errors++;
-		//Create and return an error node
+	//Now duplicated variables
+	if(do_duplicate_variables_exist(function_name.string) == TRUE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
+	} 
 
 	//Check for duplicated type names
 	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, function_name.string);
@@ -9314,16 +9224,8 @@ static generic_ast_node_t* function_definition(FILE* fl){
 
 	//If the function record is NULL, that means we're defining completely fresh
 	if(function_record == NULL){
-		//Go through all the steps of a fresh definition here
-		//Check for duplicated variables
-		symtab_variable_record_t* found_variable = lookup_variable(variable_symtab, function_name.string);
-
-		//Fail out if duplicate is found
-		if(found_variable != NULL){
-			sprintf(info, "A variable with name \"%s\" has already been defined. First defined here:", found_variable->var_name.string);
-			print_parse_message(PARSE_ERROR, info, current_line);
-			print_variable_name(found_variable);
-			num_errors++;
+		//Check for duplicate variables here
+		if(do_duplicate_variables_exist(function_name.string) == TRUE){
 			//Create and return an error node
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
