@@ -4563,7 +4563,7 @@ static u_int8_t union_definer(FILE* fl){
 	//TODO WHEN WE CREATE, WE NEED TO CREATE BOTH IMMUT AND MUT VERSIONS
 
 	//Create the union type now that we have enough information
-	generic_type_t* union_type = create_union_type(union_name, parser_line_num);
+	generic_type_t* union_type = create_union_type(union_name, parser_line_num, NOT_MUTABLE);
 
 	//Insert into symtab
 	insert_type(type_symtab, create_type_record(union_type));
@@ -4687,7 +4687,12 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//We can now create the enum type
-	generic_type_t* enum_type = create_enumerated_type(type_name, parser_line_num);
+	//
+	//
+	//TODO NEED MUTABLE VERSIONS TOO
+	//
+	//
+	generic_type_t* enum_type = create_enumerated_type(type_name, parser_line_num, NOT_MUTABLE);
 
 	//Insert into the type symtab
 	insert_type(type_symtab, create_type_record(enum_type));
@@ -5165,7 +5170,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			generic_type_t* dealiased_type = dealias_type(record->type);
 
 			//The true type record
-			symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name.string);
+			symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name.string, NOT_MUTABLE);
 
 			//Once we make it here, we should be all set to get out
 			return true_type;
@@ -5219,7 +5224,13 @@ static generic_type_t* type_specifier(FILE* fl){
 	while(lookahead.tok == STAR){
 		//We keep seeing STARS, so we have a pointer type
 		//Let's create the pointer type. This pointer type will point to the current type
-		generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num);
+		//
+		//
+		//TODO NOT DONE
+		//
+		//
+		//
+		generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, NOT_MUTABLE);
 
 		//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
 		//also not an issue
@@ -5358,7 +5369,7 @@ static generic_type_t* type_specifier(FILE* fl){
 
 		//If we get here though, we know that this one is good
 		//Lets create the array type
-		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds);
+		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds, NOT_MUTABLE);
 
 		//Let's see if we can find this one
 		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type);
@@ -5477,6 +5488,11 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 	if(lookahead.tok != COLON){
 		return print_and_return_error("Colon required after label statement", current_line);
 	}
+	
+	//If this function already exists, we fail out
+	if(do_duplicate_functions_exist(label_name.string) == TRUE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 
 	//We now need to make sure that it isn't a duplicate. We'll use a special search function to do this
 	symtab_variable_record_t* found_variable = lookup_variable_lower_scope(variable_symtab, label_name.string);
@@ -5490,32 +5506,16 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 		//give back an error node
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
-
-	//We now need to make sure that it isn't a duplicate
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, label_name.string);
-
-	//If we did find it, that's bad
-	if(found_type != NULL){
-		sprintf(info, "Identifier %s has already been declared as a type. First declared here: ", label_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		print_type_name(found_type);
-		num_errors++;
-		//give back an error node
+	
+	//Check for duplicated types
+	if(do_duplicate_types_exist(label_name.string)){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
-
-	//If this function already exists, we fail out
-	if(do_duplicate_functions_exist(label_name.string) == TRUE){
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//This is a u64(address)
-	symtab_type_record_t* label_type = lookup_type_name_only(type_symtab, "u64");
 
 	//Now that we know we didn't find it, we'll create it
 	symtab_variable_record_t* label = create_variable_record(label_name);
 	//Store the type
-	label->type_defined_as = label_type->type;
+	label->type_defined_as = immut_u64;
 	//Store the fact that it is a label
 	label->membership = LABEL_VARIABLE;
 	//Store the line number
@@ -5528,7 +5528,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 
 	//We'll also associate this variable with the node
 	label_stmt->variable = label;
-	label_stmt->inferred_type = label_type->type;
+	label_stmt->inferred_type = immut_u64;
 
 	//Now we can get out
 	return label_stmt;
@@ -7666,8 +7666,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//now create the variable record for this function
 	//Initialize the record
 	symtab_variable_record_t* declared_var = create_variable_record(name);
-	//Store its constant status
-	declared_var->is_mutable = is_mutable;
 	//Store the type--make sure that we strip any aliasing off of it first
 	declared_var->type_defined_as = dealias_type(type_spec);
 	//It was declared
@@ -8039,32 +8037,14 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//Let's get a pointer to the name for convenience
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
-	//the same scope may not share names. This is also true regarding functions and types globally
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
+	//Check for function duplicates
+	if(do_duplicate_functions_exist(name.string) == TRUE){
 		//Return a fresh error node
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
-
-	//Fail out here
-	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
+	//Check for duplicate types
+	if(do_duplicate_types_exist(name.string) == TRUE){
 		//Return a fresh error node
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
@@ -8138,7 +8118,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(initializer_node->inferred_type->type_class == TYPE_CLASS_POINTER){
-		if(initializer_node->variable != NULL && initializer_node->variable->is_mutable == FALSE && is_mutable == TRUE){
+		if(initializer_node->variable != NULL && initializer_node->variable->type_defined_as->mutability == NOT_MUTABLE && is_mutable == TRUE){
 			return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
 		}
 	}
@@ -8161,12 +8141,8 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//now create the variable record for this function
 	//Initialize the record
 	symtab_variable_record_t* declared_var = create_variable_record(name);
-	//Store it's mutability status
-	declared_var->is_mutable = is_mutable;
 	//Store the type
 	declared_var->type_defined_as = type_spec;
-	//Is it mutable
-	declared_var->is_mutable = is_mutable;
 	//It was initialized
 	declared_var->initialized = TRUE;
 	//Mark where it was declared
@@ -8277,17 +8253,8 @@ static u_int8_t alias_statement(FILE* fl){
 		return FAILURE;
 	}
 
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
-
-	//Fail out here
-	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Fail out
+	//Check for duplicate types
+	if(do_duplicate_types_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
