@@ -87,7 +87,7 @@ static char* current_file_name = NULL;
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side);
 //What type are we given?
-static generic_type_t* type_specifier(FILE* fl, mutability_type_t mutability);
+static generic_type_t* type_specifier(FILE* fl);
 static u_int8_t alias_statement(FILE* fl);
 static generic_ast_node_t* assignment_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side);
@@ -4016,7 +4016,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
  * A function pointer definer defines a function signature that can be used to dynamically call functions 
  * of the same signature
  *
- * define fn(<parameter_list>) -> <type> as <identifier>;
+ * define fn(<parameter_list>) -> {mut}? <type> as <identifier>;
  *
  * Unlike constructs & enums, we'll force the user to use an as keyword here for their type definition to
  * enforce readability
@@ -5012,20 +5012,7 @@ static u_int8_t enum_definer(FILE* fl){
  * 						   | struct <identifier>
  * 						   | <identifier>
  */
-
-//
-//
-//
-//
-//
-//TODO THIS NEEDS MUTABILITY CHECKING
-//
-//
-//
-//
-//
-//
-static symtab_type_record_t* type_name(FILE* fl){
+static symtab_type_record_t* type_name(FILE* fl, mutability_type_t mutability){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Hold the record we get
@@ -5055,7 +5042,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		case CHAR:
 		case BOOL:
 			//We will now grab this record from the symtable to make our life easier
-			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
+			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string, mutability);
 
 			//Sanity check, if this is null something is very wrong
 			if(record == NULL){
@@ -5086,7 +5073,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name.string, NOT_MUTABLE);
+			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
@@ -5120,7 +5107,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name.string, NOT_MUTABLE);
+			record = lookup_type_name_only(type_symtab, type_name.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
@@ -5154,7 +5141,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name.string, NOT_MUTABLE);
+			record = lookup_type_name_only(type_symtab, type_name.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
@@ -5171,7 +5158,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 		//This is an identifier
 		case IDENT:
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
+			record = lookup_type_name_only(type_symtab, lookahead.lexeme.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
@@ -5186,7 +5173,7 @@ static symtab_type_record_t* type_name(FILE* fl){
 			generic_type_t* dealiased_type = dealias_type(record->type);
 
 			//The true type record
-			symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name.string, NOT_MUTABLE);
+			symtab_type_record_t* true_type = lookup_type_name_only(type_symtab, dealiased_type->type_name.string, mutability);
 
 			//Once we make it here, we should be all set to get out
 			return true_type;
@@ -5212,16 +5199,23 @@ static symtab_type_record_t* type_name(FILE* fl){
  *
  * We do not need to return any nodes here, just the type we get out
  *
- * BNF Rule: <type-specifier> ::= <type-name>{<type-address-specifier>}*
+ * The type specifier also contains all of the mutability information needed for a type
+ *
+ * BNF Rule: <type-specifier> ::= {mut}? <type-name>{<type-address-specifier>}*
  */
-static generic_type_t* type_specifier(FILE* fl, mutability_type_t mutability){
+static generic_type_t* type_specifier(FILE* fl){
+	//We always assume immutability
+	mutability_type_t mutability = NOT_MUTABLE;
+
 	//Lookahead var
-	lexitem_t lookahead;
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//If we see the mut keyword, flag that we're mutable
 
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
 	//return a record of the node that the type name has. If the type name function could not
 	//find the name, then it will send back an error that we can handle here
-	symtab_type_record_t* type = type_name(fl);
+	symtab_type_record_t* type = type_name(fl, mutability);
 
 	//We'll just fail here, no need for any error printing
 	if(type == NULL){
@@ -5240,13 +5234,7 @@ static generic_type_t* type_specifier(FILE* fl, mutability_type_t mutability){
 	while(lookahead.tok == STAR){
 		//We keep seeing STARS, so we have a pointer type
 		//Let's create the pointer type. This pointer type will point to the current type
-		//
-		//
-		//TODO NOT DONE
-		//
-		//
-		//
-		generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, NOT_MUTABLE);
+		generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
 
 		//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
 		//also not an issue
@@ -5385,7 +5373,7 @@ static generic_type_t* type_specifier(FILE* fl, mutability_type_t mutability){
 
 		//If we get here though, we know that this one is good
 		//Lets create the array type
-		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds, NOT_MUTABLE);
+		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds, mutability);
 
 		//Let's see if we can find this one
 		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type);
@@ -9000,7 +8988,7 @@ after_rparen:
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= {pub}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= {pub}? fn <identifer> {<parameter-list> -> {mut}? <type-specifier> <compound-statement>
  */
 static generic_ast_node_t* function_definition(FILE* fl){
 	//Freeze the line number
