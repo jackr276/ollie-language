@@ -4,13 +4,13 @@
 */
 
 
-fn mutate_int(mut x:i32*) -> void {
+fn mutate_int(x:mut i32*) -> void {
 	*x = 2;
 }
 
 
 pub fn main() -> i32 {
-	declare mut x_arr:i32[125];
+	declare x_arr:mut i32[125];
 
 	@mutate_int(&(x_arr[3]));
 
