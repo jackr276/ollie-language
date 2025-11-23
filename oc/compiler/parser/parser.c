@@ -151,6 +151,41 @@ static u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
 
 
 /**
+ * Determine whether or not a duplicate variable exists with the given
+ * name
+ */
+static symtab_variable_record_t* get_variable_by_name(char* name){
+	//Look it up
+	symtab_variable_record_t* found = lookup_variable(variable_symtab, name);
+
+	//Give back the variable record
+	return found;
+}
+
+
+/**
+ * Check if a duplicate type record exists
+ *
+ * We will check for both mutable & immutable types
+ */
+static symtab_type_record_t* get_all_types_by_name(char* name){
+	//Look it up
+	symtab_type_record_t* found = lookup_type_name_only(type_symtab, name, NOT_MUTABLE);
+
+	//If the immutable one was found, we can leave out
+	if(found != NULL){
+		return found;
+	}
+
+	//Otherwise let's check the mutable one as well
+	found = lookup_type_name_only(type_symtab, name, NOT_MUTABLE);
+
+	//Return whatever we got
+	return found;
+}
+
+
+/**
  * Determine whether or not something is an assignment operator
  */
 static u_int8_t is_assignment_operator(ollie_token_t op){
