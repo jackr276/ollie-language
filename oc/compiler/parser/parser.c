@@ -4621,23 +4621,9 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 	//Rewind our position
 	reconsume_tokens(fl, type_start);
 
-	//Now we do the exact same consumption for the immutable version
+	//Now we do the exact same consumption for the immutable version. We don't need
+	//to do any of the checking, as it's the exact same type
 	generic_type_t* immutable_type = union_type_specifier(fl, NOT_MUTABLE);
-
-	//If this is NULL we've failed
-	if(mutable_type == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type given to union type", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
-	//the user from adding a field the mut a:char[] that is unknown at compile time
-	if(mutable_type->type_complete == FALSE){
-		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", mutable_type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		return FAILURE;
-	}
 
 	//Now that we have the type as well, we can finally see the semicolon to close it off
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4649,12 +4635,24 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 		return FAILURE;
 	}
 
-	//Finally we can create our member
-	symtab_variable_record_t* union_member = create_variable_record(name);
+	//TODO DELETEME
+	printf("MUTABLE VERSION: %s\n", mutable_type->type_name.string);
+	printf("IMMUTABLE VERSION: %s\n", immutable_type->type_name.string);
+
+	//Finally we can create our members
+	//First goes the mutable one
+	symtab_variable_record_t* mutable_union_member = create_variable_record(name);
 	//Give it its type
-	union_member->type_defined_as = type;
+	mutable_union_member->type_defined_as = mutable_type;
 	//And we'll let the helper add it into the union type
-	add_union_member(union_type, union_member);
+	add_union_member(mutable_union_type, mutable_union_member);
+
+	//Now the immutable version
+	symtab_variable_record_t* immutable_union_member = create_variable_record(clone_dynamic_string(&name));
+	//Give it its type
+	immutable_union_member->type_defined_as = immutable_type;
+	//And we'll let the helper add it into the union type
+	add_union_member(immutable_union_type, immutable_union_member);
 
 	//If we make it here then we succeeded
 	return SUCCESS;
