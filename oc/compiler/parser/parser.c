@@ -1297,10 +1297,12 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//
 		//
 		//
+		//
+		//THIS SHOULD GO IN TYPES_ASSIGNABLE - done just for compilation
 
 		//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 		if(expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-			if(expr->variable->is_mutable == FALSE && left_hand_unary->variable->is_mutable == TRUE){
+			if(expr->variable->type_defined_as->mutability == NOT_MUTABLE && left_hand_unary->variable->type_defined_as->mutability == MUTABLE){
 				return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
 			}
 		}
@@ -4149,9 +4151,8 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//Fail case
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Valid identifier required after construct keyword", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Valid identifier required after struct keyword", parser_line_num);
 		num_errors++;
-		//Destroy the node
 		//Fail out
 		return FAILURE;
 	}
@@ -4163,7 +4164,21 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//Now we will reference against the symtab to see if this type name has ever been used before. We only need
 	//to check against the type symtab because that is the only place where anything else could start with "enumerated"
-	symtab_type_record_t* found = lookup_type_name_only(type_symtab, type_name.string);
+	symtab_type_record_t* found = lookup_type_name_only(type_symtab, type_name.string, NOT_MUTABLE);
+
+	//This means that we are attempting to redefine a type
+	if(found != NULL){
+		sprintf(info, "Type with name \"%s\" was already defined. First defined here:", type_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the type
+		print_type_name(found);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Check against it with all mutable types too
+	found = lookup_type_name_only(type_symtab, type_name.string, MUTABLE);
 
 	//This means that we are attempting to redefine a type
 	if(found != NULL){
@@ -4177,7 +4192,8 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
-	generic_type_t* struct_type = create_struct_type(type_name, current_line);
+	//Create it with a default of not mutable for a struct
+	generic_type_t* struct_type = create_struct_type(type_name, current_line, NOT_MUTABLE);
 	
 	//Now we'll insert the struct type into the symtab
 	insert_type(type_symtab, create_type_record(struct_type));
@@ -4270,7 +4286,21 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, alias_name.string);
+	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, alias_name.string, NOT_MUTABLE);
+
+	//Fail out here
+	if(found_type!= NULL){
+		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_type_name(found_type);
+		num_errors++;
+		//Fail out
+		return FAILURE;
+	}
+
+	//Finally check that it isn't a duplicated type name
+	found_type = lookup_type_name_only(type_symtab, alias_name.string, MUTABLE);
 
 	//Fail out here
 	if(found_type!= NULL){
