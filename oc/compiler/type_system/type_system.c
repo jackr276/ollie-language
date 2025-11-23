@@ -1642,6 +1642,37 @@ generic_type_t* create_mutable_version_of_type(generic_type_t* type){
 			}
 
 			break;
+
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			//Create a new version
+			cloned->internal_types.function_type = calloc(1, sizeof(function_type_t));
+
+			//Copy it over
+			memcpy(cloned->internal_types.function_type, type->internal_types.function_type, sizeof(function_type_t)); 
+			
+			break;
+
+		case TYPE_CLASS_ENUMERATED:
+			//Create a new struct table
+			cloned->internal_types.enumeration_table = dynamic_array_alloc();
+
+			//Clone it over bit by bit
+			for(u_int16_t i = 0; i < type->internal_types.enumeration_table->current_index; i++){
+				dynamic_array_add(cloned->internal_types.enumeration_table, dynamic_array_get_at(type->internal_types.enumeration_table, i));
+			}
+
+			break;
+
+		case TYPE_CLASS_UNION:
+			//Create a new struct table
+			cloned->internal_types.union_table = dynamic_array_alloc();
+
+			//Clone it over bit by bit
+			for(u_int16_t i = 0; i < type->internal_types.union_table->current_index; i++){
+				dynamic_array_add(cloned->internal_types.union_table, dynamic_array_get_at(type->internal_types.union_table, i));
+			}
+
+			break;
 			
 		//In all other cases do nothing
 		default:

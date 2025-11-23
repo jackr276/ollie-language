@@ -4168,7 +4168,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//
 	//TODO NOT DONE
 	//
-	generic_type_t* alias_type = create_aliased_type(identifier_name, function_type, parser_line_num, NOT_MUTABLE);
+	generic_type_t* alias_type = create_aliased_type(identifier_name.string, function_type, parser_line_num, NOT_MUTABLE);
 
 	//Once we've created this, we'll add this into the symtab
 	insert_type(type_symtab, create_type_record(alias_type));
@@ -4312,13 +4312,13 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Now we'll make the actual record for the aliased type that is immutable
-	generic_type_t* immutable_aliased_type = create_aliased_type(alias_name, immutable_struct_type, parser_line_num, NOT_MUTABLE);
+	generic_type_t* immutable_aliased_type = create_aliased_type(alias_name.string, immutable_struct_type, parser_line_num, NOT_MUTABLE);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(immutable_aliased_type));
 
 	//Now that we've made the immutable alias, we must also make the mutable alias
-	generic_type_t* mutable_aliased_type = create_aliased_type(alias_name, mutable_struct_type, parser_line_num, MUTABLE);
+	generic_type_t* mutable_aliased_type = create_aliased_type(alias_name.string, mutable_struct_type, parser_line_num, MUTABLE);
 
 	//Add this into the symtab too
 	insert_type(type_symtab, create_type_record(mutable_aliased_type));
@@ -4593,7 +4593,7 @@ static u_int8_t union_definer(FILE* fl){
 	//
 	//TODO NOT DONE
 	//
-	generic_type_t* alias_type = create_aliased_type(alias_name, union_type, parser_line_num, NOT_MUTABLE);
+	generic_type_t* alias_type = create_aliased_type(alias_name.string, union_type, parser_line_num, NOT_MUTABLE);
 
 	//Add it into the type symtab
 	insert_type(type_symtab, create_type_record(alias_type));
@@ -4916,7 +4916,7 @@ static u_int8_t enum_definer(FILE* fl){
 	//Now we'll make the actual record for the aliased type
 	//
 	//TODO NOT DONE
-	generic_type_t* aliased_type = create_aliased_type(alias_name, enum_type, parser_line_num, NOT_MUTABLE);
+	generic_type_t* aliased_type = create_aliased_type(alias_name.string, enum_type, parser_line_num, NOT_MUTABLE);
 
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
@@ -8189,7 +8189,7 @@ static u_int8_t alias_statement(FILE* fl){
 
 	//If we get here, we know that it actually worked, so we can create the alias
 	//The alias type's mutability is that of the type specifier's mutability
-	generic_type_t* aliased_type = create_aliased_type(name, type_spec, parser_line_num, type_spec->mutability);
+	generic_type_t* aliased_type = create_aliased_type(name.string, type_spec, parser_line_num, type_spec->mutability);
 
 	//Let's now create the aliased record
 	symtab_type_record_t* aliased_record = create_type_record(aliased_type);
