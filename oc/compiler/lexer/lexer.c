@@ -134,6 +134,20 @@ static void put_back_char(FILE* fl){
 
 
 /**
+ * Reconsume the tokens starting from a given seek
+ */
+void reconsume_tokens(FILE* fl, int32_t reconsume_start){
+	//Rewinding backwards
+	int32_t rewind_amount = -1 * (SEEK_CUR - reconsume_start);
+
+	printf("Rewind amount is %d\n", rewind_amount);
+	
+	//Seek backwards by how much we need to go
+	fseek(fl, rewind_amount, SEEK_CUR);
+}
+
+
+/**
  * A special case here where we get the next assembly inline statement. Assembly
  * inline statements are officially terminated by a backslash "\", so we 
  * will simply run through what we have here until we get to that backslash. We'll

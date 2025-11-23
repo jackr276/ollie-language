@@ -2,7 +2,9 @@
  * Generic testing suite for the lexer exclusively
 */
 
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 //Link to the lexer
 #include "../lexer/lexer.h"
@@ -29,12 +31,38 @@ int main(int argc, char** argv){
 			return 1;
 		}
 
+		//Grab the first one
+		l = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Print it
+		print_token(&l);
+
+		//The current seek head
+		int32_t first_token_seek = SEEK_CUR;
+
 		//Very rudimentary here
 		while((l = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT)).tok != DONE){
 			print_token(&l);
 		}
 		//Print the last one
 		print_token(&l);
+
+		//Let's see if we can now "Reconsume" the tokens starting at a given position
+		printf("=============== RECONSUMING FROM %d ====================\n", first_token_seek);
+
+		//Invoke the reconsumer
+		reconsume_tokens(fl, first_token_seek);
+
+		//Very rudimentary here
+		while((l = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT)).tok != DONE){
+			print_token(&l);
+		}
+		//Print the last one
+		print_token(&l);
+
+		//Let's see if we can now "Reconsume" the tokens starting at a given position
+		printf("=============== DONE ====================\n");
+
 		//Close the file when done
 		fclose(fl);
 	}

@@ -4333,13 +4333,18 @@ static u_int8_t struct_definer(FILE* fl){
  * The union type specifier is a distinct version of the type specifier
  * rule that is designed just for union members. It is designed this way
  * because union members *may not be declared as mutable*. Their mutability
- * is added later on
+ * is added later on. The mutability is given to this rule
+ *
+ * BNF Rule: <union-type-specifier> ::= <type-name>{<type-address-specifier>}*
  */
-static generic_type_t* union_type_specifier(FILE* fl){
+static generic_type_t* union_type_specifier(FILE* fl, mutability_type_t mutability){
+	//Lookahead token
+	lexitem_t lookahead;
+
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
 	//return a record of the node that the type name has. If the type name function could not
 	//find the name, then it will send back an error that we can handle here
-	symtab_type_record_t* type = type_name(fl, NOT_MUTABLE);
+	symtab_type_record_t* type = type_name(fl, mutability);
 
 	//We'll just fail here, no need for any error printing
 	if(type == NULL){
@@ -4580,6 +4585,9 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 		num_errors++;
 		return FAILURE;
 	}
+
+	//TODO NEED MUT/IMMUT TYPES
+
 
 	//Now we need to see a valid type-specifier
 	generic_type_t* type = union_type_specifier(fl);
