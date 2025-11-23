@@ -249,8 +249,11 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 
 /**
  * Dynamically allocate and create a struct type
+ *
+ * Note: This only generates the immutable version of the struct. The mutable version
+ * comes afterwards
  */
-generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number);
 
 /**
  * Dynamically allocate and create a union type
@@ -316,7 +319,7 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 /**
  * Dynamically allocate and create an aliased type
  */
-generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number);
+generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create a function pointer type

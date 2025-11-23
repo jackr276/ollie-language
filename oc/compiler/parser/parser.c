@@ -4219,14 +4219,14 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
-	//Create it with a default of not mutable for a struct
-	generic_type_t* struct_type = create_struct_type(type_name, current_line, NOT_MUTABLE);
+	//We start with the immutable type
+	generic_type_t* immutable_struct_type = create_struct_type(type_name, current_line);
 	
 	//Now we'll insert the struct type into the symtab
-	insert_type(type_symtab, create_type_record(struct_type));
+	insert_type(type_symtab, create_type_record(immutable_struct_type));
 
 	//We are now required to see a valid construct member list
-	u_int8_t success = struct_member_list(fl, struct_type);
+	u_int8_t success = struct_member_list(fl, immutable_struct_type);
 
 	//Automatic fail case here
 	if(success == FAILURE){
@@ -4236,7 +4236,7 @@ static u_int8_t struct_definer(FILE* fl){
 	}
 
 	//Once we get here, the struct type's size is known and as such it is complete
-	struct_type->type_complete = TRUE;
+	immutable_struct_type->type_complete = TRUE;
 	
 	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
 	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
@@ -4284,56 +4284,32 @@ static u_int8_t struct_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Check for duplicated functions
-	u_int8_t duplicate_functions = do_duplicate_functions_exist(alias_name.string);
-
 	//Fail out if they exist
-	if(duplicate_functions == TRUE){
+	if(do_duplicate_variables_exist(alias_name.string) == TRUE){
 		return FAILURE;
 	}
-
-	//Do the duplicate check for variables
-	u_int8_t duplicate_variables = do_duplicate_variables_exist(alias_name.string);
 
 	//If we find duplicates then leave
-	if(duplicate_variables == TRUE){
+	if(do_duplicate_variables_exist(alias_name.string) == TRUE){
 		return FAILURE;
 	}
 
-
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, alias_name.string, NOT_MUTABLE);
-
-	//Fail out here
-	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Fail out
+	//Use the helper to look for duplicates
+	if(do_duplicate_types_exist(alias_name.string) == TRUE){
 		return FAILURE;
 	}
 
-	//Finally check that it isn't a duplicated type name
-	found_type = lookup_type_name_only(type_symtab, alias_name.string, MUTABLE);
-
-	//Fail out here
-	if(found_type!= NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
-		//Fail out
-		return FAILURE;
-	}
-
-	//Now we'll make the actual record for the aliased type
-	generic_type_t* aliased_type = create_aliased_type(alias_name, struct_type, parser_line_num);
+	//Now we'll make the actual record for the aliased type that is immutable
+	generic_type_t* immutable_aliased_type = create_aliased_type(alias_name, immutable_struct_type, parser_line_num, NOT_MUTABLE);
 
 	//Once we've made the aliased type, we can record it in the symbol table
-	insert_type(type_symtab, create_type_record(aliased_type));
+	insert_type(type_symtab, create_type_record(immutable_aliased_type));
+
+	/**
+	 * Now that we've created the immutable version of the struct, we need to also create the mutable version
+	 */
+	generic_type_t* mutable_struct_type = create_mutable_version_of_type(immutable_struct_type);
+
 
 	//Succeeded so
 	return SUCCESS;
@@ -4619,6 +4595,10 @@ static u_int8_t union_definer(FILE* fl){
  * Important note: By the time we get here, we will have already consume the "define" and "enum" tokens
  *
  * BNF Rule: <enum-definer> ::= define enum <identifier> { <identifier> {= <constant>}? {, <identifier>{ = <constant>}?}* } {as <identifier>}?;
+ *
+ * Another important note - complex types like an enum have the ability to be used as mutable(mut) or immutable. To support this internally,
+ * there will be two distinct versions of any given enum, the immutable(the first one that we create), and the mutable one(this will be made)
+ * after the fact
  */
 static u_int8_t enum_definer(FILE* fl){
 	//Lookahead token
@@ -4652,11 +4632,6 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//We can now create the enum type
-	//
-	//
-	//TODO NEED MUTABLE VERSIONS TOO
-	//
-	//
 	generic_type_t* enum_type = create_enumerated_type(type_name, parser_line_num, NOT_MUTABLE);
 
 	//Insert into the type symtab
@@ -4845,6 +4820,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//Now, based on our largest value, we need to determine the bit-width needed for this
 	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
+	//This will *always* be the immutable version of the type
 	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value);
 
 	//Store this in the enum
@@ -4928,6 +4904,13 @@ static u_int8_t enum_definer(FILE* fl){
 	//Once we've made the aliased type, we can record it in the symbol table
 	insert_type(type_symtab, create_type_record(aliased_type));
 
+	/**
+	 * Now that we've made the immutable version, we need to duplicate the immutable
+	 * version so that we can use it as such
+	 */
+	//TODO MAKE IMMUTABLE VERSION
+
+	//This is a successful creation
 	return SUCCESS;
 }
 

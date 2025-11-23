@@ -1563,14 +1563,15 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 /**
  * Dynamically allocate and create a constructed type
  */
-generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
 	type->type_class = TYPE_CLASS_STRUCT;
 	
-	//Is this a mutable type or not?
-	type->mutability = mutability;
+	//This is the first struct type that we're making, and we make the NOT_MUTABLE
+	//one first
+	type->mutability = NOT_MUTABLE;
 
 	//Where is the declaration?
 	type->line_number = line_number;
@@ -1580,6 +1581,7 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 	//Reserve dynamic array space for the struct table
 	type->internal_types.struct_table = dynamic_array_alloc();
 
+	//Give back the pointer
 	return type;
 }
 
@@ -1856,7 +1858,7 @@ void print_full_type_name(generic_type_t* type, char* name){
 /**
  * Dynamically allocate and create an aliased type
  */
-generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number){
+generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number, mutability_type_t mutability){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
@@ -1867,6 +1869,9 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 
 	//Copy the name
 	type->type_name = type_name;
+
+	//Assign the mutability
+	type->mutability = mutability;
 
 	//Store this reference in here
 	type->internal_types.aliased_type = aliased_type;
