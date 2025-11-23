@@ -558,19 +558,10 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 	//Grab the head record
 	symtab_type_record_t* cursor = symtab->current->records[record->hash];
 
-
-		printf("COLLIDES WITH %s\n", cursor->type->type_name.string);
 	//Get to the very last node
 	while(cursor->next != NULL){
-
-
-		printf("COLLIDES WITH %s\n", cursor->type->type_name.string);
 		cursor = cursor->next;
 	}
-
-	printf("COLLISION FOR TYPE %s\n", record->type->type_name.string);
-
-	printf("Hash is %d\n", record->hash);
 
 	//Now that cursor points to the very last node, we can add it in
 	cursor->next = record;
