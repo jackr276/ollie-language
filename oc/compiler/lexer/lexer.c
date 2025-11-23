@@ -136,9 +136,9 @@ static void put_back_char(FILE* fl){
 /**
  * Reconsume the tokens starting from a given seek
  */
-void reconsume_tokens(FILE* fl, int32_t reconsume_start){
+void reconsume_tokens(FILE* fl, int64_t reconsume_start){
 	//Seek back to where the user wanted to reconsume from
-	fseek(fl, 0, reconsume_start);
+	fseek(fl, reconsume_start, SEEK_SET);
 }
 
 

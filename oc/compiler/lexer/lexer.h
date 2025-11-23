@@ -43,7 +43,7 @@ void reset_file(FILE* fl);
 /**
  * Reconsume the tokens starting from a given seek
  */
-void reconsume_tokens(FILE* fl, int32_t reconsume_start);
+void reconsume_tokens(FILE* fl, int64_t reconsume_start);
 
 /**
  * Special case -- hunting for assembly statements
