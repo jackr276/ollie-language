@@ -87,7 +87,7 @@ static char* current_file_name = NULL;
 //Function prototypes are predeclared here as needed to avoid excessive restructuring of program
 static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side);
 //What type are we given?
-static generic_type_t* type_specifier(FILE* fl);
+static generic_type_t* type_specifier(FILE* fl, mutability_type_t mutability);
 static u_int8_t alias_statement(FILE* fl);
 static generic_ast_node_t* assignment_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side);
@@ -1023,7 +1023,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	//Now we need to see a valid type-specifier. It is important to note that the type
 	//specifier requires that a type has actually been defined. If it wasn't defined,
 	//then this will return an error node
-	generic_type_t* type_spec = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(fl, NOT_MUTABLE);
 
 	//If it's an error
 	if(type_spec == NULL){
@@ -2408,11 +2408,13 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
  * A cast expression decays into a unary expression
  *
  * BNF Rule: <cast-expression> ::= <unary-expression> 
- * 						    	| < <type-specifier> > <unary-expression>
+ * 						    	| < {mut}? <type-specifier> > <unary-expression>
  */
 static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
+	//Is this mutable or not
+	mutability_type_t mutability;
 
 	//If we first see an angle bracket, we know that we are truly doing
 	//a cast. If we do not, then this expression is just a pass through for
@@ -2430,8 +2432,19 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//Push onto the stack for matching
 	push_token(grouping_stack, lookahead);
 
+	//Grab the next token
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//Let's see if we have the mut keyword or not
+	if(lookahead.tok == MUT){
+		mutability = MUTABLE;
+	} else {
+		mutability = NOT_MUTABLE;
+		push_back_token(lookahead);
+	}
+
 	//Grab the type specifier
-	generic_type_t* type_spec = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(fl, mutability);
 
 	//If it's an error, we'll print and propagate it up
 	if(type_spec == NULL){
@@ -2465,6 +2478,14 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	generic_type_t* casting_to_type = dealias_type(type_spec);
 	//What is being casted
 	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
+
+	//
+	//
+	//
+	//TODO MUTABILITY CHECKING
+	//
+	//
+	//
 
 	//You can never cast a "void" to anything
 	if(is_void_type(being_casted_type) == TRUE){
@@ -3813,17 +3834,20 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//The lookahead token
 	lexitem_t lookahead;
-	//Is this mutable? False by default
-	u_int8_t is_mutable = FALSE;
+	//The type mutability
+	mutability_type_t mutability;
 
 	//Get the first token
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 	//We could first see the mutable keyword, indicating that this field can be changed
 	if(lookahead.tok == MUT){
-		is_mutable = TRUE;
+		mutability = MUTABLE;
 		//Refresh the lookahead
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	} else {
+		//Not mutable
+		mutability = NOT_MUTABLE;
 	}
 
 	//Let's make sure it actually worked
@@ -3871,7 +3895,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	}
 
 	//Now we are required to see a valid type specifier
-	generic_type_t* type_spec = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(fl, mutability);
 
 	//If this is an error, the whole thing fails
 	if(type_spec == NULL){
@@ -4013,13 +4037,6 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 	//Once we've gotten past this point, we're safe to allocate this type. Function
 	//pointers are always private
-	//
-	//
-	//TODO INVESTIGATE - this may or may not be mutable
-	//
-	//
-	//
-	//
 	generic_type_t* function_type = create_function_pointer_type(FALSE, parser_line_num, NOT_MUTABLE);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
@@ -4043,27 +4060,26 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Is the parameter mutable
-	u_int8_t is_mutable;
+	mutability_type_t mutability;
 
 	//Keep processing so long as we keep seeing commas
 	do{
-		//Assume by default it's not mutable
-		is_mutable = FALSE;
-
 		//Each function pointer parameter will consist only of a type and optionally
 		//a mutable keyword
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
 		//Is it mutable? If this token exists then it is
 		if(lookahead.tok == MUT){
-			is_mutable = TRUE;
+			 mutability = MUTABLE;
 		} else {
 			//Otherwise put this back
 			push_back_token(lookahead);
+			//Not mutable
+			mutability = NOT_MUTABLE;
 		}
 
 		//Now we need to see a valid type
-		generic_type_t* type = type_specifier(fl);
+		generic_type_t* type = type_specifier(fl, mutability);
 
 		//If this is NULL, we'll error out
 		if(type == NULL){
@@ -5198,7 +5214,7 @@ static symtab_type_record_t* type_name(FILE* fl){
  *
  * BNF Rule: <type-specifier> ::= <type-name>{<type-address-specifier>}*
  */
-static generic_type_t* type_specifier(FILE* fl){
+static generic_type_t* type_specifier(FILE* fl, mutability_type_t mutability){
 	//Lookahead var
 	lexitem_t lookahead;
 
