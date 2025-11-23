@@ -218,6 +218,10 @@ static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
 	if(mutability == MUTABLE){
 		//Update the key
 		key = (key * a) ^ ((*type_name) * b);
+		//Make it so that we have the '`' character, one
+		//that is not recognized at all be the lexer. This will
+		//ensure that we can never get a false positive
+		key = (key * a) ^ ('`' * b);
 	}
 
 	//Cut it down to our keyspace
@@ -274,6 +278,10 @@ static u_int16_t hash_type(generic_type_t* type){
 
 		//Update the key
 		key = (key * a) ^ (first_character * b);
+		//Make it so that we have the '`' character, one
+		//that is not recognized at all be the lexer. This will
+		//ensure that we can never get a false positive
+		key = (key * a) ^ ('`' * b);
 	}
 
 	//Cut it down to our keyspace
