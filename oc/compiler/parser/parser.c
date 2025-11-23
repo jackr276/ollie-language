@@ -87,6 +87,7 @@ static char* current_file_name = NULL;
 static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side);
 //What type are we given?
 static generic_type_t* type_specifier(FILE* fl);
+static symtab_type_record_t* type_name(FILE* fl, mutability_type_t mutability);
 static u_int8_t alias_statement(FILE* fl);
 static generic_ast_node_t* assignment_expression(FILE* fl);
 static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side);
@@ -4329,6 +4330,203 @@ static u_int8_t struct_definer(FILE* fl){
 
 
 /**
+ * The union type specifier is a distinct version of the type specifier
+ * rule that is designed just for union members. It is designed this way
+ * because union members *may not be declared as mutable*. Their mutability
+ * is added later on
+ */
+static generic_type_t* union_type_specifier(FILE* fl){
+	//Now we'll hand off the rule to the <type-name> function. The type name function will
+	//return a record of the node that the type name has. If the type name function could not
+	//find the name, then it will send back an error that we can handle here
+	symtab_type_record_t* type = type_name(fl, NOT_MUTABLE);
+
+	//We'll just fail here, no need for any error printing
+	if(type == NULL){
+		//It's already in error so just NULL out
+		return NULL;
+	}
+
+	//Now once we make it here, we know that we have a name that actually exists in the symtab
+	//The current type record is what we will eventually point our node to
+	symtab_type_record_t* current_type_record = type;
+	
+	//Let's see where we go from here
+	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+	//As long as we are seeing pointer specifiers
+	while(lookahead.tok == STAR){
+		//We keep seeing STARS, so we have a pointer type
+		//Let's create the pointer type. This pointer type will point to the current type
+		generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
+
+		//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
+		//also not an issue
+		symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer);
+
+		//If we did not find it, we will add it into the symbol table
+		if(found_pointer == NULL){
+			//Create the type record
+			symtab_type_record_t* created_pointer = create_type_record(pointer);
+			//Insert it into the symbol table
+			insert_type(type_symtab, created_pointer);
+			//We'll also set the current type record to be this
+			current_type_record = created_pointer;
+		} else {
+			//Otherwise, just set the current type record to be what we found
+			current_type_record = found_pointer;
+			//We don't need the other ponter if this is the case
+			type_dealloc(pointer);
+		}
+
+		//Refresh the search, keep hunting
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//If we don't see an array here, we can just leave now
+	if(lookahead.tok != L_BRACKET){
+		//Put it back
+		push_back_token(lookahead);
+		//We're done here
+		return current_type_record->type;
+	}
+
+	//Otherwise, we know we're in for the array
+	//We'll use a lightstack for the bounds reversal
+	lightstack_t lightstack = lightstack_initialize();
+
+	//As long as we are seeing L_BRACKETS
+	while(lookahead.tok == L_BRACKET){
+		//Scan ahead to see
+		lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+		//We could just see an empty one here. This tells us that we have 
+		//an empty array initializer. If we do see this, we can break out here
+		if(lookahead.tok == R_BRACKET){
+			//Scan ahead to see
+			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+
+			//This is a special case where we are able to have an unitialized array for the time
+			//being. This only works if we have an array initializer afterwards
+			
+			//We're all set, push this onto the lightstack
+			lightstack_push(&lightstack, 0);
+
+			//Onto the next iteration
+			continue;
+		}
+
+		//Otherwise we need to put this token back
+		push_back_token(lookahead);
+
+		//The next thing that we absolutely must see is a constant. If we don't, we're
+		//done here
+		generic_ast_node_t* const_node = constant(fl, SEARCHING_FOR_CONSTANT, SIDE_TYPE_LEFT);
+
+		//If it failed, then we're done here
+		if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			print_parse_message(PARSE_ERROR, "Invalid constant given in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//One last thing before we do expensive validation - what if there's no closing bracket? If there's not, this
+		//is an easy fail case 
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+
+		//Fail case here 
+		if(lookahead.tok != R_BRACKET){
+			print_parse_message(PARSE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Determine if we have an illegal constant given as the array bounds
+		switch(const_node->constant_type){
+			case FLOAT_CONST:
+			case STR_CONST:
+				print_parse_message(PARSE_ERROR, "Illegal constant given as array bounds", parser_line_num);
+				num_errors++;
+				return NULL;
+			default:
+				break;
+		}
+
+		//The constant value
+		int64_t constant_numeric_value = const_node->constant_value.unsigned_long_value;
+
+		//What if this is a negative or zero?
+		//If it's negative we fail like this
+		if(constant_numeric_value < 0){
+			print_parse_message(PARSE_ERROR, "Array bounds may not be negative", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//If it's zero we fail like this
+		if(constant_numeric_value == 0){
+			print_parse_message(PARSE_ERROR, "Array bounds may not be zero", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//We're all set, push this onto the lightstack
+		lightstack_push(&lightstack, constant_numeric_value);
+
+		//Refresh the search
+		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	}
+
+	//Since we made it down here, we need to push the token back
+	push_back_token(lookahead);
+
+	//Now we'll go back through and unwind the lightstack
+	while(lightstack_is_empty(&lightstack) == FALSE){
+		//Grab the number of bounds out
+		u_int32_t num_bounds = lightstack_pop(&lightstack);
+
+		//If we're trying to create an array out of a type that is not yet fully
+		//defined, we also need to fail out. There exists a special exception here for array types, because we can
+		//initially define them as blank if and only if we're using an initializer
+		if(current_type_record->type->type_class != TYPE_CLASS_ARRAY && current_type_record->type->type_complete == FALSE){
+			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//If we get here though, we know that this one is good
+		//Lets create the array type
+		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds, mutability);
+
+		//Let's see if we can find this one
+		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type);
+
+		//If we did not find it, we will add it into the symbol table
+		if(found_array == NULL){
+			//Create the type record
+			symtab_type_record_t* created_array = create_type_record(array_type);
+			//Insert it into the symbol table
+			insert_type(type_symtab, created_array);
+			//We'll also set the current type record to be this
+			current_type_record = created_array;
+		} else {
+			//Otherwise, just set the current type record to be what we found
+			current_type_record = found_array;
+			//We don't need the other one if this is the case
+			type_dealloc(array_type);
+		}
+	}
+
+	//We're done with it, so deallocate
+	lightstack_dealloc(&lightstack);
+
+	//Give back whatever the current type may be
+	return current_type_record->type;
+}
+
+
+/**
  * Parse and add a union member into our union type
  *
  * It is important to remember that union types do not allow for 
@@ -4384,7 +4582,7 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 	}
 
 	//Now we need to see a valid type-specifier
-	generic_type_t* type = type_specifier(fl);
+	generic_type_t* type = union_type_specifier(fl);
 
 	//If this is NULL we've failed
 	if(type == NULL){
@@ -4426,12 +4624,13 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 /**
  * Parse the union member list for a given union type
  *
+ * This will handle creating both the mutable and immutable union member lists. Remember that
+ * each union definition creates 2 types, one that is entirely immutable and one that is entirely
+ * mutable. There is no in-between due to how a union shares memory
+ *
  * BNF RULE: <union-member-list> ::= { {<union-member>}+ }
  */
 static u_int8_t union_member_list(FILE* fl, generic_type_t* mutable_union_type, generic_type_t* immutable_union_type){
-	//Initialize a new variable scope to help with duplicate checks
-	initialize_variable_scope(variable_symtab);
-
 	//We must first see an L_curly
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -4454,7 +4653,7 @@ static u_int8_t union_member_list(FILE* fl, generic_type_t* mutable_union_type, 
 		push_back_token(lookahead);
 
 		//Call the helper union member function
-		u_int8_t status = union_member(fl, union_type);
+		u_int8_t status = union_member(fl, mutable_union_type, immutable_union_type);
 
 		//If one of them fails, then we're out
 		if(status == FAILURE){
@@ -4476,9 +4675,6 @@ static u_int8_t union_member_list(FILE* fl, generic_type_t* mutable_union_type, 
 		num_errors++;
 		return FAILURE;
 	}
-
-	//Before we go, we need to close out that variable scope that we opened above
-	finalize_variable_scope(variable_symtab);
 
 	//If we make it here then we know that it worked
 	return SUCCESS;
@@ -4602,14 +4798,17 @@ static u_int8_t union_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Let's construct the final alias here
-	//
-	//
-	//TODO NEED MUTABLE & IMMUTABLE VERSIONS
-	generic_type_t* alias_type = create_aliased_type(alias_name.string, union_type, parser_line_num, NOT_MUTABLE);
+	//Construct both mutable & immutable versions of the alias
+	generic_type_t* mutable_alias = create_aliased_type(alias_name.string, mutable_union_type, parser_line_num, MUTABLE);
 
 	//Add it into the type symtab
-	insert_type(type_symtab, create_type_record(alias_type));
+	insert_type(type_symtab, create_type_record(mutable_alias));
+
+	//Construct both mutable & immutable versions of the alias
+	generic_type_t* immutable_alias = create_aliased_type(alias_name.string, immutable_union_type, parser_line_num, NOT_MUTABLE);
+
+	//Add it into the type symtab
+	insert_type(type_symtab, create_type_record(immutable_alias));
 
 	//If we get here it worked so
 	return SUCCESS;
