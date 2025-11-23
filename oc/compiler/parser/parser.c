@@ -7569,32 +7569,14 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//Let's get a pointer to the name for convenience
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
-	//the same scope may not share names. This is also true regarding functions and types globally
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
+	//Check for function duplciates
+	if(do_duplicate_functions_exist(name.string) == TRUE){
 		//Return a fresh error node
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
-
-	//Fail out here
-	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
+	//Check for type duplicates
+	if(do_duplicate_types_exist(name.string) == TRUE){
 		//Return a fresh error node
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
@@ -9309,31 +9291,13 @@ static u_int8_t replace_statement(FILE* fl){
 	//Let's get a pointer to the name for convenience
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Now we will check for duplicates. Duplicate variable names in different scopes are ok, but variables in
-	//the same scope may not share names. This is also true regarding functions and types globally
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, name.string);
-
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
+	//Check for function duplicates
+	if(do_duplicate_functions_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 
-	//Finally check that it isn't a duplicated type name
-	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, name.string);
-
-	//Fail out here
-	if(found_type != NULL){
-		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_type_name(found_type);
-		num_errors++;
+	//Check for type duplicates
+	if(do_duplicate_types_exist(name.string) == TRUE){
 		return FAILURE;
 	}
 

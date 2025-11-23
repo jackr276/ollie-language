@@ -91,7 +91,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	char info[ERROR_SIZE];
 	//The parser line number -- largely unused in this module, but there is a chance
 	//that we'll need it for errors if for some reason we run into an error preprocessing
-	u_int16_t parser_line_num = 0;
+	u_int32_t parser_line_num = 0;
 	//The lookahead token
 	lexitem_t lookahead;
 	//Keep a running list of what we need to compile

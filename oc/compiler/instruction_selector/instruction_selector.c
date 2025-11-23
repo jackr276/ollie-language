@@ -3744,7 +3744,7 @@ static void handle_setne_instruction(instruction_t* instruction){
  * NOTE: We guarantee that the first instruction in the window is the one that
  * we're after in this case
  */
-static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* window){
+static void handle_logical_or_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_or = window->instruction1;
 
@@ -3799,7 +3799,7 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
  * NOTE: We guarantee that the first instruction in the window is the one that we're after
  * in this case
  */
-static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* window){
+static void handle_logical_and_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
@@ -5596,12 +5596,12 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		switch(window->instruction1->op){
 			//Handle the logical and case
 			case DOUBLE_AND:
-				handle_logical_and_instruction(cfg, window);
+				handle_logical_and_instruction(window);
 				return;
 
 			//Handle logical or
 			case DOUBLE_OR:
-				handle_logical_or_instruction(cfg, window);
+				handle_logical_or_instruction(window);
 				return;
 
 			//Handle division
