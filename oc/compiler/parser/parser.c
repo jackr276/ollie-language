@@ -1023,7 +1023,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	//Now we need to see a valid type-specifier. It is important to note that the type
 	//specifier requires that a type has actually been defined. If it wasn't defined,
 	//then this will return an error node
-	generic_type_t* type_spec = type_specifier(fl, NOT_MUTABLE);
+	generic_type_t* type_spec = type_specifier(fl);
 
 	//If it's an error
 	if(type_spec == NULL){
@@ -2413,8 +2413,6 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
-	//Is this mutable or not
-	mutability_type_t mutability;
 
 	//If we first see an angle bracket, we know that we are truly doing
 	//a cast. If we do not, then this expression is just a pass through for
@@ -2432,19 +2430,8 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//Push onto the stack for matching
 	push_token(grouping_stack, lookahead);
 
-	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Let's see if we have the mut keyword or not
-	if(lookahead.tok == MUT){
-		mutability = MUTABLE;
-	} else {
-		mutability = NOT_MUTABLE;
-		push_back_token(lookahead);
-	}
-
 	//Grab the type specifier
-	generic_type_t* type_spec = type_specifier(fl, mutability);
+	generic_type_t* type_spec = type_specifier(fl);
 
 	//If it's an error, we'll print and propagate it up
 	if(type_spec == NULL){
@@ -3834,21 +3821,9 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	//The lookahead token
 	lexitem_t lookahead;
-	//The type mutability
-	mutability_type_t mutability;
 
 	//Get the first token
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//We could first see the mutable keyword, indicating that this field can be changed
-	if(lookahead.tok == MUT){
-		mutability = MUTABLE;
-		//Refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	} else {
-		//Not mutable
-		mutability = NOT_MUTABLE;
-	}
 
 	//Let's make sure it actually worked
 	if(lookahead.tok != IDENT){
@@ -3895,7 +3870,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	}
 
 	//Now we are required to see a valid type specifier
-	generic_type_t* type_spec = type_specifier(fl, mutability);
+	generic_type_t* type_spec = type_specifier(fl);
 
 	//If this is an error, the whole thing fails
 	if(type_spec == NULL){
@@ -4059,27 +4034,10 @@ static u_int8_t function_pointer_definer(FILE* fl){
 			break;
 	}
 
-	//Is the parameter mutable
-	mutability_type_t mutability;
-
 	//Keep processing so long as we keep seeing commas
 	do{
-		//Each function pointer parameter will consist only of a type and optionally
-		//a mutable keyword
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Is it mutable? If this token exists then it is
-		if(lookahead.tok == MUT){
-			 mutability = MUTABLE;
-		} else {
-			//Otherwise put this back
-			push_back_token(lookahead);
-			//Not mutable
-			mutability = NOT_MUTABLE;
-		}
-
 		//Now we need to see a valid type
-		generic_type_t* type = type_specifier(fl, mutability);
+		generic_type_t* type = type_specifier(fl);
 
 		//If this is NULL, we'll error out
 		if(type == NULL){
@@ -4390,18 +4348,9 @@ static u_int8_t struct_definer(FILE* fl){
 static u_int8_t union_member(FILE* fl, generic_type_t* union_type){
 	//Our lookahead token
 	lexitem_t lookahead;
-	//Is this mutable? By default we assume no
-	u_int8_t is_mutable = 0;
 
 	//Let's fetch the first token
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//If we have the MUT keyword we'll flag that and move along
-	if(lookahead.tok == MUT){
-		is_mutable = TRUE;
-		//Refresh the token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	}
 
 	//Once we're here, we need to see an identifier token. If we don't, we'll fail out
 	if(lookahead.tok != IDENT){
@@ -7531,8 +7480,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
-	//Is it mutable? Our default is no
-	u_int8_t is_mutable = FALSE;
 
 	//Let's see if we have a storage class
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7556,13 +7503,6 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		//By default just leave
 		default:
 			break;
-	}
-
-	//Let's now check to see if it's mutable or not
-	if(lookahead.tok == MUT){
-		is_mutable = TRUE;
-		//Refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
 	//If we get here and it's not an identifier, there is an issue
@@ -7992,28 +7932,19 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {register | static}? {mut}? <identifier> : <type-specifier> := <ternary_expression>;
+ * BNF Rule: <let-statement> ::= let {register | static}? <identifier> : <type-specifier> := <ternary_expression>;
  */
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//The line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
-	//Is it mutable?
-	u_int8_t is_mutable = FALSE;
 
 	//Let's first declare the root node
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
 
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-	//Let's now check and see if this is mutable
-	if(lookahead.tok == MUT){
-		is_mutable = TRUE;
-		//Refresh the token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	}
 
 	//If it's not an identifier, we fail
 	if(lookahead.tok != IDENT){
@@ -8104,7 +8035,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
 	if(initializer_node->inferred_type->type_class == TYPE_CLASS_POINTER){
-		if(initializer_node->variable != NULL && initializer_node->variable->type_defined_as->mutability == NOT_MUTABLE && is_mutable == TRUE){
+		if(initializer_node->variable != NULL && initializer_node->variable->type_defined_as->mutability == NOT_MUTABLE && type_spec->mutability == MUTABLE){
 			return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
 		}
 	}
@@ -8452,20 +8383,11 @@ static u_int8_t validate_main_function(generic_type_t* type){
  * BNF Rule: <parameter-declaration> ::= {mut}? {<identifier>}? : <type-specifier>
  */
 static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
-	//Is it mutable?
-	u_int8_t is_mut = FALSE;
 	//Lookahead token
 	lexitem_t lookahead;
 
 	//Now we can optionally see the constant keyword here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//Is it mutable?
-	if(lookahead.tok == MUT){
-		is_mut = TRUE;
-		//Refresh token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	}
 
 	//If it didn't work we fail immediately
 	if(lookahead.tok != IDENT){
@@ -8893,26 +8815,8 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 			break;
 	}
 
-	//Is the parameter mutable
-	u_int8_t is_mutable;
-
 	//Keep processing so long as we keep seeing commas
 	do{
-		//Assume by default it's not mutable
-		is_mutable = FALSE;
-
-		//Each function pointer parameter will consist only of a type and optionally
-		//a mutable keyword
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-
-		//Is it mutable? If this token exists then it is
-		if(lookahead.tok == MUT){
-			is_mutable = TRUE;
-		} else {
-			//Otherwise put this back
-			push_back_token(lookahead);
-		}
-
 		//Now we need to see a valid type
 		generic_type_t* type = type_specifier(fl);
 
