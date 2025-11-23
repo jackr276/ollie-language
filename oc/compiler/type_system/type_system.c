@@ -1626,6 +1626,28 @@ generic_type_t* create_mutable_version_of_type(generic_type_t* type){
 	//Copy the memory over
 	memcpy(cloned, type, sizeof(generic_type_t));
 
+	//Clone the name's memory
+	type->type_name = clone_dynamic_string(&(type->type_name));
+
+	//Some types have hidden internal fields. These need to be manually cloned
+	//over in a way that memcpy will not do
+	switch(type->type_class){
+		case TYPE_CLASS_STRUCT:
+			//Create a new struct table
+			cloned->internal_types.struct_table = dynamic_array_alloc();
+
+			//Clone it over bit by bit
+			for(u_int16_t i = 0; i < type->internal_types.struct_table->current_index; i++){
+				dynamic_array_add(cloned->internal_types.struct_table, dynamic_array_get_at(type->internal_types.struct_table, i));
+			}
+
+			break;
+			
+		//In all other cases do nothing
+		default:
+			break;
+	}
+
 	//The only thing that we change is the mutability
 	cloned->mutability = MUTABLE;
 
@@ -1879,7 +1901,7 @@ void print_full_type_name(generic_type_t* type, char* name){
 /**
  * Dynamically allocate and create an aliased type
  */
-generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number, mutability_type_t mutability){
+generic_type_t* create_aliased_type(char* name, generic_type_t* aliased_type, u_int32_t line_number, mutability_type_t mutability){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
@@ -1888,8 +1910,9 @@ generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* 
 	//Where is the declaration?
 	type->line_number = line_number;
 
-	//Copy the name
-	type->type_name = type_name;
+	//Create the name
+	dynamic_string_alloc(&(type->type_name));
+	dynamic_string_set(&(type->type_name), name);
 
 	//Assign the mutability
 	type->mutability = mutability;
