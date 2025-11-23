@@ -1275,6 +1275,11 @@ void print_type_name(symtab_type_record_t* record){
 		printf("---> %d | ", record->type->line_number);
 	}
 
+	//The mut specifier
+	if(record->type->mutability == MUTABLE){
+		printf("mut ");
+	}
+
 	//Then print out the name
 	printf("%s\n\n", record->type->type_name.string);
 }

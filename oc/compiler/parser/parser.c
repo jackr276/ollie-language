@@ -59,6 +59,7 @@ static generic_type_t* immut_u64 = NULL;
 static generic_type_t* immut_i64 = NULL;
 static generic_type_t* immut_f32 = NULL;
 static generic_type_t* immut_f64 = NULL;
+static generic_type_t* immut_char_ptr = NULL;
 
 //THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
 static nesting_stack_t* nesting_stack = NULL; 
@@ -151,15 +152,58 @@ static u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
 
 
 /**
+ * Determine whether or not a duplicate function exists with the given
+ * name
+ *
+ * Returns TRUE if successful, FALSE if not. This function handles
+ * all error printing
+ */
+static u_int8_t do_duplicate_functions_exist(char* name){
+	//Look it up
+	symtab_function_record_t* found = lookup_function(function_symtab, name);
+
+	//Fail out here
+	if(found != NULL){
+		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the function declaration
+		print_function_name(found);
+		num_errors++;
+
+		//Return TRUE here, they do exist
+		return TRUE;
+	}
+
+	//Otherwise just return FALSE
+	return FALSE;
+}
+
+
+/**
  * Determine whether or not a duplicate variable exists with the given
  * name
+ *
+ * Returns TRUE if successful, FALSE if not. This function handles
+ * all error printing
  */
-static symtab_variable_record_t* get_variable_by_name(char* name){
+static u_int8_t do_duplicate_variables_exist(char* name){
 	//Look it up
 	symtab_variable_record_t* found = lookup_variable(variable_symtab, name);
 
-	//Give back the variable record
-	return found;
+	//Means that we have a duplicate
+	if(found != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
+		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		//Also print out the original declaration
+		print_variable_name(found);
+		num_errors++;
+
+		//Give back true, they do exist
+		return TRUE;
+	}
+
+	//Otherwise just return FALSE
+	return FALSE;
 }
 
 
@@ -582,9 +626,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 
 		case STR_CONST:
 			constant_node->constant_type = STR_CONST;
-			//Let's find the type if it's in the symtab
-			symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE);
-			constant_node->inferred_type = found_type->type;
+			//The type is an immutable char*
+			constant_node->inferred_type = immut_char_ptr;
 			
 			//The dynamic string is our value
 			constant_node->string_value = lookahead.lexeme;
@@ -4110,7 +4153,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, identifier_name.string);
+	symtab_variable_record_t* found_var = 
 
 	//Fail out here
 	if(found_var != NULL){
@@ -4292,33 +4335,22 @@ static u_int8_t struct_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Check that it isn't some duplicated function name
-	symtab_function_record_t* found_func = lookup_function(function_symtab, alias_name.string);
+	//Check for duplicated functions
+	u_int8_t duplicate_functions = do_duplicate_functions_exist(alias_name.string);
 
-	//Fail out here
-	if(found_func != NULL){
-		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the function declaration
-		print_function_name(found_func);
-		num_errors++;
-		//Fail out
+	//Fail out if they exist
+	if(duplicate_functions == TRUE){
 		return FAILURE;
 	}
 
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable(variable_symtab, alias_name.string);
+	//Do the duplicate check for variables
+	u_int8_t duplicate_variables = do_duplicate_variables_exist(alias_name.string);
 
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", alias_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var);
-		num_errors++;
-		//Fail out
+	//If we find duplicates then leave
+	if(duplicate_variables == TRUE){
 		return FAILURE;
 	}
+
 
 	//Finally check that it isn't a duplicated type name
 	symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, alias_name.string, NOT_MUTABLE);
@@ -9845,17 +9877,18 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Keep these at hand because we use them so frequently, that repeatedly 
 	//searching is needlessly expensive
-	immut_char = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE);
-	immut_u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE);
-	immut_i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE);
-	immut_u16 = lookup_type_name_only(type_symtab, "u16", NOT_MUTABLE);
-	immut_i16 = lookup_type_name_only(type_symtab, "i16", NOT_MUTABLE);
-	immut_u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE);
-	immut_i32 = lookup_type_name_only(type_symtab, "i32", NOT_MUTABLE);
-	immut_u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE);
-	immut_i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE);
-	immut_f32 = lookup_type_name_only(type_symtab, "f32", NOT_MUTABLE);
-	immut_f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE);
+	immut_char = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
+	immut_u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
+	immut_i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE)->type;
+	immut_u16 = lookup_type_name_only(type_symtab, "u16", NOT_MUTABLE)->type;
+	immut_i16 = lookup_type_name_only(type_symtab, "i16", NOT_MUTABLE)->type;
+	immut_u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE)->type;
+	immut_i32 = lookup_type_name_only(type_symtab, "i32", NOT_MUTABLE)->type;
+	immut_u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
+	immut_i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE)->type;
+	immut_f32 = lookup_type_name_only(type_symtab, "f32", NOT_MUTABLE)->type;
+	immut_f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
+	immut_char_ptr = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE)->type;
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	if(grouping_stack == NULL){
