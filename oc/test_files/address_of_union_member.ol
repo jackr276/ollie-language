@@ -5,19 +5,19 @@
 
 
 define union my_union {
-	mut x:i64;
-	mut y:i32;
-	mut c:char;
+	x:mut i64;
+	y:mut i32;
+	c:mut char;
 } as custom_union;
 
 
-fn mutate_int(mut x:i32*) -> void {
+fn mutate_int(x:mut i32*) -> void {
 	*x = 2;
 }
 
 
 pub fn main() -> i32 {
-	declare mut union_type:custom_union;
+	declare union_type:mut custom_union;
 
 	@mutate_int(&(union_type.y));
 
