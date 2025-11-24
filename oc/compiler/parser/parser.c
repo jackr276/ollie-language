@@ -2411,7 +2411,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
  * A cast expression decays into a unary expression
  *
  * BNF Rule: <cast-expression> ::= <unary-expression> 
- * 						    	| < {mut}? <type-specifier> > <unary-expression>
+ * 						    	| < <type-specifier> > <unary-expression>
  */
 static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//The lookahead token
@@ -2469,14 +2469,6 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//What is being casted
 	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
 
-	//
-	//
-	//
-	//TODO MUTABILITY CHECKING
-	//
-	//
-	//
-
 	//You can never cast a "void" to anything
 	if(is_void_type(being_casted_type) == TRUE){
 		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
@@ -2489,9 +2481,36 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//You can never cast anything to be a construct
+	//You can never cast anything to be a struct 
 	if(casting_to_type->type_class == TYPE_CLASS_STRUCT){
 		return print_and_return_error("No type can be casted to a struct type", parser_line_num);
+	}
+
+	//You can never cast anything to be a union 
+	if(casting_to_type->type_class == TYPE_CLASS_UNION){
+		return print_and_return_error("No type can be casted to a union type", parser_line_num);
+	}
+
+	//You can never cast anything to be an array 
+	if(casting_to_type->type_class == TYPE_CLASS_ARRAY){
+		return print_and_return_error("No type can be casted to an array type", parser_line_num);
+	}
+
+	/**
+	 * If the type that is being casted is a memory region, and we are
+	 * trying to cast it to a pointer of some kind, we need to be careful about 
+	 * the way in which mutability is handled
+	 */
+	if(is_memory_region(being_casted_type) == TRUE
+		&& casting_to_type->type_class == TYPE_CLASS_POINTER){
+
+		//This is an error
+		if(being_casted_type->mutability == NOT_MUTABLE
+			&& casting_to_type->mutability == MUTABLE){
+			//Fail out here
+			sprintf(info, "Attempt to cast an immutable type %s to a mutable pointer type %s is illegal", being_casted_type->type_name.string, casting_to_type->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
 	}
 
 	/**
