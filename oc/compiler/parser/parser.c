@@ -3915,7 +3915,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* struct_type){
  *
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
-static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
+static u_int8_t struct_member_list(FILE* fl, generic_type_t* struct_type){
 	//Now we are required to see a curly brace
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -3939,7 +3939,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
 		push_back_token(lookahead);
 
 		//We must first see a valid construct member
-		u_int8_t status = struct_member(fl, construct);
+		u_int8_t status = struct_member(fl, struct_type);
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
@@ -3974,7 +3974,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
 	}
 
 	//Once done, we need to finalize the alignment for the construct table
-	finalize_struct_alignment(construct);
+	finalize_struct_alignment(struct_type);
 
 	//Give the member list back
 	return SUCCESS;
@@ -4006,7 +4006,8 @@ static u_int8_t function_pointer_definer(FILE* fl){
 
 	//Once we've gotten past this point, we're safe to allocate this type. Function
 	//pointers are always private
-	generic_type_t* function_type = create_function_pointer_type(FALSE, parser_line_num, NOT_MUTABLE);
+	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, parser_line_num, MUTABLE);
+	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, parser_line_num, NOT_MUTABLE);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -4038,8 +4039,17 @@ static u_int8_t function_pointer_definer(FILE* fl){
 			return FALSE;
 		}
 
-		//Let the helper add the type in
-		u_int8_t status = add_parameter_to_function_type(function_type, type);
+		//Add it to the mutable version
+		u_int8_t status = add_parameter_to_function_type(mutable_function_type, type);
+
+		//This means that we have been given too many parameters
+		if(status == FAILURE){
+			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			return FALSE;
+		}
+
+		//Let's also add it to the immutable version
+		status = add_parameter_to_function_type(immutable_function_type, type);
 
 		//This means that we have been given too many parameters
 		if(status == FAILURE){
@@ -4090,10 +4100,12 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Let's now store the return type
-	function_type->internal_types.function_type->return_type = return_type;
+	mutable_function_type->internal_types.function_type->return_type = return_type;
+	immutable_function_type->internal_types.function_type->return_type = return_type;
 
 	//Mark whether or not it's void as well
-	function_type->internal_types.function_type->returns_void = is_void_type(return_type);
+	mutable_function_type->internal_types.function_type->returns_void = is_void_type(return_type);
+	immutable_function_type->internal_types.function_type->returns_void = is_void_type(return_type);
 
 	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
 	//confusing syntactical mess that C function pointer declarations have
@@ -4149,14 +4161,17 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		return FALSE;
 	}
 
-	//We'll now generate the name. This essentially finalizes the whole affair
-	generate_function_pointer_type_name(function_type);
+	//Generate the names for both of our versions
+	generate_function_pointer_type_name(mutable_function_type);
+	generate_function_pointer_type_name(immutable_function_type);
 
 	//Now that we've created it, we'll store it in the symtab
-	symtab_type_record_t* type_record = create_type_record(function_type);
+	symtab_type_record_t* mutable_record = create_type_record(mutable_function_type);
+	symtab_type_record_t* immutable_record = create_type_record(immutable_function_type);
 
-	//Now that this has been created, we'll store it
-	insert_type(type_symtab, type_record);
+	//Insert both of these in
+	insert_type(type_symtab, mutable_record);
+	insert_type(type_symtab, immutable_record);
 
 	//Now that we've done that part, we also need to create the alias type and insert it
 	//
