@@ -651,6 +651,10 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
 	// ================================ Immutable versions of our primitive types ================================
 	
 	// ================================ Mutable versions of our primitive types ================================
+	// This mutable void type only exists to internally support a mutable void* pointer
+	type = create_basic_type("void", VOID, MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
+
 	//s_int8 type
 	type = create_basic_type("i8", I8, MUTABLE);
 	num_collisions += insert_type(symtab,  create_type_record(type));

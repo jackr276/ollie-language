@@ -58,6 +58,8 @@ static generic_type_t* immut_u64 = NULL;
 static generic_type_t* immut_i64 = NULL;
 static generic_type_t* immut_f32 = NULL;
 static generic_type_t* immut_f64 = NULL;
+static generic_type_t* mut_void = NULL;
+static generic_type_t* immut_void = NULL;
 static generic_type_t* immut_char_ptr = NULL;
 
 //THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
@@ -3902,6 +3904,13 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* struct_type){
 		return FAILURE;
 	}
 
+	//Error out if this happens
+	if(type_spec == mut_void){
+		print_parse_message(PARSE_ERROR, "Struct members may not be typed as void", parser_line_num);
+		num_errors++;
+		return FAILURE;;
+	}
+
 	//Add extra validation to ensure that the size of said type is known at comptime. This will stop
 	//the user from adding a field the mut a:char[] that is unknown at compile time
 	if(type_spec->type_complete == FALSE){
@@ -5486,8 +5495,6 @@ static generic_type_t* type_specifier(FILE* fl){
 	//Now once we make it here, we know that we have a name that actually exists in the symtab
 	//The current type record is what we will eventually point our node to
 	symtab_type_record_t* current_type_record = type;
-
-	if(current_type_record == NULL) printf("ITS NULL\n");
 	
 	//Let's see where we go from here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -5658,6 +5665,19 @@ static generic_type_t* type_specifier(FILE* fl){
 
 	//We're done with it, so deallocate
 	lightstack_dealloc(&lightstack);
+
+	/**
+	 * This is a very unique case. Internally, the system needs to have
+	 * a "mutable" void type in order to support things like mut void*, etc.. However,
+	 * if the user attempts to do something like fn my_fn() -> mut void, we should
+	 * throw an error here and disallow that. For all the user knows, there is no
+	 * mut void
+	 */
+	if(current_type_record->type == mut_void){
+		print_parse_message(PARSE_ERROR, "Void types do not contain values and therefore cannot be declared mutable. Remove the \"mut\" specificer", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
 
 	//Give back whatever the current type may be
 	return current_type_record->type;
@@ -9831,6 +9851,8 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	immut_i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE)->type;
 	immut_f32 = lookup_type_name_only(type_symtab, "f32", NOT_MUTABLE)->type;
 	immut_f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
+	immut_void = lookup_type_name_only(type_symtab, "void", NOT_MUTABLE)->type;
+	mut_void = lookup_type_name_only(type_symtab, "void", MUTABLE)->type;
 	immut_char_ptr = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE)->type;
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
