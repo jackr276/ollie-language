@@ -5197,19 +5197,15 @@ static u_int8_t enum_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//Now we'll make the actual record for the aliased type
-	//
-	//TODO NOT DONE
-	generic_type_t* aliased_type = create_aliased_type(alias_name.string, enum_type, parser_line_num, NOT_MUTABLE);
-
+	//Now we need to create both our mutable and immutable aliases
+	generic_type_t* mutable_alias = create_aliased_type(alias_name.string, mutable_enum_type, parser_line_num, MUTABLE);
 	//Once we've made the aliased type, we can record it in the symbol table
-	insert_type(type_symtab, create_type_record(aliased_type));
+	insert_type(type_symtab, create_type_record(mutable_alias));
 
-	/**
-	 * Now that we've made the immutable version, we need to duplicate the immutable
-	 * version so that we can use it as such
-	 */
-	//TODO MAKE IMMUTABLE VERSION
+	//Now the immutable version
+	generic_type_t* immutable_alias = create_aliased_type(alias_name.string, immutable_enum_type, parser_line_num, NOT_MUTABLE);
+	//Once we've made the aliased type, we can record it in the symbol table
+	insert_type(type_symtab, create_type_record(immutable_alias));
 
 	//This is a successful creation
 	return SUCCESS;
