@@ -5,9 +5,9 @@
 
 
 define union my_union {
-	x:mut i64;
-	y:mut i32;
-	c:mut char;
+	x:i64;
+	y:i32;
+	c:char;
 } as custom_union;
 
 

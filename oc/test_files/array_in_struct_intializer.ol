@@ -13,9 +13,9 @@
 *  
 */
 define struct my_struct{
-	mut ch:char;
-	mut y:i32[3];
-	mut lch:char;
+	ch:mut char;
+	y:mut i32[3];
+	lch:mut char;
 } as custom_struct;
 
 
