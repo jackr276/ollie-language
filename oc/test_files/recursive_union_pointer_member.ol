@@ -5,8 +5,8 @@
 
 define union my_union {
 	//Next node
-	mut next:union my_union*;
-	mut data:void*;
+	next:union my_union*;
+	data:void*;
 } as union_t;
 
 

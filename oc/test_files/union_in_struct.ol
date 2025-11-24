@@ -5,16 +5,16 @@
 
 //Declare the union type
 define union my_union {
-	mut x:i32[5];
-	mut y:i16;
-	mut ch:char;
+	x:i32[5];
+	y:i16;
+	ch:char;
 } as custom_union;
 
 //Define a struct that has this union in it
 define struct my_struct {
-	mut tester:custom_union;
-	mut x:i64;
-	mut a:char;
+	tester:mut custom_union;
+	x:mut i64;
+	a:mut char;
 } as custom_struct;
 
 pub fn main() -> i32{

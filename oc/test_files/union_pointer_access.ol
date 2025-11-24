@@ -5,9 +5,9 @@
 
 //Declare the union type
 define union my_union {
-	x:mut i32;
-	y:mut i16;
-	ch:mut char;
+	x:i32;
+	y:i16;
+	ch:char;
 } as custom_union;
 
 pub fn mut_union(x:mut custom_union*) -> i32 {
@@ -20,11 +20,7 @@ pub fn mut_union(x:mut custom_union*) -> i32 {
 
 
 pub fn main() -> i32{
-	//
-	// TODO
-	//
-	// 
-	declare mut my_union:custom_union;
+	declare my_union:mut custom_union;
 	
 	//Store x
 	my_union.x = 32;

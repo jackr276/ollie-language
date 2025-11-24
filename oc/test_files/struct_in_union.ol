@@ -12,14 +12,14 @@ define struct custom {
 
 //Declare the union type
 define union my_union {
-	mut x:my_struct; // internal struct type
-	mut y:i16;
-	mut ch:char;
+	x:my_struct; // internal struct type
+	y:i16;
+	ch:char;
 } as custom_union;
 
 
 pub fn main() -> i32{
-	declare mut my_union:custom_union;
+	declare my_union:mut custom_union;
 	
 	//Store x
 	my_union.x:a = 32;
