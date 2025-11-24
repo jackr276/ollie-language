@@ -3905,7 +3905,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* struct_type){
 	}
 
 	//Error out if this happens
-	if(type_spec == mut_void){
+	if(type_spec == immut_void){
 		print_parse_message(PARSE_ERROR, "Struct members may not be typed as void", parser_line_num);
 		num_errors++;
 		return FAILURE;;
@@ -4560,6 +4560,13 @@ static generic_type_t* union_type_specifier(FILE* fl, mutability_type_t mutabili
 			//We don't need the other one if this is the case
 			type_dealloc(array_type);
 		}
+	}
+
+	//It is not possible to have a void type as a union member
+	if(current_type_record->type == immut_void){
+		print_parse_message(PARSE_ERROR, "Unions may not have members that are void", parser_line_num);
+		num_errors++;
+		return NULL;
 	}
 
 	//We're done with it, so deallocate
