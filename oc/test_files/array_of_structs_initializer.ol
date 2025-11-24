@@ -4,9 +4,9 @@
 */
 
 define struct my_struct{
-	mut ch:char;
-	mut lch:char;
-	mut y:i32;
+	ch:mut char;
+	lch:mut char;
+	y:mut i32;
 } as my_struct;
 
 

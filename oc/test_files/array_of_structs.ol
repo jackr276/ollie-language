@@ -4,14 +4,14 @@
 
 pub fn main(arg:i32, argv:char**) -> i32{
 	define struct my_struct{
-		mut ch:char;
-		mut lch:char;
-		mut y:i32;
+		ch:mut char;
+		lch:mut char;
+		y:mut i32;
 
 	} as my_struct;
 
 	//Declare an array of such items
-	declare mut structure_arr:my_struct[32];
+	declare structure_arr:mut my_struct[32];
 
 	structure_arr[2]:y = 23;
 	structure_arr[2]:ch = 'a';

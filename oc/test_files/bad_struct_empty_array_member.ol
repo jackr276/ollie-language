@@ -6,9 +6,9 @@
 
 //BAD struct
 define struct bad_struct {
-	mut x:i32;
-	mut y:i32[]; //BAD
-	mut z:char;
+	x:mut i32;
+	y:mut i32[]; //BAD
+	z:mut char;
 } as invalid;
 
 
