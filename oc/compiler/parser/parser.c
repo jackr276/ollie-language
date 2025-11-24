@@ -4905,7 +4905,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 	//We can create the mutable & immutable versions of the enum types
 	generic_type_t* immutable_enum_type = create_enumerated_type(type_name, parser_line_num, NOT_MUTABLE);
-	generic_type_t* mutable_enum_type = create_enumerated_type(type_name, parser_line_num, NOT_MUTABLE);
+	generic_type_t* mutable_enum_type = create_enumerated_type(clone_dynamic_string(&type_name), parser_line_num, MUTABLE);
 
 	//Insert into the type symtab
 	insert_type(type_symtab, create_type_record(immutable_enum_type));
@@ -5467,6 +5467,8 @@ static generic_type_t* type_specifier(FILE* fl){
 	//Now once we make it here, we know that we have a name that actually exists in the symtab
 	//The current type record is what we will eventually point our node to
 	symtab_type_record_t* current_type_record = type;
+
+	if(current_type_record == NULL) printf("ITS NULL\n");
 	
 	//Let's see where we go from here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -8856,7 +8858,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 				}
 			}
 
-			//Give back the paremeter list node
+			//Give back the parameter list node
 			return SUCCESS;
 			
 		//By default just put it back and get out
@@ -8875,7 +8877,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 
 		//It's invalid, we'll just send it up the chain
 		if(parameter == NULL){
-			print_parse_message(PARSE_ERROR, "Invalid paremeter declaration found in parameter list", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Invalid parameter declaration found in parameter list", parser_line_num);
 			num_errors++;
 			return FAILURE;;
 		}

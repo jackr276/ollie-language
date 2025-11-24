@@ -11,8 +11,8 @@ define enum my_enum {
 	E = 301
 } as custom_enum;
 
-fn tester(mut param:custom_enum) -> i32{
-	let mut x:i32 = 32;
+fn tester(param:mut custom_enum) -> i32 {
+	let x:mut i32 = 32;
 
 	switch(param){
 		case A -> {
