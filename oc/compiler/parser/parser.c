@@ -3819,9 +3819,9 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
  *
  * As a reminder, type specifier will give us an error if the type is not defined
  *
- * BNF Rule: <construct-member> ::= {mut}? <identifier> : <type-specifier> 
+ * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> 
  */
-static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
+static u_int8_t struct_member(FILE* fl, generic_type_t* struct_type){
 	//The lookahead token
 	lexitem_t lookahead;
 
@@ -3840,11 +3840,11 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	dynamic_string_t name = lookahead.lexeme;
 
 	//The field, if we can find it
-	symtab_variable_record_t* duplicate = lookup_variable_local_scope(variable_symtab, name.string);
+	symtab_variable_record_t* duplicate = get_struct_member(struct_type, name.string);
 
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, construct->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, struct_type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
 		num_errors++;
@@ -3866,7 +3866,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 
 	//Fail out here
 	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required between ident and type specifier in construct member declaration", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Colon required between ident and type specifier in struct member declaration", parser_line_num);
 		num_errors++;
 		//Error out
 		return FAILURE;
@@ -3877,7 +3877,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 
 	//If this is an error, the whole thing fails
 	if(type_spec == NULL){
-		print_parse_message(PARSE_ERROR, "Attempt to use undefined type in construct member", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Attempt to use undefined type in struct member", parser_line_num);
 		num_errors++;
 		//It's already an error, so just send it up
 		return FAILURE;
@@ -3902,10 +3902,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* construct){
 	member_record->type_defined_as = type_spec;
 
 	//Add it to the construct
-	add_struct_member(construct, member_record);
-
-	//Insert into the variable symtab
-	insert_variable(variable_symtab, member_record);
+	add_struct_member(struct_type, member_record);
 
 	//All went well so we can send this up the chain
 	return SUCCESS;
@@ -3932,9 +3929,6 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
 
 	//Otherwise we'll push onto the stack for later matching
 	push_token(grouping_stack, lookahead);
-
-	//Initiate a new variable scope here
-	initialize_variable_scope(variable_symtab);
 
 	//This is just to seed our search
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -3978,9 +3972,6 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* construct){
 		//Fail out here
 		return FAILURE;
 	}
-
-	//Once we're done we can escape this scope
-	finalize_variable_scope(variable_symtab);
 
 	//Once done, we need to finalize the alignment for the construct table
 	finalize_struct_alignment(construct);
