@@ -4868,6 +4868,9 @@ static u_int8_t union_definer(FILE* fl){
  * Another important note - complex types like an enum have the ability to be used as mutable(mut) or immutable. To support this internally,
  * there will be two distinct versions of any given enum, the immutable(the first one that we create), and the mutable one(this will be made)
  * after the fact
+ *
+ * NOTE: The enum type itself may or may not be mutable, but all of the internal enum values are always *immutable* because once you define
+ * the enum, it is not possible for you to change them
  */
 static u_int8_t enum_definer(FILE* fl){
 	//Lookahead token
@@ -4900,11 +4903,13 @@ static u_int8_t enum_definer(FILE* fl){
 		return FAILURE;
 	}
 
-	//We can now create the enum type
-	generic_type_t* enum_type = create_enumerated_type(type_name, parser_line_num, NOT_MUTABLE);
+	//We can create the mutable & immutable versions of the enum types
+	generic_type_t* immutable_enum_type = create_enumerated_type(type_name, parser_line_num, NOT_MUTABLE);
+	generic_type_t* mutable_enum_type = create_enumerated_type(type_name, parser_line_num, NOT_MUTABLE);
 
 	//Insert into the type symtab
-	insert_type(type_symtab, create_type_record(enum_type));
+	insert_type(type_symtab, create_type_record(immutable_enum_type));
+	insert_type(type_symtab, create_type_record(mutable_enum_type));
 
 	//Now that we know we don't have a duplicate, we can now start looking for the enum list
 	//We must first see an L_CURLY
@@ -4951,7 +4956,7 @@ static u_int8_t enum_definer(FILE* fl){
 			return FAILURE;
 		}
 
-		//Now check for duplicated vars
+		//Add this variable in
 		if(do_duplicate_variables_exist(member_name) == TRUE){
 			return FAILURE;
 		}
@@ -4989,7 +4994,7 @@ static u_int8_t enum_definer(FILE* fl){
 			//The other case - if this is FALSE and we saw this,
 			//then we have an error
 			if(user_defined_enum_values == FALSE){
-				sprintf(info, "%s has been set as an auto-defined enum. No enum values can be assigned with the = operator", enum_type->type_name.string);
+				sprintf(info, "%s has been set as an auto-defined enum. No enum values can be assigned with the = operator", mutable_enum_type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -5043,7 +5048,7 @@ static u_int8_t enum_definer(FILE* fl){
 			//Are we using user-defined values? If so,
 			//then this is wrong
 			if(user_defined_enum_values == TRUE){
-				sprintf(info, "%s has been set as a user-defined enum. All enum values must be assigned with the = operator", enum_type->type_name.string);
+				sprintf(info, "%s has been set as a user-defined enum. All enum values must be assigned with the = operator", mutable_enum_type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -5057,7 +5062,18 @@ static u_int8_t enum_definer(FILE* fl){
 		}
 
 		//Add this in as a member to our current enum
-		u_int8_t success = add_enum_member(enum_type, member_record, user_defined_enum_values);
+		u_int8_t success = add_enum_member(mutable_enum_type, member_record, user_defined_enum_values);
+
+		//This means that the user attempted to add a duplicate value
+		if(success == FAILURE){
+			sprintf(info, "Duplicate enum value %ld", member_record->enum_member_value);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//Add this in as a member to our current enum
+		success = add_enum_member(immutable_enum_type, member_record, user_defined_enum_values);
 
 		//This means that the user attempted to add a duplicate value
 		if(success == FAILURE){
@@ -5093,15 +5109,29 @@ static u_int8_t enum_definer(FILE* fl){
 	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value);
 
 	//Store this in the enum
-	enum_type->internal_values.enum_integer_type = type_needed;
-
+	mutable_enum_type->internal_values.enum_integer_type = type_needed;
 	//Assign the size over as well
-	enum_type->type_size = type_needed->type_size;
+	mutable_enum_type->type_size = type_needed->type_size;
+
+	//We do the exact same for the immutable version
+	//Store this in the enum
+	immutable_enum_type->internal_values.enum_integer_type = type_needed;
+	//Assign the size over as well
+	immutable_enum_type->type_size = type_needed->type_size;
 
 	//We now go through and set the type now that we know what it is
-	for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
+	for(u_int16_t i = 0; i < mutable_enum_type->internal_types.enumeration_table->current_index; i++){
 		//Grab it out
-		symtab_variable_record_t* var = dynamic_array_get_at(enum_type->internal_types.enumeration_table, i);
+		symtab_variable_record_t* var = dynamic_array_get_at(mutable_enum_type->internal_types.enumeration_table, i);
+
+		//Store the type that we have
+		var->type_defined_as = type_needed;
+	}
+
+	//Do the exact same for the immutable version
+	for(u_int16_t i = 0; i < immutable_enum_type->internal_types.enumeration_table->current_index; i++){
+		//Grab it out
+		symtab_variable_record_t* var = dynamic_array_get_at(immutable_enum_type->internal_types.enumeration_table, i);
 
 		//Store the type that we have
 		var->type_defined_as = type_needed;

@@ -26,7 +26,7 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 	define fn(mut i32*, i32) -> void as arithmetic_function;
 
 	//This is the add function
-	let test:mut arithmetic_function = add;
+	let test:arithmetic_function = add;
 
 	//Call indirectly
 	@test(&x, argc);
