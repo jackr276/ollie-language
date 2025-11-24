@@ -4431,6 +4431,15 @@ static generic_type_t* union_type_specifier(FILE* fl, mutability_type_t mutabili
 	if(lookahead.tok != L_BRACKET){
 		//Put it back
 		push_back_token(lookahead);
+
+		//It is not possible to have a void type as a union member
+		if(current_type_record->type == immut_void
+			|| current_type_record->type == mut_void){
+			print_parse_message(PARSE_ERROR, "Unions may not have members that are void", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
 		//We're done here
 		return current_type_record->type;
 	}
@@ -4560,13 +4569,6 @@ static generic_type_t* union_type_specifier(FILE* fl, mutability_type_t mutabili
 			//We don't need the other one if this is the case
 			type_dealloc(array_type);
 		}
-	}
-
-	//It is not possible to have a void type as a union member
-	if(current_type_record->type == immut_void){
-		print_parse_message(PARSE_ERROR, "Unions may not have members that are void", parser_line_num);
-		num_errors++;
-		return NULL;
 	}
 
 	//We're done with it, so deallocate
@@ -5539,6 +5541,20 @@ static generic_type_t* type_specifier(FILE* fl){
 	if(lookahead.tok != L_BRACKET){
 		//Put it back
 		push_back_token(lookahead);
+
+		/**
+		 * This is a very unique case. Internally, the system needs to have
+		 * a "mutable" void type in order to support things like mut void*, etc.. However,
+		 * if the user attempts to do something like fn my_fn() -> mut void, we should
+		 * throw an error here and disallow that. For all the user knows, there is no
+		 * mut void
+		 */
+		if(current_type_record->type == mut_void){
+			print_parse_message(PARSE_ERROR, "Void types do not contain values and therefore cannot be declared mutable. Remove the \"mut\" specificer", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
 		//We're done here
 		return current_type_record->type;
 	}
@@ -5672,19 +5688,6 @@ static generic_type_t* type_specifier(FILE* fl){
 
 	//We're done with it, so deallocate
 	lightstack_dealloc(&lightstack);
-
-	/**
-	 * This is a very unique case. Internally, the system needs to have
-	 * a "mutable" void type in order to support things like mut void*, etc.. However,
-	 * if the user attempts to do something like fn my_fn() -> mut void, we should
-	 * throw an error here and disallow that. For all the user knows, there is no
-	 * mut void
-	 */
-	if(current_type_record->type == mut_void){
-		print_parse_message(PARSE_ERROR, "Void types do not contain values and therefore cannot be declared mutable. Remove the \"mut\" specificer", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
 
 	//Give back whatever the current type may be
 	return current_type_record->type;
