@@ -4173,15 +4173,17 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	insert_type(type_symtab, mutable_record);
 	insert_type(type_symtab, immutable_record);
 
-	//Now that we've done that part, we also need to create the alias type and insert it
-	//
-	//
-	//TODO NOT DONE
-	//
-	generic_type_t* alias_type = create_aliased_type(identifier_name.string, function_type, parser_line_num, NOT_MUTABLE);
+	//Now that we've done that part, we also need to create the mutable and immutable aliases for the type
+	generic_type_t* mutable_alias_type = create_aliased_type(identifier_name.string, mutable_function_type, parser_line_num, MUTABLE);
 
 	//Once we've created this, we'll add this into the symtab
-	insert_type(type_symtab, create_type_record(alias_type));
+	insert_type(type_symtab, create_type_record(mutable_alias_type));
+
+	//Now that we've done that part, we also need to create the mutable and immutable aliases for the type
+	generic_type_t* immutable_alias_type = create_aliased_type(identifier_name.string, immutable_function_type, parser_line_num, NOT_MUTABLE);
+
+	//Once we've created this, we'll add this into the symtab
+	insert_type(type_symtab, create_type_record(immutable_alias_type));
 
 	//This worked
 	return TRUE;
