@@ -2,18 +2,18 @@
 * This program is made for the purposes of testing short circuiting logic
 */
 
-fn tester(mut arg:i32) -> void{
+fn tester(arg:mut i32) -> void{
 	arg++;
 }
 
 //Dummy
-fn really_long_function(mut arg:i32) -> i32 {
+fn really_long_function(arg:mut i32) -> i32 {
 	arg++;
 	ret arg;
 }
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let mut x:u32 = 232;
+	let x:mut u32 = 232;
 
 	defer {
 		x = x + 3;
@@ -32,7 +32,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	
 
 	//Assign B a start
-	let mut b:i32 = 33;
+	let b:mut i32 = 33;
 
 	do{
 		b--;

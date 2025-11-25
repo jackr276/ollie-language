@@ -3,8 +3,8 @@
 */
 
 pub fn main() -> i32{
-	let mut x:i32 = 33;
-	let mut y:i32 = 3232;
+	let x:mut i32 = 33;
+	let y:mut i32 = 3232;
 
 	while(x <= 32){
 		x = x * 3 + x;

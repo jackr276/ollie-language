@@ -2,17 +2,17 @@
 * This program is made for the purposes of testing short circuiting logic
 */
 
-fn tester(mut arg:i32) -> void{
+fn tester(arg:mut i32) -> void{
 	arg++;
 }
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let mut x:u32 = 232;
+	let x:mut u32 = 232;
 
 	//Assign B a start
-	let mut b:i32 = 33;
+	let b:mut i32 = 33;
 
-	let mut a:u32 = 0;
+	let a:mut u32 = 0;
 
 	//These are both inverses
 	while(a < 33 && (b == 0 || b - a == 0)){
