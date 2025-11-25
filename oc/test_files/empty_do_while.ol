@@ -4,7 +4,7 @@
 */
 
 pub fn main() -> i32 {
-	let mut x:i32 = 0;
+	let x:mut i32 = 0;
 	
 	//Empty do-while
 	do{}while(x++ < 5);

@@ -5,7 +5,7 @@
 
 
 pub fn main() -> i32 {
-	let mut x:i32 = 0;
+	let x:mut i32 = 0;
 
 	for(; x < 333; x++){}
 

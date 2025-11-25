@@ -2,21 +2,21 @@
 * This program is made for the purposes of testing arrays
 */
 
-pub fn main(mut arg:i32, argv:char**) -> i32{
+pub fn main(arg:mut i32, argv:char**) -> i32{
 	//The array that we have
-	declare mut arr:i32[14][17];
-	declare mut oneD:i64[2];
-	declare mut oneDi32:i32[2];
+	declare arr:mut i32[14][17];
+	declare oneD:mut i64[2];
+	declare oneDi32:mut i32[2];
 	
 	define struct my_struct{
-		mut ch:char;
-		mut x:i64;
-		mut lch:char;
-		mut y:i32;
+		ch:mut char;
+		x:mut i64;
+		lch:mut char;
+		y:mut i32;
 
 	} as my_struct;
 
-	declare mut structure:my_struct;
+	declare structure:mut my_struct;
 
 	structure:ch = 'a';
 	structure:x = 3;
@@ -32,7 +32,7 @@ pub fn main(mut arg:i32, argv:char**) -> i32{
 	}
 
 	//Useless assign
-	let mut z:i64 = structure:x;
+	let z:mut i64 = structure:x;
 
 	//structure:x = 7;
 	let x:i64 = structure:x;
@@ -44,12 +44,10 @@ pub fn main(mut arg:i32, argv:char**) -> i32{
 
 	oneDi32[1] = 3;
 
-	let mut x:i32 = 33;
+	let x:mut i32 = 33;
 	x = arr[arg][13];
 
-	let mut i:i32 = 3;
-	//let mut j:i32* = arr;
-	//j = j + 1;
+	let i:mut i32 = 3;
 	arr[i][2] = 333;
 	
 	if(arg == 2) {
