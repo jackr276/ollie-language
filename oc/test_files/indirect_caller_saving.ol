@@ -9,8 +9,8 @@
 */
 define fn(mut u32) -> u32 as count_function;
 
-fn pcount_r(mut x:u32) -> u32 {
-	let mut y:u32 = 32;
+fn pcount_r(x:mut u32) -> u32 {
+	let y:mut u32 = 32;
 	if( x == 0) {
 		ret (x & 1) + @pcount_r(x >> 1) + y;
 	} else if (x == 1) {
@@ -26,8 +26,8 @@ fn pcount_r(mut x:u32) -> u32 {
 	ret x * 3 + y;
 }
 
-fn lcount_r(mut x:u32) -> u32 {
-	let mut y:u32 = 32;
+fn lcount_r(x:mut u32) -> u32 {
+	let y:mut u32 = 32;
 	if( x == 0) {
 		ret (x & 3) + @pcount_r(x >> 5) + y;
 	} else if (x == 5) {
@@ -44,8 +44,8 @@ fn lcount_r(mut x:u32) -> u32 {
 
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	declare mut a:u32;
-	let mut x:u32 = 433;
+	declare a:mut u32;
+	let x:mut u32 = 433;
 
 	a = (x * -128) + (x - 11);
 	x = x / 9;
