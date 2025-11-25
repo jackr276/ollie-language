@@ -3839,7 +3839,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
  *
  * BNF Rule: <construct-member> ::= <identifier> : <type-specifier> 
  */
-static u_int8_t struct_member(FILE* fl, generic_type_t* struct_type){
+static u_int8_t struct_member(FILE* fl, generic_type_t* mutable_struct_type, generic_type_t* immutable_struct_type){
 	//The lookahead token
 	lexitem_t lookahead;
 
@@ -3857,12 +3857,13 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* struct_type){
 	//Grab this for convenience
 	dynamic_string_t name = lookahead.lexeme;
 
-	//The field, if we can find it
-	symtab_variable_record_t* duplicate = get_struct_member(struct_type, name.string);
+	//The field, if we can find it. We only need to check it from one of the versions, they
+	//are the same internally
+	symtab_variable_record_t* duplicate = get_struct_member(mutable_struct_type, name.string);
 
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, struct_type->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, mutable_struct_type->type_name.string);
 		print_parse_message(PARSE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
 		num_errors++;
@@ -3926,8 +3927,9 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* struct_type){
 	//Store what the type is
 	member_record->type_defined_as = type_spec;
 
-	//Add it to the construct
-	add_struct_member(struct_type, member_record);
+	//Add it to both versions
+	add_struct_member(mutable_struct_type, member_record);
+	add_struct_member(immutable_struct_type, member_record);
 
 	//All went well so we can send this up the chain
 	return SUCCESS;
@@ -4262,14 +4264,14 @@ static u_int8_t struct_definer(FILE* fl){
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
 	//We start with the immutable type
 	generic_type_t* immutable_struct_type = create_struct_type(type_name, current_line, NOT_MUTABLE);
-	generic_type_t* mutable_struct_type = create_struct_type(type_name, current_line, MUTABLE);
+	generic_type_t* mutable_struct_type = create_struct_type(clone_dynamic_string(&type_name), current_line, MUTABLE);
 	
 	//Now we'll insert the struct type into the symtab
 	insert_type(type_symtab, create_type_record(immutable_struct_type));
 	insert_type(type_symtab, create_type_record(mutable_struct_type));
 
 	//We are now required to see a valid construct member list
-	u_int8_t success = struct_member_list(fl, immutable_struct_type);
+	u_int8_t success = struct_member_list(fl, mutable_struct_type, immutable_struct_type);
 
 	//Automatic fail case here
 	if(success == FAILURE){
@@ -4280,14 +4282,7 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//Once we get here, the struct type's size is known and as such it is complete
 	immutable_struct_type->type_complete = TRUE;
-
-	/**
-	 * Now that we've created the immutable version of the struct, we need to also create the mutable version
-	 */
-	generic_type_t* mutable_struct_type = create_mutable_version_of_type(immutable_struct_type);
-
-	//Insert it into the symtab
-	insert_type(type_symtab, create_type_record(mutable_struct_type));
+	mutable_struct_type->type_complete = TRUE;
 	
 	//Now we have one final thing to account for. The syntax allows for us to alias the type right here. This may
 	//be preferable to doing it later, and is certainly more convenient. If we see a semicol right off the bat, we'll
