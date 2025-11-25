@@ -10,7 +10,7 @@ fn ret_logical_not(x:i32) -> bool {
 
 
 pub fn main() -> i32 {
-	let mut x:i32 = 3;
+	let x:mut i32 = 3;
 
 	if(!x) {
 		ret @ret_logical_not(x);

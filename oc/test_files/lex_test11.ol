@@ -2,17 +2,16 @@
 * This one should not work
 */
 
-fn example(mut my_arr:i32*, max:u32) -> void{
+fn example(my_arr:mut i32*, max:u32) -> void{
 	*my_arr = 2+3 + 6-1;
 	ret;
 }
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	declare mut my_arr : i32[400];
+	declare my_arr:mut i32[400];
 	my_arr[0] = 3;
 
-	let mut argc:u32 = 14;
-	//let mut example:u32 = 2;
+	let argc:mut u32 = 14;
 
 	while(argc > 0) {
 		argc--;

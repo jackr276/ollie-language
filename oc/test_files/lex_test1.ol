@@ -9,10 +9,10 @@ declare j:u8;
 alias u8[100] as int_arr;
 
 fn test_func(my_float:u32, ptr:void*) -> void{
-	let mut i:u32 = 0x01;
+	let i:mut u32 = 0x01;
 	//Cast ptr to an int
 
-	declare mut my_arr:i32[100];
+	declare my_arr:mut i32[100];
 
 	my_arr[3] = 2;
 
@@ -25,12 +25,12 @@ fn test_func(my_float:u32, ptr:void*) -> void{
 	ret;
 }
 
-fn never_defined(mut x:i32) -> u32{
+fn never_defined(x:mut i32) -> u32{
 	ret x;
 }
 
 pub fn main() -> i32 {
-	let mut i:u32 = 1;
+	let i:mut u32 = 1;
 	let j:u32 = 1;
 	let j_ptr:u32* = &j;
 	let i_ptr:u32* = &i;

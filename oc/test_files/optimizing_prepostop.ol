@@ -6,12 +6,12 @@
 
 
 //Should not optimize away
-pub fn preincrement_return(mut a:i32) -> i32 {
+pub fn preincrement_return(a:mut i32) -> i32 {
 	ret ++a;
 }
 
 //Should optimize away
-pub fn postincrement_return(mut a:i32) -> i32 {
+pub fn postincrement_return(a:mut i32) -> i32 {
 	ret a++;
 }
 
