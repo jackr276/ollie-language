@@ -5,8 +5,8 @@
 
 define struct my_struct {
 	//Bad array definition
-	mut x:struct my_struct[3];
-	mut y:i32;
+	x:mut struct my_struct[3];
+	y:mut i32;
 } as custOm_struct;
 
 

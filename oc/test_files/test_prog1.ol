@@ -6,7 +6,7 @@ define struct my_struct {
 } as my_struct;
 
 
-fn my_func(mut args:u32) -> u32{
+fn my_func(args:mut u32) -> u32{
 	if(args == 2) {
 		ret 3;
 	} else {
@@ -20,7 +20,7 @@ fn my_func(mut args:u32) -> u32{
 		args++;
 	} 
 
-	for(let mut i:u32 = 0; i < 232; i++){
+	for(let i:mut u32 = 0; i < 232; i++){
 		i--;
 		let j:i32 = 32;
 		continue when (i == 32);
@@ -30,14 +30,14 @@ fn my_func(mut args:u32) -> u32{
 }
 
 
-fn test_func(mut i:u32) -> void{
+fn test_func(i:mut u32) -> void{
 	i = 32;
 }
 
 
 pub fn main(argc:i32, argv:char**) -> i32{
 	//Allocate a struct
-	declare mut my_structure:my_struct;
+	declare my_structure:mut my_struct;
 
 	my_structure:a = 2;
 	my_structure:b = 3;
@@ -48,7 +48,7 @@ pub fn main(argc:i32, argv:char**) -> i32{
 	//Sample call
 	@test_func(2);
 
-	let mut idx:u32 = 0;
+	let idx:mut u32 = 0;
 
 	while(idx < 15){
 		let bab:u32 = @my_func(idx);
@@ -69,7 +69,7 @@ pub fn main(argc:i32, argv:char**) -> i32{
 	} while (idx > 0);
 
 	//Example for loop
-	for(let mut i:u32 = 0; i <= 234; i = i + 2){
+	for(let i:mut u32 = 0; i <= 234; i = i + 2){
 		@test_func(i);
 	}
 

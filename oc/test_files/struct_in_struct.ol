@@ -17,16 +17,16 @@ define struct custom {
 * Should be  (24 + 8 + 4 + 1 + 3 pad = 40)
 */
 define struct parent {
-	mut internal:my_struct;
-	mut x:i64;
-	mut y:i32;
-	mut z:char;
+	internal:mut my_struct;
+	x:mut i64;
+	y:mut i32;
+	z:mut char;
 } as parent_struct;
 
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	declare mut parent:parent_struct;
-	declare mut internal_struct:my_struct;
+	declare parent:mut parent_struct;
+	declare internal_struct:mut my_struct;
 
 	switch(arg){
 		case 2 -> {

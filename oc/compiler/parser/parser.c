@@ -1337,9 +1337,6 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Add in the line number
 	asn_expr_node->line_number = current_line;
 
-	//Now we must see a valid unary expression. The unary expression's parent
-	//will itself be the assignment expression node
-	
 	//We'll let this rule handle it
 	generic_ast_node_t* left_hand_unary = unary_expression(fl, SIDE_TYPE_LEFT);
 
