@@ -3,8 +3,8 @@
 */
 
 fn bad_type() -> i32 {
-	let mut x:i32 = 3;
-	let mut y:i8 = 2;
+	let x:mut i32 = 3;
+	let y:mut i8 = 2;
 
 	//bad size
 	y += 3;
@@ -13,9 +13,9 @@ fn bad_type() -> i32 {
 }
 
 fn invalid_op_type_mod() -> i32 {
-	let mut x:i32 = 3;
-	let mut z:i32 = 32;
-	let mut y:i32* = &x;
+	let x:mut i32 = 3;
+	let z:mut i32 = 32;
+	let y:mut i32* = &x;
 
 	//Pointers cannot be modded
 	y %= x;
@@ -24,9 +24,9 @@ fn invalid_op_type_mod() -> i32 {
 }
 
 fn invalid_op_divide() -> i32 {
-	let mut x:i32 = 3;
-	let mut z:i32 = 32;
-	let mut y:i32* = &x;
+	let x:mut i32 = 3;
+	let z:mut i32 = 32;
+	let y:mut i32* = &x;
 
 	//Pointers cannot be divided 
 	y /= x;
@@ -35,9 +35,9 @@ fn invalid_op_divide() -> i32 {
 }
 
 fn invalid_op_shift() -> i32 {
-	let mut x:i32 = 3;
-	let mut z:i32 = 32;
-	let mut y:i32* = &x;
+	let x:mut i32 = 3;
+	let z:mut i32 = 32;
+	let y:mut i32* = &x;
 
 	//Pointers cannot be shifted 
 	y <<= x;
@@ -47,9 +47,9 @@ fn invalid_op_shift() -> i32 {
 
 
 fn invalid_op_type() -> i32 {
-	let mut x:i32 = 3;
-	let mut z:i32 = 32;
-	let mut y:i32* = &x;
+	let x:mut i32 = 3;
+	let z:mut i32 = 32;
+	let y:mut i32* = &x;
 
 	//Pointers cannot be multiplied
 	y *= x;
@@ -58,8 +58,8 @@ fn invalid_op_type() -> i32 {
 }
 
 fn bad_size() -> i32 {
-	let mut x:i32 = 3;
-	let mut y:i64 = 222;
+	let x:mut i32 = 3;
+	let y:mut i64 = 222;
 
 	//bad size
 	x *= y;

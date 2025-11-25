@@ -4,14 +4,14 @@
 
 fn not_main(arg:i32, argv:char**) -> i64 {
 	define struct my_struct{
-		mut ch:char;
-		mut x:i64;
-		mut lch:char;
-		mut y:i32;
+		ch:mut char;
+		x:mut i64;
+		lch:mut char;
+		y:mut i32;
 
 	} as my_struct;
 
-	declare mut structure:my_struct;
+	declare structure:mut my_struct;
 
 	structure:ch = 'a';
 	structure:x = 3;
@@ -27,7 +27,7 @@ fn not_main(arg:i32, argv:char**) -> i64 {
 	}
 
 	//Useless assign
-	let mut z:i64 = structure:x;
+	let z:mut i64 = structure:x;
 
 	//structure:x = 7;
 	let x:i64 = structure:x;
