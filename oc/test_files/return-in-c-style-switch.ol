@@ -4,7 +4,7 @@
 */
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let mut x:i32 = 32;
+	let x:mut i32 = 32;
 
 	switch(arg){
 		case 2:

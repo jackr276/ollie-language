@@ -5,8 +5,8 @@
 
 define struct my_struct {
 	//Bad recursive definition like so
-	mut x:struct my_struct;
-	mut y:i32;
+	x:mut struct my_struct;
+	y:mut i32;
 } as custOm_struct;
 
 

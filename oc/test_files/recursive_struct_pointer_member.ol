@@ -5,14 +5,14 @@
 
 define struct linked_list_node {
 	//Next node
-	mut next:struct linked_list_node*;
-	mut data:void*;
+	next:mut struct linked_list_node*;
+	data:mut void*;
 } as list_node_t;
 
 /**
 * Linked list functionality
 */
-fn get_next(mut current:list_node_t*) -> list_node_t* {
+fn get_next(current:mut list_node_t*) -> list_node_t* {
 	ret current=>next;
 }
 

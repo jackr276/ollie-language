@@ -4,9 +4,9 @@
 */
 
 pub fn main() -> i32 {
-	let mut a:i32 = 0;
-	declare mut b:i32;
-	declare mut c:i32;
+	let a:mut i32 = 0;
+	declare b:mut i32;
+	declare c:mut i32;
 
 	do {
 		b = a + 3;

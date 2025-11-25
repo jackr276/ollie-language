@@ -9,21 +9,21 @@ define fn(mut i32, i32) -> i32 as arithmetic_function;
 /**
 * Shares the same signature as subtract
 */
-fn add(mut x:i32, y:i32) -> i32{
+fn add(x:mut i32, y:i32) -> i32{
 	ret x + y;
 }
 
 /**
 * Shares the same signature as add
 */
-fn subtract(mut x:i32, y:i32) -> i32{
+fn subtract(x:mut i32, y:i32) -> i32{
 	ret x - y;
 }
 
 /**
 * Shares the same signature as add
 */
-fn multiply(mut x:i32, y:i32) -> i32{
+fn multiply(x:mut i32, y:i32) -> i32{
 	ret x * y;
 }
 

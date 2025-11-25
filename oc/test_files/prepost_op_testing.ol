@@ -4,19 +4,19 @@
 * Test handling of postinc/postdec
 */
 
-pub fn struct_testing(mut arg:i32, argv:char**) -> i32{
+pub fn struct_testing(arg:mut i32, argv:char**) -> i32{
 	/**
 	* Size should be: 1 + 3 pad + 320 + 1 + 3 pad + 4
 	*/
 	define struct my_struct{
-		mut ch:char;
-		mut x:i32[80];
-		mut lch:char;
-		mut y:i32;
+		ch:mut char;
+		x:mut i32[80];
+		lch:mut char;
+		y:mut i32;
 
 	} as my_struct;
 
-	declare mut structure:my_struct;
+	declare structure:mut my_struct;
 
 	structure:ch = 'a';
 	structure:x[3] = 3;
@@ -38,7 +38,7 @@ pub fn struct_testing(mut arg:i32, argv:char**) -> i32{
 pub fn main() -> i32 {
 	//The compiler should detect and count the number
 	//in the array initializer list.
-	let mut arr:i32[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+	let arr:mut i32[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 	arr[3]++;
 
