@@ -38,7 +38,7 @@ fn not_main(arg:i32, argv:char**) -> i64 {
 	}
 
 	//Useless assign
-	let mut z:i64 = struct_ptr=>x;
+	let z:mut i64 = struct_ptr=>x;
 
 	//structure:x = 7;
 	let x:i64 = struct_ptr=>x;
