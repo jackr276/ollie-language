@@ -19,7 +19,7 @@ define struct my_struct {
 
 pub fn main() -> i32{
 	//Get x as a struct
-	declare mut x:custom_struct;
+	declare x:mut custom_struct;
 
 	x:tester.ch = 'a';
 

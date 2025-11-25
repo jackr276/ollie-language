@@ -1,7 +1,7 @@
 
 fn test_func() -> i32 {
-	let mut i:u32 = 232;
-	let mut j:u32 = 32;
+	let i:mut u32 = 232;
+	let j:mut u32 = 32;
 
 	defer {
 	i++;
@@ -39,7 +39,7 @@ fn test_func() -> i32 {
 	} while (i < 232);
 
 	let sample:u32 = 2232;
-	for(let mut i:u32 = 0; i < 2323; i++) {
+	for(let i:mut u32 = 0; i < 2323; i++) {
 		@test_func();
 		if(i == -1) {
 			ret -1;
@@ -53,7 +53,7 @@ fn test_func() -> i32 {
 
 pub fn main(argc:i32, argv:char**)->i32{
 	let i:u32 = 0;
-	let mut a:u32 = 0;
+	let a:mut u32 = 0;
 	let v:u32 = 0;
 	let b:u32 = 0;
 	let j:u32 = 0;

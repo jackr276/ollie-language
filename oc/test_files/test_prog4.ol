@@ -2,15 +2,15 @@
 * Example
 */
 
-fn my_func(mut i:u32, mut j:u32) -> i32{
+fn my_func(i:mut u32, j:mut u32) -> i32{
 	i = i + 1;
 	ret i;
 }
 
 
-fn my_fn(mut argc:i32, mut argv:char**)->i32{
-	let mut i:i32 = 0;
-	let mut a:i32 = 0;
+fn my_fn(argc:mut i32, argv:mut char**)->i32{
+	let i:mut i32 = 0;
+	let a:mut i32 = 0;
 	let v:i32 = 0;
 	let b:i32 = 0;
 	let j:i32 = 0;
@@ -49,7 +49,7 @@ fn my_fn(mut argc:i32, mut argv:char**)->i32{
 
 	@my_func(i+2, j);
 
-	let mut j_copy:u32 = -i * 32 - 322;
+	let j_copy:mut u32 = -i * 32 - 322;
 	++j_copy;
 
 	ret j + a;

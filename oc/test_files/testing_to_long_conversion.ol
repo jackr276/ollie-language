@@ -5,8 +5,8 @@
 */
 
 fn test_subtraction() -> u64 {
-	let mut y:u64 = 32;
-	let mut x:i16 = 3;
+	let y:mut u64 = 32;
+	let x:mut i16 = 3;
 
 	y = y - x;
 	y = y * x;
@@ -16,8 +16,8 @@ fn test_subtraction() -> u64 {
 
 
 fn test() -> u64 {
-	let mut y:u64 = 32;
-	let mut x:i32 = 3;
+	let y:mut u64 = 32;
+	let x:mut i32 = 3;
 
 	y = y + x;
 	ret y;
