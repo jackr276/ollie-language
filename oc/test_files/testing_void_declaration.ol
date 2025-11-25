@@ -5,7 +5,7 @@
 
 
 pub fn main(void) -> i32{
-	let mut x:i32 = 32;
+	let x:mut i32 = 32;
 
 	switch(x){
 		case 2 -> {

@@ -6,8 +6,8 @@
 
 
 pub fn conversion_test() -> u64 {
-	let mut x:u32 = 33;
-	let mut y:u64 = 333;
+	let x:mut u32 = 33;
+	let y:mut u64 = 333;
 
 	//This will convert implicitly
 	ret y + x;
@@ -15,7 +15,7 @@ pub fn conversion_test() -> u64 {
 
 
 pub fn param_conversion_test(x:i32) -> u64 {
-	let mut y:u64 = 333;
+	let y:mutu64 = 333;
 
 	//This will convert implicitly
 	ret y + x;

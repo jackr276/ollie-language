@@ -1,9 +1,9 @@
 pub fn main() -> i32 {
-	let mut x:u32 = 2;
-	let mut y:i32 = 3;
-	let mut k:char = 'a';
+	let x:mut u32 = 2;
+	let y:mut i32 = 3;
+	let k:mut char = 'a';
 
-	let mut a:i32 = x * k ;
+	let a:mut i32 = x * k ;
 
 	ret a;
 }

@@ -8,7 +8,7 @@
 
 
 //Test going from a 32 bit value into a 64 bit memory region
-fn to_u64_memory_pointer(mut ptr:u64*) -> void {
+fn to_u64_memory_pointer(ptr:mut u64*) -> void {
 	let mut x:i32 = 33;
 
 	//This will trigger a widening conversion that is implicitly
@@ -20,7 +20,7 @@ fn to_u64_memory_pointer(mut ptr:u64*) -> void {
 
 
 //Test going from a 32 bit value into a 64 bit array
-fn to_u64_memory_array(mut arr:u64*) -> void {
+fn to_u64_memory_array(arr:mut u64*) -> void {
 	let mut x:i32 = 33;
 
 	//This will trigger a widening conversion that is implicitly
@@ -32,13 +32,13 @@ fn to_u64_memory_array(mut arr:u64*) -> void {
 
 
 //Test going from a 32 bit down into a u64 value
-fn from_32_to_u64_memory_pointer(mut ptr:i32*) -> u64 {
+fn from_32_to_u64_memory_pointer(ptr:mut i32*) -> u64 {
 	ret *ptr;
 }
 
 
 //Test going from a 32 bit down into a u64 value
-fn from_32_to_u64_memory_assignment(mut ptr:i32*) -> u64 {
+fn from_32_to_u64_memory_assignment(ptr:mut i32*) -> u64 {
 	let mut x:u64 = *ptr;
 
 	x = x + 33;
@@ -48,13 +48,13 @@ fn from_32_to_u64_memory_assignment(mut ptr:i32*) -> u64 {
 
 
 //Test going from 32 bit array into a 64 bit value
-fn from_32_to_u64_memory_array(mut arr:i32*) -> u64 {
+fn from_32_to_u64_memory_array(arr:mut i32*) -> u64 {
 	ret arr[32];
 }
 
 
 //Test going from 32 bit array into a 64 bit value with an index
-fn from_32_to_u64_memory_array_with_index(mut arr:i32*, idx:i32) -> u64 {
+fn from_32_to_u64_memory_array_with_index(arr:mut i32*, idx:i32) -> u64 {
 	ret arr[idx];
 }
 
