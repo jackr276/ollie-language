@@ -1563,15 +1563,14 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 /**
  * Dynamically allocate and create a constructed type
  */
-generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number){
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability){
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
 	//Assign the class
 	type->type_class = TYPE_CLASS_STRUCT;
 	
-	//This is the first struct type that we're making, and we make the NOT_MUTABLE
-	//one first
-	type->mutability = NOT_MUTABLE;
+	//Assign the mutability
+	type->mutability = mutability;
 
 	//Where is the declaration?
 	type->line_number = line_number;
@@ -1610,80 +1609,6 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 
 	//And give the type pointer back
 	return type;
-}
-
-
-/**
- * Clone and create a mutable copy of the exact type that we pass in
- *
- * This creates an exact copy of the type that we're after, only changing
- * the mutability level
- */
-generic_type_t* create_mutable_version_of_type(generic_type_t* type){
-	//Alloc it
-	generic_type_t* cloned = calloc(1, sizeof(generic_type_t));
-
-	//Copy the memory over
-	memcpy(cloned, type, sizeof(generic_type_t));
-
-	//Clone the name's memory
-	type->type_name = clone_dynamic_string(&(type->type_name));
-
-	//Some types have hidden internal fields. These need to be manually cloned
-	//over in a way that memcpy will not do
-	switch(type->type_class){
-		case TYPE_CLASS_STRUCT:
-			//Create a new struct table
-			cloned->internal_types.struct_table = dynamic_array_alloc();
-
-			//Clone it over bit by bit
-			for(u_int16_t i = 0; i < type->internal_types.struct_table->current_index; i++){
-				dynamic_array_add(cloned->internal_types.struct_table, dynamic_array_get_at(type->internal_types.struct_table, i));
-			}
-
-			break;
-
-		case TYPE_CLASS_FUNCTION_SIGNATURE:
-			//Create a new version
-			cloned->internal_types.function_type = calloc(1, sizeof(function_type_t));
-
-			//Copy it over
-			memcpy(cloned->internal_types.function_type, type->internal_types.function_type, sizeof(function_type_t)); 
-			
-			break;
-
-		case TYPE_CLASS_ENUMERATED:
-			//Create a new struct table
-			cloned->internal_types.enumeration_table = dynamic_array_alloc();
-
-			//Clone it over bit by bit
-			for(u_int16_t i = 0; i < type->internal_types.enumeration_table->current_index; i++){
-				dynamic_array_add(cloned->internal_types.enumeration_table, dynamic_array_get_at(type->internal_types.enumeration_table, i));
-			}
-
-			break;
-
-		case TYPE_CLASS_UNION:
-			//Create a new struct table
-			cloned->internal_types.union_table = dynamic_array_alloc();
-
-			//Clone it over bit by bit
-			for(u_int16_t i = 0; i < type->internal_types.union_table->current_index; i++){
-				dynamic_array_add(cloned->internal_types.union_table, dynamic_array_get_at(type->internal_types.union_table, i));
-			}
-
-			break;
-			
-		//In all other cases do nothing
-		default:
-			break;
-	}
-
-	//The only thing that we change is the mutability
-	cloned->mutability = MUTABLE;
-
-	//And give it back
-	return cloned;
 }
 
 

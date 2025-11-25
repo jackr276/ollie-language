@@ -3940,7 +3940,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* struct_type){
  *
  * BNF Rule: <construct-member-list> ::= { <construct-member> ; }*
  */
-static u_int8_t struct_member_list(FILE* fl, generic_type_t* struct_type){
+static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type, generic_type_t* immutable_struct_type){
 	//Now we are required to see a curly brace
 	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
@@ -3964,7 +3964,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* struct_type){
 		push_back_token(lookahead);
 
 		//We must first see a valid construct member
-		u_int8_t status = struct_member(fl, struct_type);
+		u_int8_t status = struct_member(fl, mutable_struct_type, immutable_struct_type);
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
@@ -3999,7 +3999,8 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* struct_type){
 	}
 
 	//Once done, we need to finalize the alignment for the construct table
-	finalize_struct_alignment(struct_type);
+	finalize_struct_alignment(mutable_struct_type);
+	finalize_struct_alignment(immutable_struct_type);
 
 	//Give the member list back
 	return SUCCESS;
@@ -4260,10 +4261,12 @@ static u_int8_t struct_definer(FILE* fl){
 
 	//If we make it here, we've made it far enough to know what we need to build our type for this construct
 	//We start with the immutable type
-	generic_type_t* immutable_struct_type = create_struct_type(type_name, current_line);
+	generic_type_t* immutable_struct_type = create_struct_type(type_name, current_line, NOT_MUTABLE);
+	generic_type_t* mutable_struct_type = create_struct_type(type_name, current_line, MUTABLE);
 	
 	//Now we'll insert the struct type into the symtab
 	insert_type(type_symtab, create_type_record(immutable_struct_type));
+	insert_type(type_symtab, create_type_record(mutable_struct_type));
 
 	//We are now required to see a valid construct member list
 	u_int8_t success = struct_member_list(fl, immutable_struct_type);

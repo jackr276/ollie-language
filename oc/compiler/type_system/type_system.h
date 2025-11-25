@@ -253,17 +253,12 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
  * Note: This only generates the immutable version of the struct. The mutable version
  * comes afterwards
  */
-generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create a union type
  */
 generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
-
-/**
- * Clone and create a mutable copy of the exact type that we pass in
- */
-generic_type_t* create_mutable_version_of_type(generic_type_t* type);
 
 /**
  * Is the given binary operation valid for the type that was specificed?
