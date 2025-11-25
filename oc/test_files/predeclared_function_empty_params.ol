@@ -18,7 +18,7 @@ fn predeclared() -> i32{
 
 pub fn main() -> i32 {
 	//Example call
-	let mut i:i32 = @test_func();
+	let i:mut i32 = @test_func();
 
 	ret i;
 }

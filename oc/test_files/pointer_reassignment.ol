@@ -7,18 +7,18 @@
 * Size should be 1 + 3 pad + 12 + 1 + 3 pad = 20
 */
 define struct my_struct{
-	mut ch:char;
-	mut y:i32[3];
-	mut lch:char;
+	ch:mut char;
+	y:mut i32[3];
+	lch:mut char;
 } as custom_struct;
 
 
 /**
 * A function that will mutate a structure in its entirety
 */
-pub fn mutate_structure_pointer(mut struct_pointer:custom_struct*) -> i32 {
+pub fn mutate_structure_pointer(struct_pointer:mut custom_struct*) -> i32 {
 	//Reassign the pointer
-	let mut ptr:custom_struct* = struct_pointer;
+	let ptr:mut custom_struct* = struct_pointer;
 
 	ptr=>y[2] = 32;
 	ptr=>lch = 'a';
@@ -30,9 +30,9 @@ pub fn mutate_structure_pointer(mut struct_pointer:custom_struct*) -> i32 {
 /**
 * A function that will mutate a structure in its entirety
 */
-pub fn mutate_structure_double_pointer(mut struct_pointer:custom_struct**) -> i32 {
+pub fn mutate_structure_double_pointer(struct_pointer:mut custom_struct**) -> i32 {
 	//Reassign the pointer
-	let mut ptr:custom_struct* = *struct_pointer;
+	let ptr:mut custom_struct* = *struct_pointer;
 
 	ptr=>y[2] = 32;
 	ptr=>lch = 'a';
@@ -46,13 +46,13 @@ pub fn mutate_structure_double_pointer(mut struct_pointer:custom_struct**) -> i3
 */
 pub fn reassign_pointer() -> i32 {
 	//Declare and initialize a struct
-	let mut a:i32[] = [2, 3, 4, 5, 17];
+	let a:mut i32[] = [2, 3, 4, 5, 17];
 
 	//Some reassignment
 	a[2] = 2;
 
 	//Pointer to a
-	let mut c:i32* = a;
+	let c:mut i32* = a;
 
 	//Some reassignment
 	c[1] = 2;
@@ -65,9 +65,9 @@ pub fn reassign_pointer() -> i32 {
 
 pub fn main(arg:i32, argv:char**) -> i32{
 	//Declare and initialize a struct
-	let mut a:custom_struct = {'a', [2,3,4], 'b'};
+	let a:mut custom_struct = {'a', [2,3,4], 'b'};
 
-	let mut b:custom_struct* = &a;
+	let b:mut custom_struct* = &a;
 
 	//Call the mutator
 	@mutate_structure_pointer(b);

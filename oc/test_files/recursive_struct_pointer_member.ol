@@ -12,7 +12,7 @@ define struct linked_list_node {
 /**
 * Linked list functionality
 */
-fn get_next(current:mut list_node_t*) -> list_node_t* {
+fn get_next(current:mut list_node_t*) ->mut list_node_t* {
 	ret current=>next;
 }
 

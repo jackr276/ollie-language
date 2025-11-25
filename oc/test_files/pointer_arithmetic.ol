@@ -4,8 +4,8 @@
 */
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	let mut x:i32 = 32;
-	let mut y:i32* = &x;
+	let x:mut i32 = 32;
+	let y:mut i32* = &x;
 
 	*y = x - 11;
 	*y = 32;
