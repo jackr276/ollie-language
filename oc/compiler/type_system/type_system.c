@@ -437,6 +437,17 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
+			//This is invalid - we cannot take an immutable pointer
+			//and then assign it over to a mutable pointer, because
+			//that would allow mutation of the underlying value
+			//
+			//
+			//TODO WE NEED TO PORT THIS TO OTHER NON-BASIC TYPES
+			if(source_type->mutability == NOT_MUTABLE 
+				&& destination_type->mutability == MUTABLE){
+				return NULL;
+			}
+
 			switch(source_type->type_class){
 				case TYPE_CLASS_BASIC:
 					//This needs to be a u64, otherwise it's invalid
