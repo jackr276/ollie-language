@@ -1281,7 +1281,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
  * a reference to the subtree created by it
  *
  * BNF Rule: <assignment-expression> ::= <ternary-expression> 
- * 									   | <unary-expression> := <ternary-expression>
+ * 									   | <unary-expression> = <ternary-expression>
  * 									   | <unary-expression> <<= <ternary-expression>
  * 									   | <unary-expression> >>= <ternary-expression>
  * 									   | <unary-expression> += <ternary-expression>
@@ -1380,6 +1380,16 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Extract the variable from the left side
 	symtab_variable_record_t* assignee = left_hand_unary->variable;
 
+	/**
+	 * If we have a so-called "field variable", that means that this 
+	 * unary expression is a postfix access of some kind. This is important
+	 * because we'll need to check the type's mutability, not the assignee's
+	 */
+	if(left_hand_unary->optional_storage.field_variable != NULL){
+		//TODO
+
+	}
+
 	//Are we able to assign to it? If not, we fail out here
 	if(can_variable_be_assigned_to(assignee) == FALSE){
 		printf("TYPE IS %s\n", left_hand_unary->inferred_type->type_name.string);
@@ -1388,6 +1398,10 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		}
 
 		printf("Type record is %s\n", left_hand_unary->inferred_type->type_name.string);
+
+		if(left_hand_unary->optional_storage.field_variable != NULL){
+			printf("Struct variable is %s\n", left_hand_unary->optional_storage.field_variable->var_name.string);
+		}
 
 		sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
 		return print_and_return_error(info, parser_line_num);
@@ -1590,6 +1604,8 @@ static generic_ast_node_t* union_pointer_accessor(FILE* fl, generic_type_t* curr
 
 	union_accessor_node->line_number = parser_line_num;
 	union_accessor_node->variable = union_member;
+	//Store the field variable
+	union_accessor_node->optional_storage.field_variable = union_member;
  	union_accessor_node->inferred_type = union_member->type_defined_as;
 	union_accessor_node->is_assignable = TRUE;
 
@@ -1660,6 +1676,9 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 	//Store the variable in here
 	struct_pointer_access_node->variable = var_record;
 
+	//Store the struct variable
+	struct_pointer_access_node->optional_storage.field_variable = var_record;
+
 	//Store the type
 	struct_pointer_access_node->inferred_type = var_record->type_defined_as;
 
@@ -1725,6 +1744,9 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	//Store the variable in here
 	struct_access_node->variable = var_record;
 
+	//Store the struct variable
+	struct_access_node->optional_storage.field_variable = var_record;
+
 	//Store the type
 	struct_access_node->inferred_type = var_record->type_defined_as;
 
@@ -1773,6 +1795,8 @@ static generic_ast_node_t* union_accessor(FILE* fl, generic_type_t* type, side_t
 
 	//Let's now populate with the appropriate variable and type
 	union_accessor->variable = union_variable;
+	//Store the field variable
+	union_accessor->optional_storage.field_variable = union_variable;
 	union_accessor->inferred_type = union_variable->type_defined_as;
 	union_accessor->is_assignable = TRUE;
 
@@ -2045,6 +2069,9 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 		//The type of this parent is always the type of the operator node
 		parent->inferred_type = operator_node->inferred_type;
 
+		//Transfer this around
+		parent->optional_storage.field_variable = operator_node->optional_storage.field_variable;
+
 		//The parent's assignability inherits from the operator
 		parent->is_assignable = operator_node->is_assignable;
 	}
@@ -2213,15 +2240,8 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was
-			//
-			//
-			//TODO INVESTIGATE - currently just using the child's mutability
-			//
-			//
-			//
-			//
-			//
+			//Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was. The mutability here is *always*
+			//the child's mutability by default. If the user wants that to change, they need to cast
 			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num, cast_expr->inferred_type->mutability);
 
 			//We'll check to see if this type is already in existence

@@ -105,8 +105,12 @@ struct generic_ast_node_t{
 	symtab_variable_record_t* variable;
 	//The symtab function record
 	symtab_function_record_t* func_record;
-	//The type record that we have
-	symtab_type_record_t* type_record;
+	union{
+		//The type record that we have
+		symtab_type_record_t* type_record;
+		//Field in a struct or union
+		symtab_variable_record_t* field_variable;
+	} optional_storage;
 	//Storing the constant values
 	union {
 		int64_t signed_long_value;
