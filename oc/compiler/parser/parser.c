@@ -118,7 +118,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 /**
  * Simply prints a parse message in a nice formatted way
 */
-void print_parse_message(parse_message_type_t message_type, char* info, u_int16_t line_num){
+void print_parse_message(parse_message_type_t message_type, char* info, u_int32_t line_num){
 	//Build and populate the message
 	parse_message_t parse_message;
 	parse_message.message = message_type;
@@ -433,7 +433,7 @@ static generic_type_t* determine_required_minimum_signed_integer_type_size(int64
 /**
  * Print out an error message. This avoids code duplicatoin becuase of how much we do this
  */
-static generic_ast_node_t* print_and_return_error(char* error_message, u_int16_t parser_line_num){
+static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t parser_line_num){
 	//Display the error
 	print_parse_message(PARSE_ERROR, error_message, parser_line_num);
 	//Increment the number of errors
@@ -1322,6 +1322,34 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		if(accessor->ast_node_type == AST_NODE_TYPE_ARRAY_ACCESSOR){
 			if(first_child->inferred_type->mutability == NOT_MUTABLE){
 				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", first_child->inferred_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
+
+		//If we have a variable, then this is definitely a mutation
+		if(left_hand_expression_tree->variable != NULL){
+			left_hand_expression_tree->variable->mutated = TRUE;
+		}
+
+	/**
+	 * If we have some kind of pointer dereference, we would see a structure
+	 * like this
+	 *
+	 * 		<unary-node>
+	 * 		  /    \ 
+	 * 	  <star>   <unary-node>
+	 */
+	} else if(left_hand_expression_tree->ast_node_type == AST_NODE_TYPE_UNARY_EXPR){
+		//Extract for our convenience
+		generic_ast_node_t* first_child = left_hand_expression_tree->first_child;
+		generic_ast_node_t* dereferenced = first_child->next_sibling;
+
+		if(first_child->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR
+			&& first_child->unary_operator == STAR){
+
+			//If this is immutable, we are trying to assign to an immutable value
+			if(dereferenced->inferred_type->mutability == NOT_MUTABLE){
+				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", dereferenced->inferred_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 		}
@@ -2233,22 +2261,6 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			//Ensure that we aren't trying to deref a null pointer
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_values.is_void_pointer == TRUE){
 				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
-			}
-
-			//Attempt to dereference an immutable pointer
-			//on the left side - this means that the user is attempting
-			//to assign to it
-			if(side == SIDE_TYPE_LEFT){
-				//These is bad
-				if(cast_expr->inferred_type->mutability == NOT_MUTABLE){
-					sprintf(info, "Type %s is immutable and cannot be assigned to", cast_expr->inferred_type->type_name.string);
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				//If we have a variable, then this is a mutation
-				if(cast_expr->variable != NULL){
-					cast_expr->variable->mutated = TRUE;
-				}
 			}
 
 			//Otherwise our dereferencing worked, so the return type will be whatever this points to
