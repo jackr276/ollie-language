@@ -26,6 +26,10 @@
 //Define a generic error array global variable
 char info[ERROR_SIZE];
 
+//For printing all of our type names
+char type_name_buf[MAX_IDENT_LENGTH];
+char type_name_buf2[MAX_IDENT_LENGTH];
+
 //The function is reentrant
 //Variable and function symbol tables
 static function_symtab_t* function_symtab = NULL;
@@ -777,7 +781,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		if(function_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 			//Print and fail out here
 			sprintf(error, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name.string, function_type->type_name.string);
-			return print_and_return_error(error, parser_line_num);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Now that we know this exists, we'll allocate this one as an indirect function call

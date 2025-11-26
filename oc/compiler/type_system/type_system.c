@@ -294,7 +294,6 @@ u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_ty
 
 	//If the destination is larger than the source, we must convert
 	if(destination_size > source_size){
-		//printf("Type conversion between needed for %s to be assigned to %s\n", source_type->type_name.string, destination_type->type_name.string);
 		return TRUE;
 	}
 
@@ -2073,13 +2072,13 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 		//Extract the parameter type
 		generic_type_t* paramter_type = function_type->parameters[i];
 
-		//Generate the mut value there if we don't have it already
+		//We'll need to generate the mut value if we do or don't have it
 		if(paramter_type->mutability == MUTABLE){
-			sprintf(var_string, "mut ");
+			sprintf(var_string, "mut %s", paramter_type->type_name.string);
+		} else {
+			//First put this into the buffer string
+			sprintf(var_string, "%s", paramter_type->type_name.string);
 		}
-
-		//First put this into the buffer string
-		sprintf(var_string, "%s", paramter_type->type_name.string);
 
 		//Then concatenate
 		dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
@@ -2099,7 +2098,6 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 		//First print this to the buffer
 		sprintf(var_string, ") -> %s", function_type->return_type->type_name.string);
 	}
-
 
 	//Add the closing sequence
 	dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
