@@ -887,10 +887,12 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
-			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s %s\". Defined as: %s",
-		   			function_name.string, param_type->type_name.string, num_params,
+			sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an input of type \"%s%s\". Defined as: %s",
+		   			function_name.string, 
+		   			(param_type->mutability == MUTABLE ? "mut ": ""),
+		   			param_type->type_name.string, num_params,
 		   			//Print the mut keyword if we need it
-		   			(current_param->inferred_type->mutability == TRUE ? "mut" : ""),
+		   			(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
 		   			current_param->inferred_type->type_name.string, function_type->type_name.string);
 
 			//Use the helper to return this
@@ -1363,7 +1365,9 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		//This is the case where we have a plain variable assignment
 		if(can_variable_be_assigned_to(assignee) == FALSE){
 			sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-			return print_and_return_error(info, parser_line_num);
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_variable_name(assignee);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		/**
