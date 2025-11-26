@@ -350,18 +350,48 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		//This is a simpler case - constructs can only be assigned
 		//if they're the exact same
 		case TYPE_CLASS_STRUCT:
-			if(destination_type == source_type){
-				return destination_type;
+			//If the string compare works, they are the same type. We must now check for mutability
+			if(strcmp(destination_type->type_name.string, source_type->type_name.string) == 0){
+				//This is fine, we can assign to something immutable
+				if(destination_type->mutability == NOT_MUTABLE){
+					return destination_type;
+
+				//Otherwise, the destination *is* mutable. The only way
+				//that this works is if the source is also mutable
+				} else {
+					//Good case
+					if(source_type->mutability == MUTABLE){
+						return destination_type;
+					//Fail out
+					} else {
+						return NULL;
+					}
+				}
 			}
 
 			return NULL;
 
 		//This will only work if they're the exact same
 		case TYPE_CLASS_UNION:
-			if(destination_type == source_type){
-				return destination_type;
+			//If the string compare works, they are the same type. We must now check for mutability
+			if(strcmp(destination_type->type_name.string, source_type->type_name.string) == 0){
+				//This is fine, we can assign to something immutable
+				if(destination_type->mutability == NOT_MUTABLE){
+					return destination_type;
+
+				//Otherwise, the destination *is* mutable. The only way
+				//that this works is if the source is also mutable
+				} else {
+					//Good case
+					if(source_type->mutability == MUTABLE){
+						return destination_type;
+					//Fail out
+					} else {
+						return NULL;
+					}
+				}
 			}
-			
+
 			return NULL;
 
 		/**
@@ -375,7 +405,18 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			//Otherwise, we'll need to use the helper rule to determine if it's equivalent
 			if(function_signatures_identical(destination_type, source_type) == TRUE){
-				return destination_type;
+				//If the destination is immutable we're all good
+				if(destination_type->mutability == NOT_MUTABLE){
+					return destination_type;
+				//Otherwise it is mutable, so we *must* have a mutable source for
+				//this to work out
+				} else {
+					if(source_type->mutability == MUTABLE){
+						return destination_type;
+					} else {
+						return NULL;
+					}
+				}
 			} else {
 				return NULL;
 			}
@@ -439,12 +480,12 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 			//This is invalid - we cannot take an immutable pointer
 			//and then assign it over to a mutable pointer, because
 			//that would allow mutation of the underlying value
-			//
-			//
-			//TODO WE NEED TO PORT THIS TO OTHER NON-BASIC TYPES
-			if(source_type->mutability == NOT_MUTABLE 
-				&& destination_type->mutability == MUTABLE){
-				return NULL;
+			if(destination_type->mutability == MUTABLE){
+				//If the destination is mutable but the source
+				//is not, we can't go forward
+				if(source_type->mutability != MUTABLE){
+					return NULL;
+				}
 			}
 
 			switch(source_type->type_class){
@@ -493,6 +534,9 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		/**
 		 * Basic types are the most interesting variety because we may need to coerce these values
 		 * according to what the destination type is
+		 *
+		 * For basic types, since we will always be copying register to register, the mutability
+		 * here is irrelevant
 		 */
 		case TYPE_CLASS_BASIC:
 			//Extract the destination's basic type
@@ -2107,8 +2151,15 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 /**
  * Generate a failure message for when the "types_assignable" call fails
  */
-void generate_types_assignable_failure_message(char* info, generic_type_t* a, generic_type_t* b){
+void generate_types_assignable_failure_message(char* info, generic_type_t* source_type, generic_type_t* destination_type){
+	//Grab the mutability levels
+	char* source_mutability = source_type->mutability == MUTABLE ? "mut" : "";
+	char* dest_mutability = destination_type->mutability == MUTABLE ? "mut" : "";
 
+	//Print into the buffer
+	sprintf(info, "Type \"%s %s\" cannot be assigned to incompatible type \"%s %s\"",
+			source_mutability, source_type->type_name.string,
+		 	dest_mutability, destination_type->type_name.string);
 }
 
 
