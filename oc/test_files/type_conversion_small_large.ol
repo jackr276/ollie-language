@@ -21,6 +21,8 @@ pub fn test_unions() -> i32{
 	//Get x as a struct
 	declare x:custom_struct;
 
+	//Since this is a mutable char, we can change it
+	//even though the top level struct is immutable
 	x:tester.ch = 'a';
 
 	x:tester.x[2] = 2;

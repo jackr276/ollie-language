@@ -1360,15 +1360,6 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
-	//Extract the variable from the left side
-	symtab_variable_record_t* assignee = left_hand_unary->variable;
-
-	//Are we able to assign to it? If not, we fail out here
-	if(can_variable_be_assigned_to(assignee) == FALSE){
-		sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
 	//Now we are required to see the := terminal
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	
@@ -1384,6 +1375,22 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
+	}
+
+	//Extract the variable from the left side
+	symtab_variable_record_t* assignee = left_hand_unary->variable;
+
+	//Are we able to assign to it? If not, we fail out here
+	if(can_variable_be_assigned_to(assignee) == FALSE){
+		printf("TYPE IS %s\n", left_hand_unary->inferred_type->type_name.string);
+		if(left_hand_unary->inferred_type->mutability == MUTABLE){
+			printf("IT IS MUT\n");
+		}
+
+		printf("Type record is %s\n", left_hand_unary->inferred_type->type_name.string);
+
+		sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	/**
@@ -1419,26 +1426,6 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			//Let the helper generate
 			generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
 			return print_and_return_error(info, parser_line_num);
-		}
-
-		//
-		//
-		//
-		//
-		//TODO SPECIAL ATTENTION NEEDED HERE
-		//
-		//
-		//
-		//
-		//
-		//
-		//THIS SHOULD GO IN TYPES_ASSIGNABLE - done just for compilation
-
-		//If the return type of the logical or expression is an address, is it an address of a mutable variable?
-		if(expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-			if(expr->variable->type_defined_as->mutability == NOT_MUTABLE && left_hand_unary->variable->type_defined_as->mutability == MUTABLE){
-				return print_and_return_error("Mutable references to immutable variables are forbidden", parser_line_num);
-			}
 		}
 
 		//If the expression is a constant, we force it to be the final type
