@@ -5,10 +5,10 @@
 //Global variables
 
 fn other_test() -> void{
-	let mut l:i32 = 33;
-	let mut j:i32 = 3232;
-let mut glob_x:u32 = 3232;
-let glog_y:i32 = -232;
+	let l:mut i32 = 33;
+	let j:mut i32 = 3232;
+	let glob_x:mut u32 = 3232;
+	let glog_y:i32 = -232;
 
 
 	if(l == 32)  {
@@ -20,15 +20,15 @@ let glog_y:i32 = -232;
 		j = l + 3;
 	}
 
-	let mut asd:i32 = l + j;
+	let asd:mut i32 = l + j;
 }
 
 
 fn tester() -> void{
-	let mut x:i32 = 33;
-	let mut y:i32 = 3232;
+	let x:mut i32 = 33;
+	let y:mut i32 = 3232;
 
-let mut glob_x:u32 = 3232;
+let glob_x:mut u32 = 3232;
 let glog_y:i32 = -232;
 	if(x <= 32) {
 		x = x + 22;
@@ -46,13 +46,13 @@ let glog_y:i32 = -232;
 
 
 pub fn main() -> i32{
-	let mut x:i32 = 33;
-	let mut y:i32 = 3232;
+	let x:mut i32 = 33;
+	let y:mut i32 = 3232;
 
-let mut glob_x:u32 = 3232;
+let glob_x:mut u32 = 3232;
 let glog_y:i32 = -232;
 	x = 3222;
-	for(let mut _:i32 = 2; _ < 23; _++) {
+	for(let _:mut i32 = 2; _ < 23; _++) {
 		if(x <= 32) {
 			x = x + 22;
 		} else {

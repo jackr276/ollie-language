@@ -6,21 +6,21 @@
 /**
 * Shares the same signature as subtract
 */
-fn add(mut x:i32, y:i32) -> i32{
+fn add(x:mut i32, y:i32) -> i32{
 	ret x + y;
 }
 
 /**
 * Shares the same signature as add
 */
-fn subtract(mut x:i32, y:i32) -> i32{
+fn subtract(x:mut i32, y:i32) -> i32{
 	ret x - y;
 }
 
 /**
 * Shares the same signature as add
 */
-fn multiply(mut x:i32, y:i32) -> i32{
+fn multiply(x:mut i32, y:i32) -> i32{
 	ret x * y;
 }
 
@@ -28,7 +28,7 @@ pub fn main() -> i32{
 	//Define an arithmetic function pointer that takes in two i32's
 	define fn(mut i32, i32) -> i32 as arithmetic_function;
 
-	declare mut functions:arithmetic_function[3];
+	declare functions:mut arithmetic_function[3];
 
 	functions[0] = add;
 	functions[1] = subtract;

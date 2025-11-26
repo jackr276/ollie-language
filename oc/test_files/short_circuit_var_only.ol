@@ -2,7 +2,7 @@
 * This program is made for the purposes of testing short circuiting logic
 */
 
-fn tester(mut arg:i32) -> void{
+fn tester(arg:mut i32) -> void{
 	arg++;
 }
 
@@ -18,7 +18,7 @@ fn test_function2(arg:i32) -> i32 {
 
 
 fn test_while_or(arg:i32) -> i32 {
-	let mut x:i32 = 55;
+	let x:mut i32 = 55;
 
 	//Will trigger inverse
 	while(x || arg) {
@@ -30,7 +30,7 @@ fn test_while_or(arg:i32) -> i32 {
 
 
 fn test_while_and(arg:i32) -> i32 {
-	let mut x:i32 = 55;
+	let x:mut i32 = 55;
 
 	//Will trigger inverse
 	while(x && arg) {
@@ -41,7 +41,7 @@ fn test_while_and(arg:i32) -> i32 {
 }
 
 pub fn test_if_and(arg:i32) -> i32 {
-	let mut x:u32 = 232;
+	let x:mut u32 = 232;
 
 	if(x && arg){
 		x = x - 3;
@@ -54,7 +54,7 @@ pub fn test_if_and(arg:i32) -> i32 {
 }
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let mut x:u32 = 232;
+	let x:mut u32 = 232;
 	
 	if(x || arg){
 		x = x - 3;

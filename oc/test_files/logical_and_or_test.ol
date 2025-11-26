@@ -5,8 +5,8 @@
 
 
 pub fn main(arc:i32, argv:char**) -> i32 {
-	let mut x:i32 = 73;
-	let mut y:i32 = 88;
+	let x:mut i32 = 73;
+	let y:mut i32 = 88;
 
 	let z:i32 = x || y;
 	let a:i32 = z && y;

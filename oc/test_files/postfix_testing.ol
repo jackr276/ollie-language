@@ -15,7 +15,7 @@ define struct custom {
 
 
 pub fn postfix_in_use(arg:i32) -> i32{
-	declare mut x:i32;
+	declare x:mut i32;
 
 	switch(arg){
 		case 2 -> {
@@ -32,7 +32,7 @@ pub fn postfix_in_use(arg:i32) -> i32{
 	}
 
 	//Very basic initializer
-	let mut tester:my_struct = {x, 7, 'a'};
+	let tester:mut my_struct = {x, 7, 'a'};
 
 	//So it isn't optimized away
 	ret tester:x--;
@@ -40,7 +40,7 @@ pub fn postfix_in_use(arg:i32) -> i32{
 
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	declare mut x:i32;
+	declare x:mut i32;
 
 	switch(arg){
 		case 2 -> {
@@ -57,7 +57,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	}
 
 	//Very basic initializer
-	let mut tester:my_struct = {x, 7, 'a'};
+	let tester:mut my_struct = {x, 7, 'a'};
 
 	//Postincrement this
 	tester:x++;

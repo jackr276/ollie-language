@@ -4,7 +4,7 @@
 */
 
 pub fn main() -> i32 {
-	declare mut x:i32[][2]; //INCOMPLETE & bad
+	declare x:mut i32[][2]; //INCOMPLETE & bad
 	
 	ret 0;
 }

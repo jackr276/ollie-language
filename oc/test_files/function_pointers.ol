@@ -6,14 +6,14 @@
 /**
 * Shares the same signature as subtract
 */
-fn add(mut x:i32, y:i32) -> i32{
+fn add(x:mut i32, y:i32) -> i32{
 	ret x + y;
 }
 
 /**
 * Shares the same signature as add
 */
-fn subtract(mut x:i32, y:i32) -> i32{
+fn subtract(x:mut i32, y:i32) -> i32{
 	ret x - y;
 }
 
@@ -23,7 +23,7 @@ pub fn main() -> i32 {
 	define fn(mut i32, i32) -> i32 as arithmetic_function;
 
 	//This is the add function
-	let mut x:arithmetic_function = add;
+	let x:arithmetic_function = add;
 
 	//Should call add on 1 and 3
 	ret @x(1, 3);

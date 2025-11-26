@@ -3,8 +3,8 @@
 * This file aims to test the caller saving conventions of the ollie compiler
 */
 
-fn pcount_r(mut x:u64) -> u64 {
-	let mut y:u64 = 32;
+fn pcount_r(x:mut u64) -> u64 {
+	let y:mut u64 = 32;
 	if( x == 0) {
 		ret (x & 1) + @pcount_r(x >> 1) + y;
 	} else if (x == 1) {

@@ -3,15 +3,15 @@
  * For multi-layer array access
  */
 pub fn main() -> i32{
-	let mut a:i32 = 23;
-	let mut b:i32 = 3232;
-	let mut c:i32 = 322322;
+	let a:mut i32 = 23;
+	let b:mut i32 = 3232;
+	let c:mut i32 = 322322;
 
 	c++;
 	
 	
 	//Declare the array
- 	declare mut arr:i32[32][3];
+ 	declare arr:mut i32[32][3];
 
 	//Let's try and populate
 	arr[1][2] = 23;
@@ -20,7 +20,7 @@ pub fn main() -> i32{
 	b = arr[3][2];
 
 	//Let's do simple access to make sure that it still works
-	declare mut b_arr:i8[3];
+	declare b_arr:mut i8[3];
 
 	b_arr[2] = 'a';
 

@@ -7,10 +7,10 @@ fn my_fn() -> void{
 */
 
 fn test(argc:i32, argv:char**) -> i32{
-	declare mut a:u32;
-	declare mut b:u32;
-	declare mut c:u32;
-	declare mut d:u32;
+	declare a:mut u32;
+	declare b:mut u32;
+	declare c:mut u32;
+	declare d:mut u32;
 
 	a = 32;
 	b = 27;
@@ -31,7 +31,7 @@ fn test(argc:i32, argv:char**) -> i32{
 
 	//do{
 	//while(d >= 32) {
-	for(let mut i:u32 = 0; i < 323; i++) {
+	for(let i:mut u32 = 0; i < 323; i++) {
 		declare a:u32;
 		declare b:u32;
 		declare c:u32;

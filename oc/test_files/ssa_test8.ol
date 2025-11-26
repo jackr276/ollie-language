@@ -3,17 +3,17 @@
 */
 
 
-fn println(mut a:i32) -> void{
+fn println(a:mut i32) -> void{
 	a++;
 	ret;
 }
 
 pub fn main() -> i32{
-	let mut x:i32 = 33;
-	let mut y:i32 = 3232;
+	let x:mut i32 = 33;
+	let y:mut i32 = 3232;
 
 
-	let mut abc:i32 = 3232;
+	let abc:mut i32 = 3232;
 
 	defer{
 	@println(abc);
@@ -35,7 +35,7 @@ pub fn main() -> i32{
 		y = x + y + 3;
 	}
 
-	let mut w:i32 = x + y;
+	let w:mut i32 = x + y;
 
 	//w = 327;
 	//w = 322;

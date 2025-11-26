@@ -4,9 +4,9 @@
 */
 
 
-fn uninitialized_in_do_while_loop(mut arg:i32) -> void {
+fn uninitialized_in_do_while_loop(arg:mut i32) -> void {
 	//Declare but do not initialize
-	declare c:i32;
+	declare c:mut i32;
 
 	do{
 		//Should fail - C is never initialized

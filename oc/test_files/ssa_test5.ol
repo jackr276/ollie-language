@@ -3,7 +3,7 @@
 */
 
 pub fn main() -> i32{
-	let mut x:i32 = 33;
+	let x:mut i32 = 33;
 
 	x = 3222;
 

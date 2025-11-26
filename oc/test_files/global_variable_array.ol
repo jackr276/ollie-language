@@ -3,7 +3,7 @@
 * Testing global array variables
 */
 
-declare mut array:i32[8];
+declare array:mut i32[8];
 
 
 pub fn main() -> i32 {
@@ -16,7 +16,7 @@ pub fn main() -> i32 {
 	array[6] = 31;
 	array[7] = 32;
 
-	for(let mut i:i32 = 0; i < 8; i++){
+	for(let i:mut i32 = 0; i < 8; i++){
 		array[i] = i * 3 - 2;
 	}
 

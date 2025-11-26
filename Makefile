@@ -250,11 +250,11 @@ parser_test: parser.o lexer.o parser_test.o symtab.o lexstack.o heapstack.o type
 parser_test_debug: parserd.o lexerd.o parser_testd.o symtabd.o lexstack.o heapstackd.o type_systemd.o astd.o call_graphd.o heap_queued.o lightstackd.o dynamic_arrayd.o stack_data_aread.o instructiond.o dynamic_stringd.o nesting_stackd.o
 	$(CC) -g -o $(OUT_LOCAL)/parser_test_debug $(OUT_LOCAL)/parser_testd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/call_graphd.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o
 
-symtab_test: symtab.o symtab_test.o lexer.o type_system.o lexstack.o lightstack.o stack_data_area.o instruction.o dynamic_array.o parser.o cfg.o ast.o call_graph.o heap_queue.o heapstack.o jump_table.o dynamic_string.o nesting_stack.o
-	$(CC) -o $(OUT_LOCAL)/symtab_test $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/symtab_test.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/call_graph.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o
+symtab_test: symtab.o symtab_test.o lexer.o type_system.o lexstack.o lightstack.o stack_data_area.o dynamic_array.o  heap_queue.o heapstack.o jump_table.o dynamic_string.o nesting_stack.o call_graph.o
+	$(CC) -o $(OUT_LOCAL)/symtab_test $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/symtab_test.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o $(OUT_LOCAL)/call_graph.o
 
-symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o lexstackd.o lightstackd.o stack_data_aread.o instructiond.o dynamic_arrayd.o dynamic_stringd.o nesting_stackd.o
-	$(CC) -o $(OUT_LOCAL)/symtab_testd $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/symtab_testd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o
+symtab_testd: symtabd.o symtab_testd.o lexerd.o type_systemd.o lexstackd.o lightstackd.o stack_data_aread.o instructiond.o dynamic_arrayd.o dynamic_stringd.o nesting_stackd.o call_graphd.o
+	$(CC) -o $(OUT_LOCAL)/symtab_testd $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/symtab_testd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/call_graphd.o
 
 stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack.o symtab.o lexer.o instruction.o stack_data_area.o dynamic_array.o ast.o call_graph.o cfg.o parser.o heap_queue.o heapstack.o jump_table.o dynamic_string.o nesting_stack.o
 	$(CC) -o $(OUT_LOCAL)/stack_data_area_test $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/stack_data_area_test.o $(OUT_LOCAL)/symtab.o $(OUT_LOCAL)/type_system.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/lightstack.o $(OUT_LOCAL)/stack_data_area.o $(OUT_LOCAL)/instruction.o $(OUT_LOCAL)/dynamic_array.o $(OUT_LOCAL)/ast.o $(OUT_LOCAL)/call_graph.o $(OUT_LOCAL)/cfg.o $(OUT_LOCAL)/parser.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/heapstack.o $(OUT_LOCAL)/jump_table.o $(OUT_LOCAL)/dynamic_string.o $(OUT_LOCAL)/nesting_stack.o
@@ -380,6 +380,16 @@ compiler_test_allocation_only: oc
 		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
 		echo "Running ./oc/out/oc -sra -f $$input -o $$output"; \
 		./oc/out/oc -sra -f $$input -o $$output; \
+	done
+
+# This one will run a trace by outputting the status code at the end
+trace_compiler_test_allocation_only: oc
+	@for input in $(inputs); do \
+		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
+		echo "Running ./oc/out/oc -sra -f $$input -o $$output"; \
+		./oc/out/oc -sra -f $$input -o $$output; \
+		status=$$?;\
+		echo "Returned a code of: $$status"; \
 	done
 
 # A performance test will skip printing out any extra debug info and just time the compiler to see how our
@@ -511,8 +521,8 @@ parser_test-CI.o: $(TEST_SUITE_PATH)/parser_test.c
 parser_test-CI: parser-CI.o lexer-CI.o parser_test-CI.o symtab-CI.o lexstack-CI.o heapstack-CI.o type_system-CI.o ast-CI.o call_graph-CI.o heap_queue-CI.o lightstack-CI.o dynamic_array-CI.o stack_data_area-CI.o instruction-CI.o dynamic_string-CI.o nesting_stack-CI.o
 	$(CC) -o $(OUT_CI)/parser_test $(OUT_CI)/parser_test.o $(OUT_CI)/parser.o $(OUT_CI)/lexstack.o $(OUT_CI)/lexer.o $(OUT_CI)/heapstack.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/ast.o $(OUT_CI)/call_graph.o $(OUT_CI)/heap_queue.o $(OUT_CI)/lightstack.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/instruction.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o
 
-symtab_test-CI: symtab-CI.o symtab_test-CI.o lexer-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o stack_data_area-CI.o instruction-CI.o dynamic_array-CI.o parser-CI.o cfg-CI.o ast-CI.o call_graph-CI.o heap_queue-CI.o heapstack-CI.o jump_table-CI.o dynamic_string-CI.o nesting_stack-CI.o
-	$(CC) -o $(OUT_CI)/symtab_test $(OUT_CI)/lexer.o $(OUT_CI)/symtab_test.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/instruction.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/parser.o $(OUT_CI)/cfg.o $(OUT_CI)/ast.o $(OUT_CI)/call_graph.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o
+symtab_test-CI: symtab-CI.o symtab_test-CI.o lexer-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o stack_data_area-CI.o dynamic_array-CI.o heap_queue-CI.o heapstack-CI.o dynamic_string-CI.o nesting_stack-CI.o call_graph-CI.o jump_table-CI.o
+	$(CC) -o $(OUT_CI)/symtab_test $(OUT_CI)/lexer.o $(OUT_CI)/symtab_test.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o  $(OUT_CI)/dynamic_array.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o $(OUT_CI)/call_graph.o
 
 stack_data_area_test-CI: stack_data_area_test-CI.o type_system-CI.o lexstack-CI.o lightstack-CI.o symtab-CI.o lexer-CI.o instruction-CI.o stack_data_area-CI.o dynamic_array-CI.o ast-CI.o call_graph-CI.o cfg-CI.o parser-CI.o heap_queue-CI.o heapstack-CI.o jump_table-CI.o dynamic_string-CI.o nesting_stack-CI.o
 	$(CC) -o $(OUT_CI)/stack_data_area_test $(OUT_CI)/lexer.o $(OUT_CI)/stack_data_area_test.o $(OUT_CI)/symtab.o $(OUT_CI)/type_system.o $(OUT_CI)/lexstack.o $(OUT_CI)/lightstack.o $(OUT_CI)/stack_data_area.o $(OUT_CI)/instruction.o $(OUT_CI)/dynamic_array.o $(OUT_CI)/ast.o $(OUT_CI)/call_graph.o $(OUT_CI)/cfg.o $(OUT_CI)/parser.o $(OUT_CI)/heap_queue.o $(OUT_CI)/heapstack.o $(OUT_CI)/jump_table.o $(OUT_CI)/dynamic_string.o $(OUT_CI)/nesting_stack.o

@@ -3744,7 +3744,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->memory_access_type = READ_FROM_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);
+	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -3789,7 +3789,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->memory_access_type = WRITE_TO_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64")->type);
+	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -4256,7 +4256,7 @@ instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, 
 	stmt->destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u32")->type);
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
 
 	//Just give this back
 	return stmt;
@@ -4277,7 +4277,7 @@ instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer
 	stmt->destination_register = stack_pointer;
 
 	//Emit this directly
-	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u32")->type);
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
 
 	//Just give this back
 	return stmt;

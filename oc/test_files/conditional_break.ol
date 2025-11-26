@@ -3,12 +3,12 @@
 */
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let mut x:i32 = 32;
+	let x:mut i32 = 32;
 
-	let mut _:u32 = 2;
+	let _:mut u32 = 2;
 
 	while (_ < 65) {
-		let mut i:u32 = 2;
+		let i:mut u32 = 2;
 		if(i == 2) {
 			i = 3;
 		}

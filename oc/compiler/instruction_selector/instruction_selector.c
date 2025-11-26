@@ -3744,7 +3744,7 @@ static void handle_setne_instruction(instruction_t* instruction){
  * NOTE: We guarantee that the first instruction in the window is the one that
  * we're after in this case
  */
-static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* window){
+static void handle_logical_or_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_or = window->instruction1;
 
@@ -3754,11 +3754,8 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
 	//Let's first emit the or instruction
 	instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
 
-	//We'll need this type for our setne's
-	generic_type_t* unsigned_int8_type = lookup_type_name_only(cfg->type_symtab, "u8")->type;
-
 	//Now we need the setne instruction
-	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
+	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8));
 
 	//Following that we'll need the final movzx instruction
 	instruction_t* move_instruction = emit_move_instruction(logical_or->assignee, setne_instruction->destination_register);
@@ -3802,7 +3799,7 @@ static void handle_logical_or_instruction(cfg_t* cfg, instruction_window_t* wind
  * NOTE: We guarantee that the first instruction in the window is the one that we're after
  * in this case
  */
-static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* window){
+static void handle_logical_and_instruction(instruction_window_t* window){
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
@@ -3812,17 +3809,14 @@ static void handle_logical_and_instruction(cfg_t* cfg, instruction_window_t* win
 	//Let's first emit our test instruction
 	instruction_t* first_test = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
 
-	//We'll need this type for our setne's
-	generic_type_t* unsigned_int8_type = lookup_type_name_only(cfg->type_symtab, "u8")->type;
-
 	//Now we'll need a setne instruction that will set a new temp
-	instruction_t* first_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
+	instruction_t* first_set = emit_setne_instruction(emit_temp_var(u8));
 	
 	//Now we'll need the second test
 	instruction_t* second_test = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
 
 	//Now the second setne
-	instruction_t* second_set = emit_setne_instruction(emit_temp_var(unsigned_int8_type));
+	instruction_t* second_set = emit_setne_instruction(emit_temp_var(u8));
 
 	//Now we'll need to ANDx these two values together to see if they're both 1
 	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
@@ -5099,7 +5093,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		u_int8_t type_signed = is_type_signed(assignment->op1->type);
 
 		//We'll now need to insert inbetween here
-		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(lookup_type_name_only(cfg->type_symtab, "u8")->type), type_signed);
+		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(u8), type_signed);
 
 		//We now also need to modify the move instruction. We can do this without creating any new memory
 		variable_size_t destination_size = get_type_size(assignment->assignee->type);
@@ -5602,12 +5596,12 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		switch(window->instruction1->op){
 			//Handle the logical and case
 			case DOUBLE_AND:
-				handle_logical_and_instruction(cfg, window);
+				handle_logical_and_instruction(window);
 				return;
 
 			//Handle logical or
 			case DOUBLE_OR:
-				handle_logical_or_instruction(cfg, window);
+				handle_logical_or_instruction(window);
 				return;
 
 			//Handle division
@@ -5787,10 +5781,10 @@ static void select_instructions(cfg_t* cfg){
  */
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Grab these two general use types first
-	u64 = lookup_type_name_only(cfg->type_symtab, "u64")->type;
-	i32 = lookup_type_name_only(cfg->type_symtab, "i32")->type;
-	u32 = lookup_type_name_only(cfg->type_symtab, "u32")->type;
-	u8 = lookup_type_name_only(cfg->type_symtab, "u8")->type;
+	u64 = lookup_type_name_only(cfg->type_symtab, "u64", NOT_MUTABLE)->type;
+	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
+	u32 = lookup_type_name_only(cfg->type_symtab, "u32", NOT_MUTABLE)->type;
+	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
 	//Our very first step in the instruction selector is to order all of the blocks in one 
 	//straight line. This step is also able to recognize and exploit some early optimizations,

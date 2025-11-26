@@ -4,7 +4,7 @@
 */
 
 //Test preopping
-pub fn preop_pointers(mut x:i32*) -> i32 {
+pub fn preop_pointers(x:mut i32*) -> i32 {
 	(++x)[2] = 3;
 
 	ret x[3];
@@ -12,7 +12,7 @@ pub fn preop_pointers(mut x:i32*) -> i32 {
 }
 
 //Test postopping
-pub fn postop_pointers(mut x:i32*) -> i32 {
+pub fn postop_pointers(x:mut i32*) -> i32 {
 	(x++)[2] = 3;
 
 	ret x[3];

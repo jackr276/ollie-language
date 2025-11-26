@@ -37,29 +37,24 @@ three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 variable_symtab_t* variable_symtab;
 //Store for use
-generic_type_t* char_type = NULL;
-//Store this for usage
-generic_type_t* u8 = NULL;
-//Store this for usage
-generic_type_t* i32 = NULL;
-//Store this for usage
-generic_type_t* u32 = NULL;
-//Store this for usage
-generic_type_t* u64 = NULL;
-//Store this for usage
-generic_type_t* i64 = NULL;
+static generic_type_t* char_type = NULL;
+static generic_type_t* u8 = NULL;
+static generic_type_t* i32 = NULL;
+static generic_type_t* u32 = NULL;
+static generic_type_t* u64 = NULL;
+static generic_type_t* i64 = NULL;
 //The break and continue stack will
 //hold values that we can break & continue
 //to. This is done here to avoid the need
 //to send value packages at each rule
-heap_stack_t* break_stack = NULL;
-heap_stack_t* continue_stack = NULL;
+static heap_stack_t* break_stack = NULL;
+static heap_stack_t* continue_stack = NULL;
 //Keep a list of all lable statements in the function(block jumps are internal only)
-dynamic_array_t* current_function_labeled_blocks = NULL;
+static dynamic_array_t* current_function_labeled_blocks = NULL;
 //Also keep a list of all custom jumps in the function
-dynamic_array_t* current_function_user_defined_jump_statements = NULL;
+static dynamic_array_t* current_function_user_defined_jump_statements = NULL;
 //The current stack offset for any given function
-u_int64_t stack_offset = 0;
+static u_int64_t stack_offset = 0;
 //For any/all error printing
 char error_info[1500];
 
@@ -4607,7 +4602,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
 
 		//Extract the parameter type here
-		generic_type_t* paramter_type = signature->parameters[i-1].parameter_type;
+		generic_type_t* paramter_type = signature->parameters[i - 1];
 
 		//We need one more assignment here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
@@ -4738,7 +4733,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
 		
 		//Extract the parameter type here
-		generic_type_t* paramter_type = signature->parameters[i-1].parameter_type;
+		generic_type_t* paramter_type = signature->parameters[i - 1];
 
 		//We need one more assignment here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
@@ -8398,12 +8393,12 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	continue_stack = heap_stack_alloc(); 
 
 	//Keep these on hand
-	u64 = lookup_type_name_only(type_symtab, "u64")->type;
-	i64 = lookup_type_name_only(type_symtab, "i64")->type;
-	u32 = lookup_type_name_only(type_symtab, "u32")->type;
-	i32 = lookup_type_name_only(type_symtab, "i32")->type;
-	u8 = lookup_type_name_only(type_symtab, "u8")->type;
-	char_type = lookup_type_name_only(type_symtab, "char")->type;
+	u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
+	i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE)->type;
+	u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE)->type;
+	i32 = lookup_type_name_only(type_symtab, "i32", NOT_MUTABLE)->type;
+	u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
+	char_type = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
 
 	//We'll first create the fresh CFG here
 	cfg_t* cfg = calloc(1, sizeof(cfg_t));

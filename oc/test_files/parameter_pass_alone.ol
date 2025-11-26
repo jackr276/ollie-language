@@ -5,8 +5,8 @@
 
 
 fn parameter_pass(x:i32, y:i32, z:i32, a:char, b:char, c:char) -> i32 {
-	let mut k:i32 = x + y + z;
-	let mut c:char = a + b + c;
+	let k:mut i32 = x + y + z;
+	let c:mut char = a + b + c;
 
 	ret k + c;
 }

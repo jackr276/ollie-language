@@ -18,7 +18,7 @@ pub fn expanding_load(ptr:i32*) -> i64 {
 	ret *ptr;
 }
 
-pub fn expanding_pointer_tester(mut ptr:i64*, x:i32) -> i32 {
+pub fn expanding_pointer_tester(ptr:mut i64*, x:i32) -> i32 {
 	//Should trigger expansion
 	*ptr = x;
 
@@ -26,14 +26,14 @@ pub fn expanding_pointer_tester(mut ptr:i64*, x:i32) -> i32 {
 }
 
 pub fn main() -> i32 {
-	declare mut arr:i32[30];
+	declare arr:mut i32[30];
 	
 	//Should trigger converting store
 	let ex:char = 'c';
 	arr[3] = ex;
 
 	//Should trigger an upwards converting move
-	let mut y:i64 = arr[5];
+	let y:mut i64 = arr[5];
 
 	//Just call for fun
 	@tester(y, arr);

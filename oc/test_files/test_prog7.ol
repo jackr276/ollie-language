@@ -39,7 +39,7 @@ fn saturating_add(x:i32, y:i32) -> i32{
 */
 
 fn tester() -> void{
-	let mut x:i32 = !3;
+	let x:mut i32 = !3;
 	++x;
 	ret;
 }
@@ -48,8 +48,7 @@ fn tester() -> void{
  * Demonstrate the functionality of saturating add for positive and negative overflows
  */
 pub fn main() -> i32{
-
-	let mut x:i32 = -2U;
+	let x:mut i32 = -2U;
 
 	//Example asm inline statement
 	defer {

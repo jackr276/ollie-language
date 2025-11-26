@@ -38,7 +38,7 @@ replace TEST_INT with -1;
 replace my_char with 'c';
 
 fn tester() -> void{
-	let mut x:i32 = !3;
+	let x:mut i32 = !3;
 	++x;
 	ret;
 }
@@ -47,23 +47,12 @@ fn tester() -> void{
  * Demonstrate the functionality of saturating add for positive and negative overflows
  */
 pub fn main() -> i32{
-
-	let mut x:i32 = -2U;
-	let mut my_float:f32 = -0.23;
-	let mut aa:i32 = --3;
-	let mut my_val:i32 = x + -32;
-	let mut teste:i32 = TEST_INT;
+	let x:mut i32 = -2U;
+	let my_float:mut f32 = -0.23;
+	let aa:mut i32 = --3;
+	let my_val:mut i32 = x + -32;
+	let teste:mut i32 = TEST_INT;
 	let test_char:char = my_char;
-
-	//Example asm inline statement
-	//defer asm{
-	//	push %rax;
-	//	push %rbx;
-	//	mov $2, %rax;
-	//	addl $3, %rax;
-	//	pop %rbx;
-	//	pop %rax;
-	//}
 
 	defer {
 		x++;	

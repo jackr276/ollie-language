@@ -7,15 +7,15 @@ fn tester(i:u32) -> i32{
  * For switch statement testing
  */
 pub fn main() -> i32{
-	let mut a:i32 = 23;
+	let a:mut i32 = 23;
 	
- 	declare mut arr:i32[32][3];
+ 	declare arr:mut i32[32][3];
 
 	arr[1][2] = 23;
 
-	let mut b:i32 = arr[3][2];
+	let b:mut i32 = arr[3][2];
 
-	for(let mut _:i32 = 0; _ < 838; _++){
+	for(let _:mut i32 = 0; _ < 838; _++){
 		a++;
 	}
 

@@ -13,13 +13,13 @@ fn test_func() -> i32 {
 }
 
 //This is a mismatched return type, it will fail
-fn predeclared(mut x:i32, y:i16) -> i64{
+fn predeclared(x:mut i32, y:i16) -> i64{
 	ret x + y;
 }
 
 pub fn main() -> i32 {
 	//Example call
-	let mut i:i32 = @test_func();
+	let i:mut i32 = @test_func();
 
 	ret i;
 }

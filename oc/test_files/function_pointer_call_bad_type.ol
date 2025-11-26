@@ -16,7 +16,7 @@ pub fn main() -> i32 {
 	//This one is tester
 	let my_func:test_func = tester;
 
-	let mut x:i32 = 6;
+	let x:mut i32 = 6;
 
 	//Bad type, x is too large
 	ret @my_func(3, x);

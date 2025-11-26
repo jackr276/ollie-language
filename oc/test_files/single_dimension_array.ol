@@ -4,15 +4,15 @@
 
 pub fn main(arg:i32, argv:char**) -> i32{
 	//The array that we have
-	declare mut arr:i32[14];
+	declare arr:mut i32[14];
 
 	arr[3] = 3;
 	arr[5] = 3;
 	arr[7] = 2;
 
-	let mut x:i32 = 33;
+	let x:mut i32 = 33;
 
-	let mut i:i32 = 3;
+	let i:mut i32 = 3;
 	
 	if(arg == 2){
 		arr[x] = i;

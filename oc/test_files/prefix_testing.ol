@@ -13,7 +13,7 @@ define struct custom {
 		y:char;
 } as my_struct;
 
-fn preinc_pointer(mut x:i32*) -> i32{
+fn preinc_pointer(x:mut i32*) -> i32{
 	//Should trigger pointer math
 	++x;
 
@@ -23,7 +23,7 @@ fn preinc_pointer(mut x:i32*) -> i32{
 
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	declare mut x:i32;
+	declare x:mut i32;
 
 	switch(arg){
 		case 2 -> {
@@ -44,7 +44,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	
 
 	//Very basic initializer
-	let mut tester:my_struct = {x, 7, 'a'};
+	let tester:mut my_struct = {x, 7, 'a'};
 
 	//preincrement this
 	++tester:x;

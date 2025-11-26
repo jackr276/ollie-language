@@ -12,7 +12,7 @@ define enum my_enum {
 } as custom_enum;
 
 fn tester(mut param:custom_enum) -> i32{
-	let mut x:i32 = 32;
+	let x:mut i32 = 32;
 
 	switch(param){
 		case A -> {

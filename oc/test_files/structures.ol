@@ -8,8 +8,8 @@ pub fn main(arg:i32, argv:char**) -> i32{
 		y:i32;
 	} as my_struct;
 
-	let mut x:i32 = 32;
-	let mut _:u32 = 2;
+	let x:mut i32 = 32;
+	let _:mut u32 = 2;
 
 	switch(x){
 		case 2 -> {

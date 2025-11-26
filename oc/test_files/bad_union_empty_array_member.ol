@@ -6,9 +6,9 @@
 
 //BAD struct
 define union bad_union {
-	mut x:i32;
-	mut y:i32[][3]; //BAD
-	mut z:char;
+	x:i32;
+	y:i32[][3]; //BAD
+	z:char;
 } as invalid;
 
 

@@ -15,7 +15,7 @@ define struct custom {
 
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	declare mut x:i32;
+	declare x:mut i32;
 
 	switch(arg){
 		case 2 -> {
@@ -32,7 +32,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	}
 
 	//Very basic initializer
-	let mut tester:my_struct = {x, 7, 'a'};
+	let tester:mut my_struct = {x, 7, 'a'};
 
 	// This should FAIL
 	++tester:x = 3;

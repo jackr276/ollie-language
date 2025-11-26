@@ -4,12 +4,11 @@
 */
 
 pub fn main() -> i32 {
-	let mut x:i32 = 2;
-	let mut a:i32 = 3;
-	let mut b:i32 = 3;
+	let x:mut i32 = 2;
+	let a:mut i32 = 3;
+	let b:mut i32 = 3;
 	
-	let mut test:i32 = x == 0 ? a else b;
-	
+	let test:mut i32 = x == 0 ? a else b;
 
-	ret test;//c;
+	ret test;
 }

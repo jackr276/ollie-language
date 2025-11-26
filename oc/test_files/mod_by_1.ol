@@ -4,7 +4,7 @@
 */
 
 pub fn main() -> i32 {
-	let mut x:i32 = 5;
+	let x:mut i32 = 5;
 
 	ret x % 1;
 }

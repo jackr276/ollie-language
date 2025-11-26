@@ -18,14 +18,20 @@
 typedef struct generic_type_t generic_type_t;
 //A function type
 typedef struct function_type_t function_type_t;
-//A function type's individual parameter
-typedef struct function_type_parameter_t function_type_parameter_t;
 
 //A type for which side we're on
 typedef enum{
 	SIDE_TYPE_LEFT,
 	SIDE_TYPE_RIGHT,
 } side_type_t;
+
+/**
+ * Is a type mutable or not
+ */
+typedef enum {
+	NOT_MUTABLE = 0,
+	MUTABLE
+} mutability_type_t;
 
 /**
  * What kind of word length do we have -- used for instructions
@@ -64,7 +70,6 @@ typedef enum type_class_t {
 struct generic_type_t{
 	//The name of the type
 	dynamic_string_t type_name;
-
 	/**
 	 * All fields in this union are
 	 * mutually exclusive with one another.
@@ -115,6 +120,12 @@ struct generic_type_t{
 	//Has this type been fully defined or not? This will be used to avoid 
 	//struct/union member recursive definitions with incomplete types
 	u_int8_t type_complete;
+	/**
+	 * Is this a mutable type? We need to take this into account whenever doing
+	 * any kind of operation checking. Mutable versions of the same type are stored
+	 * as separate records
+	 */
+	mutability_type_t mutability;
 	//Basic types don't need anything crazy - just a token that stores what they are
 	ollie_token_t basic_type_token;
 	//What class of type is it
@@ -123,23 +134,13 @@ struct generic_type_t{
 
 
 /**
- * A type for storing the individual function parameters themselves
- */
-struct function_type_parameter_t{
-	//What's the type
-	generic_type_t* parameter_type;
-	//Is this mutable
-	u_int8_t is_mutable;
-};
-
-
-/**
  * A function type is a function signature that is used for function pointers
  * For a function type, we simply need a list of parameters and a return type
  */
 struct function_type_t{
-	//A list of function parameters. Limited to 6
-	function_type_parameter_t parameters[MAX_FUNCTION_TYPE_PARAMS];
+	//A list of parameters which are just types - since we encode everything
+	//that we need to into the type system
+	generic_type_t* parameters[MAX_FUNCTION_TYPE_PARAMS];
 	//The return type
 	generic_type_t* return_type;
 	//Store the number of parameters
@@ -229,7 +230,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 /**
  * Dynamically allocate and create a basic type
 */
-generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type);
+generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability);
 
 /**
  * Strip any aliasing away from a type that we have
@@ -239,22 +240,25 @@ generic_type_t* dealias_type(generic_type_t* type);
 /**
  * Dynamically allocate and create a pointer type
  */
-generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_number);
+generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create an enumerated type
  */
-generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create a struct type
+ *
+ * Note: This only generates the immutable version of the struct. The mutable version
+ * comes afterwards
  */
-generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create a union type
  */
-generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number);
+generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Is the given binary operation valid for the type that was specificed?
@@ -292,6 +296,12 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var);
 void finalize_struct_alignment(generic_type_t* type);
 
 /**
+ * Print the full name of a type *into* the char buffer that
+ * is provided
+ */
+void print_full_type_name(generic_type_t* type, char* name);
+
+/**
  * Does this struct contain said member? Return the variable if yes, NULL if not
  */
 void* get_struct_member(generic_type_t* structure, char* name);
@@ -304,27 +314,32 @@ void* get_union_member(generic_type_t* union_type, char* name);
 /**
  * Dynamically allocate and create an array type
  */
-generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members);
+generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create an aliased type
  */
-generic_type_t* create_aliased_type(dynamic_string_t type_name, generic_type_t* aliased_type, u_int32_t line_number);
+generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_type, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number);
+generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Add a function's parameter in
  */
-u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter, u_int8_t is_mutable);
+u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter);
 
 /**
  * Print a function pointer type out
  */
 void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
+
+/**
+ * Generate a failure message for when the "types_assignable" call fails
+ */
+void generate_types_assignable_failure_message(char* info, generic_type_t* source_type, generic_type_t* destination_type);
 
 /**
  * Perform a symbolic dereference of a type

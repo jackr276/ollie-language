@@ -4,7 +4,7 @@
 */
 
 pub fn main() -> i32 {
-	declare mut c:i32;
+	declare c:mut i32;
 
 	//Should fail - we never initialized
 	c++;

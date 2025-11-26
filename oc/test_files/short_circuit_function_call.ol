@@ -2,7 +2,7 @@
 * This program is made for the purposes of testing short circuiting logic
 */
 
-fn tester(mut arg:i32) -> void{
+fn tester(arg:mut i32) -> void{
 	arg++;
 }
 
@@ -17,7 +17,7 @@ fn test_function2(arg:i32) -> i32 {
 }
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let mut x:u32 = 232;
+	let x:mut u32 = 232;
 	
 	if(@test_function(arg) && @test_function2(arg)){
 		x = x - 3;

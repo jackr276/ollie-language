@@ -4,7 +4,7 @@
 */
 
 pub fn main() -> i32 {
-	declare mut arr:i32*[33];
+	declare arr:mut i32*[33];
 
 	*(arr[3]) = 3;
 

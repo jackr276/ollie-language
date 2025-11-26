@@ -16,7 +16,7 @@ define enum type_enum{
 
 
 fn tester(param:my_enum_type) -> i32{
-	let mut x:i32 = 32;
+	let x:mut i32 = 32;
 
 	//Test the type system's ability to deal with this
 	switch(param - 3){

@@ -195,7 +195,46 @@ static u_int16_t hash(char* name){
 
 
 /**
- * Type hashing also includes the bounds of arrays, if we have them
+ * A helper function that will hash the name of a type
+ */
+static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
+	u_int32_t key = 37;
+	
+	char* cursor = type_name;
+	//Two primes(this should be good enough for us)
+	u_int32_t a = 54059;
+	u_int32_t b = 76963;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		//Sum this up for our key
+		key = (key * a) ^ (*cursor * b);
+	}
+
+	//If this is mutable, we will keep going by adding
+	//a duplicated version of the type's first character
+	//onto the hash. This should(in most cases) make the hash
+	//entirely different from the non-mutable version
+	if(mutability == MUTABLE){
+		//Update the key
+		key = (key * a) ^ ((*type_name) * b);
+		//Make it so that we have the '`' character, one
+		//that is not recognized at all be the lexer. This will
+		//ensure that we can never get a false positive
+		key = (key * a) ^ ('`' * b);
+	}
+
+	//Cut it down to our keyspace
+	return key % KEYSPACE;
+}
+
+
+/**
+ * For arrays, type hashing will include their values
+ *
+ * For *mutable types*, the type hasher concatenates a
+ * "mut" onto the end to make the hash *different* from
+ * the non-mutable version. This should allow for a faster lookup
  *
  * Hash a name before entry/search into the hash table
  *
@@ -227,6 +266,22 @@ static u_int16_t hash_type(generic_type_t* type){
 	//If this is an array, we'll add the bounds in
 	if(type->type_class == TYPE_CLASS_ARRAY){
 		key += type->internal_values.num_members;
+	}
+
+	//If this is mutable, we will keep going by adding
+	//a duplicated version of the type's first character
+	//onto the hash. This should(in most cases) make the hash
+	//entirely different from the non-mutable version
+	if(type->mutability == MUTABLE){
+		//Extract the first character
+		char first_character = *(type->type_name.string);
+
+		//Update the key
+		key = (key * a) ^ (first_character * b);
+		//Make it so that we have the '`' character, one
+		//that is not recognized at all be the lexer. This will
+		//ensure that we can never get a false positive
+		key = (key * a) ^ ('`' * b);
 	}
 
 	//Cut it down to our keyspace
@@ -339,7 +394,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	record->call_graph_node = create_call_graph_node(record);
 
 	//We know that we need to create this immediately
-	record->signature = create_function_pointer_type(is_public, line_number);
+	record->signature = create_function_pointer_type(is_public, line_number, NOT_MUTABLE);
 
 	//And give it back
 	return record;
@@ -348,6 +403,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 
 /**
  * Dynamically allocate and create a type record
+ *
+ * The hash_type function automatically allows us to distinguish between
+ * mutable and immutable values
  */
 symtab_type_record_t* create_type_record(generic_type_t* type){
 	//Allocate it
@@ -517,72 +575,150 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 
 /**
  * A helper function that adds all basic types to the type symtab
+ *
+ * NOTE: This helper creates both *mutable and immutable* versions
+ * of all of our basic types
  */
-void add_all_basic_types(type_symtab_t* symtab){
+u_int16_t add_all_basic_types(type_symtab_t* symtab){
+	//Store the number of collisions that we have
+	u_int16_t num_collisions = 0;
+
 	generic_type_t* type;
 
 	//Add in void type
-	type = create_basic_type("void", VOID);
-	insert_type(symtab, create_type_record(type));
+	type = create_basic_type("void", VOID, NOT_MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
 
+	// ================================ Immutable versions of our primitive types ================================
 	//s_int8 type
-	type = create_basic_type("i8", I8);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("i8", I8, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//u_int8 type
-	type = create_basic_type("u8", U8);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("u8", U8, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//Bool type
-	type = create_basic_type("bool", BOOL);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("bool", BOOL, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//char type
-	type = create_basic_type("char", CHAR);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("char", CHAR, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//Save this for the next one to avoid confusion
 	generic_type_t* char_type = type;
 
 	//char* type
-	type = create_pointer_type(char_type, 0);
-	insert_type(symtab,  create_type_record(type));
+	type = create_pointer_type(char_type, 0, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//Create "char*" type
-	type = create_pointer_type(type, 0);
-	insert_type(symtab,  create_type_record(type));
-	
+	type = create_pointer_type(type, 0, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+
 	//u_int16 type
-	type = create_basic_type("u16", U16);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("u16", U16, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 		
 	//s_int16 type
-	type = create_basic_type("i16", I16);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("i16", I16, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//s_int32 type
-	type = create_basic_type("i32", I32);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("i32", I32, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//u_int32 type
-	type = create_basic_type("u32", U32);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("u32", U32, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//u_int64 type
-	type = create_basic_type("u64", U64);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("u64", U64, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//s_int64 type
-	type = create_basic_type("i64", I64);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("i64", I64, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 
 	//float32 type
-	type = create_basic_type("f32", F32);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("f32", F32, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
 	
 	//float64 type
-	type = create_basic_type("f64", F64);
-	insert_type(symtab,  create_type_record(type));
+	type = create_basic_type("f64", F64, NOT_MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+	// ================================ Immutable versions of our primitive types ================================
+	
+	// ================================ Mutable versions of our primitive types ================================
+	// This mutable void type only exists to internally support a mutable void* pointer
+	type = create_basic_type("void", VOID, MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
+
+	//s_int8 type
+	type = create_basic_type("i8", I8, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+
+	//u_int8 type
+	type = create_basic_type("u8", U8, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+
+	//Bool type
+	type = create_basic_type("bool", BOOL, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+
+	//char type
+	type = create_basic_type("char", CHAR, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+
+	//Save this for the next one to avoid confusion
+	char_type = type;
+
+	//char* type
+	type = create_pointer_type(char_type, 0, MUTABLE);
+	num_collisions += insert_type(symtab, create_type_record(type));
+
+	//Create "char*" type
+	type = create_pointer_type(type, 0, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+	
+	//u_int16 type
+	type = create_basic_type("u16", U16, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+		
+	//s_int16 type
+	type = create_basic_type("i16", I16, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+	
+	//s_int32 type
+	type = create_basic_type("i32", I32, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+	
+	//u_int32 type
+	type = create_basic_type("u32", U32, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+	
+	//u_int64 type
+	type = create_basic_type("u64", U64, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+	
+	//s_int64 type
+	type = create_basic_type("i64", I64, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+
+	//float32 type
+	type = create_basic_type("f32", F32, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+	
+	//float64 type
+	type = create_basic_type("f64", F64, MUTABLE);
+	num_collisions += insert_type(symtab,  create_type_record(type));
+
+	// ================================ Mutable versions of our primitive types ==============================
+	
+	// This is for observability in the test suites - if we have 
+	// more than 1 or 2 collisions here, then we have a serious problem
+	return num_collisions;
 }
 
 
@@ -599,7 +735,7 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 
 	symtab_variable_record_t* stack_pointer = create_variable_record(variable_name);
 	//Set this type as a label(address)
-	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;
+	stack_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
 	//Give it back
 	return stack_pointer;
@@ -619,7 +755,7 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 
 	symtab_variable_record_t* instruction_pointer = create_variable_record(variable_name);
 	//Set this type as a label(address)
-	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64")->type;
+	instruction_pointer->type_defined_as = lookup_type_name_only(types, "u64", NOT_MUTABLE)->type;
 
 	//Give it back
 	return instruction_pointer;
@@ -792,9 +928,9 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
  * Lookup a type name in the symtab by the name only. This does not
  * do the array bound comparison that we need for strict equality
  */
-symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
+symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability){
 	//Grab the hash
-	u_int16_t h = hash(name);
+	u_int16_t h = hash_type_name(name, mutability);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_type_sheaf_t* cursor = symtab->current;
@@ -807,7 +943,11 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name){
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->type->type_name.string, name) == 0){
+			if(strcmp(records_cursor->type->type_name.string, name) == 0
+				//The mutability must also match
+				&& records_cursor->type->mutability == mutability){
+
+				//Give it back
 				return records_cursor;
 			}
 			//Advance it
@@ -999,7 +1139,7 @@ void print_function_name(symtab_function_record_t* record){
 	//Print out the params
 	for(u_int8_t i = 0; i < record->number_of_params; i++){
 		//Print if it's mutable
-		if(record->func_params[i]->is_mutable == 1){
+		if(record->func_params[i]->type_defined_as->mutability == MUTABLE){
 			printf("mut ");
 		}
 
@@ -1053,16 +1193,12 @@ void print_variable_name(symtab_variable_record_t* record){
 			//Declare or let
 			record->declare_or_let == 0 ? printf("declare ") : printf("let ");
 
-			//If it's mutable print that
-			if(record->is_mutable == 1){
-				printf(" mut ");
-			}
-
 			//The var name
 			printf("%s : ", record->var_name.string);
 
 			//The type name
-			printf("%s ", record->type_defined_as->type_name.string);
+			printf("%s%s", (record->type_defined_as->mutability == MUTABLE ? "mut ": ""),
+		  					record->type_defined_as->type_name.string);
 			
 			//We'll print out some abbreviated stuff with the let record
 			if(record->declare_or_let == 1){
@@ -1128,6 +1264,11 @@ void print_type_name(symtab_type_record_t* record){
 		printf("---> BASIC TYPE | ");
 	} else {
 		printf("---> %d | ", record->type->line_number);
+	}
+
+	//The mut specifier
+	if(record->type->mutability == MUTABLE){
+		printf("mut ");
 	}
 
 	//Then print out the name
@@ -1222,7 +1363,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			//Let's now analyze this record
 			
 			//We have a non initialized variable
-			if(record->initialized == 0 && is_memory_address_type(record->type_defined_as) == FALSE){
+			if(record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE){
 				sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
 				print_warning(info, record->line_number);
 				print_variable_name(record);
@@ -1232,7 +1373,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			}
 
 			//If it's mutable but never mutated
-			if(record->is_mutable == TRUE && record->mutated == FALSE){
+			if(record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE){
 				sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
 				print_warning(info, record->line_number);
 				print_variable_name(record);

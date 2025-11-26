@@ -3,9 +3,9 @@
 * Testing taking the address of a parameter
 */
 
-fn address_op_parameter(mut param:i32) -> i32{
+fn address_op_parameter(param:mut i32) -> i32{
 	//Address of a parameter
-	let mut x:i32* = &param;
+	let x:mut i32* = &param;
 
 	//Do some stuff
 	*x = 32;

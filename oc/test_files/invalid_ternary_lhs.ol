@@ -4,9 +4,9 @@
 */
 
 pub fn main() -> i32 {
-	let mut x:i32 = 3;
-	let mut y:i32 = 5
-	let mut z:i32 = 6;
+	let x:mut i32 = 3;
+	let y:mut i32 = 5
+	let z:mut i32 = 6;
 
 	(z == 6 ? x else y) = 32;
 

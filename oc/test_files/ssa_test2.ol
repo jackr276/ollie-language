@@ -3,7 +3,7 @@
 */
 
 pub fn main() -> i32{
-	let mut x:u32 = 33;
+	let x:mut u32 = 33;
 	defer {
 		x++;
 	};

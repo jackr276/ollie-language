@@ -4,7 +4,7 @@
 */
 
 //Global variable declaration
-declare mut x:i32;
+declare x:mut i32;
 
 pub fn add_vars(y:i32) -> i64 {
 	//We must assign first

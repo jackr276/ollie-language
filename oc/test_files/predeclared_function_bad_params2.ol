@@ -13,13 +13,13 @@ fn test_func() -> i32 {
 }
 
 //We have mismatched parameter types - this should fail
-fn predeclared(x:i64, mut y:i32) -> i64{
+fn predeclared(x:i64, y:mut i32) -> i64{
 	ret x + y;
 }
 
 pub fn main() -> i32 {
 	//Example call
-	let mut i:i32 = @test_func();
+	let i:mut i32 = @test_func();
 
 	ret i;
 }

@@ -3,21 +3,20 @@
 */
 
 fn unsigned_shift() -> u32 {
-	let mut z:u32 = 23;
-	let mut x:u32 = z << 3;
-	let mut y:u32 = z >> x;
+	let z:mut u32 = 23;
+	let x:mut u32 = z << 3;
+	let y:mut u32 = z >> x;
 
 	ret x + y;
 }
 
 
 pub fn main(arg:i32, argv:char**) -> i32 {
-
-	let mut z:i32 = 33;
-	let mut c:i32 = z - 1;
-	let mut a:i32 = 222;
-	let mut x:i32 = !a;
-	let mut y:i32 = -3;
+	let z:mut i32 = 33;
+	let c:mut i32 = z - 1;
+	let a:mut i32 = 222;
+	let x:mut i32 = !a;
+	let y:mut i32 = -3;
 
 	x = x + y * 8;
 	a = x - 0;

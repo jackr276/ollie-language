@@ -41,6 +41,16 @@ struct lexitem_t{
 void reset_file(FILE* fl);
 
 /**
+ * Get the current file pointer position
+ */
+int64_t get_current_file_position(FILE* fl);
+
+/**
+ * Reconsume the tokens starting from a given seek
+ */
+void reconsume_tokens(FILE* fl, int64_t reconsume_start);
+
+/**
  * Special case -- hunting for assembly statements
  */
 lexitem_t get_next_assembly_statement(FILE* fl);
@@ -48,7 +58,7 @@ lexitem_t get_next_assembly_statement(FILE* fl);
 /**
  * Generic token grabbing function
  */
-lexitem_t get_next_token(FILE* fl, u_int16_t* parser_line_num, const_search_t const_search);
+lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t const_search);
 
 /**
  * Push a token back to the stream

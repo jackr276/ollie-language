@@ -3,18 +3,18 @@
 */
 
 pub fn main() -> i32 {
-	let mut x:i32 = 3;
-	let mut y:i32 = 5;
-	let mut z:i32 = 3;
+	let x:mut i32 = 3;
+	let y:mut i32 = 5;
+	let z:mut i32 = 3;
 
 	if( x == 0) {
-		let mut x:i32 = 35;
-		let mut y:i32 = 55;
+		let x:mut i32 = 35;
+		let y:mut i32 = 55;
 
 		 z = x + y;
 	} else {
-		let mut x:i8 = 3;
-		let mut y:i8 = 2;
+		let x:mut i8 = 3;
+		let y:mut i8 = 2;
 		ret x / y;
 	}
 

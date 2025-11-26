@@ -6,8 +6,8 @@
 
 
 pub fn main(argc:i32, argv:char**) -> i32 {
-	let mut x:i32 = 3;
-	let mut y:i32 = 5;
+	let x:mut i32 = 3;
+	let y:mut i32 = 5;
 
 	switch (argc) {
 		case 1:

@@ -5,7 +5,7 @@
 */
 
 
-fn confusing_jumps(mut a:i32, mut b:i32) -> i32{
+fn confusing_jumps(a:mut i32, b:mut i32) -> i32{
 	if(a == 3){
 		jump end_label;
 
