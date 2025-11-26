@@ -8048,8 +8048,22 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	switch(declared_var->type_defined_as->type_class){
 		//These all require a stack allocation, so a node is required
 		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
+			/**
+			 * Special warning here - if the user is declaring an array or a union as
+			 * immutable, they actually never initialize these memory regions. We should
+			 * throw a warning up for this
+			 */
+			if(declared_var->type_defined_as->mutability == NOT_MUTABLE){
+				//Throw up the warning here
+				sprintf(info, "Type \"%s\" is immutable. If you declare variable \"%s\" with this type, you may never be able to initialize it",
+								declared_var->type_defined_as->type_name.string,
+								declared_var->var_name.string);
+				print_parse_message(WARNING, info, parser_line_num);
+			}
+
+			//Fall through
+		case TYPE_CLASS_STRUCT:
 			//Actually create the node now
 			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 
