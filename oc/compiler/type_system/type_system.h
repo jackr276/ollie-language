@@ -339,7 +339,7 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
 /**
  * Generate a failure message for when the "types_assignable" call fails
  */
-void generate_types_assignable_failure_message(char* info, generic_type_t* a, generic_type_t* b);
+void generate_types_assignable_failure_message(char* info, generic_type_t* source_type, generic_type_t* destination_type);
 
 /**
  * Perform a symbolic dereference of a type

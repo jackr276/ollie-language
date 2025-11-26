@@ -1416,7 +1416,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 		//If they're not, we fail here
 		if(final_type == NULL){
-			sprintf(info, "Attempt to assign expression of type %s to variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
+			//Let the helper generate
+			generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1483,7 +1484,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 			//If this fails, that means that we have an invalid operation
 			if(final_type == NULL){
-				sprintf(info, "Types %s cannot be assigned to a variable of type %s", right_hand_type->type_name.string, left_hand_type->type_name.string);
+				generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1838,7 +1839,9 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 
 	//Let's make sure that this is an int
 	if(final_type == NULL){
-		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", expr->inferred_type->type_name.string);
+		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s%s\"",
+		  (expr->inferred_type->mutability == MUTABLE ? "mut ": ""),
+		  expr->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -2526,7 +2529,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 
 	//This is our fail case
 	if(return_type == NULL){
-		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
+		generate_types_assignable_failure_message(info, being_casted_type, casting_to_type);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -7638,8 +7641,11 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 			//If this fails, they're incompatible
 			if(case_stmt->inferred_type == NULL){
-				sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-							  switch_stmt_node->inferred_type->type_name.string, enum_record->type_defined_as->type_name.string);
+				sprintf(info, "Switch statement switches on type \"%s%s\", but case statement has incompatible type \"%s%s\"", 
+								(switch_stmt_node->inferred_type->mutability == MUTABLE ? "mut ": ""),
+							  	switch_stmt_node->inferred_type->type_name.string,
+								(enum_record->type_defined_as->mutability == MUTABLE ? "mut ": ""),
+								enum_record->type_defined_as->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -8256,7 +8262,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 
 			//Will be null if we have a failure
 			if(final_type == NULL){
-				sprintf(info, "Attempt to assign expression of type %s to variable of type %s", initializer_node->inferred_type->type_name.string, return_type->type_name.string);
+				generate_types_assignable_failure_message(info, initializer_node->inferred_type, return_type);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 			}
 

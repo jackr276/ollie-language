@@ -395,7 +395,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 			return NULL;
 
 		/**
-		 * A function signature type is a very special casein terms of assignability
+		 * A function signature type is a very special case in terms of assignability
 		 */
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			//If this is not also a function signature, then we're done here
@@ -405,18 +405,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			//Otherwise, we'll need to use the helper rule to determine if it's equivalent
 			if(function_signatures_identical(destination_type, source_type) == TRUE){
-				//If the destination is immutable we're all good
-				if(destination_type->mutability == NOT_MUTABLE){
-					return destination_type;
-				//Otherwise it is mutable, so we *must* have a mutable source for
-				//this to work out
-				} else {
-					if(source_type->mutability == MUTABLE){
-						return destination_type;
-					} else {
-						return NULL;
-					}
-				}
+				return destination_type;
 			} else {
 				return NULL;
 			}
