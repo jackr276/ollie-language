@@ -1,8 +1,8 @@
 
 define struct my_struct {
-	a:u32;
-	b:u32;
-	c:u32;
+	a:mut u32;
+	b:mut u32;
+	c:mut u32;
 } as my_struct;
 
 

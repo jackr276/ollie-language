@@ -1390,7 +1390,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//initialization here, that is not possible to track
 		if(left_hand_unary->optional_storage.field_variable->type_defined_as->mutability == NOT_MUTABLE){
 			//Fail out appropriately
-			sprintf(info, "Field %s is not mutable. Fields must be declared as mutable to be assigned to.",
+			sprintf(info, "Field \"%s\" is not mutable. Fields must be declared as mutable to be assigned to.",
 		   				left_hand_unary->optional_storage.field_variable->var_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -1401,13 +1401,17 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//This is a mutation
+		assignee->mutated = TRUE;
 	}
 
 	/**
 	 * Once we have processed *both* the left and right hand sides, we can declare the left
-	 * hand variable as either assigned to or initialized
+	 * hand variable as either assigned to or initialized. This is the case *except* for 
+	 * memory types, which we do not care about
 	 */
-	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == FALSE){
+	if(assignee->initialized == TRUE && is_memory_region(assignee->type_defined_as) == FALSE){
 		//This is a mutation
 		assignee->mutated = TRUE;
 	} else {
@@ -2178,11 +2182,22 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
+
 		
 			//Otherwise if we made it here, we only have one final tripping point
 			//Ensure that we aren't trying to deref a null pointer
 			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_values.is_void_pointer == TRUE){
 				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
+			}
+
+			//Attempt to dereference an immutable pointer
+			//on the left side - this means that the user is attempting
+			//to assign to it
+			if(side == SIDE_TYPE_LEFT){
+				//These is bad
+				if(cast_expr->inferred_type->mutability == NOT_MUTABLE){
+					printf("ERROR\n");
+				}
 			}
 
 			//Otherwise our dereferencing worked, so the return type will be whatever this points to

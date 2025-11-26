@@ -5,9 +5,9 @@
 
 //Define a struct type
 define struct custom {
-		x:i32;
-		a:i64;
-		y:char;
+		x:mut i32;
+		a:mut i64;
+		y:mut char;
 } as my_struct;
 
 //Declare the union type
