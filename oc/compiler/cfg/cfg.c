@@ -3907,6 +3907,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 						&& unary_expression_child->variable->stack_region == NULL) {
 						//Create the stack region and store it in the variable
 						unary_expression_child->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), unary_expression_child->variable->type_defined_as);
+					//We need to emit this somehow
+					} else {
+						//TODO
+
 					}
 
 					//Add the memory address statement in
