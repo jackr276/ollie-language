@@ -10,7 +10,7 @@ fn tester(x:i32*) -> void {
 
 
 pub fn main() -> i32 {
-	let mut x:i32 = 3;
+	let x:mut i32 = 3;
 	@tester(&x);
 
 	ret 0;

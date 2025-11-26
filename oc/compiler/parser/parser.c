@@ -2196,7 +2196,8 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 			if(side == SIDE_TYPE_LEFT){
 				//These is bad
 				if(cast_expr->inferred_type->mutability == NOT_MUTABLE){
-					printf("ERROR\n");
+					sprintf(info, "Type %s is immutable and cannot be assigned to", cast_expr->inferred_type->type_name.string);
+					return print_and_return_error(info, parser_line_num);
 				}
 			}
 
