@@ -1274,6 +1274,87 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 
 
 /**
+ * Perform all mutability checking/bookkeeping for an assignment expression
+ *
+ * Cases that we cover:
+ * 1.) Attempting to assign to an immutable "field variable" - think struct/union field
+ * 2.) Attempting to assign to an immutable array area
+ * 3.) Attempting to assign to a type regularly after it has been initialized
+ */
+static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
+	//Extract the 
+	symtab_variable_record_t* assignee = left_hand_expression_tree->variable;
+
+	/**
+	 * If we have a so-called "field variable", that means that this 
+	 * unary expression is a postfix access of some kind. This is important
+	 * because we'll need to check the type's mutability, not the assignee's
+	 */
+	if(left_hand_expression_tree->optional_storage.field_variable != NULL){
+		//If this is immutable, we fail. We are not checking for anything like
+		//initialization here, that is not possible to track
+		if(left_hand_expression_tree->optional_storage.field_variable->type_defined_as->mutability == NOT_MUTABLE){
+			//Fail out appropriately
+			sprintf(info, "Field \"%s\" is not mutable. Fields must be declared as mutable to be assigned to.",
+		   				left_hand_expression_tree->optional_storage.field_variable->var_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//If we have a variable, then this is definitely a mutation
+		if(left_hand_expression_tree->variable != NULL){
+			left_hand_expression_tree->variable->mutated = TRUE;
+		}
+
+	/**
+	 * If we are ending in an array accessor, we would see a tree structure like:
+	 * 			<postifx-node>
+	 * 		       /   \
+	 *      <subtree>  <array-accessor>
+	 *
+	 *  We need to dig through the tree to actually check this
+	 */
+	} else if(left_hand_expression_tree->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
+		//Extract for our convenience
+		generic_ast_node_t* first_child = left_hand_expression_tree->first_child;
+		generic_ast_node_t* accessor = first_child->next_sibling;
+
+		//We have an array accessor to check
+		if(accessor->ast_node_type == AST_NODE_TYPE_ARRAY_ACCESSOR){
+			if(first_child->inferred_type->mutability == NOT_MUTABLE){
+				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", first_child->inferred_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
+
+		//If we have a variable, then this is definitely a mutation
+		if(left_hand_expression_tree->variable != NULL){
+			left_hand_expression_tree->variable->mutated = TRUE;
+		}
+
+	} else {
+		//This is the case where we have a plain variable assignment
+		if(can_variable_be_assigned_to(assignee) == FALSE){
+			sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		/**
+		 * Since we are not doing any kind of memory access here, now we can go
+		 * through and update our mutability/initialization
+		 */
+		if(assignee->initialized == TRUE){
+			assignee->mutated = TRUE;
+		} else {
+			assignee->initialized = TRUE;
+		}
+	}
+
+	//Just give this back as a flag that we're fine
+	return left_hand_expression_tree;
+}
+
+
+/**
  * An assignment expression can decay into a conditional expression or it
  * can actually do assigning. There is no chaining in Ollie language of assignments. There are two
  * options for treenodes here. If we see an actual assignment, there is a special assignment node
@@ -1377,46 +1458,10 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
 	}
 
-	//Extract the variable from the left side
-	symtab_variable_record_t* assignee = left_hand_unary->variable;
-
-	/**
-	 * If we have a so-called "field variable", that means that this 
-	 * unary expression is a postfix access of some kind. This is important
-	 * because we'll need to check the type's mutability, not the assignee's
-	 */
-	if(left_hand_unary->optional_storage.field_variable != NULL){
-		//If this is immutable, we fail. We are not checking for anything like
-		//initialization here, that is not possible to track
-		if(left_hand_unary->optional_storage.field_variable->type_defined_as->mutability == NOT_MUTABLE){
-			//Fail out appropriately
-			sprintf(info, "Field \"%s\" is not mutable. Fields must be declared as mutable to be assigned to.",
-		   				left_hand_unary->optional_storage.field_variable->var_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-	} else {
-		//This is the case where we have a plain variable assignment
-		if(can_variable_be_assigned_to(assignee) == FALSE){
-			sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//This is a mutation
-		assignee->mutated = TRUE;
-	}
-
-	/**
-	 * Once we have processed *both* the left and right hand sides, we can declare the left
-	 * hand variable as either assigned to or initialized. This is the case *except* for 
-	 * memory types, which we do not care about
-	 */
-	if(assignee->initialized == TRUE && is_memory_region(assignee->type_defined_as) == FALSE){
-		//This is a mutation
-		assignee->mutated = TRUE;
-	} else {
-		//Mark that this var was in fact initialized
-		assignee->initialized = TRUE;
+	//Let the helper do all mutability checking
+	generic_ast_node_t* result = perform_mutability_checking(left_hand_unary);
+	if(result->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return result;
 	}
 
 	//Let's now see if we have compatible types
@@ -2198,6 +2243,11 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				if(cast_expr->inferred_type->mutability == NOT_MUTABLE){
 					sprintf(info, "Type %s is immutable and cannot be assigned to", cast_expr->inferred_type->type_name.string);
 					return print_and_return_error(info, parser_line_num);
+				}
+
+				//If we have a variable, then this is a mutation
+				if(cast_expr->variable != NULL){
+					cast_expr->variable->mutated = TRUE;
 				}
 			}
 
