@@ -337,6 +337,11 @@ u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_t
 void generate_function_pointer_type_name(generic_type_t* function_pointer_type);
 
 /**
+ * Generate a failure message for when the "types_assignable" call fails
+ */
+void generate_types_assignable_failure_message(char* info, generic_type_t* a, generic_type_t* b);
+
+/**
  * Perform a symbolic dereference of a type
  */
 generic_type_t* dereference_type(generic_type_t* pointer_type);

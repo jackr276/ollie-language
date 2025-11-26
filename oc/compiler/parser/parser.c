@@ -887,8 +887,11 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
-			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s\". Defined as: %s",
-		   			function_name.string, param_type->type_name.string, num_params, current_param->inferred_type->type_name.string, function_type->type_name.string);
+			sprintf(info, "Function \"%s\" expects an input of type \"%s\" as parameter %d, but was given an input of type \"%s %s\". Defined as: %s",
+		   			function_name.string, param_type->type_name.string, num_params,
+		   			//Print the mut keyword if we need it
+		   			(current_param->inferred_type->mutability == TRUE ? "mut" : ""),
+		   			current_param->inferred_type->type_name.string, function_type->type_name.string);
 
 			//Use the helper to return this
 			return print_and_return_error(info, parser_line_num);
