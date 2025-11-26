@@ -1363,7 +1363,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 			//Let's now analyze this record
 			
 			//We have a non initialized variable
-			if(record->initialized == 0 && is_memory_address_type(record->type_defined_as) == FALSE){
+			if(record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE){
 				sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
 				print_warning(info, record->line_number);
 				print_variable_name(record);

@@ -5,7 +5,7 @@
 
 //Declare the union type
 define union my_union {
-	x:i32[5];
+	arr:i32[5];
 	y:i16;
 	ch:char;
 } as custom_union;
@@ -25,23 +25,23 @@ pub fn test_unions() -> i32{
 	//even though the top level struct is immutable
 	x:tester.ch = 'a';
 
-	x:tester.x[2] = 2;
-	x:tester.x[3] = 2;
-	x:tester.x[4] = 2;
+	x:tester.arr[2] = 2;
+	x:tester.arr[3] = 2;
+	x:tester.arr[4] = 2;
 
 	x:a = 'a';
 
-	ret x:a + x:tester.x[3];
+	ret x:a + x:tester.arr[3];
 }
 
 pub fn test_array_in_union() -> i32{
 	declare my_union:mut custom_union;
 	
 	//Store x
-	my_union.x[2] = 32;
+	my_union.arr[2] = 32;
 	
 	//Read as char
-	ret my_union.ch + my_union.x[3];
+	ret my_union.ch + my_union.arr[3];
 }
 
 pub fn main(argc:i32, argv:char**) -> i32 {

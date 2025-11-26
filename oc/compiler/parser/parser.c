@@ -1386,32 +1386,28 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	 * because we'll need to check the type's mutability, not the assignee's
 	 */
 	if(left_hand_unary->optional_storage.field_variable != NULL){
-		//TODO
-
-	}
-
-	//Are we able to assign to it? If not, we fail out here
-	if(can_variable_be_assigned_to(assignee) == FALSE){
-		printf("TYPE IS %s\n", left_hand_unary->inferred_type->type_name.string);
-		if(left_hand_unary->inferred_type->mutability == MUTABLE){
-			printf("IT IS MUT\n");
+		//If this is immutable, we fail. We are not checking for anything like
+		//initialization here, that is not possible to track
+		if(left_hand_unary->optional_storage.field_variable->type_defined_as->mutability == NOT_MUTABLE){
+			//Fail out appropriately
+			sprintf(info, "Field %s is not mutable. Fields must be declared as mutable to be assigned to.",
+		   				left_hand_unary->optional_storage.field_variable->var_name.string);
+			return print_and_return_error(info, parser_line_num);
 		}
 
-		printf("Type record is %s\n", left_hand_unary->inferred_type->type_name.string);
-
-		if(left_hand_unary->optional_storage.field_variable != NULL){
-			printf("Struct variable is %s\n", left_hand_unary->optional_storage.field_variable->var_name.string);
+	} else {
+		//This is the case where we have a plain variable assignment
+		if(can_variable_be_assigned_to(assignee) == FALSE){
+			sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
+			return print_and_return_error(info, parser_line_num);
 		}
-
-		sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-		return print_and_return_error(info, parser_line_num);
 	}
 
 	/**
 	 * Once we have processed *both* the left and right hand sides, we can declare the left
 	 * hand variable as either assigned to or initialized
 	 */
-	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == TRUE){
+	if(assignee->initialized == TRUE || is_memory_address_type(assignee->type_defined_as) == FALSE){
 		//This is a mutation
 		assignee->mutated = TRUE;
 	} else {
