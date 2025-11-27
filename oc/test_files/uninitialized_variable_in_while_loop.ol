@@ -3,7 +3,7 @@
 * Test edge cases for uninitialized variable detection
 */
 
-fn uninitialized_in_while_loop(mut arg:i32) -> void {
+fn uninitialized_in_while_loop(arg:mut i32) -> void {
 	//Declare but do not initialize
 	declare c:i32;
 
