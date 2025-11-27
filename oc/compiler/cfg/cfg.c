@@ -3908,9 +3908,36 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 						//Create the stack region and store it in the variable
 						unary_expression_child->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), unary_expression_child->variable->type_defined_as);
 					//We need to emit this somehow
-					} else {
-						//TODO
+					} else if(is_memory_region(unary_expression_child->variable->type_defined_as) == TRUE) {
+						printf("HERE\n");
 
+						//
+						//
+						//
+						//
+						//TODO - we actually will need the memory address of the variable that we're trying to store here
+						//
+						//This is a rapid prototype, improvements will be made to it
+						//
+						//
+						//
+						//
+						//We need to load a reference to this into memory
+						stack_region_t* region = create_stack_region_for_type(&(current_function->data_area), unary_expression_parent->inferred_type);
+
+						three_addr_const_t* offset = emit_direct_integer_or_char_constant(region->base_address, u64);
+
+						//And then we need to load into it
+						instruction_t* store = emit_store_with_constant_offset_ir_code(cfg_ref->stack_pointer, offset, emit_var(unary_expression_child->variable));
+
+						add_statement(current_block, store);
+
+						instruction_t* load = emit_load_with_constant_offset_ir_code(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, offset);
+
+						add_statement(current_block, load);
+
+						unary_package.assignee = load->assignee;
+						break;
 					}
 
 					//Add the memory address statement in
