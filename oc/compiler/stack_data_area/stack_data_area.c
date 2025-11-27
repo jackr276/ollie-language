@@ -6,7 +6,6 @@
 */
 
 #include "stack_data_area.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <stdlib.h>
