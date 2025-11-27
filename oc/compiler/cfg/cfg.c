@@ -3931,7 +3931,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 					/**
 					 * For an array type, we'll need to create a pointer to this in memory before we are able to load
-					 * up the address. 
+					 * up the address. Since the array type is already in memory, we'll create a pointer and load it
+					 * with the address of the base of the array.
 					 */
 					} else {
 						//We need to load a reference to this into memory
@@ -3954,11 +3955,14 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 						//This comes afterwards
 						add_statement(current_block, store);
 
+						//The final load will come here using the offset that comes from the new stack region
 						instruction_t* load = emit_load_with_constant_offset_ir_code(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, offset);
 						load->is_branch_ending = is_branch_ending;
 
+						//Add it into the block
 						add_statement(current_block, load);
 
+						//The final assignee is this offset here
 						unary_package.assignee = load->assignee;
 					}
 
