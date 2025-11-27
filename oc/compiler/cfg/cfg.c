@@ -3901,57 +3901,66 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 *
 					 * We do not do this if it's a global variable, because global variables have their own unique storage
 					 * mechanism that is not stack related
+					 *
+					 *
+					 * Another nuance, if we have an array, say and int[], and we take the address, the user will
+					 * receive a type of int[]*(pointer to an array). In order to achieve this, we will need to create
+					 * a whole new stack variable to save the array
 					 */
 					if(unary_expression_child->variable->membership != GLOBAL_VARIABLE
 						//Is it not on the stack already?
 						&& unary_expression_child->variable->stack_region == NULL) {
 						//Create the stack region and store it in the variable
 						unary_expression_child->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), unary_expression_child->variable->type_defined_as);
-					//We need to emit this somehow
-					} else if(is_memory_region(unary_expression_child->variable->type_defined_as) == TRUE) {
-						printf("HERE\n");
+					} 
 
-						//
-						//
-						//
-						//
-						//TODO - we actually will need the memory address of the variable that we're trying to store here
-						//
-						//This is a rapid prototype, improvements will be made to it
-						//
-						//
-						//
-						//
+					//If it's *not* an array type, we can proceed doing this as we normally do
+					if(unary_expression_child->variable->type_defined_as->type_class != TYPE_CLASS_ARRAY){
+						//Add the memory address statement in
+						instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(unary_expression_child->variable));
+						memory_address_statement->is_branch_ending = is_branch_ending;
+
+						//This counts add as a use
+						add_used_variable(current_block, memory_address_statement->op1);
+
+						//Now add the statement in
+						add_statement(current_block, memory_address_statement);
+
+						//And package the value up as what we want here
+						unary_package.assignee = memory_address_statement->assignee;
+
+					/**
+					 * For an array type, we'll need to create a pointer to this in memory before we are able to load
+					 * up the address. 
+					 */
+					} else {
 						//We need to load a reference to this into memory
 						stack_region_t* region = create_stack_region_for_type(&(current_function->data_area), unary_expression_parent->inferred_type);
 
+						//We need a stack offset
 						three_addr_const_t* offset = emit_direct_integer_or_char_constant(region->base_address, u64);
 
-						//And then we need to load into it
-						instruction_t* store = emit_store_with_constant_offset_ir_code(cfg_ref->stack_pointer, offset, emit_var(unary_expression_child->variable));
+						//We first need the memory address of the existing array in memory
+						instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(unary_expression_child->variable));
+						memory_address_statement->is_branch_ending = is_branch_ending;
 
+						//Throw this into the block
+						add_statement(current_block, memory_address_statement);
+
+						//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
+						instruction_t* store = emit_store_with_constant_offset_ir_code(cfg_ref->stack_pointer, offset, memory_address_statement->assignee);
+						store->is_branch_ending = is_branch_ending;
+
+						//This comes afterwards
 						add_statement(current_block, store);
 
 						instruction_t* load = emit_load_with_constant_offset_ir_code(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, offset);
+						load->is_branch_ending = is_branch_ending;
 
 						add_statement(current_block, load);
 
 						unary_package.assignee = load->assignee;
-						break;
 					}
-
-					//Add the memory address statement in
-					instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(unary_expression_child->variable));
-					memory_address_statement->is_branch_ending = is_branch_ending;
-
-					//This counts add as a use
-					add_used_variable(current_block, memory_address_statement->op1);
-
-					//Now add the statement in
-					add_statement(current_block, memory_address_statement);
-
-					//And package the value up as what we want here
-					unary_package.assignee = memory_address_statement->assignee;
 
 					break;
 
