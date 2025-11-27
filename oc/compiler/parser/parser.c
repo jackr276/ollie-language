@@ -1470,6 +1470,11 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
+	//This types are not assignable
+	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY){
+		return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
+	}
+
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
