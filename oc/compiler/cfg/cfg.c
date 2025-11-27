@@ -3955,15 +3955,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 						//This comes afterwards
 						add_statement(current_block, store);
 
-						//The final load will come here using the offset that comes from the new stack region
-						instruction_t* load = emit_load_with_constant_offset_ir_code(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, offset);
-						load->is_branch_ending = is_branch_ending;
+						//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
+						//a simple binary operation instruction
+						instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, PLUS, offset);
+						address->is_branch_ending = is_branch_ending;
 
 						//Add it into the block
-						add_statement(current_block, load);
+						add_statement(current_block, address);
 
 						//The final assignee is this offset here
-						unary_package.assignee = load->assignee;
+						unary_package.assignee = address->assignee;
 					}
 
 					break;
