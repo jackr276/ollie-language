@@ -209,6 +209,33 @@ void print_stack_data_area(stack_data_area_t* area){
 
 
 /**
+ * Does the stack contain a given pointer value? This is used for avoiding redundant addresses
+ * in the stack
+ */
+stack_region_t* does_stack_contain_pointer_to_variable(stack_data_area_t* area, void* variable){
+	//This should never happen
+	if(variable == NULL){
+		printf("Fatal internal compiler error. Attempt to find a stack region for a null pointer\n");
+		exit(1);
+	}
+
+	//Run through all of the regions backwards
+	for(int16_t i = area->stack_regions->current_index - 1; i >= 0; i--){
+		//Grab a given one out
+		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
+
+		//If we find it, give it back
+		if(region->variable_referenced == variable){
+			return region;
+		}
+	}
+
+	//NULL means we do not have it
+	return NULL;
+}
+
+
+/**
  * Deallocate the internal linked list of the stack data area
  */
 void stack_data_area_dealloc(stack_data_area_t* stack_data_area){

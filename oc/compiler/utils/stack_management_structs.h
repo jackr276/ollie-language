@@ -36,6 +36,9 @@ typedef struct stack_region_t stack_region_t;
 struct stack_region_t {
 	//What type are we storing?
 	generic_type_t* type;
+	//What variable are we pointing to? This is
+	void* variable_referenced;
+	//used for array addresses
 	//The unique ID for this region
 	u_int32_t stack_region_id;
 	//The base address

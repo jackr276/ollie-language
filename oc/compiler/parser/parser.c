@@ -1470,6 +1470,11 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
+	//This types are not assignable
+	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY){
+		return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
+	}
+
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
@@ -8289,6 +8294,9 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
  * Top level initializer value for type validation
  */
 static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node){
+	//Dealias this just to be safe
+	target_type = dealias_type(target_type);
+
 	//What's the return type of our node?
 	generic_type_t* return_type = target_type;
 
@@ -8354,6 +8362,17 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				//Otherwise we'll just break out. The initializer node will have been properly
 				//set by the function above
 				return return_type;
+			}
+
+			/**
+			 * If we somehow get here and we have either an array, struct
+			 * or union type, this is incorrect. These types can only be initialized using
+			 * the initializer strategy
+			 */
+			if(is_memory_region(target_type) == TRUE){
+				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				return NULL;
 			}
 
 			//Use the helper to determine if the types are assignable
