@@ -466,18 +466,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
-			//This is invalid - we cannot take an immutable pointer
-			//and then assign it over to a mutable pointer, because
-			//that would allow mutation of the underlying value
-			if(destination_type->mutability == MUTABLE){
-				//If the destination is mutable but the source
-				//is not, we can't go forward
-				if(source_type->mutability != MUTABLE){
-					return NULL;
-				}
-			}
-
 			switch(source_type->type_class){
+				//We don't care about mutability here - we'll
+				//be copying the u64 so the value there is actually irrelevant, it's not a pointer
+				//that we're copying over
 				case TYPE_CLASS_BASIC:
 					//This needs to be a u64, otherwise it's invalid
 					if(source_type->basic_type_token == U64){
@@ -490,6 +482,17 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 				//Check if they're assignable
 				case TYPE_CLASS_ARRAY:
+					//This is invalid - we cannot take an immutable pointer
+					//and then assign it over to a mutable pointer, because
+					//that would allow mutation of the underlying value
+					if(destination_type->mutability == MUTABLE){
+						//If the destination is mutable but the source
+						//is not, we can't go forward
+						if(source_type->mutability != MUTABLE){
+							return NULL;
+						}
+					}
+
 					//If this works, return the destination type
 					if(types_assignable(destination_type->internal_types.points_to, source_type->internal_types.member_type) != NULL){
 						return destination_type;
@@ -499,6 +502,17 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		
 				//Likely the most common case
 				case TYPE_CLASS_POINTER:
+					//This is invalid - we cannot take an immutable pointer
+					//and then assign it over to a mutable pointer, because
+					//that would allow mutation of the underlying value
+					if(destination_type->mutability == MUTABLE){
+						//If the destination is mutable but the source
+						//is not, we can't go forward
+						if(source_type->mutability != MUTABLE){
+							return NULL;
+						}
+					}
+
 					//If this itself is a void pointer, then we're good
 					if(source_type->internal_values.is_void_pointer == TRUE){
 						return destination_type;
@@ -2142,11 +2156,11 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
  */
 void generate_types_assignable_failure_message(char* info, generic_type_t* source_type, generic_type_t* destination_type){
 	//Grab the mutability levels
-	char* source_mutability = source_type->mutability == MUTABLE ? "mut" : "";
-	char* dest_mutability = destination_type->mutability == MUTABLE ? "mut" : "";
+	char* source_mutability = source_type->mutability == MUTABLE ? "mut " : "";
+	char* dest_mutability = destination_type->mutability == MUTABLE ? "mut " : "";
 
 	//Print into the buffer
-	sprintf(info, "Type \"%s %s\" cannot be assigned to incompatible type \"%s %s\"",
+	sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
 			source_mutability, source_type->type_name.string,
 		 	dest_mutability, destination_type->type_name.string);
 }
