@@ -42,7 +42,7 @@ void print_stack_data_area(stack_data_area_t* area);
  * Does the stack contain a given pointer value? This is used for avoiding redundant addresses
  * in the stack
  */
-stack_region_t* does_stack_contain_pointer_value(stack_data_area_t* area, void* pointer);
+stack_region_t* does_stack_contain_pointer_to_variable(stack_data_area_t* area, void* variable);
 
 /**
  * Align the stack data area to be 16-byte aligned

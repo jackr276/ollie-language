@@ -213,9 +213,9 @@ void print_stack_data_area(stack_data_area_t* area){
  * Does the stack contain a given pointer value? This is used for avoiding redundant addresses
  * in the stack
  */
-stack_region_t* does_stack_contain_pointer_value(stack_data_area_t* area, void* pointer){
+stack_region_t* does_stack_contain_pointer_to_variable(stack_data_area_t* area, void* variable){
 	//This should never happen
-	if(pointer == NULL){
+	if(variable == NULL){
 		printf("Fatal internal compiler error. Attempt to find a stack region for a null pointer\n");
 		exit(1);
 	}
@@ -226,7 +226,7 @@ stack_region_t* does_stack_contain_pointer_value(stack_data_area_t* area, void* 
 		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
 
 		//If we find it, give it back
-		if(region->variable_referenced == pointer){
+		if(region->variable_referenced == variable){
 			return region;
 		}
 	}

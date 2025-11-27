@@ -3933,38 +3933,69 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					 * For an array type, we'll need to create a pointer to this in memory before we are able to load
 					 * up the address. Since the array type is already in memory, we'll create a pointer and load it
 					 * with the address of the base of the array.
+					 *
+					 * There are two scenarios here:
+					 *  1.) This is the first time we're taking the address of the array. We'll need to go through,
+					 *  make the pointer, load it's address and then return it
+					 *
+					 *  2.) We've already taken the address of this array and there already exists a pointer in memory to it. In
+					 *  this case, we will reuse that same region
 					 */
 					} else {
-						//We need to load a reference to this into memory
-						stack_region_t* region = create_stack_region_for_type(&(current_function->data_area), unary_expression_parent->inferred_type);
+						//Let's see whether or not we already have it
+						stack_region_t* existing_region = does_stack_contain_pointer_to_variable(&(current_function->data_area), unary_expression_child->variable);
 
-						//We need a stack offset
-						three_addr_const_t* offset = emit_direct_integer_or_char_constant(region->base_address, u64);
+						//We don't have it, so we need to go through our whole procedure
+						if(existing_region == NULL){
+							//We need to load a reference to this into memory
+							stack_region_t* region = create_stack_region_for_type(&(current_function->data_area), unary_expression_parent->inferred_type);
+							//Flag the variable in here
+							region->variable_referenced = unary_expression_child->variable;
 
-						//We first need the memory address of the existing array in memory
-						instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(unary_expression_child->variable));
-						memory_address_statement->is_branch_ending = is_branch_ending;
+							//We need a stack offset
+							three_addr_const_t* offset = emit_direct_integer_or_char_constant(region->base_address, u64);
 
-						//Throw this into the block
-						add_statement(current_block, memory_address_statement);
+							//We first need the memory address of the existing array in memory
+							instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(unary_expression_child->variable));
+							memory_address_statement->is_branch_ending = is_branch_ending;
 
-						//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
-						instruction_t* store = emit_store_with_constant_offset_ir_code(cfg_ref->stack_pointer, offset, memory_address_statement->assignee);
-						store->is_branch_ending = is_branch_ending;
+							//Throw this into the block
+							add_statement(current_block, memory_address_statement);
 
-						//This comes afterwards
-						add_statement(current_block, store);
+							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
+							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg_ref->stack_pointer, offset, memory_address_statement->assignee);
+							store->is_branch_ending = is_branch_ending;
 
-						//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
-						//a simple binary operation instruction
-						instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, PLUS, offset);
-						address->is_branch_ending = is_branch_ending;
+							//This comes afterwards
+							add_statement(current_block, store);
 
-						//Add it into the block
-						add_statement(current_block, address);
+							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
+							//a simple binary operation instruction
+							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, PLUS, offset);
+							address->is_branch_ending = is_branch_ending;
 
-						//The final assignee is this offset here
-						unary_package.assignee = address->assignee;
+							//Add it into the block
+							add_statement(current_block, address);
+
+							//The final assignee is this offset here
+							unary_package.assignee = address->assignee;
+
+						//Otherwise, we do have it, so all we need to do is reuse the pointer that we already have
+						} else {
+							//Emit the offset
+							three_addr_const_t* offset = emit_direct_integer_or_char_constant(existing_region->base_address, u64);
+
+							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
+							//a simple binary operation instruction
+							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, PLUS, offset);
+							address->is_branch_ending = is_branch_ending;
+
+							//Add it into the block
+							add_statement(current_block, address);
+
+							//The final assignee is this offset here
+							unary_package.assignee = address->assignee;
+						}
 					}
 
 					break;
