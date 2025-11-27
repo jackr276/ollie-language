@@ -1,6 +1,6 @@
 /**
 * Author: Jack Robbins
-* Testing array initializers in ollie
+* Test an array pointer with an intermediary assignment
 */
 
 pub fn access_array(a:mut i32**) -> i32{
@@ -16,8 +16,11 @@ pub fn main() -> i32 {
 	//in the array initializer list.
 	let arr:mut i32[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-	//Grab this by just taking the array's address
-	@access_array(&arr);
+	//Grab the address of the array
+	let x:mut i32** = &arr;
+
+	//Pass x in
+	@access_array(x);
 
 	ret arr[3];
 }
