@@ -181,6 +181,18 @@ struct instruction_t{
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
 	instruction_t* previous_statement;
+	/**
+	 * Data dependency graph values
+	 *
+	 * It is more efficient for us to just store the dependency
+	 * graph in here rather than creating separate memory for it
+	 */
+	//The nodes that this instruction
+	//depends on(predecessors)
+	dynamic_array_t* dependencies;
+	//The nodes that depend on this
+	//These could be considered as our successors
+	dynamic_array_t* dependees;
 	//A three address code always has 2 operands and an assignee
 	three_addr_var_t* op1;
 	three_addr_var_t* op2;
@@ -214,6 +226,8 @@ struct instruction_t{
 	symtab_function_record_t* function;
 	//Generic parameter list - could be used for phi functions or function calls
 	void* parameters;
+	//The number of cycles that this instruction needs to execute(always approximate/rough)
+	u_int32_t cycles;
 	//What is the three address code type
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction

@@ -6,28 +6,16 @@
 
 #ifndef DATA_DEPENDENCY_GRAPH_H
 #define DATA_DEPENDENCY_GRAPH_H
-
-//Top level struct for our dependency graph
 #include <sys/types.h>
-typedef struct data_dependency_graph_t data_dependency_graph_t;
+#include "../utils/constants.h"
+#include "../utils/dynamic_array/dynamic_array.h"
+#include "../instruction/instruction.h"
 
-/**
- * The data dependency graph will internally just be an adjacency
- * matrix. This allows us to have O(1) lookup. The O(n^2) space complexity
- * is not a big deal for us because we're just storing these as ints.
- *
- * A value of 0 in the graph means that there is no relation between the two instructions
- *
- *
- * TODO this is a first cut - we may need to use a more costly approach like pointers in
- * the instruction itself if this turns out not to work
- */
-struct data_dependency_graph_t{
-	u_int32_t** adjacency_matrix;
 
-	//Number of nodes(instructions) that we have
-	u_int32_t num_nodes;
-};
+void add_dependence(instruction_t* dependency, instruction_t* dependent);
 
+void remove_dependence(instruction_t* dependency, instruction_t* dependent);
+
+u_int32_t get_edge_weight(instruction_t* dependency, instruction_t* dependent);
 
 #endif /* DATA_DEPENDENCY_GRAPH_H */

@@ -140,6 +140,9 @@ void insert_instruction_before_given(instruction_t* insertee, instruction_t* giv
 	//Mark this while we're here
 	insertee->block_contained_in = block;
 
+	//Increment our number here
+	block->number_of_instructions++;
+
 	//Grab out what's before the given
 	instruction_t* before_given = given->previous_statement;
 
@@ -170,6 +173,9 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
 	//Mark this while we're here
 	insertee->block_contained_in = block;
 	
+	//Increment our number here
+	block->number_of_instructions++;
+
 	//Whatever comes after given
 	instruction_t* after_given = given->next_statement;
 
