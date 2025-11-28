@@ -13,15 +13,53 @@
  * Does the given instruction have a *Data Dependence* on the candidate. We will know
  * if the instruction does depend on it if the candidate *assigns* the one of the source
  * values in the instruction
+ *
+ * Once we find a dependence, we add it an leave. There's no point in searching on once
+ * one has been established. For this reason, we will search the most used dependency's first
+ *
+ * Candidate: movb $1, t5
+ * ...
+ * ...
+ * Given: addb t4, t5
+ *
+ * Then we need to establish a dependence between given and the candidate
  */
 static void update_dependence(instruction_t* given, instruction_t* candidate){
-	//Extract for convenience
-	three_addr_var_t* destination_register = given->destination_register;
+	//The candidate never even assigns anything, so why bother checking
+	if(is_destination_assigned(candidate) == FALSE){
+		return;
+	}
+
+	//We are looking to see if the candidate's destination register
+	//is used by us
+	three_addr_var_t* destination_register = candidate->destination_register;
+
+	//No point in going on here if there is no destination register to speak of
+	//in the candidate
+	if(destination_register == NULL){
+		return;
+	}
 
 	//Go for the source first
-	if(candidate->source_register != NULL){
+	if(given->source_register != NULL){
 		//These variables are equal, we have a dependence
-		if(variables_equal(candidate->source_register, destination_register, FALSE) == TRUE){
+		if(variables_equal(given->source_register, destination_register, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	/**
+	 * Recall the unique procedures for the destination register
+	 *	
+	 *	1.) It can be a source & a destination(is_destination_also_source)
+	 *	2.) It can exclusively be a source(we ruled this out at the top)
+	 *	3.) It's just a destination, in which case we don't care(we'd just skip here)
+	 */
+	if(is_destination_also_operand(given) == TRUE){
+		//These variables are equal, we have a dependence
+		if(variables_equal(given->destination_register, destination_register, FALSE) == TRUE){
 			//Given depends on candidate
 			add_dependence(candidate, given);
 			return;
@@ -29,9 +67,9 @@ static void update_dependence(instruction_t* given, instruction_t* candidate){
 	}
 
 	//Second source
-	if(candidate->source_register2 != NULL){
+	if(given->source_register2 != NULL){
 		//These variables are equal, we have a dependence
-		if(variables_equal(candidate->source_register2, destination_register, FALSE) == TRUE){
+		if(variables_equal(given->source_register2, destination_register, FALSE) == TRUE){
 			//Given depends on candidate
 			add_dependence(candidate, given);
 			return;
@@ -39,9 +77,9 @@ static void update_dependence(instruction_t* given, instruction_t* candidate){
 	}
 
 	//Address calc registers
-	if(candidate->address_calc_reg1 != NULL){
+	if(given->address_calc_reg1 != NULL){
 		//These variables are equal, we have a dependence
-		if(variables_equal(candidate->address_calc_reg1, destination_register, FALSE) == TRUE){
+		if(variables_equal(given->address_calc_reg1, destination_register, FALSE) == TRUE){
 			//Given depends on candidate
 			add_dependence(candidate, given);
 			return;
@@ -49,19 +87,34 @@ static void update_dependence(instruction_t* given, instruction_t* candidate){
 	}
 
 	//Address calc registers
-	if(candidate->address_calc_reg2 != NULL){
+	if(given->address_calc_reg2 != NULL){
 		//These variables are equal, we have a dependence
-		if(variables_equal(candidate->address_calc_reg2, destination_register, FALSE) == TRUE){
+		if(variables_equal(given->address_calc_reg2, destination_register, FALSE) == TRUE){
 			//Given depends on candidate
 			add_dependence(candidate, given);
 			return;
 		}
 	}
+
+	//Now run through all of the parameters *if* they exist
+	if(given->parameters != NULL){
+		//Run through them all
+		dynamic_array_t* params = given->parameters;
+		for(u_int16_t i = 0; i < params->current_index; i++){
+			//Extract it
+			three_addr_var_t* param = dynamic_array_get_at(params, i);
+
+			//Add it and leave if so
+			if(variables_equal(param, destination_register, FALSE) == TRUE){
+				add_dependence(candidate, given);
+				return;
+			}
+		}
+	}
+
 
 	three_addr_var_t* destination_register2 = given->destination_register2;
-
 }
-
 
 
 /**
