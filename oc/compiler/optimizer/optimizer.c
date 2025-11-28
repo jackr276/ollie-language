@@ -75,6 +75,9 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	//Copy this over too
 	a->block_terminal_type = b->block_terminal_type;
 
+	//Increment the number of instructions in here
+	a->number_of_instructions += b->number_of_instructions;
+
 	//For each statement in b, all of it's old statements are now "defined" in a
 	instruction_t* b_stmt = b->leader_statement;
 

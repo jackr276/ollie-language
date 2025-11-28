@@ -17,9 +17,43 @@ static void build_dependency_graph_for_block(basic_block_t* block){
 
 
 /**
- * Run through a block and perform the reordering/scheduling in it
+ * Run through a block and perform the reordering/scheduling in it step by step.
+ * Once this function returns, we can consider that block 100% done from a scheduling perspective
  */
 static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_printing, u_int8_t print_irs){
+	/**
+	 * Step 0: load all of the instructions into a static array. This is going
+	 * to be an efficiency boost because we need to traverse up and down
+	 * the block to find assignments for our data relationships
+	 */
+	//A list of all instructions in the block. We actually have a set
+	//number of instructions in the block, which allows us to do this
+	instruction_t* instructions[block->number_of_instructions];
+
+	//Grab a cursor
+	instruction_t* instruction_cursor = block->leader_statement;
+	
+	//Current index in the list
+	u_int32_t list_index = 0;
+
+	//Run through and add them all in
+	while(instruction_cursor != NULL){
+		//Add it in
+		instructions[list_index] = instruction_cursor;
+
+		//Now we advance
+		instruction_cursor = instruction_cursor->next_statement;
+	}
+
+	//By the time we're here, we now have a list that we can traverse
+	//quicker than if we had to use the linked list approaach
+
+
+	/**
+	 * Step 1: build the data dependency graph inside of the block. This is done by
+	 * the helper function. Nothing else can be done until this is done
+	 */
+	build_dependency_graph_for_block(block);
 
 }
 

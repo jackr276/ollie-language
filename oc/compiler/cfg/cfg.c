@@ -5379,6 +5379,8 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		add_assigned_variable(a, b->assigned_variables->internal_array[i]);
 	}
 
+	//Update the instruction counts
+	a->number_of_instructions += b->number_of_instructions;
 
 	//We'll remove this from the list of created blocks
 	dynamic_array_delete(cfg_ref->created_blocks, b);
