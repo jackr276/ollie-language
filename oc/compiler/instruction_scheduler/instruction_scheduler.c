@@ -98,6 +98,11 @@ static void update_dependence_for_variable(instruction_t* given, instruction_t**
  * Build the dependency graph inside of a block. We're also given our instruction list here for reference
  */
 static void build_dependency_graph_for_block(basic_block_t* block, instruction_t** instructions){
+	//Predeclare for any/all function parameter lists due to
+	//the nature of the switch
+	dynamic_array_t* function_parameters;
+
+
 	//Run through the instruction list backwards. Logically speaking, we're going to
 	//find the instruction with the maximum number of dependencies later on down in the block
 	//We only go down to one here because for the first instruction, there is nothing of
@@ -139,7 +144,58 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 				update_dependence_for_variable(current, instructions, current->op1, i - 1);
 				break;
 
+			//We can actually skip phi functions, reason being that they
+			//will always come at the front of a block and are always going
+			//to have their dependencies coming from outside of the block
+			case PHI_FUNCTION:
+				break;
 
+			/**
+			 * For an indirect call, we need to consider:
+			 * 	1.) The source register
+			 * 	2.) The parameters
+			 */
+			case INDIRECT_CALL:
+				//Update the dependence for the source var
+				update_dependence_for_variable(current, instructions, current->source_register, i - 1);
+
+				//Really just acts as a cleaner cast
+				function_parameters = current->parameters;
+
+				//This can happen, in which case we just leave
+				if(function_parameters == NULL){
+					break;
+				}
+
+				//Otherwise, we update all of the parameters
+				for(u_int16_t j = 0; j < function_parameters->current_index; j++){
+					//Invoke the helper for each given parameter
+					update_dependence_for_variable(current, instructions, dynamic_array_get_at(function_parameters, j), i - 1);
+				}
+
+				break;
+
+			/**
+			 * For a direct call, all that we
+			 * need to consider are the parameters
+			 */
+			case CALL:
+				//Really just acts as a cleaner cast
+				function_parameters = current->parameters;
+
+				//This can happen, in which case we just leave
+				if(function_parameters == NULL){
+					break;
+				}
+
+				//Otherwise, we update all of the parameters
+				for(u_int16_t j = 0; j < function_parameters->current_index; j++){
+					//Invoke the helper for each given parameter
+					update_dependence_for_variable(current, instructions, dynamic_array_get_at(function_parameters, j), i - 1);
+				}
+
+				break;
+				
 			default:
 				//For this instruction, we need to backtrace through the list and figure out:
 				//	1.) Do the dependencies get assigned in this block? It is fully possible
