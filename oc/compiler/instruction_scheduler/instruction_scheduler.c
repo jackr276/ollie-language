@@ -25,9 +25,6 @@
  * Then we need to establish a dependence between given and the candidate
  */
 static void update_dependence(instruction_t* given, instruction_t* candidate){
-	printf("Checking:");
-	print_instruction(stdout, candidate, PRINTING_VAR_IN_INSTRUCTION);
-
 	//The candidate never even assigns anything, so why bother checking
 	if(is_destination_assigned(candidate) == FALSE){
 		return;
@@ -205,13 +202,11 @@ static void update_dependence(instruction_t* given, instruction_t* candidate){
 static void build_dependency_graph_for_block(basic_block_t* block, instruction_t** instructions){
 	//Run through the instruction list backwards. Logically speaking, we're going to
 	//find the instruction with the maximum number of dependencies later on down in the block
-	for(int32_t i = block->number_of_instructions - 1; i >= 0; i--){
+	//We only go down to one here because for the first instruction, there is nothing of
+	//value to check as it's the very first one
+	for(int32_t i = block->number_of_instructions - 1; i >= 1; i--){
 		//Extract it
 		instruction_t* current = instructions[i];
-
-		printf("On instruction:\n");
-		print_instruction(stdout, current, PRINTING_VAR_IN_INSTRUCTION);
-		printf("\n");
 
 		//For this instruction, we need to backtrace through the list and figure out:
 		//	1.) Do the dependencies get assigned in this block? It is fully possible
@@ -224,7 +219,6 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 		for(int32_t j = i - 1; j >= 0; j--){
 			//Extract it
 			instruction_t* candidate = instructions[j];
-
 
 			//Update the dependence
 			update_dependence(current, candidate);
@@ -249,7 +243,7 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 
 	//Grab a cursor
 	instruction_t* instruction_cursor = block->leader_statement;
-	
+
 	//Current index in the list
 	u_int32_t list_index = 0;
 
@@ -273,7 +267,6 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * the helper function. Nothing else can be done until this is done
 	 */
 	build_dependency_graph_for_block(block, instructions);
-
 }
 
 

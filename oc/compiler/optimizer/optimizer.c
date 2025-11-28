@@ -102,6 +102,9 @@ void remove_statement(instruction_t* stmt){
 	//Grab the block out
 	basic_block_t* block = stmt->block_contained_in;
 
+	//We are losing a statement here
+	block->number_of_instructions--;
+
 	//If it's the leader statement, we'll just update the references
 	if(block->leader_statement == stmt){
 		//Special case - it's the only statement. We'll just delete it here
