@@ -17,6 +17,11 @@
 void add_dependence(instruction_t* depends_on, instruction_t* target);
 
 /**
+ * Print out the entirety of the data dependence graph
+ */
+void print_data_dependence_graph(FILE* output, instruction_t** graph, u_int32_t num_nodes);
+
+/**
  * Remove a dependence between the two instructions
  */
 void remove_dependence(instruction_t* depends_on, instruction_t* target);

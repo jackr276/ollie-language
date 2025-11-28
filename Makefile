@@ -537,7 +537,7 @@ stack_data_area_test-CI: stack_data_area_test-CI.o type_system-CI.o lexstack-CI.
 call_graph-CI.o : $(CALL_GRAPH_PATH)/call_graph.c
 	$(CC) $(CFLAGS) $(CALL_GRAPH_PATH)/call_graph.c -o $(OUT_CI)/call_graph.o
 
-data_depedency_graph-CI.o : $(DATA_DEPENDENCY_GRAPH_PATH)/data_dependency_graph.c
+data_dependency_graph-CI.o : $(DATA_DEPENDENCY_GRAPH_PATH)/data_dependency_graph.c
 	$(CC) $(CFLAGS) $(DATA_DEPENDENCY_GRAPH_PATH)/data_dependency_graph.c -o $(OUT_CI)/data_dependency_graph.o
 
 compiler-CI.o: ./oc/compiler/compiler.c 

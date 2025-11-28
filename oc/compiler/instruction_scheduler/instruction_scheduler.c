@@ -267,6 +267,12 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * the helper function. Nothing else can be done until this is done
 	 */
 	build_dependency_graph_for_block(block, instructions);
+
+	//Only if we want debug printing we can show this
+	if(debug_printing == TRUE){
+		//Print out the dependence graph for the block
+		print_data_dependence_graph(stdout, instructions, block->number_of_instructions);
+	}
 }
 
 
