@@ -25,6 +25,9 @@
  * Then we need to establish a dependence between given and the candidate
  */
 static void update_dependence(instruction_t* given, instruction_t* candidate){
+	printf("Checking:");
+	print_instruction(stdout, candidate, PRINTING_VAR_IN_INSTRUCTION);
+
 	//The candidate never even assigns anything, so why bother checking
 	if(is_destination_assigned(candidate) == FALSE){
 		return;
@@ -113,7 +116,86 @@ static void update_dependence(instruction_t* given, instruction_t* candidate){
 	}
 
 
+	/**
+	 * Recall that there exist some instructions that have 2 destination registers.
+	 * If this is the case, we will need to perform all of this checking again
+	 */
 	three_addr_var_t* destination_register2 = given->destination_register2;
+	if(destination_register2 == NULL){
+		return;
+	}
+
+	//Go for the source first
+	if(given->source_register != NULL){
+		//These variables are equal, we have a dependence
+		if(variables_equal(given->source_register, destination_register2, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	/**
+	 * Recall the unique procedures for the destination register
+	 *	
+	 *	1.) It can be a source & a destination(is_destination_also_source)
+	 *	2.) It can exclusively be a source(we ruled this out at the top)
+	 *	3.) It's just a destination, in which case we don't care(we'd just skip here)
+	 */
+	if(is_destination_also_operand(given) == TRUE){
+		//These variables are equal, we have a dependence
+		if(variables_equal(given->destination_register, destination_register2, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	//Second source
+	if(given->source_register2 != NULL){
+		//These variables are equal, we have a dependence
+		if(variables_equal(given->source_register2, destination_register2, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	//Address calc registers
+	if(given->address_calc_reg1 != NULL){
+		//These variables are equal, we have a dependence
+		if(variables_equal(given->address_calc_reg1, destination_register2, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	//Address calc registers
+	if(given->address_calc_reg2 != NULL){
+		//These variables are equal, we have a dependence
+		if(variables_equal(given->address_calc_reg2, destination_register2, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	//Now run through all of the parameters *if* they exist
+	if(given->parameters != NULL){
+		//Run through them all
+		dynamic_array_t* params = given->parameters;
+		for(u_int16_t i = 0; i < params->current_index; i++){
+			//Extract it
+			three_addr_var_t* param = dynamic_array_get_at(params, i);
+
+			//Add it and leave if so
+			if(variables_equal(param, destination_register2, FALSE) == TRUE){
+				add_dependence(candidate, given);
+				return;
+			}
+		}
+	}
 }
 
 
@@ -127,6 +209,10 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 		//Extract it
 		instruction_t* current = instructions[i];
 
+		printf("On instruction:\n");
+		print_instruction(stdout, current, PRINTING_VAR_IN_INSTRUCTION);
+		printf("\n");
+
 		//For this instruction, we need to backtrace through the list and figure out:
 		//	1.) Do the dependencies get assigned in this block? It is fully possible
 		//	that they do not
@@ -138,6 +224,7 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 		for(int32_t j = i - 1; j >= 0; j--){
 			//Extract it
 			instruction_t* candidate = instructions[j];
+
 
 			//Update the dependence
 			update_dependence(current, candidate);
@@ -170,6 +257,9 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	while(instruction_cursor != NULL){
 		//Add it in
 		instructions[list_index] = instruction_cursor;
+
+		//Increment
+		list_index++;
 
 		//Now we advance
 		instruction_cursor = instruction_cursor->next_statement;

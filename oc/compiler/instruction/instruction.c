@@ -3375,7 +3375,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		//Show a default error message
 		default:
-			//fprintf(fl, "Not yet selected\n");
+			fprintf(fl, "Not yet selected. Statement code is: %d\n", instruction->statement_type);
 			break;
 	}
 }
