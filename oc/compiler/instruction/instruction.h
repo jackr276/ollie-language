@@ -189,10 +189,10 @@ struct instruction_t{
 	 */
 	//The nodes that this instruction
 	//depends on(predecessors)
-	dynamic_array_t* dependencies;
+	dynamic_array_t* predecessor_instructions;
 	//The nodes that depend on this
 	//These could be considered as our successors
-	dynamic_array_t* dependees;
+	dynamic_array_t* successor_instructions;
 	//A three address code always has 2 operands and an assignee
 	three_addr_var_t* op1;
 	three_addr_var_t* op2;

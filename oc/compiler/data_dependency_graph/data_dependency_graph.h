@@ -11,11 +11,19 @@
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../instruction/instruction.h"
 
-
+/**
+ * Add a dependence between the two instructions
+ */
 void add_dependence(instruction_t* dependency, instruction_t* dependent);
 
+/**
+ * Remove a dependence between the two instructions
+ */
 void remove_dependence(instruction_t* dependency, instruction_t* dependent);
 
+/**
+ * Get the edge weight between two instructions
+ */
 u_int32_t get_edge_weight(instruction_t* dependency, instruction_t* dependent);
 
 #endif /* DATA_DEPENDENCY_GRAPH_H */
