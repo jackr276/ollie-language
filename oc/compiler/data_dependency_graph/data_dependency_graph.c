@@ -9,34 +9,34 @@
 /**
  * Add a dependence between the dependent and the dependency
 */
-void add_dependence(instruction_t* dependency, instruction_t* dependent){
+void add_dependence(instruction_t* depends_on, instruction_t* target){
 	//Allocate this if we don't have it
-	if(dependency->successor_instructions == NULL){
-		dependency->successor_instructions = dynamic_array_alloc();
+	if(depends_on->successor_instructions == NULL){
+		depends_on->successor_instructions = dynamic_array_alloc();
 	}
 
 	//Again allocate if we don't have
-	if(dependent->predecessor_instructions == NULL){
-		dependency->predecessor_instructions = dynamic_array_alloc();
+	if(target->predecessor_instructions == NULL){
+		target->predecessor_instructions = dynamic_array_alloc();
 	}
 
 	//The dependent is a successor of the dependency
-	dynamic_array_add(dependency->successor_instructions, dependent);
+	dynamic_array_add(depends_on->successor_instructions, target);
 
 	//The dependency is a predecessor of the dependent
-	dynamic_array_add(dependent->predecessor_instructions, dependency);
+	dynamic_array_add(target->predecessor_instructions, depends_on);
 }
 
 
 /**
  * Remove a dependence between the dependent and the dependency
 */
-void remove_dependence(instruction_t* dependency, instruction_t* dependent){
+void remove_dependence(instruction_t* depends_on, instruction_t* target){
 	//Remove the dependent from our successors here
-	dynamic_array_delete(dependency->successor_instructions, dependent);
+	dynamic_array_delete(depends_on->successor_instructions, target);
 
 	//Remove the dependency from the dependent's predecessors
-	dynamic_array_delete(dependent->predecessor_instructions, dependency);
+	dynamic_array_delete(target->predecessor_instructions, depends_on);
 }
 
 

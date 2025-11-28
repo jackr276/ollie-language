@@ -5,7 +5,63 @@
 */
 
 #include "instruction_scheduler.h"
+#include "../data_dependency_graph/data_dependency_graph.h"
 #include <sys/types.h>
+
+
+/**
+ * Does the given instruction have a *Data Dependence* on the candidate. We will know
+ * if the instruction does depend on it if the candidate *assigns* the one of the source
+ * values in the instruction
+ */
+static void update_dependence(instruction_t* given, instruction_t* candidate){
+	//Extract for convenience
+	three_addr_var_t* destination_register = given->destination_register;
+
+	//Go for the source first
+	if(candidate->source_register != NULL){
+		//These variables are equal, we have a dependence
+		if(variables_equal(candidate->source_register, destination_register, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	//Second source
+	if(candidate->source_register2 != NULL){
+		//These variables are equal, we have a dependence
+		if(variables_equal(candidate->source_register2, destination_register, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	//Address calc registers
+	if(candidate->address_calc_reg1 != NULL){
+		//These variables are equal, we have a dependence
+		if(variables_equal(candidate->address_calc_reg1, destination_register, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	//Address calc registers
+	if(candidate->address_calc_reg2 != NULL){
+		//These variables are equal, we have a dependence
+		if(variables_equal(candidate->address_calc_reg2, destination_register, FALSE) == TRUE){
+			//Given depends on candidate
+			add_dependence(candidate, given);
+			return;
+		}
+	}
+
+	three_addr_var_t* destination_register2 = given->destination_register2;
+
+}
+
 
 
 /**
@@ -18,6 +74,21 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 		//Extract it
 		instruction_t* current = instructions[i];
 
+		//For this instruction, we need to backtrace through the list and figure out:
+		//	1.) Do the dependencies get assigned in this block? It is fully possible
+		//	that they do not
+		//	2.) If they do get assigned in this block, what are those instructions that
+		//	are doing the assignment
+		
+		//Let's now backtrace from this current instruction up the chain. We can
+		//start at this given instruction's immediate predecessor
+		for(int32_t j = i - 1; j >= 0; j--){
+			//Extract it
+			instruction_t* candidate = instructions[j];
+
+			//Update the dependence
+			update_dependence(current, candidate);
+		}
 	}
 }
 
