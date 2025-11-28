@@ -59,6 +59,8 @@ struct module_times_t {
 	double optimizer_time;
 	//Instruction selector
 	double selector_time;
+	//Instruction scheduler 
+	double scheduler_time;
 	//Register allocator
 	double allocator_time;
 	//Overall compilation time
