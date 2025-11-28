@@ -766,6 +766,9 @@ static void add_phi_statement(basic_block_t* target, instruction_t* phi_statemen
 		return;
 	}
 
+	//Counts as an instruction
+	target->number_of_instructions++;
+
 	//Otherwise we will add this in at the very front
 	phi_statement->next_statement = target->leader_statement;
 	//Update this reference

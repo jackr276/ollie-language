@@ -9,10 +9,16 @@
 
 
 /**
- * Build the dependency graph inside of a block
+ * Build the dependency graph inside of a block. We're also given our instruction list here for reference
  */
-static void build_dependency_graph_for_block(basic_block_t* block){
+static void build_dependency_graph_for_block(basic_block_t* block, instruction_t** instructions){
+	//Run through the instruction list backwards. Logically speaking, we're going to
+	//find the instruction with the maximum number of dependencies later on down in the block
+	for(int32_t i = block->number_of_instructions - 1; i >= 0; i--){
+		//Extract it
+		instruction_t* current = instructions[i];
 
+	}
 }
 
 
@@ -48,12 +54,11 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	//By the time we're here, we now have a list that we can traverse
 	//quicker than if we had to use the linked list approaach
 
-
 	/**
 	 * Step 1: build the data dependency graph inside of the block. This is done by
 	 * the helper function. Nothing else can be done until this is done
 	 */
-	build_dependency_graph_for_block(block);
+	build_dependency_graph_for_block(block, instructions);
 
 }
 
