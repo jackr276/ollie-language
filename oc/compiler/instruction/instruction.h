@@ -628,12 +628,12 @@ instruction_t* emit_idle_instruction();
 /**
  * Emit a setX instruction
  */
-instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, u_int8_t is_signed);
+instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_signed);
 
 /**
  * Emit a setne three address code statement
  */
-instruction_t* emit_setne_code(three_addr_var_t* assignee);
+instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on);
 
 /**
  * Emit a stack allocation statement

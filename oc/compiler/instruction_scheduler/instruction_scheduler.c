@@ -27,6 +27,10 @@
  * definition, we're done for that given variable
  */
 static void update_dependence_for_variable(instruction_t* given, instruction_t** instructions, three_addr_var_t* variable, u_int32_t start){
+	//Predeclare due to the switch
+	three_addr_var_t* destination;
+	three_addr_var_t* destination2;
+
 	//Run through all of the instructions starting at what we were given
 	for(int32_t i = start; i >= 0; i--){
 		//Extract it
@@ -37,26 +41,52 @@ static void update_dependence_for_variable(instruction_t* given, instruction_t**
 			continue;
 		}
 
-		//Grab these out
-		three_addr_var_t* destination = current->destination_register;
-		three_addr_var_t* destination2 = current->destination_register2;
+		//Some instructions(namely compares), have
+		//special rules where we hang onto the assignee
+		//for just this reason
+		switch(current->instruction_type){
+			case CMPQ:
+			case CMPW:
+			case CMPL:
+			case CMPB:
+			case TESTB:
+			case TESTL:
+			case TESTW:
+			case TESTQ:
+				//The cmp instructions store their symbolic assignees in the assignee slot
+				if(variables_equal(current->assignee, variable, FALSE) == TRUE){
+					//Add it in
+					add_dependence(current, given);
+					return;
+				}
 
-		//If they're equal then we're good
-		if(variables_equal(destination, variable, FALSE) == TRUE){
-			//Given depends on current
-			add_dependence(current, given);
+				break;
+			
+			//All others we just leave
+			default:
+				//Grab these out
+				destination = current->destination_register;
+				destination2 = current->destination_register2;
 
-			//We're done
-			return;
-		}
+				//If they're equal then we're good
+				if(variables_equal(destination, variable, FALSE) == TRUE){
+					//Given depends on current
+					add_dependence(current, given);
 
-		//We're also done here
-		if(variables_equal(destination2, variable, FALSE) == TRUE){
-			//Given depends on current
-			add_dependence(current, given);
+					//We're done
+					return;
+				}
 
-			//We're done
-			return;
+				//We're also done here
+				if(variables_equal(destination2, variable, FALSE) == TRUE){
+					//Given depends on current
+					add_dependence(current, given);
+
+					//We're done
+					return;
+				}
+
+				break;
 		}
 
 		//Otherwise we just keep going
@@ -76,40 +106,78 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 		//Extract it
 		instruction_t* current = instructions[i];
 
-		//For this instruction, we need to backtrace through the list and figure out:
-		//	1.) Do the dependencies get assigned in this block? It is fully possible
-		//	that they do not
-		//	2.) If they do get assigned in this block, what are those instructions that
-		//	are doing the assignment
-		
-		//For each variable in the instruction, we need to perform the search
-		if(is_destination_also_operand(current) == TRUE){
-			//Start searching here, beginngin at the last instruction
-			update_dependence_for_variable(current, instructions, current->destination_register, i - 1);
-		}
+		//Go by the instruction type to handle special cases 
+		//more efficiently
+		switch(current->instruction_type){
+			/**
+			 * Jump and set instructions store the op1's that they depend on, though
+			 * this is intentionally looked over by the selector, we need to account for it
+			 * here
+			 */
+			case SETNE:
+			case SETA:
+			case SETAE:
+			case SETE:
+			case SETB:
+			case SETBE:
+			case SETG:
+			case SETGE:
+			case SETL:
+			case SETLE:
+			case JNE:
+			case JE:
+			case JNZ:
+			case JZ:
+			case JA:
+			case JAE:
+			case JB:
+			case JBE:
+			case JL:
+			case JLE:
+			case JG:
+			case JGE:
+				update_dependence_for_variable(current, instructions, current->op1, i - 1);
+				break;
 
-		//Same for the source
-		if(current->source_register != NULL){
-			//Start searching here, beginngin at the last instruction
-			update_dependence_for_variable(current, instructions, current->source_register, i - 1);
-		}
 
-		//Same for the second source
-		if(current->source_register2 != NULL){
-			//Start searching here, beginngin at the last instruction
-			update_dependence_for_variable(current, instructions, current->source_register2, i - 1);
-		}
+			default:
+				//For this instruction, we need to backtrace through the list and figure out:
+				//	1.) Do the dependencies get assigned in this block? It is fully possible
+				//	that they do not
+				//	2.) If they do get assigned in this block, what are those instructions that
+				//	are doing the assignment
+				
+				//For each variable in the instruction, we need to perform the search
+				if(is_destination_also_operand(current) == TRUE){
+					//Start searching here, beginngin at the last instruction
+					update_dependence_for_variable(current, instructions, current->destination_register, i - 1);
+				}
 
-		//And the address calc registers
-		if(current->address_calc_reg1 != NULL){
-			//Start searching here, beginngin at the last instruction
-			update_dependence_for_variable(current, instructions, current->address_calc_reg1, i - 1);
-		}
+				//Same for the source
+				if(current->source_register != NULL){
+					//Start searching here, beginngin at the last instruction
+					update_dependence_for_variable(current, instructions, current->source_register, i - 1);
+				}
 
-		//And the address calc registers
-		if(current->address_calc_reg2 != NULL){
-			//Start searching here, beginngin at the last instruction
-			update_dependence_for_variable(current, instructions, current->address_calc_reg2, i - 1);
+				//Same for the second source
+				if(current->source_register2 != NULL){
+					//Start searching here, beginngin at the last instruction
+					update_dependence_for_variable(current, instructions, current->source_register2, i - 1);
+				}
+
+				//And the address calc registers
+				if(current->address_calc_reg1 != NULL){
+					//Start searching here, beginngin at the last instruction
+					update_dependence_for_variable(current, instructions, current->address_calc_reg1, i - 1);
+				}
+
+				//And the address calc registers
+				if(current->address_calc_reg2 != NULL){
+					//Start searching here, beginngin at the last instruction
+					update_dependence_for_variable(current, instructions, current->address_calc_reg2, i - 1);
+				}
+
+				break;
 		}
 	}
 }

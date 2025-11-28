@@ -897,12 +897,15 @@ instruction_t* emit_idle_instruction(){
 /**
  * Emit a setX instruction
  */
-instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, u_int8_t is_signed){
+instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_signed){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//We'll need to give it the assignee
 	stmt->destination_register = destination_register;
+
+	//What do we relie on
+	stmt->op1 = relies_on;
 
 	//We'll determine the actual instruction type using the helper
 	stmt->instruction_type = select_appropriate_set_stmt(op, is_signed);
@@ -915,12 +918,14 @@ instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destina
 /**
  * Emit a setne three address code statement
  */
-instruction_t* emit_setne_code(three_addr_var_t* assignee){
+instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Save the assignee
 	stmt->assignee = assignee;
+
+	stmt->op1 = relies_on;
 
 	//We'll determine the actual instruction type using the helper
 	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
