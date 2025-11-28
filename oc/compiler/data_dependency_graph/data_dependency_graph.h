@@ -26,4 +26,5 @@ void remove_dependence(instruction_t* dependency, instruction_t* dependent);
  */
 u_int32_t get_edge_weight(instruction_t* dependency, instruction_t* dependent);
 
+
 #endif /* DATA_DEPENDENCY_GRAPH_H */

@@ -32,11 +32,20 @@ void add_dependence(instruction_t* dependency, instruction_t* dependent){
  * Remove a dependence between the dependent and the dependency
 */
 void remove_dependence(instruction_t* dependency, instruction_t* dependent){
+	//Remove the dependent from our successors here
+	dynamic_array_delete(dependency->successor_instructions, dependent);
 
+	//Remove the dependency from the dependent's predecessors
+	dynamic_array_delete(dependent->predecessor_instructions, dependency);
 }
 
 
 /**
  * Get the edge weight between the dependent and dependency
 */
-u_int32_t get_edge_weight(instruction_t* dependency, instruction_t* dependent);
+u_int32_t get_edge_weight(instruction_t* dependency, instruction_t* dependent){
+	//TODO
+
+
+	return 0;
+}
