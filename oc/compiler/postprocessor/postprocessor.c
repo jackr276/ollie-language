@@ -389,7 +389,7 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 	enqueue(queue, function_entry_block);
 	
 	//So long as the queue is not empty
-	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+	while(queue_is_empty(queue) == FALSE){
 		//Grab this block off of the queue
 		basic_block_t* current = dequeue(queue);
 

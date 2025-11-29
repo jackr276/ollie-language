@@ -10,6 +10,9 @@
 #include <strings.h>
 #include <sys/types.h>
 
+//For access to TRUE and FALSE
+#include "../constants.h"
+
 // Initially the queue size is 50. This is usually enough for most switch statements. Of course
 // if a user writes more than 50 cases, it will be accomodated
 #define INITIAL_QUEUE_SIZE 50
@@ -165,12 +168,8 @@ void* priority_queue_dequeue(priority_queue_t* queue){
 /**
  * Simply return if the next index is 0
  */
-priority_queue_status_t priority_queue_is_empty(priority_queue_t* queue){
-	if(queue->next_index == 0){
-		return PRIORITY_QUEUE_EMPTY;
-	} else {
-		return PRIORITY_QUEUE_NOT_EMPTY;
-	}
+u_int8_t priority_queue_is_empty(priority_queue_t* queue){
+	return queue->next_index == 0 ? TRUE : FALSE;
 }
 
 

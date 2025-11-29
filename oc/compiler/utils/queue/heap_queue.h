@@ -14,14 +14,6 @@ typedef struct heap_queue_t heap_queue_t;
 //A struct for each heapqueue node
 typedef struct heap_queue_node_t heap_queue_node_t;
 
-/**
- * Is the queue empty or not
- */
-typedef enum {
-	HEAP_QUEUE_EMPTY,
-	HEAP_QUEUE_NOT_EMPTY
-} heap_queue_status_t;
-
 //The overall heap struct
 struct heap_queue_t{
 	//The head and tail
@@ -66,6 +58,6 @@ void* dequeue(heap_queue_t* heap_queue);
 /**
  * Determine if the heap is empty. Returns 1 if empty, 0 if not
  */
-heap_queue_status_t queue_is_empty(heap_queue_t* heap_queue);
+u_int8_t queue_is_empty(heap_queue_t* heap_queue);
 
 #endif /* HEAP_QUEUE_H */

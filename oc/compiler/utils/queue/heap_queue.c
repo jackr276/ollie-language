@@ -6,6 +6,9 @@
 
 #include "heap_queue.h"
 #include <stdlib.h>
+#include <sys/types.h>
+//For the TRUE and FALSE constants
+#include "../constants.h"
 
 /**
  * Allocate a heap queue structure
@@ -110,10 +113,6 @@ void* dequeue(heap_queue_t* heap_queue){
 /**
  * Determine if the heap is empty
  */
-heap_queue_status_t queue_is_empty(heap_queue_t* heap_queue){
-	if(heap_queue->num_nodes == 0){
-		return HEAP_QUEUE_EMPTY;
-	} else {
-		return HEAP_QUEUE_NOT_EMPTY;
-	}
+u_int8_t queue_is_empty(heap_queue_t* heap_queue){
+	return heap_queue->num_nodes == 0 ? TRUE : FALSE;
 }

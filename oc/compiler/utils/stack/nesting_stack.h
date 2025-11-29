@@ -28,13 +28,6 @@ typedef enum {
 	//TODO more probably needed
 } nesting_level_t;
 
-/**
- * The current status of the lexer stack
- */
-typedef enum{
-	NESTING_STACK_EMPTY,
-	NESTING_STACK_NOT_EMPTY,
-} nesting_stack_status_t;
 
 /**
  * Nodes for our stack
@@ -68,7 +61,7 @@ void push_nesting_level(nesting_stack_t* stack, nesting_level_t level);
 /**
  * Is the stack empty or not
  */
-nesting_stack_status_t nesting_stack_is_empty(nesting_stack_t* nesting_stack);
+u_int8_t nesting_stack_is_empty(nesting_stack_t* nesting_stack);
 
 /**
  * Perform a scan of the nesting stack to see if a given level is contained

@@ -8728,7 +8728,7 @@ static int8_t check_jump_labels(){
 	generic_ast_node_t* current_jump_statement;
 
 	//So long as there are jump statements in the queue
-	while(queue_is_empty(current_function_jump_statements) == HEAP_QUEUE_NOT_EMPTY){
+	while(queue_is_empty(current_function_jump_statements) == FALSE){
 		//Grab the jump statement
 		current_jump_statement = dequeue(current_function_jump_statements);
 
