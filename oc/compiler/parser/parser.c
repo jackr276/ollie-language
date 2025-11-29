@@ -1438,7 +1438,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//Once we get here, we either found the assignment op or we didn't. First though, let's
 	//put everything back where we found it
-	while(lex_stack_is_empty(stack) == LEX_STACK_NOT_EMPTY){
+	while(lex_stack_is_empty(stack) == FALSE){
 		//Pop the token off and put it back
 		push_back_token(pop_token(stack));
 	}
