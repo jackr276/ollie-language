@@ -63,7 +63,7 @@ void push_token(lex_stack_t* stack, lexitem_t l){
 	stack->tokens[stack->num_tokens] = l;
 
 	//Push up the number of tokens
-	stack->tokens++;
+	stack->num_tokens++;
 }
 
 
@@ -112,27 +112,24 @@ lexitem_t pop_token(lex_stack_t* stack){
  * Peek the top of the stack without removing it
  */
 lexitem_t peek_token(lex_stack_t* stack){
-	lexitem_t l;
-	l.tok = BLANK;
+	//Initialize the blank token here
+	lexitem_t blank_token;
+	blank_token.tok = BLANK;
 
-	//Just in case
+	//Fatal error here, something went wrong if the user is trying this
 	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return l;
+		printf("Fatal internal compiler error: Attempt to peek a null lexstack\n");
+		exit(1);
 	}
 
-	//If the top is NULL, just return NULL
-	if(stack->top == NULL){
-		return l;
+	//If we have nothing on the stack, just return the blank
+	//token
+	if(stack->num_tokens == 0){
+		return blank_token;
 	}
 
-	//If there are no nodes return 0
-	if(stack->num_nodes == 0){
-		return l;
-	}
-
-	//Return the data pointer
-	return stack->top->l;
+	//Return 
+	return stack->tokens[stack->num_tokens - 1];
 }
 
 
@@ -140,31 +137,18 @@ lexitem_t peek_token(lex_stack_t* stack){
  * Completely free all memory in the stack
  */
 void lex_stack_dealloc(lex_stack_t** stack){
-	//Just in case...
-	if(stack == NULL){
-		printf("ERROR: Attempt to free a null pointer\n");
-		return;
+	//Fatal error here, something went wrong if the user is trying this
+	if(stack == NULL || *stack == NULL){
+		printf("Fatal internal compiler error: attempt to free a null lexstack\n");
+		exit(1);
 	}
 
-	//Define a cursor and a temp
-	void* temp;
-	lex_node_t* cursor = (*stack)->top;
+	//Free the internal array
+	free((*stack)->tokens);
 
-	//Free every node
-	while(cursor != NULL){
-		//Save the cursor
-		temp = cursor; 
-
-		//Advance the cursor
-		cursor = cursor->next;
-
-		//Free the node
-		free(temp);
-	}
-
-	//Finally free the stack
+	//Now free the stack
 	free(*stack);
 
-	//Set to NULL as a warning
+	//NULL it as a warning
 	*stack = NULL;
 }
