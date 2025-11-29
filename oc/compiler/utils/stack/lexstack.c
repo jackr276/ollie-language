@@ -6,6 +6,12 @@
 #include "lexstack.h"
 #include <stdio.h>
 #include <stdlib.h>
+//For the constants that we need
+#include "../constants.h"
+
+//The default initial size is going to be 10, but we have the
+//ability to dynamically resize
+#define DEFAULT_INITIAL_LEXSTACK_SIZE 10
 
 
 /**
@@ -14,6 +20,9 @@
 lex_stack_t* lex_stack_alloc(){
 	//Allocate our stack
 	lex_stack_t* stack = calloc(1, sizeof(lex_stack_t));
+	
+	//Now let's allocate our internal array
+	stack->num_tokens = 0
 
 	//Return the stack
 	return stack;
