@@ -6,6 +6,7 @@
 #include "lexstack.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 //For the constants that we need
 #include "../constants.h"
 
@@ -21,9 +22,14 @@ lex_stack_t* lex_stack_alloc(){
 	//Allocate our stack
 	lex_stack_t* stack = calloc(1, sizeof(lex_stack_t));
 	
-	//Now let's allocate our internal array
-	stack->num_tokens = 0
+	//Current token count is 0
+	stack->num_tokens = 0;
+	//We start off with 10
+	stack->current_max_size = DEFAULT_INITIAL_LEXSTACK_SIZE;
 
+	//Now let's allocate our internal array
+	stack->tokens = calloc(stack->current_max_size, sizeof(lexitem_t));
+	
 	//Return the stack
 	return stack;
 }
@@ -31,38 +37,41 @@ lex_stack_t* lex_stack_alloc(){
 
 /**
  * Push data to the top of the stack
+ *
+ * This function handle any dynamic resizing that is needed by the internal array. That is
+ * all abstracted away from the user
  */
 void push_token(lex_stack_t* stack, lexitem_t l){
 	//Just in case
 	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return;
+		printf("Fatal internal compiler error: attempt to use an uninitialized lexstack\n");
+		exit(1);
 	}
 
-	//Allocate a new node
-	lex_node_t* new = calloc(1, sizeof(lex_node_t));
-	//Store the data
-	new->l = l;
+	/**
+	 * If we get here, we 
+	 */
+	if(stack->num_tokens == stack->current_max_size){
+		//Always double the size
+		stack->current_max_size *= 2;
 
-	//Attach to the front of the stack
-	new->next = stack->top;
-	//Assign the top of the stack to be the new
-	stack->top = new;
+		//The tokens now get realloc'd
+		stack->tokens = realloc(stack->tokens, stack->current_max_size * sizeof(lexitem_t));
+	}
 
-	//Increment number of nodes
-	stack->num_nodes++;
+	//Now we add the data in. The top of the stack is the end of the array
+	stack->tokens[stack->num_tokens] = l;
+
+	//Push up the number of tokens
+	stack->tokens++;
 }
 
 
 /**
  * Is the lex stack empty?
  */
-lex_stack_status_t lex_stack_is_empty(lex_stack_t* lex_stack){
-	if(lex_stack->top == NULL){
-		return LEX_STACK_EMPTY;
-	} else {
-		return LEX_STACK_NOT_EMPTY;
-	}
+u_int8_t lex_stack_is_empty(lex_stack_t* lex_stack){
+	return lex_stack->num_tokens == 0 ? TRUE : FALSE;
 }
 
 

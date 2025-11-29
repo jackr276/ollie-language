@@ -16,7 +16,6 @@
 //Predefine
 typedef struct lex_stack_t lex_stack_t;
 
-
 /**
  * Lexitem stack type itself
  */
