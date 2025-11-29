@@ -1247,9 +1247,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
 						
 			//The result of this will be used for our set instruction
-			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
-			//Subtly hook this in, even though it's not needed
-			setne_instruction->op1 = test_instruction->assignee;
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->assignee);
 
 			//Assign the two over
 			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
@@ -1290,9 +1288,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
 						
 			//The result of this will be used for our set instruction
-			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8));
-			//Subtly hook this in, even though it's not needed
-			setne_instruction->op1 = test_instruction->assignee;
+			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->assignee);
 
 			//Assign the two over
 			instruction_t* assignment = emit_assignment_instruction(current_instruction->assignee, setne_instruction->assignee);
@@ -3624,6 +3620,9 @@ static void handle_branch_instruction(instruction_window_t* window){
 			break;
 	}
 
+	//Copy the source register over here as it is a dependence
+	jump_to_if->op1 = branch_stmt->op1;
+
 	//The else jump is always a direct jump no matter what
 	instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
@@ -5092,8 +5091,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//always be unsigned
 		u_int8_t type_signed = is_type_signed(assignment->op1->type);
 
-		//We'll now need to insert inbetween here
-		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(u8), type_signed);
+		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction
+		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(u8), comparison->op1, type_signed);
 
 		//We now also need to modify the move instruction. We can do this without creating any new memory
 		variable_size_t destination_size = get_type_size(assignment->assignee->type);

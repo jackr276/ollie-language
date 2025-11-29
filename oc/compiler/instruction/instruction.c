@@ -140,6 +140,9 @@ void insert_instruction_before_given(instruction_t* insertee, instruction_t* giv
 	//Mark this while we're here
 	insertee->block_contained_in = block;
 
+	//Increment our number here
+	block->number_of_instructions++;
+
 	//Grab out what's before the given
 	instruction_t* before_given = given->previous_statement;
 
@@ -170,6 +173,9 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
 	//Mark this while we're here
 	insertee->block_contained_in = block;
 	
+	//Increment our number here
+	block->number_of_instructions++;
+
 	//Whatever comes after given
 	instruction_t* after_given = given->next_statement;
 
@@ -891,12 +897,15 @@ instruction_t* emit_idle_instruction(){
 /**
  * Emit a setX instruction
  */
-instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, u_int8_t is_signed){
+instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_signed){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//We'll need to give it the assignee
 	stmt->destination_register = destination_register;
+
+	//What do we relie on
+	stmt->op1 = relies_on;
 
 	//We'll determine the actual instruction type using the helper
 	stmt->instruction_type = select_appropriate_set_stmt(op, is_signed);
@@ -909,12 +918,14 @@ instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destina
 /**
  * Emit a setne three address code statement
  */
-instruction_t* emit_setne_code(three_addr_var_t* assignee){
+instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Save the assignee
 	stmt->assignee = assignee;
+
+	stmt->op1 = relies_on;
 
 	//We'll determine the actual instruction type using the helper
 	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
@@ -3367,9 +3378,11 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			fprintf(fl, ")\n");
 
-		//Show a default error message
+			break;
+
+		//Show a default error message. This is for the Dev's use only
 		default:
-			//fprintf(fl, "Not yet selected\n");
+			fprintf(fl, "Not yet selected. Statement code is: %d\n", instruction->statement_type);
 			break;
 	}
 }
