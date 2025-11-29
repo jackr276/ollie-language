@@ -149,6 +149,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
 		printf("CFG constuctor took: %.8f seconds\n", times->cfg_time);
 		printf("Optimizer took: %.8f seconds\n", times->optimizer_time);
 		printf("Instruction Selector took: %.8f seconds\n", times->selector_time);
+		printf("Instruction Scheduler took: %.8f seconds\n", times->scheduler_time);
 		printf("Register Allocator took: %.8f seconds\n", times->allocator_time);
 	}
 
@@ -348,7 +349,11 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	/**
-	 * REQUIRED CLEANUP: Now that we're done, we'll free all of our memory
+	 * We can deallocate memory as we go along here
+	 *
+	 * It's not entirely necessary to deallocate all of this memory, recall that
+	 * the operating system reclaims all of it once the program runs. Since a compiler is
+	 * not something that runs perpetually, we really don't need to worry about freeing the memory
 	 */
 	//Deallocate the ast
 	ast_dealloc();
