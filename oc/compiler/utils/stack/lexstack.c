@@ -77,40 +77,33 @@ u_int8_t lex_stack_is_empty(lex_stack_t* lex_stack){
 
 /**
  * Pop the head off of the stack and return the data
+ *
+ * Returns the BLANK token if nothing is found
  */
 lexitem_t pop_token(lex_stack_t* stack){
-	lexitem_t l;
-	l.tok = BLANK;
+	//Initialize the blank token
+	lexitem_t empty_token;
+	empty_token.tok = BLANK;
 
-	//Just in case
+	//Fatal error here, something went wrong if the user is trying this
 	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return l;
+		printf("Fatal internal compiler error: Attempt to pop off of a null lexstack\n");
+		exit(1);
 	}
 
-	//Special case: we have an empty stack
-	if(stack->top == NULL){
-		return l;
+	//If we have no tokens then return the empty token
+	if(stack->num_tokens == 0){
+		return empty_token;
 	}
 
-	//If there are no nodes return 0
-	if(stack->num_nodes == 0){
-		return l;
-	}
+	//Remember, the num_tokens index stores the index of the *next*
+	//available index. To get the top, we need to subtract one from it
+	lexitem_t top = stack->tokens[stack->num_tokens - 1];
 
-	//Grab the data
-	lexitem_t top = stack->top->l;
-	
-	lex_node_t* temp = stack->top;
+	//Decrement one overall
+	stack->num_tokens--;
 
-	//"Delete" the node from the stack
-	stack->top = stack->top->next;
-
-	//Free the node
-	free(temp);
-	//Decrement number of nodes
-	stack->num_nodes--;
-
+	//And give it back
 	return top;
 }
 
