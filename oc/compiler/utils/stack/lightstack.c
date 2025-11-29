@@ -110,13 +110,7 @@ void lightstack_dealloc(lightstack_t* stack){
  * Determine if the stack is empty
 */
 u_int8_t lightstack_is_empty(lightstack_t* stack){
-	//If this is the case give back true
-	if(stack->top_index == 0){
-		return TRUE;
-	}
-
-	//Otherwise not
-	return FALSE;
+	return stack->top_index == 0 ? TRUE : FALSE;
 }
 
 

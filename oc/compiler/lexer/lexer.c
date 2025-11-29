@@ -169,7 +169,7 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 	char ch;
 
 	//First pop off all of the tokens if there are any on the stack
-	while(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
+	while(lex_stack_is_empty(pushed_back_tokens) == FALSE){
 		//Pop whatever we have off
 		lexitem_t token = pop_token(pushed_back_tokens);
 
@@ -203,7 +203,7 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 */
 lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t const_search){
 	//IF we have pushed back tokens, we need to return them first
-	if(lex_stack_is_empty(pushed_back_tokens) == LEX_STACK_NOT_EMPTY){
+	if(lex_stack_is_empty(pushed_back_tokens) == FALSE){
 		//Just pop this and leave
 		return pop_token(pushed_back_tokens);
 	}

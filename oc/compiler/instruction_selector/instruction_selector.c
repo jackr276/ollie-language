@@ -111,7 +111,7 @@ static void order_blocks(cfg_t* cfg){
 		enqueue(queue, func_block);
 		
 		//So long as the queue is not empty
-		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		while(queue_is_empty(queue) == FALSE){
 			//Grab this block off of the queue
 			basic_block_t* current = dequeue(queue);
 

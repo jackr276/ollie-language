@@ -13,34 +13,20 @@
 #include <sys/types.h>
 #include "../../lexer/lexer.h"
 
-//Allows us to use lex_node_t as a type
-typedef struct lex_node_t lex_node_t;
+//Predefine
+typedef struct lex_stack_t lex_stack_t;
 
 /**
- * The current status of the lexer stack
+ * Lexitem stack type itself
  */
-typedef enum{
-	LEX_STACK_EMPTY,
-	LEX_STACK_NOT_EMPTY
-} lex_stack_status_t;
-
-/**
- * Nodes for our stack
- */
-struct lex_node_t {
-	lex_node_t* next;
-	lexitem_t l;
+struct lex_stack_t {
+	//Internal token arrays
+	lexitem_t* tokens;
+	//The current maximum size
+	u_int32_t current_max_size;
+	//The number of tokens
+	u_int32_t num_tokens;
 };
-
-
-/**
- * A reference to the the stack object that allows us to
- * have more than one stack
- */
-typedef struct {
-	lex_node_t* top;
-	u_int16_t num_nodes;
-} lex_stack_t;
 
 
 /**
@@ -56,7 +42,7 @@ void push_token(lex_stack_t* stack, lexitem_t l);
 /**
  * Is the stack empty or not
  */
-lex_stack_status_t lex_stack_is_empty(lex_stack_t* lex_stack);
+u_int8_t lex_stack_is_empty(lex_stack_t* lex_stack);
 
 /**
  * Remove the top value of the stack
