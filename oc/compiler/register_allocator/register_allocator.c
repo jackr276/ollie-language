@@ -2646,14 +2646,15 @@ static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_
 			continue;
 		}
 
-		//Otherwise put it into our priority queue
-		dynamic_array_priority_insert_live_range(priority_live_ranges, live_range);
+		//Insert it into the max queue. The higher the spill cost, the higher priority we have
+		//here
+		max_priority_queue_enqueue(&priority_live_ranges, live_range, live_range->spill_cost);
 	}
 
 	//So long as this isn't empty
-	while(dynamic_array_is_empty(priority_live_ranges) == FALSE){
+	while(max_priority_queue_is_empty(&priority_live_ranges) == FALSE){
 		//Grab a live range out by deletion
-		live_range_t* range = dynamic_array_delete_from_back(priority_live_ranges);
+		live_range_t* range = max_priority_queue_dequeue(&priority_live_ranges);
 
 		/**
 		 * This degree being less than the number of registers
