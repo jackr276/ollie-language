@@ -27,7 +27,7 @@
  * We are looking for only a specific variable here(say t4). Once we find that variable's
  * definition, we're done for that given variable
  */
-static void update_dependence_for_variable(instruction_t* given, instruction_t** instructions, three_addr_var_t* variable, u_int32_t start){
+static void update_dependence_for_variable(data_dependency_graph_t* graph, instruction_t* given, instruction_t** instructions, three_addr_var_t* variable, u_int32_t start){
 	//Predeclare due to the switch
 	three_addr_var_t* destination;
 	three_addr_var_t* destination2;
@@ -57,7 +57,7 @@ static void update_dependence_for_variable(instruction_t* given, instruction_t**
 				//The cmp instructions store their symbolic assignees in the assignee slot
 				if(variables_equal(current->assignee, variable, FALSE) == TRUE){
 					//Add it in
-					add_dependence(current, given);
+					add_dependence(graph, current, given);
 					return;
 				}
 
@@ -72,7 +72,7 @@ static void update_dependence_for_variable(instruction_t* given, instruction_t**
 				//If they're equal then we're good
 				if(variables_equal(destination, variable, FALSE) == TRUE){
 					//Given depends on current
-					add_dependence(current, given);
+					add_dependence(graph, current, given);
 
 					//We're done
 					return;
@@ -81,7 +81,7 @@ static void update_dependence_for_variable(instruction_t* given, instruction_t**
 				//We're also done here
 				if(variables_equal(destination2, variable, FALSE) == TRUE){
 					//Given depends on current
-					add_dependence(current, given);
+					add_dependence(graph, current, given);
 
 					//We're done
 					return;
@@ -98,7 +98,7 @@ static void update_dependence_for_variable(instruction_t* given, instruction_t**
 /**
  * Build the dependency graph inside of a block. We're also given our instruction list here for reference
  */
-static void build_dependency_graph_for_block(basic_block_t* block, instruction_t** instructions, dynamic_array_t* leaves, dynamic_array_t* roots){
+static void build_dependency_graph_for_block(data_dependency_graph_t* graph, basic_block_t* block, instruction_t** instructions){
 	//Predeclare for any/all function parameter lists due to
 	//the nature of the switch
 	dynamic_array_t* function_parameters;
@@ -142,7 +142,7 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 			case JLE:
 			case JG:
 			case JGE:
-				update_dependence_for_variable(current, instructions, current->op1, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->op1, i - 1);
 				break;
 
 			//We can actually skip phi functions, reason being that they
@@ -158,7 +158,7 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 			 */
 			case INDIRECT_CALL:
 				//Update the dependence for the source var
-				update_dependence_for_variable(current, instructions, current->source_register, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->source_register, i - 1);
 
 				//Really just acts as a cleaner cast
 				function_parameters = current->parameters;
@@ -171,7 +171,7 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 				//Otherwise, we update all of the parameters
 				for(u_int16_t j = 0; j < function_parameters->current_index; j++){
 					//Invoke the helper for each given parameter
-					update_dependence_for_variable(current, instructions, dynamic_array_get_at(function_parameters, j), i - 1);
+					update_dependence_for_variable(graph, current, instructions, dynamic_array_get_at(function_parameters, j), i - 1);
 				}
 
 				break;
@@ -192,7 +192,7 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 				//Otherwise, we update all of the parameters
 				for(u_int16_t j = 0; j < function_parameters->current_index; j++){
 					//Invoke the helper for each given parameter
-					update_dependence_for_variable(current, instructions, dynamic_array_get_at(function_parameters, j), i - 1);
+					update_dependence_for_variable(graph, current, instructions, dynamic_array_get_at(function_parameters, j), i - 1);
 				}
 
 				break;
@@ -207,31 +207,31 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 				//For each variable in the instruction, we need to perform the search
 				if(is_destination_also_operand(current) == TRUE){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(current, instructions, current->destination_register, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->destination_register, i - 1);
 				}
 
 				//Same for the source
 				if(current->source_register != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(current, instructions, current->source_register, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->source_register, i - 1);
 				}
 
 				//Same for the second source
 				if(current->source_register2 != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(current, instructions, current->source_register2, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->source_register2, i - 1);
 				}
 
 				//And the address calc registers
 				if(current->address_calc_reg1 != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(current, instructions, current->address_calc_reg1, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->address_calc_reg1, i - 1);
 				}
 
 				//And the address calc registers
 				if(current->address_calc_reg2 != NULL){
 					//Start searching here, beginngin at the last instruction
-					update_dependence_for_variable(current, instructions, current->address_calc_reg2, i - 1);
+					update_dependence_for_variable(graph, current, instructions, current->address_calc_reg2, i - 1);
 				}
 
 				break;
@@ -295,10 +295,8 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	//number of instructions in the block, which allows us to do this
 	instruction_t* instructions[block->number_of_instructions];
 
-	//The "leaves" of the graph are instructions for which there is no dependency
-	dynamic_array_t* leaves = dynamic_array_alloc();
-	//The "roots" of the graph are instructions that have nothing else relying on them
-	dynamic_array_t* roots = dynamic_array_alloc();
+	//Let's also allocate the block's dependency graph
+	data_dependency_graph_t dependency_graph = dependency_graph_alloc();
 
 	//Grab a cursor
 	instruction_t* instruction_cursor = block->leader_statement;
@@ -329,26 +327,14 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * Step 2: build the data dependency graph inside of the block. This is done by
 	 * the helper function. Nothing else can be done until this is done
 	 */
-	build_dependency_graph_for_block(block, instructions, leaves, roots);
+	build_dependency_graph_for_block(&dependency_graph, block, instructions);
 
 	//Only if we want debug printing we can show this
 	if(debug_printing == TRUE){
 		printf("============================ Block .L%d ============================\n", block->block_id);
 		//Print out the dependence graph for the block
-		print_data_dependence_graph(stdout, instructions, block->number_of_instructions);
+		print_data_dependence_graph(stdout, &dependency_graph);
 		//Now let's display the roots and leaves
-		printf("================= Leaves ===================\n");
-		for(u_int16_t i = 0; i < leaves->current_index; i++){
-			printf("Leaf: ");
-			print_instruction(stdout, dynamic_array_get_at(leaves, i), PRINTING_VAR_IN_INSTRUCTION);
-		}
-		printf("================= Leaves ===================\n");
-		printf("================= Roots ====================\n");
-		for(u_int16_t i = 0; i < roots->current_index; i++){
-			printf("Root: ");
-			print_instruction(stdout, dynamic_array_get_at(roots, i), PRINTING_VAR_IN_INSTRUCTION);
-		}
-		printf("================= Roots ====================\n");
 		printf("============================ Block .L%d ============================\n", block->block_id);
 	}
 
@@ -363,9 +349,8 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * The algorithm is detailed in the function
 	 */
 
-	//Once we are done release the leaves and roots arrays
-	dynamic_array_dealloc(leaves);
-	dynamic_array_dealloc(roots);
+	//We're done with it, we can deallocate now
+	dependency_graph_dealloc(&dependency_graph);
 }
 
 

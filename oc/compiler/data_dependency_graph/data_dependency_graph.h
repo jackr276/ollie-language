@@ -16,7 +16,7 @@
 #include "../instruction/instruction.h"
 
 //Top level type definition
-typedef struct data_depency_graph_t data_depency_graph_t;
+typedef struct data_dependency_graph_t data_dependency_graph_t;
 //The individual nodes on the graph
 typedef struct data_dependency_graph_node_t data_dependency_graph_node_t;
 
@@ -46,11 +46,11 @@ struct data_dependency_graph_node_t {
  * of vertices(instructions) that are linked with their
  * adjacency lists(dynamic_arrays)
  */
-struct data_depency_graph_t {
+struct data_dependency_graph_t {
 	//Just an array of nodes - will dynamically resize
 	data_dependency_graph_node_t* nodes; 
 	//The maximum node count
-	u_int16_t node_count;
+	u_int16_t current_max_index;
 	//The current index
 	u_int16_t current_index;
 };
@@ -59,26 +59,26 @@ struct data_depency_graph_t {
  * Create a data dependency graph. Parent struct
  * is stack allocated
  */
-data_depency_graph_t dependency_graph_alloc();
+data_dependency_graph_t dependency_graph_alloc();
+
+/**
+ * Add a node for a given instruction
+ */
+data_dependency_graph_node_t* add_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
 
 /**
  * Add a dependence between the two instructions
  */
-void add_dependence(instruction_t* depends_on, instruction_t* target);
+void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instruction_t* depends_on);
 
 /**
  * Print out the entirety of the data dependence graph
  */
-void print_data_dependence_graph(FILE* output, instruction_t** graph, u_int32_t num_nodes);
-
-/**
- * Remove a dependence between the two instructions
- */
-void remove_dependence(instruction_t* depends_on, instruction_t* target);
+void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph);
 
 /**
  * Free a data dependency graph
  */
-void dependency_graph_dealloc(data_depency_graph_t* graph);
+void dependency_graph_dealloc(data_dependency_graph_t* graph);
 
 #endif /* DATA_DEPENDENCY_GRAPH_H */
