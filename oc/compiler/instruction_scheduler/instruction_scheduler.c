@@ -236,16 +236,6 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 
 				break;
 		}
-
-		/**
-		 * If we get here and the current instruction, after doing all of this logic, has no
-		 * predecessors, we need to add it to the "Leaves" of our graph
-		 */
-		if(current->predecessor_instructions == NULL
-			|| dynamic_array_is_empty(current->predecessor_instructions) == TRUE){
-			//Add this to the leaves of our graph
-			dynamic_array_add(leaves, current);
-		}
 	}
 
 	/**
@@ -255,29 +245,6 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 	for(int32_t i = block->number_of_instructions - 1; i >= 1; i--){
 		//Extract it
 		instruction_t* current = instructions[i];
-
-		//Add these to the roots
-		if(current->successor_instructions == NULL
-			|| dynamic_array_is_empty(current->successor_instructions) == TRUE){
-			dynamic_array_add(roots, current);
-		}
-	}
-}
-
-
-/**
- * Compute the priority for a given instruction. We compute the priority
- * by calculating the longest weighted path from an instruction i to any
- * given root in the data dependency graph
- *
- * TODO THIS will need to be updated eventually, but right now it's just the
- * successor count
- */
-static void compute_instruction_priority(instruction_t* instruction){
-	if(instruction->successor_instructions != NULL){
-		instruction->priority = instruction->successor_instructions->current_index;
-	} else {
-		instruction->priority = 0;
 	}
 }
 
@@ -390,10 +357,6 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * length of longest weighted path for an instruction to a
 	 * root in the dependency graph
 	 */
-	for(u_int32_t i = 0; i < block->number_of_instructions; i++){
-		//Let the helper compute it
-		compute_instruction_priority(instructions[i]);
-	}
 
 	/**
 	 * Step 4: use the list scheduler to reorder the entire block.

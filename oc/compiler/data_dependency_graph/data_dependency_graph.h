@@ -35,6 +35,10 @@ struct data_dependency_graph_node_t {
 	dynamic_array_t* neighbors;
 	//The cycle time that this instruction takes
 	u_int32_t cycles_to_complete;
+	//The number of instructions that rely on this instruction
+	u_int32_t relied_on_by_count;
+	//The number of instructions that this instruction relies on
+	u_int32_t relies_on_count;
 };
 
 /**
@@ -43,8 +47,12 @@ struct data_dependency_graph_node_t {
  * adjacency lists(dynamic_arrays)
  */
 struct data_depency_graph_t {
-	//Just an array of nodes
-	dynamic_array_t* nodes; 
+	//Just an array of nodes - will dynamically resize
+	data_dependency_graph_node_t* nodes; 
+	//The maximum node count
+	u_int16_t node_count;
+	//The current index
+	u_int16_t current_index;
 };
 
 /**
