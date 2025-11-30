@@ -4,7 +4,7 @@
  * This is the implementation file for the associated priority queue header file
 */
 
-#include "priority_queue.h"
+#include "max_priority_queue.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -20,12 +20,12 @@
 /**
  * Initialize the priority queue with the default size
 */
-priority_queue_t priority_queue_alloc(){
+max_priority_queue_t max_priority_queue_alloc(){
 	//Stack allocated
-	priority_queue_t queue;
+	max_priority_queue_t queue;
 
 	//We need to reserve the initial space
-	queue.heap = calloc(INITIAL_QUEUE_SIZE, sizeof(priority_queue_node_t));
+	queue.heap = calloc(INITIAL_QUEUE_SIZE, sizeof(max_priority_queue_node_t));
 
 	//Set these values too
 	queue.maximum_size = INITIAL_QUEUE_SIZE;
@@ -49,9 +49,9 @@ static u_int16_t get_parent_index(u_int16_t index){
  * Swap the two given indices. Remember that this heap isn't a heap of
  * pointers, so it's not as simple as swapping pointers
  */
-static void swap(priority_queue_t* queue, u_int16_t index1, u_int16_t index2){
+static void swap(max_priority_queue_t* queue, u_int16_t index1, u_int16_t index2){
 	//Grab out index 1
-	priority_queue_node_t temp = queue->heap[index1];
+	max_priority_queue_node_t temp = queue->heap[index1];
 
 	//Put index 2 in 1's spot
 	queue->heap[index1] = queue->heap[index2];
@@ -62,12 +62,14 @@ static void swap(priority_queue_t* queue, u_int16_t index1, u_int16_t index2){
 
 
 /**
- * Generic min-heapify operation. This will recursively
- * "down-heapify" because we start at the front and go forwards
+ * Generic max-heapify operation. This will recursively
+ * "up-heapify" because we start at the front and go forwards
+ *
+ * When we are done, the root will be the highest value
  */
-static void min_heapify(priority_queue_t* queue, u_int16_t index){
-	//Initially set smallest to be what we're given
-	u_int16_t smallest_index = index;
+static void max_heapify(max_priority_queue_t* queue, u_int16_t index){
+	//Initially set largest to be what we're given
+	u_int16_t largest_index = index;
 
 	//Get the left and right children here
 	u_int16_t left_child_index = index * 2 + 1;
@@ -75,30 +77,30 @@ static void min_heapify(priority_queue_t* queue, u_int16_t index){
 
 	/**
 	 * If the left child is actually there(first condition) and it's priority
-	 * is less than the "smallest" index, it is our new smallest
+	 * is greater than the "largest" index, it is our new largest 
 	 */
 	if(left_child_index < queue->next_index && 
-		queue->heap[left_child_index].priority < queue->heap[smallest_index].priority){
-		smallest_index = left_child_index;
+		queue->heap[left_child_index].priority > queue->heap[largest_index].priority){
+		largest_index = left_child_index;
 	}
 
 	/**
 	 * If the right child is actually there(first condition) and it's priority
-	 * is less than the "smallest" index, it is our new smallest
+	 * is greater than the "largest" index, it is our new largest 
 	 */
 	if(right_child_index < queue->next_index && 
-		queue->heap[right_child_index].priority < queue->heap[smallest_index].priority){
-		smallest_index = right_child_index;
+		queue->heap[right_child_index].priority > queue->heap[largest_index].priority){
+		largest_index = right_child_index;
 	}
 
-	//If we found something smaller than the index, we must swap
-	if(smallest_index != index){
+	//If we found something larger than the index, we must swap
+	if(largest_index != index){
 		//Swap the index and smallest index
-		swap(queue, index, smallest_index);
+		swap(queue, index, largest_index);
 
-		//Recursively min-heapify with the new 
-		//smallest index
-		min_heapify(queue, smallest_index);
+		//Recursively max-heapify with the new 
+		//largest index
+		max_heapify(queue, largest_index);
 	}
 }
 
@@ -111,13 +113,13 @@ static void min_heapify(priority_queue_t* queue, u_int16_t index){
  * priority. This would confuse the system and would be a confusing edge case. As such, every
  * priority has 1 added to it, that way even if it is 0 passed in, it won't be in the system
  */
-void priority_queue_enqueue(priority_queue_t* queue, void *ptr, int64_t priority){
+void max_priority_queue_enqueue(max_priority_queue_t* queue, void *ptr, int64_t priority){
 	//Automatic resize if needed
 	if(queue->next_index == queue->maximum_size){
 		//Double it
 		queue->maximum_size *= 2;
 		//Realloc
-		queue->heap = realloc(queue->heap, sizeof(priority_queue_node_t) * queue->maximum_size);
+		queue->heap = realloc(queue->heap, sizeof(max_priority_queue_node_t) * queue->maximum_size);
 	}
 
 	//See the top explanation for why we do this
@@ -147,7 +149,7 @@ void priority_queue_enqueue(priority_queue_t* queue, void *ptr, int64_t priority
 /**
  * Dequeue from the priority queue
  */
-void* priority_queue_dequeue(priority_queue_t* queue){
+void* max_priority_queue_dequeue(max_priority_queue_t* queue){
 	//Save the pointer
 	void* dequeued = queue->heap[0].ptr;
 
@@ -157,8 +159,8 @@ void* priority_queue_dequeue(priority_queue_t* queue){
 	//Decrement the next index
 	queue->next_index--;
 
-	//Minheapify with 0 as the seed to maintain the minheap property
-	min_heapify(queue, 0);
+	//Minheapify with 0 as the seed to maintain the maxheap property
+	max_heapify(queue, 0);
 
 	//Give this pointer back
 	return dequeued;
@@ -168,7 +170,7 @@ void* priority_queue_dequeue(priority_queue_t* queue){
 /**
  * Simply return if the next index is 0
  */
-u_int8_t priority_queue_is_empty(priority_queue_t* queue){
+u_int8_t max_priority_queue_is_empty(max_priority_queue_t* queue){
 	return queue->next_index == 0 ? TRUE : FALSE;
 }
 
@@ -176,7 +178,7 @@ u_int8_t priority_queue_is_empty(priority_queue_t* queue){
 /**
  * Deallocate the priority queue
 */
-void priority_queue_dealloc(priority_queue_t* queue){
+void max_priority_queue_dealloc(max_priority_queue_t* queue){
 	//We need to deallocate the heap only here
 	free(queue->heap);
 	//And we're done

@@ -58,16 +58,16 @@ void max_priority_queue_enqueue(max_priority_queue_t* queue, void* ptr, int64_t 
 /**
  * Dequeue from the priority queue
 */
-void* priority_queue_dequeue(max_priority_queue_t* queue);
+void* max_priority_queue_dequeue(max_priority_queue_t* queue);
 
 /**
  * Is the priority queue empty?
 */
-u_int8_t priority_queue_is_empty(max_priority_queue_t* queue);
+u_int8_t max_priority_queue_is_empty(max_priority_queue_t* queue);
 
 /**
  * Deallocate the memory of the priority queue
 */
-void priority_queue_dealloc(max_priority_queue_t* queue);
+void max_priority_queue_dealloc(max_priority_queue_t* queue);
 
 #endif /* MAX_PRIORITY_QUEUE_H */
