@@ -6,7 +6,6 @@
 
 #include "instruction_scheduler.h"
 #include "../data_dependency_graph/data_dependency_graph.h"
-#include "../utils/queue/priority_queue.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -305,9 +304,7 @@ static void compute_instruction_priority(instruction_t* instruction){
  *
  * 	Cycle <- Cycle + 1
  */
-static void list_schedule_block(basic_block_t* block, instruction_t** instructions, dynamic_array_t* leaves){
-
-}
+//static void list_schedule_block(basic_block_t* block, instruction_t** instructions, dynamic_array_t* leaves){}
 
 
 /**
@@ -321,7 +318,7 @@ static void list_schedule_block(basic_block_t* block, instruction_t** instructio
  * 	3.) With the data dependency graph in hand, compute the priorities for each instruction
  * 	4.) Use the list scheduling algorithm to schedule instructions
  */
-static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_printing, u_int8_t print_irs){
+static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_printing ){
 	/**
 	 * Step 0: load all of the instructions into a static array. This is going
 	 * to be an efficiency boost because we need to traverse up and down
@@ -432,11 +429,17 @@ cfg_t* schedule_all_instructions(cfg_t* cfg, compiler_options_t* options){
 		//Run through everything in here
 		while(cursor != NULL){
 			//Invoke the block scheduler itself
-			schedule_instructions_in_block(cursor, debug_printing, print_irs);
+			schedule_instructions_in_block(cursor, debug_printing);
 
 			//Advance it up using the direct successor
 			cursor = cursor->direct_successor;
 		}
+	}
+
+	//If we want to print our IR's we will display what we look like post-scheduling
+	if(print_irs == TRUE){
+		printf("============================= After Scheduling ===========================\n");
+		printf("============================= After Scheduling ===========================\n");
 	}
 
 	//Give back the final CFG. This is more symbolic

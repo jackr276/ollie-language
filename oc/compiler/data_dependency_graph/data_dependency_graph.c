@@ -69,14 +69,3 @@ void print_data_dependence_graph(FILE* output, instruction_t** graph, u_int32_t 
 		fprintf(output, "================================================\n");
 	}
 }
-
-
-/**
- * Get the edge weight between the dependent and dependency
-*/
-u_int32_t get_edge_weight(instruction_t* dependency, instruction_t* dependent){
-	//TODO
-
-
-	return 0;
-}

@@ -26,10 +26,4 @@ void print_data_dependence_graph(FILE* output, instruction_t** graph, u_int32_t 
  */
 void remove_dependence(instruction_t* depends_on, instruction_t* target);
 
-/**
- * Get the edge weight between two instructions
- */
-u_int32_t get_edge_weight(instruction_t* depends_on, instruction_t* target);
-
-
 #endif /* DATA_DEPENDENCY_GRAPH_H */
