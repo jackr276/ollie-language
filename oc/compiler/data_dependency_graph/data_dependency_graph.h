@@ -62,12 +62,15 @@ struct data_dependency_graph_t {
 data_dependency_graph_t dependency_graph_alloc();
 
 /**
- * Add a node for a given instruction
+ * Add a node for a given instruction. Once this function executes, there will be a dependency
+ * node for the given instruction
  */
-data_dependency_graph_node_t* add_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
+void add_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
 
 /**
  * Add a dependence between the two instructions
+ *
+ * NOTE: This function *assumes* that both target and depends_on already have nodes created for them
  */
 void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instruction_t* depends_on);
 

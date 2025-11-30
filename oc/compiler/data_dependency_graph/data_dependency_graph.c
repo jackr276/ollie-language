@@ -35,6 +35,39 @@ data_dependency_graph_t dependency_graph_alloc(){
 
 
 /**
+ * Add a node for a given instruction
+ */
+void add_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction){
+	//Dynamic resize ability
+	if(graph->current_index == graph->current_max_index){
+		//Double it
+		graph->current_max_index *= 2;
+
+		//Realloc the whole thing
+		graph->nodes = realloc(graph->nodes, sizeof(data_dependency_graph_node_t) * graph->current_max_index);
+	}
+
+	//Now we can "create" our node. The nodes are actually all already created, we will just populate the one
+	//that we see fit. This can save us a lot of cache misses when we do linear searches through here
+	
+	//Grab a reference
+	data_dependency_graph_node_t* reference_node = &(graph->nodes[graph->current_index]);
+
+	//Store the instruction pointer
+	reference_node->instruction = instruction;
+
+	//Allocate the dynamic array
+	reference_node->neighbors = dynamic_array_alloc();
+
+	//Populate the cycle count
+	reference_node->cycles_to_complete = get_estimated_cycle_count(instruction);
+
+	//And now all we need to do is push the index value up
+	graph->current_index++;
+}
+
+
+/**
  * Add a dependence between the dependent and the dependency
  *
  * NOTE: This assumes that the graph *already* has nodes for the target and depends_on instructions
