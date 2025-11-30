@@ -97,7 +97,7 @@ static void update_dependence_for_variable(instruction_t* given, instruction_t**
 /**
  * Build the dependency graph inside of a block. We're also given our instruction list here for reference
  */
-static void build_dependency_graph_for_block(basic_block_t* block, instruction_t** instructions){
+static void build_dependency_graph_for_block(basic_block_t* block, instruction_t** instructions, dynamic_array_t* leaves){
 	//Predeclare for any/all function parameter lists due to
 	//the nature of the switch
 	dynamic_array_t* function_parameters;
@@ -235,14 +235,46 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 
 				break;
 		}
+
+		/**
+		 * If we get here and the current instruction, after doing all of this logic, has no
+		 * predecessors, we need to add it to the "Leaves" of our graph
+		 */
+		if(current->predecessor_instructions == NULL
+			|| dynamic_array_is_empty(current->predecessor_instructions) == TRUE){
+			//Add this to the leaves of our graph
+			dynamic_array_add(leaves, current);
+		}
 	}
 }
 
 
 /**
+ * Perform list scheduling on the entire block. Once this function executes, our block schedule
+ * is considered final and we are done
+ *
+ * Cycle <- 1
+ * Readylist <- leaves
+ * Activelist <- {}
+ *
+ * while (Readylist U Activelist != {}):
+ * 	for each instruction in Activelist:
+ * 		if cycles(instruction) + start(instruction) < Cycle: //We are done, it's finished
+ * 			remove instruction from Activelist
+ * 			for each successor s of instruction:
+ * 				if s is ready
+ * 					add s to Readylist
+ * 	if Readylist != {}
+ * 		remove an instruction from ReadyList
+ * 		Start(instruction) <- Cycle
+ * 		add instruction to active
+ *
+ * 	Cycle <- Cycle + 1
+ * 			
+ *
  *
  */
-static void list_schedule_block(basic_block_t* block, instruction_t** instructions){
+static void list_schedule_block(basic_block_t* block, instruction_t** instructions, dynamic_array_t* leaves){
 
 }
 
@@ -266,6 +298,9 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	//A list of all instructions in the block. We actually have a set
 	//number of instructions in the block, which allows us to do this
 	instruction_t* instructions[block->number_of_instructions];
+
+	//The "leaves" of the graph are instructions for which there is no dependency
+	dynamic_array_t* leaves = dynamic_array_alloc();
 
 	//Grab a cursor
 	instruction_t* instruction_cursor = block->leader_statement;
@@ -299,7 +334,7 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * Step 2: build the data dependency graph inside of the block. This is done by
 	 * the helper function. Nothing else can be done until this is done
 	 */
-	build_dependency_graph_for_block(block, instructions);
+	build_dependency_graph_for_block(block, instructions, leaves);
 
 	//Only if we want debug printing we can show this
 	if(debug_printing == TRUE){
@@ -308,10 +343,12 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	}
 
 	/**
-	 * Step 3: use the list scheduler to reorder the entire block
-	 *
+	 * Step 3: use the list scheduler to reorder the entire block.
+	 * The algorithm is detailed in the function
 	 */
 
+	//Once we are done release the leaves array
+	dynamic_array_dealloc(leaves);
 }
 
 
