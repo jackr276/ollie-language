@@ -164,9 +164,48 @@ static void test_max_priority_queue(){
 	//Wipe the current node id
 	current_node_id = 0;
 
-	//500 test items generated
-	for(u_int16_t i = 0; i < 500; i++){
+	//500 test items generated. These will be inserted in backwards, so the min-heap
+	//operation will have to work every time
+	for(int16_t i = 500; i >= 0; i--){
+		//Create a test node with our given priority
+		priority_queue_test_node_t* node = create_test_node(i);
 
+		//Insert it - this is a worst case type deal
+		max_priority_queue_enqueue(&max_queue, node, node->priority);
+	}
+
+	//Let's dequeue half of them and see if our order worked
+	for(int16_t i = 500; i >= 250; i--){
+		//Dequeue it
+		priority_queue_test_node_t* node = max_priority_queue_dequeue(&max_queue);
+
+		//Assert that 
+		printf("Dequeued node with priority %ld\n", node->priority);
+
+		//Asser that this is the case, the priority should be highest to lowest here
+		assert(node->priority == i);
+	}
+
+	//Now let's randomly insert some nodes with lower priorities and see where they fall
+	for(int16_t i = 835; i >= 785; i--){
+		//Create a test node with our given priority
+		priority_queue_test_node_t* node = create_test_node(i);
+
+		//Insert it - this is a worst case type deal
+		max_priority_queue_enqueue(&max_queue, node, node->priority);
+	}
+
+	//Let's now verify that these are the ones which come off first
+	//Let's dequeue half of them and see if our order worked
+	for(int16_t i = 835; i >= 785; i--){
+		//Dequeue it
+		priority_queue_test_node_t* node = max_priority_queue_dequeue(&max_queue);
+
+		//Assert that 
+		printf("Dequeued node with priority %ld\n", node->priority);
+
+		//Asser that this is the case, the priority should be highest to lowest here
+		assert(node->priority == i);
 	}
 
 	//Now deallocate it
@@ -178,11 +217,15 @@ static void test_max_priority_queue(){
  * Just a single test runner here with some asserts
 */
 int main() {
+	printf("===================== Testing min priority queue =======================\n");
 	//Invoke the min tester first
 	test_min_priority_queue();
+	printf("===================== Testing min priority queue =======================\n");
 
+	printf("===================== Testing max priority queue =======================\n");
 	//Then the max tester
 	test_max_priority_queue();
+	printf("===================== Testing max priority queue =======================\n");
 
 	return 0;
 }

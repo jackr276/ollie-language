@@ -537,6 +537,9 @@ symtab_test-CI.o: $(TEST_SUITE_PATH)/symtab_test.c
 dynamic_array_test-CI.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_array_test.c -o $(OUT_CI)/dynamic_array_test.o
 
+priority_queue_test-CI.o: $(TEST_SUITE_PATH)/priority_queue_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/priority_queue_test.c -o $(OUT_CI)/priority_queue_test.o
+
 dynamic_string_test-CI.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_CI)/dynamic_string_test.o
 
