@@ -11,20 +11,19 @@
 //We find that basic blocks in many cases usually have less than 15 nodes
 #define DEFAULT_DATA_DEPENDENCY_GRAPH_NODE_COUNT 15
 
-
 /**
  * Create a data dependency graph. Parent struct
  * is stack allocated
  */
-data_dependency_graph_t dependency_graph_alloc(){
+data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes){
 	//Stack allocate
 	data_dependency_graph_t graph;
 
 	//Allocate the nodes
-	graph.nodes = calloc(DEFAULT_DATA_DEPENDENCY_GRAPH_NODE_COUNT, sizeof(data_dependency_graph_node_t));
+	graph.nodes = calloc(num_nodes, sizeof(data_dependency_graph_node_t*));
 
 	//Initially we have the default amount
-	graph.current_max_index = DEFAULT_DATA_DEPENDENCY_GRAPH_NODE_COUNT;
+	graph.node_count = num_nodes;
 
 	//And the index
 	graph.current_index = 0;
@@ -35,32 +34,23 @@ data_dependency_graph_t dependency_graph_alloc(){
 
 
 /**
- * Add a node for a given instruction
+ * Create and add a node for a given instruction
  */
 void add_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction){
-	//Dynamic resize ability
-	if(graph->current_index == graph->current_max_index){
-		//Double it
-		graph->current_max_index *= 2;
-
-		//Realloc the whole thing
-		graph->nodes = realloc(graph->nodes, sizeof(data_dependency_graph_node_t) * graph->current_max_index);
-	}
-
-	//Now we can "create" our node. The nodes are actually all already created, we will just populate the one
-	//that we see fit. This can save us a lot of cache misses when we do linear searches through here
-	
-	//Grab a reference
-	data_dependency_graph_node_t* reference_node = &(graph->nodes[graph->current_index]);
+	//Allocate it
+	data_dependency_graph_node_t* node = calloc(1, sizeof(data_dependency_graph_node_t));
 
 	//Store the instruction pointer
-	reference_node->instruction = instruction;
+	node->instruction = instruction;
 
 	//Allocate the dynamic array
-	reference_node->neighbors = dynamic_array_alloc();
+	node->neighbors = dynamic_array_alloc();
 
 	//Populate the cycle count
-	reference_node->cycles_to_complete = get_estimated_cycle_count(instruction);
+	node->cycles_to_complete = get_estimated_cycle_count(instruction);
+
+	//Add it into the list
+	graph->nodes[graph->current_index] = node;
 
 	//And now all we need to do is push the index value up
 	graph->current_index++;
@@ -84,7 +74,7 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
 	//Run through all of the nodes
 	for(u_int32_t i = 0; i < graph->current_index; i++){
 		//Extract the address
-		data_dependency_graph_node_t* node = &(graph->nodes[i]);
+		data_dependency_graph_node_t* node = graph->nodes[i];
 
 		fprintf(output, "================================================\n");
 
@@ -114,7 +104,10 @@ void dependency_graph_dealloc(data_dependency_graph_t* graph){
 	//Run through all of the nodes
 	for(u_int16_t i = 0; i < graph->current_index; i++){
 		//Free the dynamic array
-		dynamic_array_dealloc(graph->nodes[i].neighbors);
+		dynamic_array_dealloc(graph->nodes[i]->neighbors);
+
+		//Now deallocate the node itself
+		free(graph->nodes[i]);
 	}
 
 	//Now free the overall array

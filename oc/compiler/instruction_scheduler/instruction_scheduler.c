@@ -296,7 +296,7 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	instruction_t* instructions[block->number_of_instructions];
 
 	//Let's also allocate the block's dependency graph
-	data_dependency_graph_t dependency_graph = dependency_graph_alloc();
+	data_dependency_graph_t dependency_graph = dependency_graph_alloc(block->number_of_instructions);
 
 	//Grab a cursor
 	instruction_t* instruction_cursor = block->leader_statement;

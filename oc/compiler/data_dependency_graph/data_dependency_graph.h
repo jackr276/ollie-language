@@ -47,10 +47,10 @@ struct data_dependency_graph_node_t {
  * adjacency lists(dynamic_arrays)
  */
 struct data_dependency_graph_t {
-	//Just an array of nodes - will dynamically resize
-	data_dependency_graph_node_t* nodes; 
-	//The maximum node count
-	u_int16_t current_max_index;
+	//Just an array of node pointers
+	data_dependency_graph_node_t** nodes; 
+	//The maximum node count - this is actually known at allocation time
+	u_int16_t node_count;
 	//The current index
 	u_int16_t current_index;
 };
@@ -59,7 +59,7 @@ struct data_dependency_graph_t {
  * Create a data dependency graph. Parent struct
  * is stack allocated
  */
-data_dependency_graph_t dependency_graph_alloc();
+data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes);
 
 /**
  * Add a node for a given instruction. Once this function executes, there will be a dependency
