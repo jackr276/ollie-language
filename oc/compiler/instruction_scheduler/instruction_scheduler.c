@@ -6,6 +6,7 @@
 
 #include "instruction_scheduler.h"
 #include "../data_dependency_graph/data_dependency_graph.h"
+#include "../utils/queue/priority_queue.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -269,9 +270,16 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
  * Compute the priority for a given instruction. We compute the priority
  * by calculating the longest weighted path from an instruction i to any
  * given root in the data dependency graph
+ *
+ * TODO THIS will need to be updated eventually, but right now it's just the
+ * successor count
  */
 static void compute_instruction_priority(instruction_t* instruction){
-
+	if(instruction->successor_instructions != NULL){
+		instruction->priority = instruction->successor_instructions->current_index;
+	} else {
+		instruction->priority = 0;
+	}
 }
 
 
@@ -280,7 +288,7 @@ static void compute_instruction_priority(instruction_t* instruction){
  * is considered final and we are done
  *
  * Cycle <- 1
- * Readylist <- leaves
+ * Readylist <- leaves in priority order(higher is higher priority)
  * Activelist <- {}
  *
  * while (Readylist U Activelist != {}):
@@ -296,9 +304,6 @@ static void compute_instruction_priority(instruction_t* instruction){
  * 		add instruction to active
  *
  * 	Cycle <- Cycle + 1
- * 			
- *
- *
  */
 static void list_schedule_block(basic_block_t* block, instruction_t** instructions, dynamic_array_t* leaves){
 

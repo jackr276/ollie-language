@@ -228,6 +228,8 @@ struct instruction_t{
 	void* parameters;
 	//The priority in the list scheduler
 	u_int32_t priority;
+	//The order of our instruction in the block
+	u_int32_t block_order;
 	//What is the three address code type
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
