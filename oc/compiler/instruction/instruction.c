@@ -4636,11 +4636,62 @@ u_int8_t is_register_callee_saved(general_purpose_register_t reg){
  */
 u_int32_t get_estimated_cycle_count(instruction_t* instruction){
 	switch(instruction->instruction_type){
-		//TODO ADD MORE
+		case MULQ:
+		case MULL:
+		case MULW:
+		case MULB:
+			return UNSIGNED_INT_MULTIPLY_CYCLE_COUNT;
+		case IMULQ:
+		case IMULW:
+		case IMULL:
+		case IMULB:
+			return SIGNED_INT_MULTIPLY_CYCLE_COUNT;
+		case DIVQ:
+		case DIVL:
+		case DIVW:
+		case DIVB:
+			return UNSIGNED_INT_DIVIDE_CYCLE_COUNT;
+		case IDIVQ:
+		case IDIVL:
+		case IDIVW:
+		case IDIVB:
+			return SIGNED_INT_DIVIDE_CYCLE_COUNT;
+		/**
+		 * For moves, we have to account for the differences
+		 * in expense between loading and storing and just regular
+		 * moves
+		 */
+		case MOVL:
+		case MOVQ:
+		case MOVB:
+		case MOVW:
+		case MOVSBL:
+		case MOVSBW:
+		case MOVSBQ:
+		case MOVZBL:
+		case MOVZBW:
+		case MOVZBQ:
+		case MOVSWL:
+		case MOVSWQ:
+		case MOVZWL:
+		case MOVZWQ:
+		case MOVSLQ:
+			//Now go based on how we are hitting memory
+			switch(instruction->memory_access_type){
+				//Loads are typically more expensive than
+				//stores
+				case READ_FROM_MEMORY:
+					return LOAD_CYCLE_COUNT;
+				case WRITE_TO_MEMORY:
+					return STORE_CYCLE_COUNT;
+				//Register moves are the cheapest of all
+				default:
+					return DEFAULT_CYCLE_COUNT;
+			}
 
-		//By default we assume 1 cycle
+		//By default we assume the default
 		default:
-			return 1;
+			return DEFAULT_CYCLE_COUNT;
 	}
 
 }

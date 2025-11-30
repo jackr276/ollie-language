@@ -261,6 +261,9 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 
 	//Run through and add them all in
 	while(instruction_cursor != NULL){
+		//Invoke the estimator to get our presumed number of cycles
+		instruction_cursor->cycles = get_estimated_cycle_count(instruction_cursor);
+
 		//Add it in
 		instructions[list_index] = instruction_cursor;
 
