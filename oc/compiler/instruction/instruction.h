@@ -713,6 +713,12 @@ u_int8_t is_register_caller_saved(general_purpose_register_t reg);
 u_int8_t is_register_callee_saved(general_purpose_register_t reg);
 
 /**
+ * Get the estimated cycle count for a given instruction. This count
+ * is of course estimated, we cannot know for sure
+ */
+u_int32_t get_estimated_cycle_count(instruction_t* instruction);
+
+/**
  * Pretty print a three address code statement
 */
 void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt);

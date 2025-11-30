@@ -4631,6 +4631,22 @@ u_int8_t is_register_callee_saved(general_purpose_register_t reg){
 
 
 /**
+ * Get the estimated cycle count for a given instruction. This count
+ * is of course estimated, we cannot know for sure
+ */
+u_int32_t get_estimated_cycle_count(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		//TODO ADD MORE
+
+		//By default we assume 1 cycle
+		default:
+			return 1;
+	}
+
+}
+
+
+/**
  * Are two variables equal? A helper method for searching
  */
 u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection){
