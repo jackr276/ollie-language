@@ -97,7 +97,7 @@ static void update_dependence_for_variable(instruction_t* given, instruction_t**
 /**
  * Build the dependency graph inside of a block. We're also given our instruction list here for reference
  */
-static void build_dependency_graph_for_block(basic_block_t* block, instruction_t** instructions, dynamic_array_t* leaves){
+static void build_dependency_graph_for_block(basic_block_t* block, instruction_t** instructions, dynamic_array_t* leaves, dynamic_array_t* roots){
 	//Predeclare for any/all function parameter lists due to
 	//the nature of the switch
 	dynamic_array_t* function_parameters;
@@ -246,6 +246,31 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 			dynamic_array_add(leaves, current);
 		}
 	}
+
+	/**
+	 * Once we've done all of that, we can now go back and compute all of the
+	 * roots in the graph. The roots are simply instructions that have no successors
+	 */
+	for(int32_t i = block->number_of_instructions - 1; i >= 1; i--){
+		//Extract it
+		instruction_t* current = instructions[i];
+
+		//Add these to the roots
+		if(current->successor_instructions == NULL
+			|| dynamic_array_is_empty(current->successor_instructions) == TRUE){
+			dynamic_array_add(roots, current);
+		}
+	}
+}
+
+
+/**
+ * Compute the priority for a given instruction. We compute the priority
+ * by calculating the longest weighted path from an instruction i to any
+ * given root in the data dependency graph
+ */
+static void compute_instruction_priority(instruction_t* instruction){
+
 }
 
 
@@ -287,7 +312,8 @@ static void list_schedule_block(basic_block_t* block, instruction_t** instructio
  * 	1.) Get the estimated cycle count(cost) for each instruction. This is also where we break
  * 	 	all of the bons holding the instructions in the block(leader, exit, etc)
  * 	2.) Build a data dependency graph for the entire block
- * 	3.) Use the list scheduling algorithm 
+ * 	3.) With the data dependency graph in hand, compute the priorities for each instruction
+ * 	4.) Use the list scheduling algorithm to schedule instructions
  */
 static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_printing, u_int8_t print_irs){
 	/**
@@ -301,6 +327,8 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 
 	//The "leaves" of the graph are instructions for which there is no dependency
 	dynamic_array_t* leaves = dynamic_array_alloc();
+	//The "roots" of the graph are instructions that have nothing else relying on them
+	dynamic_array_t* roots = dynamic_array_alloc();
 
 	//Grab a cursor
 	instruction_t* instruction_cursor = block->leader_statement;
@@ -314,9 +342,6 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 */
 	//Run through and add them all in
 	while(instruction_cursor != NULL){
-		//Invoke the estimator to get our presumed number of cycles
-		instruction_cursor->cycles = get_estimated_cycle_count(instruction_cursor);
-
 		//Add it in
 		instructions[list_index] = instruction_cursor;
 
@@ -334,7 +359,7 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * Step 2: build the data dependency graph inside of the block. This is done by
 	 * the helper function. Nothing else can be done until this is done
 	 */
-	build_dependency_graph_for_block(block, instructions, leaves);
+	build_dependency_graph_for_block(block, instructions, leaves, roots);
 
 	//Only if we want debug printing we can show this
 	if(debug_printing == TRUE){
@@ -343,12 +368,23 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	}
 
 	/**
-	 * Step 3: use the list scheduler to reorder the entire block.
+	 * Step 3: for each instruction, compute it's priority using the 
+	 * length of longest weighted path for an instruction to a
+	 * root in the dependency graph
+	 */
+	for(u_int32_t i = 0; i < block->number_of_instructions; i++){
+		//Let the helper compute it
+		compute_instruction_priority(instructions[i]);
+	}
+
+	/**
+	 * Step 4: use the list scheduler to reorder the entire block.
 	 * The algorithm is detailed in the function
 	 */
 
-	//Once we are done release the leaves array
+	//Once we are done release the leaves and roots arrays
 	dynamic_array_dealloc(leaves);
+	dynamic_array_dealloc(roots);
 }
 
 

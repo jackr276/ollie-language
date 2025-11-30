@@ -226,8 +226,8 @@ struct instruction_t{
 	symtab_function_record_t* function;
 	//Generic parameter list - could be used for phi functions or function calls
 	void* parameters;
-	//The number of cycles that this instruction needs to execute(always approximate/rough)
-	u_int32_t cycles;
+	//The priority in the list scheduler
+	u_int32_t priority;
 	//What is the three address code type
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
