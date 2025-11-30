@@ -766,6 +766,9 @@ static void add_phi_statement(basic_block_t* target, instruction_t* phi_statemen
 		return;
 	}
 
+	//Counts as an instruction
+	target->number_of_instructions++;
+
 	//Otherwise we will add this in at the very front
 	phi_statement->next_statement = target->leader_statement;
 	//Update this reference
@@ -803,6 +806,9 @@ void add_statement(basic_block_t* target, instruction_t* statement_node){
 		exit(1);
 	}
 
+	//No matter what - we are adding a statement to this block
+	target->number_of_instructions++;
+
 	//Special case--we're adding the head
 	if(target->leader_statement == NULL || target->exit_statement == NULL){
 		//Assign this to be the head and the tail
@@ -838,6 +844,9 @@ void delete_statement(instruction_t* stmt){
 	if(stmt->op1_const != NULL && stmt->op1_const->const_type == STR_CONST){
 		stmt->op1_const->local_constant->reference_count--;
 	}
+
+	//No matter what, we are reducing the number of statements in this block
+	block->number_of_instructions--;
 
 	//If it's the leader statement, we'll just update the references
 	if(block->leader_statement == stmt){
@@ -5373,6 +5382,8 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		add_assigned_variable(a, b->assigned_variables->internal_array[i]);
 	}
 
+	//Update the instruction counts
+	a->number_of_instructions += b->number_of_instructions;
 
 	//We'll remove this from the list of created blocks
 	dynamic_array_delete(cfg_ref->created_blocks, b);

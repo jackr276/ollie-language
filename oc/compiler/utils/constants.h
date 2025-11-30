@@ -43,4 +43,13 @@
 //Default length of the string is 60 characters
 #define DEFAULT_DYNAMIC_STRING_LENGTH 60
 
+//Definitions for cycle counts on our known instructions
+#define LOAD_CYCLE_COUNT 4
+#define STORE_CYCLE_COUNT 2
+#define UNSIGNED_INT_MULTIPLY_CYCLE_COUNT 3
+#define SIGNED_INT_MULTIPLY_CYCLE_COUNT 3
+#define SIGNED_INT_DIVIDE_CYCLE_COUNT 30
+#define UNSIGNED_INT_DIVIDE_CYCLE_COUNT 30
+#define DEFAULT_CYCLE_COUNT 1
+
 #endif /* OLLIE_COMPILER_CONSTANTS_H */

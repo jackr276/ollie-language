@@ -13,9 +13,9 @@
 //For access to TRUE and FALSE
 #include "../constants.h"
 
-// Initially the queue size is 50. This is usually enough for most switch statements. Of course
-// if a user writes more than 50 cases, it will be accomodated
-#define INITIAL_QUEUE_SIZE 50
+// Initially the queue size is 10. This is usually enough for most switch statements. Of course
+// if a user writes more than 10 cases, it will be accomodated
+#define INITIAL_QUEUE_SIZE 10
 
 /**
  * Initialize the priority queue with the default size

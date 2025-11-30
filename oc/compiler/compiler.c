@@ -15,6 +15,7 @@
 #include "cfg/cfg.h"
 #include "register_allocator/register_allocator.h"
 #include "instruction_selector/instruction_selector.h"
+#include "instruction_scheduler/instruction_scheduler.h"
 #include "file_builder/file_builder.h"
 #include "optimizer/optimizer.h"
 #include "utils/constants.h"
@@ -148,6 +149,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
 		printf("CFG constuctor took: %.8f seconds\n", times->cfg_time);
 		printf("Optimizer took: %.8f seconds\n", times->optimizer_time);
 		printf("Instruction Selector took: %.8f seconds\n", times->selector_time);
+		printf("Instruction Scheduler took: %.8f seconds\n", times->scheduler_time);
 		printf("Register Allocator took: %.8f seconds\n", times->allocator_time);
 	}
 
@@ -168,7 +170,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
  */
 static u_int8_t compile(compiler_options_t* options){
 	//Declare our times and set all to 0
-	module_times_t times = {0, 0, 0, 0, 0, 0};
+	module_times_t times = {0, 0, 0, 0, 0, 0, 0};
 
 	//Print out the file name if we're debug printing
 	printf("Compiling source file: %s\n\n\n", options->file_name);
@@ -184,6 +186,7 @@ static u_int8_t compile(compiler_options_t* options){
 	clock_t cfg_end = 0;
 	clock_t optimizer_end = 0;
 	clock_t selector_end = 0;
+	clock_t scheduler_end = 0;
 	clock_t allocator_end = 0;
 
 	//This is the true "end" when all has finished
@@ -291,9 +294,25 @@ static u_int8_t compile(compiler_options_t* options){
 
 	if(options->print_irs == TRUE){
 		printf("=============================== Instruction Selection ==================================\n");
+		printf("=============================== Instruction Scheduling =================================\n");
+	}
+
+	//Now we need to schedule all of the instructions
+	cfg = schedule_all_instructions(cfg, options);
+	
+	//If we are doing module specific timing, store the selector time
+	if(options->module_specific_timing == TRUE){
+		//End the selector timer
+		scheduler_end = clock();
+
+		//Crude time calculation. The scheduler starts when the selector ends
+		times.scheduler_time = (double)(scheduler_end - selector_end) / CLOCKS_PER_SEC;
+	}
+
+	if(options->print_irs == TRUE){
+		printf("=============================== Instruction Scheduling =================================\n");
 		printf("=============================== Register Allocation ====================================\n");
 	}
-	
 	//Run the register allocator. This will take the OIR version and truly put it into assembler-ready code
 	allocate_all_registers(options, cfg);
 
@@ -303,7 +322,7 @@ static u_int8_t compile(compiler_options_t* options){
 		allocator_end = clock();
 
 		//Crude time calculation. The allocator starts when the selector ends
-		times.allocator_time = (double)(allocator_end - selector_end) / CLOCKS_PER_SEC;
+		times.allocator_time = (double)(allocator_end - scheduler_end) / CLOCKS_PER_SEC;
 	}
 
 	if(options->print_irs == TRUE){
@@ -330,7 +349,11 @@ static u_int8_t compile(compiler_options_t* options){
 	}
 
 	/**
-	 * REQUIRED CLEANUP: Now that we're done, we'll free all of our memory
+	 * We can deallocate memory as we go along here
+	 *
+	 * It's not entirely necessary to deallocate all of this memory, recall that
+	 * the operating system reclaims all of it once the program runs. Since a compiler is
+	 * not something that runs perpetually, we really don't need to worry about freeing the memory
 	 */
 	//Deallocate the ast
 	ast_dealloc();

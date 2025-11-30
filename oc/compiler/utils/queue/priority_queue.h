@@ -1,8 +1,7 @@
 /**
  * Author: Jack Robbins
  *
- * A priority queue, implemented as a min-heap behind the scenes. Specifically used by Ollie Compiler in
- * the reordering of case statements in switch blocks
+ * A priority queue, implemented as a min-heap behind the scenes
 */
 
 #ifndef PRIORITY_QUEUE_H
@@ -30,6 +29,8 @@ struct priority_queue_t{
 /**
  * Each individual node is stored here. The priority needs to be stored 
  * along with the pointer, which is what makes these nodes necessary
+ *
+ * The priority is as follows -> higher is higher priority
 */
 struct priority_queue_node_t{
 	//Our priority
