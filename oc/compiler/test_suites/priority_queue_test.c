@@ -63,6 +63,9 @@ static void test_min_priority_queue(){
 		min_priority_queue_enqueue(&min_queue, node, node->priority);
 	}
 
+	//It's not empty, so verify that the empty call works
+	assert(min_priority_queue_is_empty(&min_queue) == FALSE);
+
 	//Let's dequeue half of them
 	for(int16_t i = 0; i < 250; i++){
 		//Dequeue it
@@ -186,6 +189,9 @@ static void test_max_priority_queue(){
 		assert(node->priority == i);
 	}
 
+	//It's not empty, so verify that the empty call works
+	assert(max_priority_queue_is_empty(&max_queue) == FALSE);
+
 	//Now let's randomly insert some nodes with lower priorities and see where they fall
 	for(int16_t i = 835; i >= 785; i--){
 		//Create a test node with our given priority
@@ -207,6 +213,58 @@ static void test_max_priority_queue(){
 		//Asser that this is the case, the priority should be highest to lowest here
 		assert(node->priority == i);
 	}
+
+	//Now the minimum node is now 249, so let's enqueue some stuff higher than it in
+	//We'll also do duplicate priorities here to see how it's handled
+	for(u_int16_t i = 380; i < 390; i++){
+		//Create a test node with our given priority
+		priority_queue_test_node_t* node = create_test_node(i);
+
+		//Insert it - this is a worst case type deal
+		max_priority_queue_enqueue(&max_queue, node, node->priority);
+
+		//Create a test node with our given priority
+		priority_queue_test_node_t* duplicate_node = create_test_node(i);
+
+		//Insert it - this is a worst case type deal
+		max_priority_queue_enqueue(&max_queue, duplicate_node, duplicate_node->priority);
+	}
+
+	//We should now be able to dequeue all of these
+	for(int16_t i = 389; i >= 380; i--){
+		//Dequeue it
+		priority_queue_test_node_t* node = max_priority_queue_dequeue(&max_queue);
+
+		//Assert that 
+		printf("Dequeued node with priority %ld\n", node->priority);
+
+		//Asser that this is the case, the priority should be highest to lowest here
+		assert(node->priority == i);
+
+		//Dequeue it again(we had duplicates)
+		priority_queue_test_node_t* duplicate_node = max_priority_queue_dequeue(&max_queue);
+
+		//Assert that 
+		printf("Dequeued node with priority %ld\n", duplicate_node->priority);
+
+		//Asser that this is the case, the priority should be highest to lowest here
+		assert(duplicate_node->priority == i);
+	}
+
+	//Let's now dequeue the rest of it
+	for(int16_t i = 249; i >= 0; i--){
+		//Dequeue it
+		priority_queue_test_node_t* node = max_priority_queue_dequeue(&max_queue);
+
+		//Assert that 
+		printf("Dequeued node with priority %ld\n", node->priority);
+
+		//Asser that this is the case, the priority should be highest to lowest here
+		assert(node->priority == i);
+	}
+
+	//It's now empty so let's verify that this works
+	assert(max_priority_queue_is_empty(&max_queue) == TRUE);
 
 	//Now deallocate it
 	max_priority_queue_dealloc(&max_queue);
