@@ -65,7 +65,7 @@ data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes);
  * Add a node for a given instruction. Once this function executes, there will be a dependency
  * node for the given instruction
  */
-void add_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
+void add_data_dependency_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
 
 /**
  * Add a dependence between the two instructions

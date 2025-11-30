@@ -36,7 +36,7 @@ data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes){
 /**
  * Create and add a node for a given instruction
  */
-void add_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction){
+void add_data_dependency_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction){
 	//Allocate it
 	data_dependency_graph_node_t* node = calloc(1, sizeof(data_dependency_graph_node_t));
 
@@ -64,6 +64,7 @@ void add_node_for_instruction(data_dependency_graph_t* graph, instruction_t* ins
  * created and at the ready
 */
 void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instruction_t* depends_on){
+	//TODO
 }
 
 
@@ -79,10 +80,10 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
 		fprintf(output, "================================================\n");
 
 		//Print the instruction
-		fprintf(output, "Instruction:\n");
+		fprintf(output, "Instruction: ");
 		print_instruction(stdout, node->instruction, PRINTING_VAR_IN_INSTRUCTION);
 		//Now show what it depends on
-		fprintf(output, "Depends on:\n");
+		fprintf(output, "Depends on: [\n");
 
 		//Run through all of what we depend on
 		for(u_int16_t j = 0; j < node->neighbors->current_index; j++){
@@ -90,6 +91,8 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
 			data_dependency_graph_node_t* predecessor = dynamic_array_get_at(node->neighbors, j);
 			print_instruction(stdout, predecessor->instruction, PRINTING_VAR_IN_INSTRUCTION);
 		}
+
+		printf("]\n");
 
 		fprintf(output, "================================================\n");
 	}
@@ -102,14 +105,17 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
  */
 void dependency_graph_dealloc(data_dependency_graph_t* graph){
 	//Run through all of the nodes
-	for(u_int16_t i = 0; i < graph->current_index; i++){
+	for(u_int16_t i = 0; i < graph->node_count; i++){
+		//Grab a pointer to this
+		data_dependency_graph_node_t* node = graph->nodes[i];
+
 		//Free the dynamic array
-		dynamic_array_dealloc(graph->nodes[i]->neighbors);
+		dynamic_array_dealloc(node->neighbors);
 
 		//Now deallocate the node itself
-		free(graph->nodes[i]);
+		free(node);
 	}
 
-	//Now free the overall array
+	//Now free the overall array of nodes
 	free(graph->nodes);
 }
