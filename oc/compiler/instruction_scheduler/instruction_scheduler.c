@@ -7,6 +7,7 @@
 #include "instruction_scheduler.h"
 #include "../data_dependency_graph/data_dependency_graph.h"
 #include <stdint.h>
+#include <stdio.h>
 #include <sys/types.h>
 
 
@@ -363,8 +364,23 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 
 	//Only if we want debug printing we can show this
 	if(debug_printing == TRUE){
+		printf("============================ Block .L%d ============================\n", block->block_id);
 		//Print out the dependence graph for the block
 		print_data_dependence_graph(stdout, instructions, block->number_of_instructions);
+		//Now let's display the roots and leaves
+		printf("================= Leaves ===================\n");
+		for(u_int16_t i = 0; i < leaves->current_index; i++){
+			printf("Leaf: ");
+			print_instruction(stdout, dynamic_array_get_at(leaves, i), PRINTING_VAR_IN_INSTRUCTION);
+		}
+		printf("================= Leaves ===================\n");
+		printf("================= Roots ====================\n");
+		for(u_int16_t i = 0; i < roots->current_index; i++){
+			printf("Root: ");
+			print_instruction(stdout, dynamic_array_get_at(roots, i), PRINTING_VAR_IN_INSTRUCTION);
+		}
+		printf("================= Roots ====================\n");
+		printf("============================ Block .L%d ============================\n", block->block_id);
 	}
 
 	/**
