@@ -673,7 +673,7 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 	basic_block_t* candidate;
 
 	//So long as the queue is not empty
-	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+	while(queue_is_empty(queue) == FALSE){
 		//Grab the block off
 		candidate = dequeue(queue);
 		

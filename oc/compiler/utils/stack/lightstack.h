@@ -55,11 +55,6 @@ void lightstack_dealloc(lightstack_t* stack);
 u_int8_t lightstack_is_empty(lightstack_t* stack);
 
 /**
- * Determine if the stack is empty
-*/
-u_int8_t lightstack_is_empty(lightstack_t* stack);
-
-/**
  * Reset the entire lightstack
  */
 void reset_lightstack(lightstack_t* stack);

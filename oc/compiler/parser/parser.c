@@ -1438,7 +1438,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//Once we get here, we either found the assignment op or we didn't. First though, let's
 	//put everything back where we found it
-	while(lex_stack_is_empty(stack) == LEX_STACK_NOT_EMPTY){
+	while(lex_stack_is_empty(stack) == FALSE){
 		//Pop the token off and put it back
 		push_back_token(pop_token(stack));
 	}
@@ -8728,7 +8728,7 @@ static int8_t check_jump_labels(){
 	generic_ast_node_t* current_jump_statement;
 
 	//So long as there are jump statements in the queue
-	while(queue_is_empty(current_function_jump_statements) == HEAP_QUEUE_NOT_EMPTY){
+	while(queue_is_empty(current_function_jump_statements) == FALSE){
 		//Grab the jump statement
 		current_jump_statement = dequeue(current_function_jump_statements);
 

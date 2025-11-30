@@ -251,7 +251,7 @@ dynamic_array_t* compute_reverse_post_order_traversal_reverse_cfg(basic_block_t*
 
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
-	while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
+	while(heap_stack_is_empty(stack) == FALSE){
 		dynamic_array_add(reverse_post_order_traversal, pop(stack));
 	}
 
@@ -302,7 +302,7 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry){
 
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
-	while(heap_stack_is_empty(stack) == HEAP_STACK_NOT_EMPTY){
+	while(heap_stack_is_empty(stack) == FALSE){
 		dynamic_array_add(reverse_post_order_traversal, pop(stack));
 	}
 
@@ -1073,7 +1073,7 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 	enqueue(queue, B);
 
 	//So long as the queue isn't empty
-	while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+	while(queue_is_empty(queue) == FALSE){
 		//Pop off of the queue
 		basic_block_t* current = dequeue(queue);
 
@@ -4968,7 +4968,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		enqueue(queue, dynamic_array_get_at(cfg->function_entry_blocks, i));
 
 		//So long as the queue isn't empty
-		while(queue_is_empty(queue) == HEAP_QUEUE_NOT_EMPTY){
+		while(queue_is_empty(queue) == FALSE){
 			//Pop off of the queue
 			block = dequeue(queue);
 

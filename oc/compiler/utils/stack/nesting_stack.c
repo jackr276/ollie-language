@@ -6,6 +6,7 @@
 #include "nesting_stack.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include "../constants.h"
 
 /**
@@ -52,12 +53,8 @@ void push_nesting_level(nesting_stack_t* stack, nesting_level_t level){
 /**
  * Is the lex stack empty?
  */
-nesting_stack_status_t nesting_stack_is_empty(nesting_stack_t* nesting_stack){
-	if(nesting_stack->top == NULL){
-		return NESTING_STACK_EMPTY;
-	} else {
-		return NESTING_STACK_NOT_EMPTY;
-	}
+u_int8_t nesting_stack_is_empty(nesting_stack_t* nesting_stack){
+	return nesting_stack->num_nodes == 0 ? TRUE : FALSE;
 }
 
 
