@@ -13,6 +13,7 @@
 #include "../utils/constants.h"
 #include "../interference_graph/interference_graph.h"
 #include "../postprocessor/postprocessor.h"
+#include "../utils/queue/max_priority_queue.h"
 #include "../cfg/cfg.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,51 +40,6 @@ static three_addr_var_t* stack_pointer;
 static type_symtab_t* type_symtab;
 //The u64 type for reference
 static generic_type_t* u64_type;
-
-/**
- * Priority queue insert a live range in here
- *
- * Highest spill cost = highest priority. We want to guarantee that the values which get into registers first
- * are high spill cost items. We don't want to end up having to spill these. If we need to spill a lower
- * priority item, we won't feel it nearly as much
- * Higher priority items go to the back to make removal O(1)(using dynamic_array_delete_from_back())
- */
-static void dynamic_array_priority_insert_live_range(dynamic_array_t* array, live_range_t* live_range){
-	//Now we'll see if we need to reallocate this. We use current index + 1 because we could be inserting
-	//at the back
-	if(array->current_index + 1 == array->current_max_size){
-		//We'll double the current max size
-		array->current_max_size *= 2;
-
-		//And we'll reallocate the array
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
-	}
-
-	//We'll need this out of the scope
-	u_int16_t i = 0;
-
-	//Run through the array and figure out where to put this
-	for(; i < array->current_index; i++){
-		//Grab the current one out
-		live_range_t* current = dynamic_array_get_at(array, i);
-
-		//If this one is lower priority than the given one, we'll stop
-		if(current->spill_cost > live_range->spill_cost){
-			break;
-		}
-	}
-
-	//Shift to the right by 1
-	for(int16_t j = array->current_index; j >= i; j--){
-		array->internal_array[j+1] = array->internal_array[j];
-	}
-
-	//Now we can insert the array at i
-	array->internal_array[i] = live_range;
-
-	//Bump this up by 1
-	array->current_index++;
-}
 
 
 /**
@@ -2677,9 +2633,8 @@ static void spill_in_function(basic_block_t* function_entry_block, dynamic_array
  * Return TRUE if the graph was colorable, FALSE if not
  */
 static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_array_t* live_ranges){
-	//We first need to construct the priority version of the live range arrays
-	//Create a new one
-	dynamic_array_t* priority_live_ranges = dynamic_array_alloc();
+	//Max priority queue for our live ranges
+	max_priority_queue_t priority_live_ranges = max_priority_queue_alloc();
 
 	//Run through and insert everything into the priority live range
 	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
@@ -2725,6 +2680,9 @@ static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_
 				 */
 				spill_in_function(function_entry, live_ranges, range);
 
+				//Destroy the priority queue now that we're done with it
+				max_priority_queue_dealloc(&priority_live_ranges);
+
 				//We could not allocate everything here, so we need to return false to
 				//trigger the restart by the parent process
 				return FALSE;
@@ -2732,8 +2690,8 @@ static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_
 		}
 	}
 
-	//Destroy the dynamic array
-	dynamic_array_dealloc(priority_live_ranges);
+	//Destroy the priority queue now that we're done with it
+	max_priority_queue_dealloc(&priority_live_ranges);
 
 	//Give back true because if we made it here, our graph was N-colorable
 	//and we did not have a spill
