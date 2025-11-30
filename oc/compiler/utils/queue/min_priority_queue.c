@@ -2,9 +2,11 @@
  * Author: Jack Robbins
  *
  * This is the implementation file for the associated priority queue header file
+ *
+ * Internally, our heap obeys the min-heap property: the parent is always smaller than its children
 */
 
-#include "priority_queue.h"
+#include "min_priority_queue.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -15,20 +17,20 @@
 
 // Initially the queue size is 10. This is usually enough for most switch statements. Of course
 // if a user writes more than 10 cases, it will be accomodated
-#define INITIAL_QUEUE_SIZE 10
+#define INITIAL_MIN_PRIORITY_QUEUE_SIZE 10
 
 /**
  * Initialize the priority queue with the default size
 */
-priority_queue_t priority_queue_alloc(){
+min_priority_queue_t min_priority_queue_alloc(){
 	//Stack allocated
-	priority_queue_t queue;
+	min_priority_queue_t queue;
 
 	//We need to reserve the initial space
-	queue.heap = calloc(INITIAL_QUEUE_SIZE, sizeof(priority_queue_node_t));
+	queue.heap = calloc(INITIAL_MIN_PRIORITY_QUEUE_SIZE, sizeof(min_priority_queue_t));
 
 	//Set these values too
-	queue.maximum_size = INITIAL_QUEUE_SIZE;
+	queue.maximum_size = INITIAL_MIN_PRIORITY_QUEUE_SIZE;
 	queue.next_index = 0;
 
 	//And give back a copy
@@ -49,9 +51,9 @@ static u_int16_t get_parent_index(u_int16_t index){
  * Swap the two given indices. Remember that this heap isn't a heap of
  * pointers, so it's not as simple as swapping pointers
  */
-static void swap(priority_queue_t* queue, u_int16_t index1, u_int16_t index2){
+static void swap(min_priority_queue_t* queue, u_int16_t index1, u_int16_t index2){
 	//Grab out index 1
-	priority_queue_node_t temp = queue->heap[index1];
+	min_priority_queue_node_t temp = queue->heap[index1];
 
 	//Put index 2 in 1's spot
 	queue->heap[index1] = queue->heap[index2];
@@ -65,7 +67,7 @@ static void swap(priority_queue_t* queue, u_int16_t index1, u_int16_t index2){
  * Generic min-heapify operation. This will recursively
  * "down-heapify" because we start at the front and go forwards
  */
-static void min_heapify(priority_queue_t* queue, u_int16_t index){
+static void min_heapify(min_priority_queue_t* queue, u_int16_t index){
 	//Initially set smallest to be what we're given
 	u_int16_t smallest_index = index;
 
@@ -111,13 +113,13 @@ static void min_heapify(priority_queue_t* queue, u_int16_t index){
  * priority. This would confuse the system and would be a confusing edge case. As such, every
  * priority has 1 added to it, that way even if it is 0 passed in, it won't be in the system
  */
-void priority_queue_enqueue(priority_queue_t* queue, void *ptr, int64_t priority){
+void min_priority_queue_enqueue(min_priority_queue_t* queue, void *ptr, int64_t priority){
 	//Automatic resize if needed
 	if(queue->next_index == queue->maximum_size){
 		//Double it
 		queue->maximum_size *= 2;
 		//Realloc
-		queue->heap = realloc(queue->heap, sizeof(priority_queue_node_t) * queue->maximum_size);
+		queue->heap = realloc(queue->heap, sizeof(min_priority_queue_node_t) * queue->maximum_size);
 	}
 
 	//See the top explanation for why we do this
@@ -133,9 +135,9 @@ void priority_queue_enqueue(priority_queue_t* queue, void *ptr, int64_t priority
 	//Increment this for the next go around
 	queue->next_index++;
 
-	//So long as we're in valid bounds and the child/parent are backwards
+	//So long as we're in valid bounds and the child/parent are backwards(parent is more than child)
 	while(current_index > 0 && 
-		queue->heap[get_parent_index(current_index)].priority < queue->heap[current_index].priority){
+		queue->heap[get_parent_index(current_index)].priority > queue->heap[current_index].priority){
 		//Swap the values
 		swap(queue, get_parent_index(current_index), current_index);
 
@@ -147,7 +149,7 @@ void priority_queue_enqueue(priority_queue_t* queue, void *ptr, int64_t priority
 /**
  * Dequeue from the priority queue
  */
-void* priority_queue_dequeue(priority_queue_t* queue){
+void* min_priority_queue_dequeue(min_priority_queue_t* queue){
 	//Save the pointer
 	void* dequeued = queue->heap[0].ptr;
 
@@ -168,7 +170,7 @@ void* priority_queue_dequeue(priority_queue_t* queue){
 /**
  * Simply return if the next index is 0
  */
-u_int8_t priority_queue_is_empty(priority_queue_t* queue){
+u_int8_t min_priority_queue_is_empty(min_priority_queue_t* queue){
 	return queue->next_index == 0 ? TRUE : FALSE;
 }
 
@@ -176,7 +178,7 @@ u_int8_t priority_queue_is_empty(priority_queue_t* queue){
 /**
  * Deallocate the priority queue
 */
-void priority_queue_dealloc(priority_queue_t* queue){
+void min_priority_queue_dealloc(min_priority_queue_t* queue){
 	//We need to deallocate the heap only here
 	free(queue->heap);
 	//And we're done

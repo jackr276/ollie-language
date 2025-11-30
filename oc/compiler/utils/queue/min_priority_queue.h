@@ -66,6 +66,6 @@ u_int8_t min_priority_queue_is_empty(min_priority_queue_t* queue);
 /**
  * Deallocate the memory of the priority queue
 */
-void priority_queue_dealloc(min_priority_queue_t* queue);
+void min_priority_queue_dealloc(min_priority_queue_t* queue);
 
 #endif /* MIN_PRIORITY_QUEUE_H */

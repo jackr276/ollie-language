@@ -15,7 +15,7 @@
 
 // Initially the queue size is 10. This is usually enough for most switch statements. Of course
 // if a user writes more than 10 cases, it will be accomodated
-#define INITIAL_QUEUE_SIZE 10
+#define INITIAL_MAX_PRIORITY_QUEUE_SIZE 10
 
 /**
  * Initialize the priority queue with the default size
@@ -25,10 +25,10 @@ max_priority_queue_t max_priority_queue_alloc(){
 	max_priority_queue_t queue;
 
 	//We need to reserve the initial space
-	queue.heap = calloc(INITIAL_QUEUE_SIZE, sizeof(max_priority_queue_node_t));
+	queue.heap = calloc(INITIAL_MAX_PRIORITY_QUEUE_SIZE, sizeof(max_priority_queue_node_t));
 
 	//Set these values too
-	queue.maximum_size = INITIAL_QUEUE_SIZE;
+	queue.maximum_size = INITIAL_MAX_PRIORITY_QUEUE_SIZE;
 	queue.next_index = 0;
 
 	//And give back a copy
