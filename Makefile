@@ -606,7 +606,7 @@ test_data_area-CI: stack_data_area_test-CI
 ptest-CI: parser_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/parser_test -i -d -f
 
-test_priority_queues: priority_queue_test-CI
+test_priority_queues-CI: priority_queue_test-CI
 	$(OUT_CI)/priority_queue_test
 
 front_test-CI: front_end_test-CI
