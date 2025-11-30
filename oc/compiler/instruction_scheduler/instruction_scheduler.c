@@ -240,8 +240,22 @@ static void build_dependency_graph_for_block(basic_block_t* block, instruction_t
 
 
 /**
+ *
+ */
+static void list_schedule_block(basic_block_t* block, instruction_t** instructions){
+
+}
+
+
+/**
  * Run through a block and perform the reordering/scheduling in it step by step.
  * Once this function returns, we can consider that block 100% done from a scheduling perspective
+ *
+ * Steps in the scheduling:
+ * 	1.) Get the estimated cycle count(cost) for each instruction. This is also where we break
+ * 	 	all of the bons holding the instructions in the block(leader, exit, etc)
+ * 	2.) Build a data dependency graph for the entire block
+ * 	3.) Use the list scheduling algorithm 
  */
 static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_printing, u_int8_t print_irs){
 	/**
@@ -259,6 +273,10 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	//Current index in the list
 	u_int32_t list_index = 0;
 
+	/**
+	 * Step 1: get the estimated cycle count for each instruction.
+	 * We will also break all of the links here in the block
+	 */
 	//Run through and add them all in
 	while(instruction_cursor != NULL){
 		//Invoke the estimator to get our presumed number of cycles
@@ -278,7 +296,7 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	//quicker than if we had to use the linked list approaach
 
 	/**
-	 * Step 1: build the data dependency graph inside of the block. This is done by
+	 * Step 2: build the data dependency graph inside of the block. This is done by
 	 * the helper function. Nothing else can be done until this is done
 	 */
 	build_dependency_graph_for_block(block, instructions);
@@ -288,6 +306,12 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 		//Print out the dependence graph for the block
 		print_data_dependence_graph(stdout, instructions, block->number_of_instructions);
 	}
+
+	/**
+	 * Step 3: use the list scheduler to reorder the entire block
+	 *
+	 */
+
 }
 
 
