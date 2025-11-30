@@ -71,6 +71,18 @@ heap_queue.o: $(QUEUE_PATH)/heap_queue.c
 heap_queued.o: $(QUEUE_PATH)/heap_queue.c
 	$(CC) $(CFLAGS) -g $(QUEUE_PATH)/heap_queue.c -o $(OUT_LOCAL)/heap_queued.o
 
+min_priority_queue.o: $(QUEUE_PATH)/min_priority_queue.c
+	$(CC) $(CFLAGS) $(QUEUE_PATH)/min_priority_queue.c -o $(OUT_LOCAL)/min_priority_queue.o
+
+min_priority_queued.o: $(QUEUE_PATH)/min_priority_queue.c
+	$(CC) -g $(CFLAGS) $(QUEUE_PATH)/min_priority_queue.c -o $(OUT_LOCAL)/min_priority_queued.o
+
+max_priority_queue.o: $(QUEUE_PATH)/max_priority_queue.c
+	$(CC) $(CFLAGS) $(QUEUE_PATH)/max_priority_queue.c -o $(OUT_LOCAL)/max_priority_queue.o
+
+max_priority_queued.o: $(QUEUE_PATH)/max_priority_queue.c
+	$(CC) -g $(CFLAGS) $(QUEUE_PATH)/max_priority_queue.c -o $(OUT_LOCAL)/max_priority_queued.o
+
 dynamic_array.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
 	$(CC) $(CFLAGS) $(DYNAMIC_ARRAY_PATH)/dynamic_array.c -o $(OUT_LOCAL)/dynamic_array.o
 
@@ -215,6 +227,12 @@ dynamic_array_test.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 dynamic_array_testd.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATh)/dynamic_array_test.c -o $(OUT_LOCAL)/dynamic_array_testd.o
 
+priority_queue_test.o: $(TEST_SUITE_PATH)/priority_queue_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/priority_queue_test.c -o $(OUT_LOCAL)/priority_queue_test.o
+
+priority_queue_testd.o: $(TEST_SUITE_PATH)/priority_queue_testd.c
+	$(CC) -g $(CFLAGS) $(TEST_SUITE_PATH)/priority_queue_test.c -o $(OUT_LOCAL)/priority_queue_testd.o
+
 dynamic_string_test.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_string_test.c -o $(OUT_LOCAL)/dynamic_string_test.o
 
@@ -256,6 +274,12 @@ stack_data_area_test: stack_data_area_test.o type_system.o lexstack.o lightstack
 	
 stack_data_area_testd: stack_data_area_testd.o type_systemd.o lexstackd.o lightstackd.o symtabd.o lexerd.o instructiond.o stack_data_aread.o dynamic_arrayd.o astd.o call_graphd.o cfgd.o parserd.o heap_queued.o heapstackd.o jump_tabled.o dynamic_stringd.o nesting_stackd.o
 	$(CC) -o $(OUT_LOCAL)/stack_data_area_testd $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/stack_data_area_testd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/call_graphd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o
+
+priority_queue_test: priority_queue_test.o max_priority_queue.o min_priority_queue.o
+	$(CC) -o $(OUT_LOCAL)/priority_queue_test $(OUT_LOCAL)/priority_queue_test.o $(OUT_LOCAL)/max_priority_queue.o $(OUT_LOCAL)/min_priority_queue.o
+
+priority_queue_testd: priority_queue_testd.o max_priority_queued.o min_priority_queued.o
+	$(CC) -o $(OUT_LOCAL)/priority_queue_testd $(OUT_LOCAL)/priority_queue_testd.o $(OUT_LOCAL)/max_priority_queued.o $(OUT_LOCAL)/min_priority_queued.o
 
 call_graph.o : $(CALL_GRAPH_PATH)/call_graph.c
 	$(CC) $(CFLAGS) $(CALL_GRAPH_PATH)/call_graph.c -o $(OUT_LOCAL)/call_graph.o
@@ -337,6 +361,9 @@ ptest: parser_test
 	
 ptest-debug: parser_test_debug
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/parser_test_debug -i -d -f
+
+test_priority_queues: priority_queue_test
+	$(OUT_LOCAL)/priority_queue_test
 
 front_test: front_end_test
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_LOCAL)/front_end_test -i -t -d -f
@@ -428,6 +455,12 @@ heapstack-CI.o: $(STACK_PATH)/heapstack.c
 
 heap_queue-CI.o: $(QUEUE_PATH)/heap_queue.c
 	$(CC) $(CFLAGS) $(QUEUE_PATH)/heap_queue.c -o $(OUT_CI)/heap_queue.o
+
+min_priority_queue-CI.o: $(QUEUE_PATH)/min_priority_queue.c
+	$(CC) $(CFLAGS) $(QUEUE_PATH)/min_priority_queue.c -o $(OUT_CI)/min_priority_queue.o
+
+max_priority_queue-CI.o: $(QUEUE_PATH)/max_priority_queue.c
+	$(CC) $(CFLAGS) $(QUEUE_PATH)/max_priority_queue.c -o $(OUT_CI)/max_priority_queue.o
 
 dynamic_array-CI.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
 	$(CC) $(CFLAGS) $(DYNAMIC_ARRAY_PATH)/dynamic_array.c -o $(OUT_CI)/dynamic_array.o
@@ -564,11 +597,17 @@ oc-CI: compiler-CI.o parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_syst
 stest-CI: symtab_test-CI
 	$(OUT_CI)/symtab_test
 
+priority_queue_test-CI: priority_queue_test-CI.o max_priority_queue-CI.o min_priority_queue-CI.o
+	$(CC) -o $(OUT_CI)/priority_queue_test $(OUT_CI)/priority_queue_test.o $(OUT_CI)/max_priority_queue.o $(OUT_CI)/min_priority_queue.o
+
 test_data_area-CI: stack_data_area_test-CI
 	$(OUT_CI)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
 
 ptest-CI: parser_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/parser_test -i -d -f
+
+test_priority_queues: priority_queue_test-CI
+	$(OUT_CI)/priority_queue_test
 
 front_test-CI: front_end_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/front_end_test -i -d -f
