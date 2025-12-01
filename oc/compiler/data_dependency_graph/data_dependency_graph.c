@@ -8,9 +8,6 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-//We find that basic blocks in many cases usually have less than 15 nodes
-#define DEFAULT_DATA_DEPENDENCY_GRAPH_NODE_COUNT 15
-
 /**
  * Create a data dependency graph. Parent struct
  * is stack allocated
