@@ -239,7 +239,7 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
  * 	if dist[U] == -INF:
  * 		continue //unreachable
  * 	for each edge U -> V with weight w:
- * 		if dist[U] + W < dist[V]:
+ * 		if dist[U] + W > dist[V]:
  * 			dist[V] = dist[U] + W
  *
  * 	return dist[R] //dist[R] holds the longest path to R
@@ -266,9 +266,6 @@ static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph,
 	//distance is 0
 	distances[start->index] = 0;
 
-	//Initialize our longest path
-	int32_t longest_path = 0;
-
 	//For each node U in D
 	for(u_int16_t i = 0; i < graph->node_count; i++){
 		//Grab out our node
@@ -284,16 +281,21 @@ static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph,
 		//to check the weights for each edge
 		for(u_int16_t j = 0; j < U->neighbors->current_index; j++){
 			//Extract the neighbor
-			dynamic_array_t* neighbor = dynamic_array_get_at(U->neighbors, j);
+			data_dependency_graph_node_t* V = dynamic_array_get_at(U->neighbors, j);
 
 			//The weight is the number of cycles that *U* takes to run
-			u_int32_t weight = U->cycles_to_complete;
+			int32_t weight = U->cycles_to_complete;
 
-
-
+			//If the distance with this weight exceeds our current distance,
+			//then this is our new distance
+			if(distances[U->index] + weight > distances[V->index]){
+				distances[V->index] = distances[U->index] + weight;
+			}
 		}
-
 	}
+
+	//The longest path is always the one at the root's area
+	int32_t longest_path = distances[root->index];
 
 	//Scrap the distances array now that we're done
 	free(distances);
@@ -427,6 +429,8 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
 		}
 
 		printf("]\n");
+		//Display the priority too
+		printf("Priority is %d\n", node->priority);
 
 		fprintf(output, "================================================\n");
 	}
