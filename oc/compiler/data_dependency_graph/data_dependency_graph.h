@@ -35,6 +35,8 @@ struct data_dependency_graph_node_t {
 	dynamic_array_t* neighbors;
 	//The cycle time that this instruction takes
 	u_int32_t cycles_to_complete;
+	//The priority of the instruction
+	int32_t priority;
 	//The number of instructions that rely on this instruction
 	u_int32_t relied_on_by_count;
 	//The number of instructions that this instruction relies on
@@ -93,11 +95,10 @@ dynamic_array_t* get_data_dependency_graph_root_nodes(data_dependency_graph_t* g
 data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
 
 /**
- * Find the priority for a given node in the dependency graph D
- *
- * The priority is found by finding the longest weighted path from the node to any root in D.
+ * Find the priority for all nodes in the dependency graph D. This is done
+ * internally using the longest path between a given node and a root
  */
-u_int32_t compute_longest_weighted_path_heuristic(data_dependency_graph_t* graph, data_dependency_graph_node_t* start, dynamic_array_t* roots);
+void compute_priorities_for_all_nodes(data_dependency_graph_t* graph);
 
 /**
  * Add a dependence between the two instructions

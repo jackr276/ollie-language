@@ -238,8 +238,12 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 		}
 	}
 
-	//Once we've built it, we need to perform our topoligical sort in preparation for the next steps
-	inplace_topological_sort(graph);
+	/**
+	 * Once we've created our graph, we need to compute the priorities for each node in the grpah.
+	 * To do this, we will use the longest path between the given node and a root(we compute the options
+	 * for all roots) using the helper method
+	 */
+	compute_priorities_for_all_nodes(graph);
 }
 
 
