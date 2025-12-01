@@ -56,6 +56,45 @@ void add_data_dependency_node_for_instruction(data_dependency_graph_t* graph, in
 
 
 /**
+ * Get the leaves of the data DAG. The leaves are simply instructions that have no dependencies
+ */
+dynamic_array_t* get_data_dependency_graph_leaf_nodes(data_dependency_graph_t* graph){
+	//Create the dynamic array first
+	dynamic_array_t* leaves = dynamic_array_alloc();
+
+	//Done via a simple linear scan
+	for(u_int32_t i = 0; i < graph->current_index; i++){
+		//We want nothing that we rely on here
+		if(graph->nodes[i]->relies_on_count == 0){
+			dynamic_array_add(leaves, graph->nodes[i]);
+		}
+	}
+
+	return leaves;
+}
+
+
+/**
+ * Get the roots of the data DAG. The roots are simply instructions that have nothing
+ * else depends on. There will often be more than one root
+ */
+dynamic_array_t* get_data_dependency_graph_root_nodes(data_dependency_graph_t* graph){
+	//Create the dynamic array first
+	dynamic_array_t* roots = dynamic_array_alloc();
+
+	//Done via a simple linear scan
+	for(u_int32_t i = 0; i < graph->current_index; i++){
+		//For a root, we want to be relied on by nothing
+		if(graph->nodes[i]->relied_on_by_count == 0){
+			dynamic_array_add(roots, graph->nodes[i]);
+		}
+	}
+
+	return roots;
+}
+
+
+/**
  * Find the dependency graph node for a given instruction
  *
  * To do this, we can perform a simple linear lookup and compare the memory addresses

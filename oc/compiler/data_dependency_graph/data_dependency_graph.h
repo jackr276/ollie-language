@@ -68,6 +68,17 @@ data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes);
 void add_data_dependency_node_for_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
 
 /**
+ * Get the leaves of the data DAG. The leaves are simply instructions that have no dependencies
+ */
+dynamic_array_t* get_data_dependency_graph_leaf_nodes(data_dependency_graph_t* graph);
+
+/**
+ * Get the roots of the data DAG. The roots are simply instructions that have nothing
+ * else depends on. There will often be more than one root
+ */
+dynamic_array_t* get_data_dependency_graph_root_nodes(data_dependency_graph_t* graph);
+
+/**
  * Find the node for a given instruction. This function returns NULL if no node is found
  */
 data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dependency_graph_t* graph, instruction_t* instruction);

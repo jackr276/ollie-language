@@ -237,15 +237,6 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				break;
 		}
 	}
-
-	/**
-	 * Once we've done all of that, we can now go back and compute all of the
-	 * roots in the graph. The roots are simply instructions that have no successors
-	 */
-	for(int32_t i = block->number_of_instructions - 1; i >= 1; i--){
-		//Extract it
-		instruction_t* current = instructions[i];
-	}
 }
 
 
