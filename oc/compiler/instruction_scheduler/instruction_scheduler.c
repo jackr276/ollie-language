@@ -237,6 +237,9 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				break;
 		}
 	}
+
+	//Once we've built it, we need to perform our topoligical sort in preparation for the next steps
+	inplace_topological_sort(graph);
 }
 
 

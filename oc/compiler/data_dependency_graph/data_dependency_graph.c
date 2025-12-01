@@ -34,7 +34,7 @@ data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes){
 /**
  * Reset the visited status for the graph
  */
-static void reset_visited_status(data_dependency_graph_t* graph){
+static void reset_dependency_graph_visited_status(data_dependency_graph_t* graph){
 	//Run through them all
 	for(u_int32_t i = 0; i < graph->node_count; i++){
 		//Clear it out
@@ -83,17 +83,47 @@ static void topological_sort_visit_node(data_dependency_graph_node_t* node, data
  * Perform an inplace topological sort on the graph. This is a necessary
  * step before we attempt to find any priorities. This sort happens *inplace*,
  * meaning that it will modify the internal array of the graph
+ *
+ * Basic algorithm:
+ * 	for each node in the node list n
+ * 		if node was visited:
+ * 			continue
+ * 		else:
+ * 			visit(n)
  */
 void inplace_topological_sort(data_dependency_graph_t* graph){
 	//Let's first create a new memory area that we can use to store
 	//the topologically sorted version
 	//NOTE: for efficiency sake, this list will actually be in reverse order(head is at the last index). We
 	//will reverse it at the end
-	data_dependency_graph_node_t** sorted = calloc(graph->node_count, sizeof(data_dependency_graph_node_t*));
+	data_dependency_graph_node_t** sorted_in_reverse = calloc(graph->node_count, sizeof(data_dependency_graph_node_t*));
 	//We need to track this too
 	u_int32_t sorted_current_index = 0;
 
+	//Let's first wipe the visited status just in case something else ran before us
+	reset_dependency_graph_visited_status(graph);
 
+	//Run through all of the nodes
+	for(u_int16_t i = 0; i < graph->node_count; i++){
+		//It's already visited, so skip it
+		if(graph->nodes[i]->visited == TRUE){
+			continue;
+		}
+
+		//Otherwise, we visit the node
+		topological_sort_visit_node(graph->nodes[i], sorted_in_reverse, &sorted_current_index);
+	}
+
+	//Once we've done that, we'll actually reverse the list in sorted by going from back-to-front
+	//and replacing the graph's list
+	for(int16_t i = sorted_current_index - 1; i >= 0; i--){
+		//Loading in backwards here, so the graph nodes
+		//will be at their node count minus i
+		graph->nodes[graph->node_count - i - 1] = sorted_in_reverse[i];
+	}
+
+	//Once we're here, we can scrap the reverse sorted list
+	free(sorted_in_reverse);
 }
 
 
