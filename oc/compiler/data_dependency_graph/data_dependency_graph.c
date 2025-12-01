@@ -5,6 +5,7 @@
 */
 
 #include "data_dependency_graph.h"
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -118,9 +119,18 @@ void inplace_topological_sort(data_dependency_graph_t* graph){
 	//Once we've done that, we'll actually reverse the list in sorted by going from back-to-front
 	//and replacing the graph's list
 	for(int16_t i = sorted_current_index - 1; i >= 0; i--){
+		//Grab the node out
+		data_dependency_graph_node_t* node = sorted_in_reverse[i];
+
+		//Grab the in-order index
+		u_int16_t index = graph->node_count - i - 1;
+
+		//Store the index for later on
+		node->index = index;
+
 		//Loading in backwards here, so the graph nodes
 		//will be at their node count minus i
-		graph->nodes[graph->node_count - i - 1] = sorted_in_reverse[i];
+		graph->nodes[index] = node;
 	}
 
 	//Once we're here, we can scrap the reverse sorted list
@@ -215,9 +225,55 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 /**
  * Compute the longest path on a topologically sorted graph between the node and the root
  *
+ * Pseudocde(Source S, Root R, DAG D(in topological order))
+ *
+ * if root has no depencies:
+ * 	return 0
+ *
+ * for each vertex V in D:
+ * 	dist[V] = -INF
+ *
+ * dist[S] = 0
+ *
+ * for each node U in D
+ * 	if dist[U] == -INF:
+ * 		continue //unreachable
+ * 	for each edge U -> V with weight w:
+ * 		if dist[U] + W < dist[V]:
+ * 			dist[V] = dist[U] + W
+ *
+ * 	return dist[R] //dist[R] holds the longest path to R
+ *
  */
-static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, data_dependency_graph_node_t* root){
-	return 0;
+static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph, data_dependency_graph_node_t* start, data_dependency_graph_node_t* root){
+	//If this root has no dependencies, then we can just get out
+	//instead of going through the trouble. This can potentially happen
+	//for jmps that end a block
+	if(root->relies_on_count == 0){
+		return 0;
+	}
+
+	//We will have a distances array for all of our distances. These are indexed
+	//by the graph's index itself
+	int32_t* vertices = calloc(graph->current_index, sizeof(int32_t));
+	
+	//Make them all INT_MIN except for our source
+	for(u_int16_t i = 0; i < graph->current_index; i++){
+		vertices[i] = INT_MIN;
+	}
+
+	//With the exception of our given vertex. This one we know the
+	//distance is 0
+	vertices[start->index] = 0;
+
+	//Initialize our longest path
+	int32_t longest_path = 0;
+
+
+	//Scrap the vertices array now that we're done
+	free(vertices);
+
+	return longest_path;
 }
 
 

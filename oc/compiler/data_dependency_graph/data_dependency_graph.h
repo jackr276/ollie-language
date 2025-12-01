@@ -41,6 +41,8 @@ struct data_dependency_graph_node_t {
 	u_int32_t relied_on_by_count;
 	//The number of instructions that this instruction relies on
 	u_int32_t relies_on_count;
+	//What is the index of this node in the list
+	u_int16_t index;
 	//Has this been visited or not(for our traversals)
 	u_int8_t visited;
 };
