@@ -9,13 +9,6 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-//These are our mark types in the topological sort
-typedef enum {
-	MARK_TYPE_NONE = 0,
-	MARK_TYPE_TEMP,
-	MARK_TYPE_PERMANENT
-} topological_sort_mark_t;
-
 /**
  * Create a data dependency graph. Parent struct
  * is stack allocated
@@ -45,16 +38,44 @@ static void reset_visited_status(data_dependency_graph_t* graph){
 	//Run through them all
 	for(u_int32_t i = 0; i < graph->node_count; i++){
 		//Clear it out
-		graph->nodes[i]->visited = MARK_TYPE_NONE;
+		graph->nodes[i]->visited = FALSE;
 	}
 }
 
 
 /**
  * Helper method that visits a node in the topological sort
+ *
+ * Algorithm:
+ * 	if node is visited then
+ * 		return
+ *
+ * 	for each dependency of node "m" do:
+ * 		visit(m)
+ *
+ * 	mark node as visited
+ * 	add node to *head* of list
  */
 static void topological_sort_visit_node(data_dependency_graph_node_t* node, data_dependency_graph_node_t** sorted, u_int32_t* sorted_index){
+	//Base case, we're visited already
+	if(node->visited == TRUE){
+		return;
+	}
 
+	//Run through all of the dependencies
+	for(u_int16_t i = 0; i < node->neighbors->current_index; i++){
+		//Recursive visit call
+		topological_sort_visit_node(dynamic_array_get_at(node->neighbors, i), sorted, sorted_index);
+	}
+
+	//Now that we're here, the node is truly visited
+	node->visited = TRUE;
+
+	//Insert at the head
+	sorted[*sorted_index] = node;
+	
+	//Push it up
+	(*sorted_index)++;
 }
 
 
