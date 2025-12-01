@@ -39,6 +39,8 @@ struct data_dependency_graph_node_t {
 	u_int32_t relied_on_by_count;
 	//The number of instructions that this instruction relies on
 	u_int32_t relies_on_count;
+	//Has this been visited or not(for our traversals)
+	u_int8_t visited;
 };
 
 /**
@@ -82,6 +84,13 @@ dynamic_array_t* get_data_dependency_graph_root_nodes(data_dependency_graph_t* g
  * Find the node for a given instruction. This function returns NULL if no node is found
  */
 data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
+
+/**
+ * Find the priority for a given node in the dependency graph D
+ *
+ * The priority is found by finding the longest weighted path from the node to any root in D.
+ */
+u_int32_t compute_longest_weighted_path_heuristic(data_dependency_graph_t* graph, data_dependency_graph_node_t* start, dynamic_array_t* roots);
 
 /**
  * Add a dependence between the two instructions

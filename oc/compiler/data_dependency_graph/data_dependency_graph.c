@@ -115,6 +115,23 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 }
 
 
+
+
+/**
+ * Find the priority for a given node in the dependency graph D
+ *
+ * The priority is found by finding the longest weighted path from the node to any root in D.
+ */
+u_int32_t compute_longest_weighted_path_heuristic(data_dependency_graph_t* graph, data_dependency_graph_node_t* start, dynamic_array_t* roots){
+	//Initialize this to have the longest path be at 0
+	u_int32_t longest_path = 0;
+
+
+	//Give back whatever our longest path was
+	return longest_path;
+}
+
+
 /**
  * Add a dependence between the dependent and the dependency
  *
