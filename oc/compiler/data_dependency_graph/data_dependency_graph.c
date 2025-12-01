@@ -255,24 +255,50 @@ static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph,
 
 	//We will have a distances array for all of our distances. These are indexed
 	//by the graph's index itself
-	int32_t* vertices = calloc(graph->current_index, sizeof(int32_t));
+	int32_t* distances = calloc(graph->current_index, sizeof(int32_t));
 	
 	//Make them all INT_MIN except for our source
 	for(u_int16_t i = 0; i < graph->current_index; i++){
-		vertices[i] = INT_MIN;
+		distances[i] = INT_MIN;
 	}
 
 	//With the exception of our given vertex. This one we know the
 	//distance is 0
-	vertices[start->index] = 0;
+	distances[start->index] = 0;
 
 	//Initialize our longest path
 	int32_t longest_path = 0;
 
+	//For each node U in D
+	for(u_int16_t i = 0; i < graph->node_count; i++){
+		//Grab out our node
+		data_dependency_graph_node_t* U = graph->nodes[i];
 
-	//Scrap the vertices array now that we're done
-	free(vertices);
+		//If the distance is infinite, it's unreachable from
+		//our source so we don't care
+		if(distances[U->index] == INT_MIN){
+			continue;
+		}
 
+		//Otherwise, it is reachable from our source, so we need
+		//to check the weights for each edge
+		for(u_int16_t j = 0; j < U->neighbors->current_index; j++){
+			//Extract the neighbor
+			dynamic_array_t* neighbor = dynamic_array_get_at(U->neighbors, j);
+
+			//The weight is the number of cycles that *U* takes to run
+			u_int32_t weight = U->cycles_to_complete;
+
+
+
+		}
+
+	}
+
+	//Scrap the distances array now that we're done
+	free(distances);
+
+	//Whatever our longest one is
 	return longest_path;
 }
 
