@@ -38,7 +38,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 		instruction_t* current = instructions[i];
 		
 		//If we don't even deal with the destination why bother
-		if(is_destination_assigned(current) == FALSE){
+		if(is_move_instruction_destination_assigned(current) == FALSE){
 			continue;
 		}
 
@@ -55,7 +55,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 			case TESTW:
 			case TESTQ:
 				//The cmp instructions store their symbolic assignees in the assignee slot
-				if(variables_equal(current->assignee, variable, FALSE) == TRUE){
+				if(variables_equal(current->assignee, variable, TRUE) == TRUE){
 					//Add it in
 					add_dependence(graph, given, current);
 					return;
@@ -70,7 +70,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 				destination2 = current->destination_register2;
 
 				//If they're equal then we're good
-				if(variables_equal(destination, variable, FALSE) == TRUE){
+				if(variables_equal(destination, variable, TRUE) == TRUE){
 					//Given depends on current
 					add_dependence(graph, given, current);
 
@@ -79,7 +79,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 				}
 
 				//We're also done here
-				if(variables_equal(destination2, variable, FALSE) == TRUE){
+				if(variables_equal(destination2, variable, TRUE) == TRUE){
 					//Given depends on current
 					add_dependence(graph, given, current);
 
@@ -205,7 +205,9 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				//	are doing the assignment
 				
 				//For each variable in the instruction, we need to perform the search
-				if(is_destination_also_operand(current) == TRUE){
+				if(is_destination_also_operand(current) == TRUE
+					//If the move instruction's destination is not assigned, then it is being used
+					|| is_move_instruction_destination_assigned(current) == FALSE){
 					//Start searching here, beginngin at the last instruction
 					update_dependence_for_variable(graph, current, instructions, current->destination_register, i - 1);
 				}

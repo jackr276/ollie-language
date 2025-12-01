@@ -309,7 +309,7 @@ u_int8_t is_destination_also_operand(instruction_t* instruction);
 /**
  * Is the destination actually assigned?
  */
-u_int8_t is_destination_assigned(instruction_t* instruction);
+u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction);
 
 /**
  * Is this operation a pure copy? In other words, is it a move instruction

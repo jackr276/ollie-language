@@ -385,7 +385,7 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 /**
  * Is the destination actually assigned?
  */
-u_int8_t is_destination_assigned(instruction_t* instruction){
+u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction){
 	switch(instruction->instruction_type){
 		case MOVQ:
 		case MOVL:
