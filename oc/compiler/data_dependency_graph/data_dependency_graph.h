@@ -64,6 +64,13 @@ struct data_dependency_graph_t {
 data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes);
 
 /**
+ * Perform an inplace topological sort on the graph. This is a necessary
+ * step before we attempt to find any priorities. This sort happens *inplace*,
+ * meaning that it will modify the internal array of the graph
+ */
+void inplace_topological_sort(data_dependency_graph_t* graph);
+
+/**
  * Add a node for a given instruction. Once this function executes, there will be a dependency
  * node for the given instruction
  */

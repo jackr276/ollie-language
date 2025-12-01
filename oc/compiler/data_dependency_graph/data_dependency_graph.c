@@ -9,6 +9,13 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+//These are our mark types in the topological sort
+typedef enum {
+	MARK_TYPE_NONE = 0,
+	MARK_TYPE_TEMP,
+	MARK_TYPE_PERMANENT
+} topological_sort_mark_t;
+
 /**
  * Create a data dependency graph. Parent struct
  * is stack allocated
@@ -28,6 +35,44 @@ data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes){
 
 	//And give it back
 	return graph;
+}
+
+
+/**
+ * Reset the visited status for the graph
+ */
+static void reset_visited_status(data_dependency_graph_t* graph){
+	//Run through them all
+	for(u_int32_t i = 0; i < graph->node_count; i++){
+		//Clear it out
+		graph->nodes[i]->visited = MARK_TYPE_NONE;
+	}
+}
+
+
+/**
+ * Helper method that visits a node in the topological sort
+ */
+static void topological_sort_visit_node(data_dependency_graph_node_t* node, data_dependency_graph_node_t** sorted, u_int32_t* sorted_index){
+
+}
+
+
+/**
+ * Perform an inplace topological sort on the graph. This is a necessary
+ * step before we attempt to find any priorities. This sort happens *inplace*,
+ * meaning that it will modify the internal array of the graph
+ */
+void inplace_topological_sort(data_dependency_graph_t* graph){
+	//Let's first create a new memory area that we can use to store
+	//the topologically sorted version
+	//NOTE: for efficiency sake, this list will actually be in reverse order(head is at the last index). We
+	//will reverse it at the end
+	data_dependency_graph_node_t** sorted = calloc(graph->node_count, sizeof(data_dependency_graph_node_t*));
+	//We need to track this too
+	u_int32_t sorted_current_index = 0;
+
+
 }
 
 
