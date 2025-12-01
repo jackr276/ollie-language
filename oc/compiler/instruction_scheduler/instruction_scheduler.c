@@ -57,7 +57,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 				//The cmp instructions store their symbolic assignees in the assignee slot
 				if(variables_equal(current->assignee, variable, FALSE) == TRUE){
 					//Add it in
-					add_dependence(graph, current, given);
+					add_dependence(graph, given, current);
 					return;
 				}
 
@@ -72,7 +72,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 				//If they're equal then we're good
 				if(variables_equal(destination, variable, FALSE) == TRUE){
 					//Given depends on current
-					add_dependence(graph, current, given);
+					add_dependence(graph, given, current);
 
 					//We're done
 					return;
@@ -81,7 +81,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 				//We're also done here
 				if(variables_equal(destination2, variable, FALSE) == TRUE){
 					//Given depends on current
-					add_dependence(graph, current, given);
+					add_dependence(graph, given, current);
 
 					//We're done
 					return;

@@ -93,8 +93,15 @@ void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instr
 		exit(1);
 	}
 
+	//The target now depends on one more thing
+	target_node->relies_on_count++;
 
-	//TODO
+	//The dependency node now has one more thing relying on it
+	depends_on_node->relied_on_by_count++;
+
+	//Now we link them together in the list. This will be added to the "depends_on" node's list because the list
+	//is a "from->to" type list. We have a dependency connection from the depends_on node to the target
+	dynamic_array_add(depends_on_node->neighbors, target_node);
 }
 
 
@@ -113,13 +120,13 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
 		fprintf(output, "Instruction: ");
 		print_instruction(stdout, node->instruction, PRINTING_VAR_IN_INSTRUCTION);
 		//Now show what it depends on
-		fprintf(output, "Depends on: [\n");
+		fprintf(output, "Depended on by: [\n");
 
 		//Run through all of what we depend on
 		for(u_int16_t j = 0; j < node->neighbors->current_index; j++){
-			//Print out the predecessor
-			data_dependency_graph_node_t* predecessor = dynamic_array_get_at(node->neighbors, j);
-			print_instruction(stdout, predecessor->instruction, PRINTING_VAR_IN_INSTRUCTION);
+			//Print out the successor 
+			data_dependency_graph_node_t* successor = dynamic_array_get_at(node->neighbors, j);
+			print_instruction(stdout, successor->instruction, PRINTING_VAR_IN_INSTRUCTION);
 		}
 
 		printf("]\n");
