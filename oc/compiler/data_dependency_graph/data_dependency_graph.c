@@ -5,6 +5,7 @@
 */
 
 #include "data_dependency_graph.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -211,17 +212,57 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 }
 
 
+/**
+ * Compute the longest path on a topologically sorted graph between the node and the root
+ *
+ */
+static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, data_dependency_graph_node_t* root){
+	return 0;
+}
+
 
 
 /**
  * Find the priority for a given node in the dependency graph D
  *
  * The priority is found by finding the longest weighted path from the node to any root in D.
+ *
+ * Pseudocode:
+ * 	longest_path = 0
+ *
+ * 	for every root in graph D
+ * 		candidate = compute_longest_path(node, root_node)
+ *
+ * 		if candidate > longest_path:
+ * 			longest_path = candidate
+ * 		
+ * By the end, we will have found the longest path
  */
-static u_int32_t compute_longest_weighted_path_heuristic_for_node(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* roots){
-	//Initialize this to have the longest path be at 0
-	u_int32_t longest_path = 0;
+static int32_t compute_longest_weighted_path_heuristic_for_node(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* roots){
+	//If this node is already a root, we can just return 0, there is no path to speak of
+	if(node->relied_on_by_count == 0){
+		return 0;
+	}
 
+	//Initialize this to have the longest path be at 0
+	int32_t longest_path = 0;
+	//Potential longest path
+	int32_t candidate;
+
+	//Run through every single node
+	for(u_int16_t i = 0; i < roots->current_index; i++){
+		//Extract the root node
+		data_dependency_graph_node_t* root_node = dynamic_array_get_at(roots, i);
+
+		//Let the helper compute it
+		candidate = compute_longest_path_to_root_node(graph, node, root_node);
+
+		//Did we beat the current longest path? If so then
+		//we are the longest path
+		if(candidate > longest_path){
+			longest_path = candidate;
+		}
+	}
 
 	//Give back whatever our longest path was
 	return longest_path;
