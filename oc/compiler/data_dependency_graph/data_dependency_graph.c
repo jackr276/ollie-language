@@ -245,17 +245,13 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
  * 	return dist[R] //dist[R] holds the longest path to R
  *
  */
-static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph, data_dependency_graph_node_t* start, data_dependency_graph_node_t* root){
+static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph, data_dependency_graph_node_t* start, data_dependency_graph_node_t* root, int32_t* distances){
 	//If this root has no dependencies, then we can just get out
 	//instead of going through the trouble. This can potentially happen
 	//for jmps that end a block
 	if(root->relies_on_count == 0){
 		return 0;
 	}
-
-	//We will have a distances array for all of our distances. These are indexed
-	//by the graph's index itself
-	int32_t* distances = calloc(graph->current_index, sizeof(int32_t));
 	
 	//Make them all INT_MIN except for our source
 	for(u_int16_t i = 0; i < graph->current_index; i++){
@@ -297,13 +293,9 @@ static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph,
 	//The longest path is always the one at the root's area
 	int32_t longest_path = distances[root->index];
 
-	//Scrap the distances array now that we're done
-	free(distances);
-
 	//Whatever our longest one is
 	return longest_path;
 }
-
 
 
 /**
@@ -322,7 +314,7 @@ static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph,
  * 		
  * By the end, we will have found the longest path
  */
-static int32_t compute_longest_weighted_path_heuristic_for_node(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* roots){
+static int32_t compute_longest_weighted_path_heuristic_for_node(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* roots, int32_t* distances){
 	//If this node is already a root, we can just return 0, there is no path to speak of
 	if(node->relied_on_by_count == 0){
 		return 0;
@@ -339,7 +331,7 @@ static int32_t compute_longest_weighted_path_heuristic_for_node(data_dependency_
 		data_dependency_graph_node_t* root_node = dynamic_array_get_at(roots, i);
 
 		//Let the helper compute it
-		candidate = compute_longest_path_to_root_node(graph, node, root_node);
+		candidate = compute_longest_path_to_root_node(graph, node, root_node, distances);
 
 		//Did we beat the current longest path? If so then
 		//we are the longest path
@@ -350,6 +342,36 @@ static int32_t compute_longest_weighted_path_heuristic_for_node(data_dependency_
 
 	//Give back whatever our longest path was
 	return longest_path;
+}
+
+
+/**
+ * Find the priority for all nodes in the dependency graph D. This is done
+ * internally using the longest path between a given node and a root
+ *
+ * NOTE: the graph *must* be topologically sorted before we invoke this function
+ * for it to work properly
+ */
+void compute_priorities_for_all_nodes(data_dependency_graph_t* graph){
+	//Extract the graph's roots
+	dynamic_array_t* roots = get_data_dependency_graph_root_nodes(graph);
+
+	//A reusable distances[] array - this lets us avoid allocating memory every time.
+	//The distances array itself is wiped out every time the helper runs, so this
+	//won't be an issue
+	int32_t* distances = calloc(graph->node_count, sizeof(int32_t));
+
+	//Run through every single node in the graph
+	for(u_int16_t i = 0; i < graph->current_index; i++){
+		//Compute the priority for the given node
+		graph->nodes[i]->priority = compute_longest_weighted_path_heuristic_for_node(graph, graph->nodes[i], roots, distances);
+	}
+
+	//We're done with distances[] now
+	free(distances);
+
+	//We're done with the roots so scrap them
+	dynamic_array_dealloc(roots);
 }
 
 
@@ -372,29 +394,8 @@ static int32_t compute_longest_weighted_path_heuristic_for_node(data_dependency_
  * maximum number of loads in the last step
  */
 void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
+	//TODO
 
-}
-
-
-/**
- * Find the priority for all nodes in the dependency graph D. This is done
- * internally using the longest path between a given node and a root
- *
- * NOTE: the graph *must* be topologically sorted before we invoke this function
- * for it to work properly
- */
-void compute_priorities_for_all_nodes(data_dependency_graph_t* graph){
-	//Extract the graph's roots
-	dynamic_array_t* roots = get_data_dependency_graph_root_nodes(graph);
-
-	//Run through every single node in the graph
-	for(u_int16_t i = 0; i < graph->current_index; i++){
-		//Compute the priority for the given node
-		graph->nodes[i]->priority = compute_longest_weighted_path_heuristic_for_node(graph, graph->nodes[i], roots);
-	}
-
-	//We're done with the roots so scrap them
-	dynamic_array_dealloc(roots);
 }
 
 
