@@ -233,16 +233,14 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
  *
  * In our transitive closure, the *rows are from*, the *columns are to*. So for example, if
  * closure[1][2] = 1, then there is a path from 1 to 2
- *
- * We can try doing this using strongly connected components(SCC's) as well. This may actually
- * be our best bet because we need to compute these components anyway for this given algorithm
  */
 static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
 	//2d array that is N X N
-	int8_t** transitive_closure = calloc(graph->node_count * graph->node_count, sizeof(int8_t));
+	int8_t* transitive_closure = calloc(graph->node_count * graph->node_count, sizeof(int8_t));
 	
 	//Store this for the graph. It will be freed later on once the DAG is freed
 	graph->transitive_closure = transitive_closure;
+
 
 }
 
@@ -481,7 +479,7 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
 		fprintf(output, "================================================\n");
 
 		//Print the instruction
-		fprintf(output, "Instruction: ");
+		fprintf(output, "ID %d, Instruction: ", node->index);
 		print_instruction(stdout, node->instruction, PRINTING_VAR_IN_INSTRUCTION);
 		//Now show what it depends on
 		fprintf(output, "Depended on by: [\n");
@@ -498,6 +496,27 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
 		printf("Priority is %d\n", node->priority);
 
 		fprintf(output, "================================================\n");
+	}
+
+	//Print out the transitive closure if one exists
+	if(graph->transitive_closure != NULL){
+		//Extract the count
+		u_int32_t num_nodes = graph->node_count;
+
+		//Run through each row
+		for(u_int32_t i = 0; i < num_nodes; i++){
+			//Print out the row number
+			fprintf(output, "%d: ", i);
+
+			//Now print out the columns
+			for(u_int32_t j = 0; j < num_nodes; j++){
+				//Will be 1(connected) or 0
+				fprintf(output, "%d ", graph->transitive_closure[i * num_nodes + j]);
+			}
+
+			//Final newline
+			fprintf(output, "\n");
+		}
 	}
 }
 
