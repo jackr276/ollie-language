@@ -315,7 +315,12 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 		//Add it into the graph
 		add_data_dependency_node_for_instruction(&dependency_graph, instruction_cursor);
 
-		if(is_load_operation(instruction_cursor))
+		//If we have a load, flag it for later. This is an optimization for us,
+		//if we don't have any loads, we aren't going to bother with the special
+		//load cycle estimator
+		if(is_load_instruction(instruction_cursor) == TRUE){
+			contains_load = TRUE;
+		}
 
 		//Now we advance
 		instruction_cursor = instruction_cursor->next_statement;
