@@ -165,9 +165,6 @@ void add_data_dependency_node_for_instruction(data_dependency_graph_t* graph, in
 	//This node's index is the graph's current index
 	node->index = graph->current_index;
 
-	//Store that this node is reachable from itself
-	graph->adjacency_matrix[node->index * graph->node_count + node->index] = 1;
-
 	//Add it into the list
 	graph->nodes[graph->current_index] = node;
 
@@ -474,6 +471,12 @@ void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instr
 		exit(1);
 	}
 
+	//This is possible, if we have something like testl t6, t6, t6 may try to get in there
+	//twice
+	if(dynamic_array_contains(depends_on_node->neighbors, target_node) != NOT_FOUND){
+		return;
+	}
+
 	//The target now depends on one more thing
 	target_node->relies_on_count++;
 
@@ -497,7 +500,7 @@ void print_adjacency_matrix(FILE* output, u_int8_t* matrix, u_int32_t num_nodes)
 	//Run through each row
 	for(u_int32_t i = 0; i < num_nodes; i++){
 		//Print out the row number
-		fprintf(output, "[%d]: ", i);
+		fprintf(output, "[%2d]: ", i);
 
 		//Now print out the columns
 		for(u_int32_t j = 0; j < num_nodes; j++){
