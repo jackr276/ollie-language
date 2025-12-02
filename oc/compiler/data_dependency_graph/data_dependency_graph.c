@@ -25,6 +25,9 @@ data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes){
 	//Initially we have the default amount
 	graph.node_count = num_nodes;
 
+	//Initialize the adjacency matrix too
+	graph.adjacency_matrix = calloc(num_nodes * num_nodes, sizeof(u_int8_t));
+
 	//We may or may not ever end up computing this - it's
 	//only used when we need to do the special load delay
 	//calculations
@@ -233,10 +236,20 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
  *
  * In our transitive closure, the *rows are from*, the *columns are to*. So for example, if
  * closure[1][2] = 1, then there is a path from 1 to 2
+ *
+ * Pseudocode:
+ * 	Given a DAG D in topologically sorted order
+ *
+ * 	For each node U in D iterated *backwards*:
+ * 		add U to it's own transitive closure(set N x N to 1)
+ * 		For each edge V -> U:
+ *
+ * 		TODO
+ * 			
  */
 static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
 	//2d array that is N X N
-	int8_t* transitive_closure = calloc(graph->node_count * graph->node_count, sizeof(int8_t));
+	u_int8_t* transitive_closure = calloc(graph->node_count * graph->node_count, sizeof(u_int8_t));
 	
 	//Store this for the graph. It will be freed later on once the DAG is freed
 	graph->transitive_closure = transitive_closure;
@@ -468,6 +481,27 @@ void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instr
 
 
 /**
+ * A utility that will print an N x N adjacency matrix out to the console for debug reasons
+ */
+void print_adjacency_matrix(FILE* output, u_int8_t* matrix, u_int32_t num_nodes){
+	//Run through each row
+	for(u_int32_t i = 0; i < num_nodes; i++){
+		//Print out the row number
+		fprintf(output, "%d: ", i);
+
+		//Now print out the columns
+		for(u_int32_t j = 0; j < num_nodes; j++){
+			//Will be 1(connected) or 0
+			fprintf(output, "%d ", matrix[i * num_nodes + j]);
+		}
+
+		//Final newline
+		fprintf(output, "\n");
+	}
+}
+
+
+/**
  * Print out the entirety of the data dependence graph
  */
 void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
@@ -498,25 +532,15 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
 		fprintf(output, "================================================\n");
 	}
 
+	fprintf(output, "================== Adjacency Matrix ===================\n");
+	print_adjacency_matrix(output, graph->adjacency_matrix, graph->node_count);
+	fprintf(output, "================== Adjacency Matrix ===================\n");
+
 	//Print out the transitive closure if one exists
 	if(graph->transitive_closure != NULL){
-		//Extract the count
-		u_int32_t num_nodes = graph->node_count;
-
-		//Run through each row
-		for(u_int32_t i = 0; i < num_nodes; i++){
-			//Print out the row number
-			fprintf(output, "%d: ", i);
-
-			//Now print out the columns
-			for(u_int32_t j = 0; j < num_nodes; j++){
-				//Will be 1(connected) or 0
-				fprintf(output, "%d ", graph->transitive_closure[i * num_nodes + j]);
-			}
-
-			//Final newline
-			fprintf(output, "\n");
-		}
+		fprintf(output, "================== Transitive Closure ===================\n");
+		print_adjacency_matrix(output, graph->transitive_closure, graph->node_count);
+		fprintf(output, "================== Transitive Closure ===================\n");
 	}
 }
 
@@ -540,6 +564,9 @@ void dependency_graph_dealloc(data_dependency_graph_t* graph){
 
 	//Now free the overall array of nodes
 	free(graph->nodes);
+
+	//Free the adjacency matrix
+	free(graph->adjacency_matrix);
 
 	//Free the transitive closure too
 	if(graph->transitive_closure != NULL){
