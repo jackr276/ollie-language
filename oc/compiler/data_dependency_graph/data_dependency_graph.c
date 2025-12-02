@@ -162,6 +162,12 @@ void add_data_dependency_node_for_instruction(data_dependency_graph_t* graph, in
 	//Populate the cycle count
 	node->cycles_to_complete = get_estimated_cycle_count(instruction);
 
+	//This node's index is the graph's current index
+	node->index = graph->current_index;
+
+	//Store that this node is reachable from itself
+	graph->adjacency_matrix[node->index * graph->node_count + node->index] = 1;
+
 	//Add it into the list
 	graph->nodes[graph->current_index] = node;
 
@@ -477,6 +483,10 @@ void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instr
 	//Now we link them together in the list. This will be added to the "depends_on" node's list because the list
 	//is a "from->to" type list. We have a dependency connection from the depends_on node to the target
 	dynamic_array_add(depends_on_node->neighbors, target_node);
+
+	//Add it into the adjacency matrix. Recall, the pattern is row = from, column = to
+	//This way we have: matrix[dependency_row][target_column] = 1
+	graph->adjacency_matrix[depends_on_node->index * graph->node_count + target_node->index] = 1;
 }
 
 
@@ -487,7 +497,7 @@ void print_adjacency_matrix(FILE* output, u_int8_t* matrix, u_int32_t num_nodes)
 	//Run through each row
 	for(u_int32_t i = 0; i < num_nodes; i++){
 		//Print out the row number
-		fprintf(output, "%d: ", i);
+		fprintf(output, "[%d]: ", i);
 
 		//Now print out the columns
 		for(u_int32_t j = 0; j < num_nodes; j++){
