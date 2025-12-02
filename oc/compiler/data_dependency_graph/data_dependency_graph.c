@@ -223,6 +223,43 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 
 
 /**
+ * Run through the topologically sorted graph and get a list of all nodes that are independent of the given node. Conceptually,
+ * this means that we want all nodes that are "unreachable" from the given node. We will do this as follows:
+ *
+ * if node has no successors:
+ * 	return NULL
+ */
+static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, int32_t* reachable){
+
+	return NULL;
+}
+
+
+/**
+ * Compute the cycle counts for load operations using a special algorithm. This will
+ * help us in getting more accurate delay counts that somewhat account for the
+ * possibility of cache misses. This should only be run on graphs that definitely
+ * have load instructions in them, otherwise we are wasting our time on this
+ *
+ * Pseudocode:
+ * 	for each operation i in D:
+ * 		let Di be the nodes in D *independent* of i
+ * 		for each connected component C of Di:
+ * 			find the maximal number of loads N on any path through C
+ * 			for each load operation l in D
+ * 				cycles(l) = cycles(l) + cycles(i) / N
+ *
+ * This algorithm works because all of the independent operations will share
+ * in the slack time of delayed loads. Every load is added a fractional part of the 
+ * maximum number of loads in the last step
+ */
+void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
+	//TODO
+
+}
+
+
+/**
  * Compute the longest path on a topologically sorted graph between the node and the root
  *
  * Pseudocde(Source S, Root R, DAG D(in topological order))
@@ -372,30 +409,6 @@ void compute_priorities_for_all_nodes(data_dependency_graph_t* graph){
 
 	//We're done with the roots so scrap them
 	dynamic_array_dealloc(roots);
-}
-
-
-/**
- * Compute the cycle counts for load operations using a special algorithm. This will
- * help us in getting more accurate delay counts that somewhat account for the
- * possibility of cache misses. This should only be run on graphs that definitely
- * have load instructions in them, otherwise we are wasting our time on this
- *
- * Pseudocode:
- * 	for each operation i in D:
- * 		let Di be the nodes in D *independent* of i
- * 		for each connected component C of Di:
- * 			find the maximal number of loads N on any path through C
- * 			for each load operation l in D
- * 				cycles(l) = cycles(l) + cycles(i) / N
- *
- * This algorithm works because all of the independent operations will share
- * in the slack time of delayed loads. Every load is added a fractional part of the 
- * maximum number of loads in the last step
- */
-void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
-	//TODO
-
 }
 
 
