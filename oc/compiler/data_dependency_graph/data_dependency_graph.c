@@ -25,6 +25,11 @@ data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes){
 	//Initially we have the default amount
 	graph.node_count = num_nodes;
 
+	//We may or may not ever end up computing this - it's
+	//only used when we need to do the special load delay
+	//calculations
+	graph.transitive_closure = NULL;
+
 	//And the index
 	graph.current_index = 0;
 
@@ -518,5 +523,7 @@ void dependency_graph_dealloc(data_dependency_graph_t* graph){
 	free(graph->nodes);
 
 	//Free the transitive closure too
-	free(graph->transitive_closure);
+	if(graph->transitive_closure != NULL){
+		free(graph->transitive_closure);
+	}
 }
