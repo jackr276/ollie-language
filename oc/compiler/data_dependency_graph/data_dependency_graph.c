@@ -223,13 +223,40 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 
 
 /**
- * Run through the topologically sorted graph and get a list of all nodes that are independent of the given node. Conceptually,
- * this means that we want all nodes that are "unreachable" from the given node. We will do this as follows:
- *
- * if node has no successors:
- * 	return NULL
+ * Compute the transitive closure of a DAG that is already topologically sorted. The DAG luckily for
+ * us is acyclic, so we don't need to worry about any cycles.
  */
-static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, int32_t* reachable){
+static int8_t** compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
+	//2d array that is N X N
+	int8_t** transitive_closure = calloc(graph->node_count * graph->node_count, sizeof(int8_t));
+
+
+	//Give it back
+	return transitive_closure;
+}
+
+
+/**
+ * Run through the topologically sorted graph and get a list of all nodes that are independent of the given node. Conceptually,
+ * this means that we want all nodes that are "independent" from the given node. Conceptually, this means that we want all
+ * nodes that are *not* transitive successors or transitive predecessors of the given node. We can do this by finding the transitive
+ * closure over the whole graph
+ *
+ * We will do this as follows:
+ *
+ * if node has no successors and no predecessors:
+ * 	return NULL
+ *
+ *
+ */
+static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, int8_t** transitive_closure){
+	//This is probably something like a jump instruction or a function call with
+	//no params and no return value. We won't even bother going on
+	if(node->relied_on_by_count == 0 && node->relies_on_count == 0){
+		return NULL;
+	}
+
+
 
 	return NULL;
 }
