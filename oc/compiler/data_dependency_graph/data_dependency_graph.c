@@ -354,15 +354,24 @@ static int32_t compute_longest_weighted_path_heuristic_for_node(data_dependency_
 
 
 /**
+ * Compute the cycle counts for load operations using a special algorithm. This will
+ * help us in getting more accurate delay counts that somewhat account for the
+ * possibility of cache misses. This should only be run on graphs that definitely
+ * have load instructions in them, otherwise we are wasting our time on this
+ */
+void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph);
+
+
+/**
  * Find the priority for all nodes in the dependency graph D. This is done
  * internally using the longest path between a given node and a root
+ *
+ * NOTE: the graph *must* be topologically sorted before we invoke this function
+ * for it to work properly
  */
 void compute_priorities_for_all_nodes(data_dependency_graph_t* graph){
 	//Extract the graph's roots
 	dynamic_array_t* roots = get_data_dependency_graph_root_nodes(graph);
-
-	//We need to have the graph topologically sorted
-	inplace_topological_sort(graph);
 
 	//Run through every single node in the graph
 	for(u_int16_t i = 0; i < graph->current_index; i++){

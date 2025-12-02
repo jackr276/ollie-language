@@ -345,21 +345,30 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	}
 
 	/**
-	 * Step 3: we need to account for some special delay timing with load operations. We need
+	 * Step 3: for all of our work going forward, our dependency graph will need to be topologically
+	 * sorted. We will handle this now for the next 2 steps
+	 */
+	inplace_topological_sort(&dependency_graph);
+
+	/**
+	 * Step 4: we need to account for some special delay timing with load operations. We need
 	 * to do this because load operations may execute quickly if the item that it's looking for
 	 * is in cache or incredibly slowly if we have a cache miss. We have a special approximation
 	 * algorithm that will help us account for this that we need to run before moving forward
 	 */
+	if(contains_load == TRUE){
+
+	}
 
 	/**
-	 * Step 4: for each instruction, compute it's priority using the 
+	 * Step 5: for each instruction, compute it's priority using the 
 	 * length of longest weighted path for an instruction to a
 	 * root in the dependency graph
 	 */
 	compute_priorities_for_all_nodes(&dependency_graph);
 
 	/**
-	 * Step 4: use the list scheduler to reorder the entire block.
+	 * Step 6: use the list scheduler to reorder the entire block.
 	 * The algorithm is detailed in the function
 	 */
 

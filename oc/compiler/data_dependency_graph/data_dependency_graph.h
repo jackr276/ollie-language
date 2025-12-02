@@ -92,6 +92,14 @@ dynamic_array_t* get_data_dependency_graph_leaf_nodes(data_dependency_graph_t* g
 dynamic_array_t* get_data_dependency_graph_root_nodes(data_dependency_graph_t* graph);
 
 /**
+ * Compute the cycle counts for load operations using a special algorithm. This will
+ * help us in getting more accurate delay counts that somewhat account for the
+ * possibility of cache misses. This should only be run on graphs that definitely
+ * have load instructions in them, otherwise we are wasting our time on this
+ */
+void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph);
+
+/**
  * Find the node for a given instruction. This function returns NULL if no node is found
  */
 data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
