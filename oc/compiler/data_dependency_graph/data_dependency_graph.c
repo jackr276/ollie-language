@@ -225,14 +225,20 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 /**
  * Compute the transitive closure of a DAG that is already topologically sorted. The DAG luckily for
  * us is acyclic, so we don't need to worry about any cycles.
+ *
+ * In our transitive closure, the *rows are from*, the *columns are to*. So for example, if
+ * closure[1][2] = 1, then there is a path from 1 to 2
+ *
+ * We can try doing this using strongly connected components(SCC's) as well. This may actually
+ * be our best bet because we need to compute these components anyway for this given algorithm
  */
-static int8_t** compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
+static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
 	//2d array that is N X N
 	int8_t** transitive_closure = calloc(graph->node_count * graph->node_count, sizeof(int8_t));
+	
+	//Store this for the graph. It will be freed later on once the DAG is freed
+	graph->transitive_closure = transitive_closure;
 
-
-	//Give it back
-	return transitive_closure;
 }
 
 
@@ -242,21 +248,11 @@ static int8_t** compute_transitive_closure_of_graph(data_dependency_graph_t* gra
  * nodes that are *not* transitive successors or transitive predecessors of the given node. We can do this by finding the transitive
  * closure over the whole graph
  *
- * We will do this as follows:
- *
- * if node has no successors and no predecessors:
- * 	return NULL
- *
+ * To do this, we will need to have the transitive closure of the graph already created and stored in the graph struct itself
  *
  */
-static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, int8_t** transitive_closure){
-	//This is probably something like a jump instruction or a function call with
-	//no params and no return value. We won't even bother going on
-	if(node->relied_on_by_count == 0 && node->relies_on_count == 0){
-		return NULL;
-	}
-
-
+static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node){
+	//TODO
 
 	return NULL;
 }
@@ -520,4 +516,7 @@ void dependency_graph_dealloc(data_dependency_graph_t* graph){
 
 	//Now free the overall array of nodes
 	free(graph->nodes);
+
+	//Free the transitive closure too
+	free(graph->transitive_closure);
 }

@@ -55,6 +55,9 @@ struct data_dependency_graph_node_t {
 struct data_dependency_graph_t {
 	//Just an array of node pointers
 	data_dependency_graph_node_t** nodes; 
+	//We may need to compute the closure. If we do, we'll store
+	//it here
+	int8_t** transitive_closure;
 	//The maximum node count - this is actually known at allocation time
 	u_int16_t node_count;
 	//The current index
