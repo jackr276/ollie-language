@@ -357,7 +357,7 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * algorithm that will help us account for this that we need to run before moving forward
 	 */
 	if(contains_load == TRUE){
-
+		compute_cycle_counts_for_load_operations(&dependency_graph);
 	}
 
 	/**
