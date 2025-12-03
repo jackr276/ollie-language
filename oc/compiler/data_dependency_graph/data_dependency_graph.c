@@ -244,20 +244,60 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
  * 	Given a DAG D in topologically sorted order
  *
  * 	For each node U in D iterated *backwards*:
- * 		add U to it's own transitive closure(set N x N to 1)
  * 		For each edge V -> U:
- *
- * 		TODO
- * 			
+ * 			transitive_closure[u][v] = 1 #u depends on v
+ * 			For each edge W -> V: 
+ * 				transitive_closure[u][w] = 1 #u depends on w
+ *		
  */
 static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
 	//2d array that is N X N
 	u_int8_t* transitive_closure = calloc(graph->node_count * graph->node_count, sizeof(u_int8_t));
-	
-	//Store this for the graph. It will be freed later on once the DAG is freed
+
+	//Assign it over
 	graph->transitive_closure = transitive_closure;
 
+	//Extract so we have it on hand
+	u_int32_t node_count = graph->node_count;
 
+	//Run through every node backwards
+	for(int32_t i = node_count - 1; i >= 0; i--){
+		//Just so we have it on hand
+		data_dependency_graph_node_t* node = graph->nodes[i];
+
+		//Let's iterate over his entire row
+		u_int32_t row_number = node->index;
+
+		//Anode is a part of it's own transitive closure
+		transitive_closure[row_number * node_count + row_number] = 1;
+
+		//Run back through everything in this graph's row
+		for(u_int32_t j  = 0; j < graph->node_count; j++){
+			//Skip it, they aren't a match
+			if(graph->adjacency_matrix[row_number * node_count + j] == 0){
+				continue;
+			}
+
+			//U depends on w
+			transitive_closure[row_number * node_count + j] = 1;
+
+			//Extract this one's row number. Remember that this is a dependency
+			u_int32_t w_row_number = j;
+
+			//Otherwise we have a match, now we need to go through every edge to
+			//this node
+			for(u_int32_t k = 0; k < graph->node_count; k++){
+				//Now dependency here, so skip
+				if(graph->adjacency_matrix[w_row_number * node_count + k] == 0){
+					continue;
+				}
+
+				//Otherwise, let's mark that the edge k -> u exists. In other words, u now
+				//has a transitive dependency in k
+				transitive_closure[row_number * node_count + k] = 1;
+			}
+		}
+	}
 }
 
 
@@ -487,9 +527,10 @@ void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instr
 	//is a "from->to" type list. We have a dependency connection from the depends_on node to the target
 	dynamic_array_add(depends_on_node->neighbors, target_node);
 
-	//Add it into the adjacency matrix. Recall, the pattern is row = from, column = to
+	//Add it into the adjacency matrix. Recall, the pattern is row = to, column = from
+	//This way, we can quickly figure out everything that our node depends on
 	//This way we have: matrix[dependency_row][target_column] = 1
-	graph->adjacency_matrix[depends_on_node->index * graph->node_count + target_node->index] = 1;
+	graph->adjacency_matrix[target_node->index * graph->node_count + depends_on_node->index] = 1;
 }
 
 
