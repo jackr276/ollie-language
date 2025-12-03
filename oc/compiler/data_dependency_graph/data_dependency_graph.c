@@ -162,9 +162,6 @@ void add_data_dependency_node_for_instruction(data_dependency_graph_t* graph, in
 	//Populate the cycle count
 	node->cycles_to_complete = get_estimated_cycle_count(instruction);
 
-	//This node's index is the graph's current index
-	node->index = graph->current_index;
-
 	//Add it into the list
 	graph->nodes[graph->current_index] = node;
 
@@ -230,6 +227,40 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 
 	//Otherwise if we get to here, we didn't find it so we return NULL
 	return NULL;
+}
+
+
+/**
+ * Construct the adjacency matrix for a given graph
+ *
+ * NOTE: This should be done *after* the topological sort has been done
+ * to preserve the ordering
+ *
+ * We can assume that the matrix has already been made by the allocator
+ *
+ * The adjacency matrix goes node[dependent] is a row of all of the dependent's
+ * direct dependencies
+ */
+void construct_adjacency_matrix(data_dependency_graph_t* graph){
+	//Extract the node count
+	u_int32_t node_count = graph->node_count;
+
+	//Run through all the nodes
+	for(u_int32_t i = 0; i < node_count; i++){
+		//Grab the target
+		data_dependency_graph_node_t* depends_on_node = graph->nodes[i];
+
+		//Now we grab all of its dependencies
+		for(u_int16_t i = 0; i < depends_on_node->neighbors->current_index; i++){
+			//Get his dependent
+			data_dependency_graph_node_t* dependent = dynamic_array_get_at(depends_on_node->neighbors, i);
+
+			//Add it into the adjacency matrix. Recall, the pattern is row = to, column = from
+			//This way, we can quickly figure out everything that our node depends on
+			//This way we have: matrix[dependent_row][depends_on_column] = 1
+			graph->adjacency_matrix[dependent->index * node_count + depends_on_node->index] = 1;
+		}
+	}
 }
 
 
@@ -373,7 +404,7 @@ static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph,
 	}
 	
 	//Make them all INT_MIN except for our source
-	for(u_int16_t i = 0; i < graph->current_index; i++){
+	for(u_int32_t i = 0; i < graph->current_index; i++){
 		distances[i] = INT_MIN;
 	}
 
@@ -382,7 +413,7 @@ static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph,
 	distances[start->index] = 0;
 
 	//For each node U in D
-	for(u_int16_t i = 0; i < graph->node_count; i++){
+	for(u_int32_t i = 0; i < graph->node_count; i++){
 		//Grab out our node
 		data_dependency_graph_node_t* U = graph->nodes[i];
 
@@ -526,11 +557,6 @@ void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instr
 	//Now we link them together in the list. This will be added to the "depends_on" node's list because the list
 	//is a "from->to" type list. We have a dependency connection from the depends_on node to the target
 	dynamic_array_add(depends_on_node->neighbors, target_node);
-
-	//Add it into the adjacency matrix. Recall, the pattern is row = to, column = from
-	//This way, we can quickly figure out everything that our node depends on
-	//This way we have: matrix[dependency_row][target_column] = 1
-	graph->adjacency_matrix[target_node->index * graph->node_count + depends_on_node->index] = 1;
 }
 
 

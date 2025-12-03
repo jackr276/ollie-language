@@ -123,6 +123,15 @@ void compute_priorities_for_all_nodes(data_dependency_graph_t* graph);
 void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instruction_t* depends_on);
 
 /**
+ * Construct the adjacency matrix for a given graph
+ *
+ * NOTE: This should be done *after* the topological sort has been done
+ *
+ * We can assume that the matrix has already been made by the allocator
+ */
+void construct_adjacency_matrix(data_dependency_graph_t* graph);
+
+/**
  * Print out the entirety of the data dependence graph
  */
 void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph);
