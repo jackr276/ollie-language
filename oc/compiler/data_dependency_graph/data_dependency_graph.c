@@ -278,20 +278,24 @@ void construct_adjacency_matrix(data_dependency_graph_t* graph){
  *
  * 	For each node U in D iterated *backwards*:
  * 		For each edge V -> U:
- * 			transitive_closure[u][v] = 1 #u depends on v
- * 			For each edge W -> V: 
- * 				transitive_closure[u][w] = 1 #u depends on w
+ * 			if transitive_closure[u][v] == 1 #u depends on v
+ * 				For each edge W -> V: 
+ * 					if transitive_closure[v][w] == 1 #u depends on w
+ * 						transitive_closure[u][w] = 1
  *		
  */
 static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
 	//2d array that is N X N
 	u_int8_t* transitive_closure = calloc(graph->node_count * graph->node_count, sizeof(u_int8_t));
 
+	//Extract this to avoid the repeat memory access
+	u_int8_t* adjacency_matrix = graph->adjacency_matrix;
+
 	//Extract so we have it on hand
 	u_int32_t node_count = graph->node_count;
 
 	//Duplicate the memory
-	memcpy(transitive_closure, graph->adjacency_matrix, node_count * node_count * sizeof(u_int8_t));
+	memcpy(transitive_closure, adjacency_matrix, node_count * node_count * sizeof(u_int8_t));
 
 	//Assign it over
 	graph->transitive_closure = transitive_closure;
@@ -299,39 +303,33 @@ static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
 	//Run through every node backwards in reverse topological order
 	for(int32_t i = node_count - 1; i >= 0; i--){
 		//Just so we have it on hand
-		data_dependency_graph_node_t* U = graph->nodes[i];
+		data_dependency_graph_node_t* node = graph->nodes[i];
 
 		//Let's iterate over his entire row
-		u_int32_t row_number = U->index;
-
-		//Anode is a part of it's own transitive closure
-		transitive_closure[row_number * node_count + row_number] = 1;
+		u_int32_t U = node->index;
 
 		//For each vertex adjacent to U -> this would be vertices that
 		//are in U's row with the 1 flagged as true. If this is the case, then
 		//those vertices are *dependencies* of U
 		for(u_int32_t j  = 0; j < node_count; j++){
-			//Skip it, they aren't a match
-			if(graph->adjacency_matrix[row_number * node_count + j] == 0){
+			//There's no direct edge if this is the case
+			if(adjacency_matrix[U * node_count + j] == 0){
 				continue;
 			}
 
-			//U depends on w
-			transitive_closure[row_number * node_count + j] = 1;
-
 			//Extract this one's row number. Remember that this is a dependency
-			u_int32_t V_row = j;
+			u_int32_t V = j;
 
 			//For each vertex adjacent to
 			for(u_int32_t k = 0; k < node_count; k++){
-				//No transitive dependency here, so we skip
-				if(graph->transitive_closure[V_row * node_count + k] == 0){
+				//Does V depend on K? If not, we need to bail out
+				if(transitive_closure[V * node_count + k] == 0){
 					continue;
 				}
 
 				//Otherwise, let's mark that the edge k -> u exists. In other words, u now
 				//has a transitive dependency in k
-				transitive_closure[row_number * node_count + k] = 1;
+				transitive_closure[U * node_count + k] = 1;
 			}
 		}
 	}
