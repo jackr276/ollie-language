@@ -431,11 +431,22 @@ static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
  *
  * To do this, we will need to have the transitive closure of the graph already created and stored in the graph struct itself
  *
+ * Pseudocode:
+ * independent = []
+ *
+ * For each node N in the graph that is not the given:
+ * 	if TC[node][N] == 0 and TC[N][Node] == 0:
+ * 		independent = independent U {N}
+ *
+ * Essentially, we are checking to see if both nodes never cross paths
  */
-static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node){
-	//TODO
+static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* independent){
+	//Wipe the dynamic array - we are avoiding reallocation for efficiency
+	reset_dynamic_array(independent);
+	
 
-	return NULL;
+	//Give the array back
+	return independent;
 }
 
 
@@ -458,14 +469,23 @@ static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* 
  * maximum number of loads in the last step
  */
 void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
-	//To do this, we first need to find the transitive closure of the graph. This is
-	//done so that we can identify all transitive predecessors/successors of a given node.
-	//In other words, we are looking for all nodes that are on a path that does not
-	//have a given node
-	compute_transitive_closure_of_graph(graph);
+	//Let's create a reusable "independent" array to lighten memory pressure
+	dynamic_array_t* independent = dynamic_array_alloc();
 
-	//TODO
+	//Run through all of the nodes
+	for(u_int32_t i = 0; i < graph->node_count; i++){
+		//Graph each node
+		data_dependency_graph_node_t* node = graph->nodes[i];
 
+		//Get a list of all nodes independent of this one(will be loaded
+		//into "independent"). This essentially gives us a sub-graph
+		//that has had everything related to the above node removed
+		get_nodes_independent_of_given(graph, node, independent);
+
+	}
+
+	//Let go of this now that we're done
+	dynamic_array_dealloc(independent);
 }
 
 
