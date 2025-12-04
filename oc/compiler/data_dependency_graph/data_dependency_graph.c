@@ -268,15 +268,53 @@ data_dependency_graph_node_t* tie_break(data_dependency_graph_t* graph, data_dep
 	u_int32_t b_score;
 
 	/**
-	 * 1st try - we're looking at the number of total decendants that a node has. Luckily, we've already
+	 * 1st try: we're looking at the number of total decendants that a node has. Luckily, we've already
 	 * computed the transitive closure so this is a simple lookup
 	 */
+	a_score = get_number_of_node_descendants(graph->transitive_closure, a, graph->node_count);
+	b_score = get_number_of_node_descendants(graph->transitive_closure, b, graph->node_count);
 
+	//A is more so give it back
+	if(a_score > b_score){
+		return a;
+	}
 
+	//Vice versa for b
+	if(b_score > a_score){
+		return b;
+	}
 
-	//TODO 
-	return a;
+	/**
+	 * 2nd try: If we hit here - then they're equal, so we need to go to our next tie breaker. Since the total
+	 * number of dependents was a tie, we're now going to look at the number of immediate dependents that
+	 * the node has
+	 */
+	a_score = a->relied_on_by_count;
+	b_score = b->relied_on_by_count;
 
+	//A is more so give it back
+	if(a_score > b_score){
+		return a;
+	}
+
+	//Vice versa for b
+	if(b_score > a_score){
+		return b;
+	}
+
+	/**
+	 * 3rd and final try: if both of the above did not break the tie, we will just use the cycle count. If for some
+	 * reason they also have the exact same cycle count, we will just return a
+	 */
+	a_score = a->cycles_to_complete;
+	b_score = b->cycles_to_complete;
+
+	//Just return a if there is a 3rd tie
+	if(a_score >= b_score){
+		return a;
+	} else {
+		return b;
+	}
 }
 
 
