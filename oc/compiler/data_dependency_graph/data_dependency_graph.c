@@ -232,6 +232,15 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 
 /**
  * Given two nodes "a" and "b" that are tied, use several other heuristics to break the tie
+ *
+ * The tie breaking goes in this order. If this order is found to be unsatisfactory, then we can rearrange
+ * it. Recall that the original method:
+ *
+ * 1.) Look at the rank of both nodes. The rank is the number of immediate successors(nodes that depend on it)
+ * that a node has
+ * 2.) Look at the total number of descendants for the nodes(done via transitive closure). Nodes with more total
+ * descendants(even if they aren't immediate) come first
+ * 3.) Look directly at the delay. The higher the delay, the higher the priority
  */
 data_dependency_graph_node_t* tie_break(data_dependency_graph_node_t* a, data_dependency_graph_node_t* b){
 	//TODO 
