@@ -482,6 +482,28 @@ static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* 
 
 
 /**
+ * Recursively go through a graph, adding vertices to the connected component list
+ */
+static void connected_component_rec_DFS(data_dependency_graph_node_t* vertex, dynamic_array_t* connected_component){
+
+}
+
+
+/**
+ * Get all of the connected components of a node in a given subgraph
+ * 
+ * We are using a subset of our graph that is independent of a given node, 
+ * so we will only be creating connected components over this graph
+ *
+ */
+static dynamic_array_t* get_all_connected_components(data_dependency_graph_node_t* node){
+	
+	return NULL;
+
+}
+
+
+/**
  * Compute the cycle counts for load operations using a special algorithm. This will
  * help us in getting more accurate delay counts that somewhat account for the
  * possibility of cache misses. This should only be run on graphs that definitely
@@ -513,6 +535,14 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 		//that has had everything related to the above node removed
 		get_nodes_independent_of_given(graph, node, independent);
 
+		//Now that we have the independent nodes from given, we will iterate
+		//over every connected component that they have
+		for(u_int16_t j = 0; j < independent->current_index; j++){
+			//Get the node out
+			data_dependency_graph_node_t* node = dynamic_array_get_at(independent, i);
+
+
+		}
 	}
 
 	//Let go of this now that we're done
