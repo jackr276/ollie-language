@@ -483,6 +483,17 @@ static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* 
 
 /**
  * Recursively go through a graph, adding vertices to the connected component list
+ *
+ * Pseudocode:
+ * connected_component_dfs(vertex, component)
+ *
+ * mark vertex as visited
+ * append vertex to component
+ *
+ * for each neighbor u of v
+ * 	if u is unvisited:
+ * 		DFS(vertex, component)
+ * 		
  */
 static void connected_component_rec_DFS(data_dependency_graph_node_t* vertex, dynamic_array_t* connected_component){
 
@@ -496,7 +507,20 @@ static void connected_component_rec_DFS(data_dependency_graph_node_t* vertex, dy
  * so we will only be creating connected components over this graph
  *
  */
-static dynamic_array_t* get_all_connected_components(data_dependency_graph_node_t* node){
+static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, dynamic_array_t* connect_components){
+	//Mark everything in the subgraph as unvisited
+	for(u_int16_t i = 0; i < subgraph->current_index; i++){
+		//Extract it
+		data_dependency_graph_node_t* node = dynamic_array_get_at(subgraph, i);
+
+		//Make it unvisited
+		node->visited = FALSE;
+	}
+
+	//Wipe out the connected components graph from the prior run
+	reset_dynamic_array(connect_components);
+	
+
 	
 	return NULL;
 
@@ -525,6 +549,9 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 	//Let's create a reusable "independent" array to lighten memory pressure
 	dynamic_array_t* independent = dynamic_array_alloc();
 
+	//The set of connected components is also reusable
+	dynamic_array_t* connected_components = dynamic_array_alloc();
+
 	//Run through all of the nodes
 	for(u_int32_t i = 0; i < graph->node_count; i++){
 		//Graph each node
@@ -541,12 +568,20 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 			//Get the node out
 			data_dependency_graph_node_t* node = dynamic_array_get_at(independent, i);
 
+			//Create the connected component array for this subgraph(the nodes in independent)
+			//so that we can search through it
+			get_all_connected_components(independent, connected_components);
+
+			//For every connected component
+
 
 		}
 	}
 
-	//Let go of this now that we're done
+	//Let go of these now that we're done
 	dynamic_array_dealloc(independent);
+	//Let go of this now that we're done
+	dynamic_array_dealloc(connected_components);
 }
 
 
