@@ -297,6 +297,9 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	//Current index in the list
 	u_int32_t list_index = 0;
 
+	//Do we have at least one load instruction?
+	u_int8_t contains_load = FALSE;
+
 	/**
 	 * Step 1: get the estimated cycle count for each instruction.
 	 * We will also break all of the links here in the block
@@ -308,6 +311,12 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 
 		//Increment
 		list_index++;
+
+		//Flag if we have at least one load instruction for our
+		//priority computations down the line
+		if(is_load_instruction(instruction_cursor) == TRUE){
+			contains_load = TRUE;
+		}
 
 		//Add it into the graph
 		add_data_dependency_node_for_instruction(&dependency_graph, instruction_cursor);
@@ -331,8 +340,20 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 */
 	finalize_data_dependency_graph(&dependency_graph);
 
+
 	/**
-	 * Step 4: for each instruction, compute it's priority using the 
+	 * Step 4: If we have at least one load instruction, we will run
+	 * a specialized algorithm to attempt to estimate the delay of each load
+	 * instruction accounting for any potential cache misses. This algorithm does
+	 * add an expense, so we will only run it if we know that there is a load
+	 * instruction in the graph
+	 */
+	if(contains_load == TRUE){
+		compute_cycle_counts_for_load_operations(&dependency_graph);
+	}
+
+	/**
+	 * Step 5: for each instruction, compute it's priority using the 
 	 * length of longest weighted path for an instruction to a
 	 * root in the dependency graph
 	 */
@@ -348,8 +369,10 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	}
 
 	/**
-	 * Step 5: use the list scheduler to reorder the entire block.
+	 * Step 6: use the list scheduler to reorder the entire block.
 	 * The algorithm is detailed in the function
+	 *
+	 * TODO
 	 */
 
 	//We're done with it, we can deallocate now
