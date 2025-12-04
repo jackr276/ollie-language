@@ -229,18 +229,51 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 
 
 /**
+ * Use the transitive closure to determine how many descendants a given node has. This includes both transitive
+ * descendants and direct ones. This can be done by counting every element in this node's given row
+ */
+static u_int32_t get_number_of_node_descendants(u_int8_t* transitive_closure, data_dependency_graph_node_t* given, u_int32_t num_nodes){
+	//Extract a pointer to the row start
+	u_int8_t* row = &(transitive_closure[given->index * num_nodes]);
+
+	//Initialize the count
+	u_int32_t count = 0;
+
+	//Loop through this item's row
+	for(u_int32_t i = 0; i < num_nodes; i++){
+		//It's either 0 or 1, so just add whatever it is to avoid the branch
+		count += row[i];
+	}
+
+	//Give back the count
+	return count;
+}
+
+
+/**
  * Given two nodes "a" and "b" that are tied, use several other heuristics to break the tie
  *
  * The tie breaking goes in this order. If this order is found to be unsatisfactory, then we can rearrange
  * it. Recall that the original method:
  *
- * 1.) Look at the rank of both nodes. The rank is the number of immediate successors(nodes that depend on it)
- * that a node has
- * 2.) Look at the total number of descendants for the nodes(done via transitive closure). Nodes with more total
+ * 1.) Look at the total number of descendants for the nodes(done via transitive closure). Nodes with more total
  * descendants(even if they aren't immediate) come first
+ * 2.) Look at the rank of both nodes. The rank is the number of immediate successors(nodes that depend on it)
+ * that a node has
  * 3.) Look directly at the delay. The higher the delay, the higher the priority
  */
-data_dependency_graph_node_t* tie_break(data_dependency_graph_node_t* a, data_dependency_graph_node_t* b){
+data_dependency_graph_node_t* tie_break(data_dependency_graph_t* graph, data_dependency_graph_node_t* a, data_dependency_graph_node_t* b){
+	//Two scores that we'll be comparing
+	u_int32_t a_score;
+	u_int32_t b_score;
+
+	/**
+	 * 1st try - we're looking at the number of total decendants that a node has. Luckily, we've already
+	 * computed the transitive closure so this is a simple lookup
+	 */
+
+
+
 	//TODO 
 	return a;
 
