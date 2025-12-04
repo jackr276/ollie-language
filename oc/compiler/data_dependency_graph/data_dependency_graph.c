@@ -443,6 +443,34 @@ static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
 static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* independent){
 	//Wipe the dynamic array - we are avoiding reallocation for efficiency
 	reset_dynamic_array(independent);
+
+	//In the transitive closure, the nodes that are independent of the given node are the ones that are not in
+	//it's row(not dependended on by it) and not in its column(not a dependency of it)
+	
+	//Extract the nodes row
+	u_int8_t* node_row = &(graph->transitive_closure[node->index]);
+
+	//Run through everyting in here
+	for(u_int32_t i = 0; i < graph->node_count; i++){
+		//No point checking here
+		if(i == node->index){
+			continue;
+		}
+
+		//It's dependent, so move on
+		if(node_row[i] == 1){
+			continue;
+		}
+
+		//Once we get here we know that node i is not dependent
+		//on the given node, so we can now check to see if the 
+		//given node is dependent on i
+		//if(graph->transitive_closure[])
+
+
+
+	}
+
 	
 
 	//Give the array back
