@@ -462,16 +462,19 @@ static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* 
 			continue;
 		}
 
-		//Once we get here we know that node i is not dependent
-		//on the given node, so we can now check to see if the 
-		//given node is dependent on i
-		//if(graph->transitive_closure[])
+		//We now know that i *is not* a transitive successor
+		//of the given node. The next thing we need to check is
+		//if i is a transitive predecessor of the node. We can
+		//do this by looking to see if the node is a transitive
+		//predecessor of i
+		if(graph->transitive_closure[i * graph->node_count + node->index] == 1){
+			continue;
+		}
 
-
-
+		//If we survive to all the way down here, then we know for sure that i is neither
+		//a transitive predecessor or a transitive successor of the node
+		dynamic_array_add(independent, graph->nodes[i]);
 	}
-
-	
 
 	//Give the array back
 	return independent;
