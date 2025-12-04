@@ -297,9 +297,6 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	//Current index in the list
 	u_int32_t list_index = 0;
 
-	//Do we contain *at least* one load operation?
-	u_int8_t contains_load = FALSE;
-
 	/**
 	 * Step 1: get the estimated cycle count for each instruction.
 	 * We will also break all of the links here in the block
@@ -315,13 +312,6 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 		//Add it into the graph
 		add_data_dependency_node_for_instruction(&dependency_graph, instruction_cursor);
 
-		//If we have a load, flag it for later. This is an optimization for us,
-		//if we don't have any loads, we aren't going to bother with the special
-		//load cycle estimator
-		if(is_load_instruction(instruction_cursor) == TRUE){
-			contains_load = TRUE;
-		}
-
 		//Now we advance
 		instruction_cursor = instruction_cursor->next_statement;
 	}
@@ -336,31 +326,13 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	build_dependency_graph_for_block(&dependency_graph, block, instructions);
 
 	/**
-	 * Step 3: for all of our work going forward, our dependency graph will need to be topologically
-	 * sorted. We will handle this now for the next 2 steps
+	 * Step 3: Finalize the graph by sorting it and constructing the appropriate
+	 * adjacency matrix
 	 */
-	inplace_topological_sort(&dependency_graph);
+	finalize_data_dependency_graph(&dependency_graph);
 
 	/**
-	 * Step 4: compute the adjacency matrix on the topologically sorted graph
-	 *
-	 * After we have performed the topological sort, we will construct the adjacency matrix
-	 * on the sorted graph
-	 */
-	construct_adjacency_matrix(&dependency_graph);
-
-	/**
-	 * Step 5: we need to account for some special delay timing with load operations. We need
-	 * to do this because load operations may execute quickly if the item that it's looking for
-	 * is in cache or incredibly slowly if we have a cache miss. We have a special approximation
-	 * algorithm that will help us account for this that we need to run before moving forward
-	 */
-	if(contains_load == TRUE){
-		compute_cycle_counts_for_load_operations(&dependency_graph);
-	}
-
-	/**
-	 * Step 6: for each instruction, compute it's priority using the 
+	 * Step 4: for each instruction, compute it's priority using the 
 	 * length of longest weighted path for an instruction to a
 	 * root in the dependency graph
 	 */
@@ -376,7 +348,7 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	}
 
 	/**
-	 * Step 7: use the list scheduler to reorder the entire block.
+	 * Step 5: use the list scheduler to reorder the entire block.
 	 * The algorithm is detailed in the function
 	 */
 

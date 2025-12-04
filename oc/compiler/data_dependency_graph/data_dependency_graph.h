@@ -121,6 +121,16 @@ data_dependency_graph_node_t* tie_break(data_dependency_graph_node_t* a, data_de
 void compute_priorities_for_all_nodes(data_dependency_graph_t* graph);
 
 /**
+ * Finalize the data dependency graph by:
+ * 	1.) topologically sorting it
+ * 	2.) constructing the adjacency matrix
+ * 	3.) constructing the transitive closure
+ *
+ * This needs to be done before we start thinking about anything else
+ */
+void finalize_data_dependency_graph(data_dependency_graph_t* graph);
+
+/**
  * Add a dependence between the two instructions
  *
  * NOTE: This function *assumes* that both target and depends_on already have nodes created for them

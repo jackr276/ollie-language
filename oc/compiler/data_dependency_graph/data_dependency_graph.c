@@ -28,10 +28,8 @@ data_dependency_graph_t dependency_graph_alloc(u_int32_t num_nodes){
 	//Initialize the adjacency matrix too
 	graph.adjacency_matrix = calloc(num_nodes * num_nodes, sizeof(u_int8_t));
 
-	//We may or may not ever end up computing this - it's
-	//only used when we need to do the special load delay
-	//calculations
-	graph.transitive_closure = NULL;
+	//This ends up being copied from the adjacency matrix
+	graph.transitive_closure = calloc(num_nodes * num_nodes, sizeof(u_int8_t));
 
 	//And the index
 	graph.current_index = 0;
@@ -304,8 +302,8 @@ void construct_adjacency_matrix(data_dependency_graph_t* graph){
  *		
  */
 static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
-	//2d array that is N X N
-	u_int8_t* transitive_closure = calloc(graph->node_count * graph->node_count, sizeof(u_int8_t));
+	//Extract the transitive closure, it will have already been allocated
+	u_int8_t* transitive_closure = graph->transitive_closure;
 
 	//Extract this to avoid the repeat memory access
 	u_int8_t* adjacency_matrix = graph->adjacency_matrix;
@@ -555,6 +553,28 @@ void compute_priorities_for_all_nodes(data_dependency_graph_t* graph){
 
 
 /**
+ * Finalize the data dependency graph by:
+ * 	1.) topologically sorting it
+ * 	2.) constructing the adjacency matrix
+ * 	3.) constructing the transitive closure
+ *
+ * This needs to be done before we start thinking about anything else
+ */
+void finalize_data_dependency_graph(data_dependency_graph_t* graph){
+	//Step 1 - topologically sort it
+	inplace_topological_sort(graph);
+
+	//Step 2 - construct the adjacency matrix. We can't do this on the fly
+	//because we know that we'll be sorting it. We do so now to keep the indices
+	//matching
+	construct_adjacency_matrix(graph);
+
+	//Once we've done all of that, we'll construct the transitive closure
+	compute_transitive_closure_of_graph(graph);
+}
+
+
+/**
  * Add a dependence between the dependent and the dependency
  *
  * NOTE: This assumes that the graph *already* has nodes for the target and depends_on instructions
@@ -678,7 +698,5 @@ void dependency_graph_dealloc(data_dependency_graph_t* graph){
 	free(graph->adjacency_matrix);
 
 	//Free the transitive closure too
-	if(graph->transitive_closure != NULL){
-		free(graph->transitive_closure);
-	}
+	free(graph->transitive_closure);
 }
