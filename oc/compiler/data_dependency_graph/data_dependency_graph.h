@@ -110,6 +110,11 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph);
 data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dependency_graph_t* graph, instruction_t* instruction);
 
 /**
+ * Given two nodes "a" and "b" that are tied, use several other heuristics to break the tie
+ */
+data_dependency_graph_node_t* tie_break(data_dependency_graph_node_t* a, data_dependency_graph_node_t* b);
+
+/**
  * Find the priority for all nodes in the dependency graph D. This is done
  * internally using the longest path between a given node and a root
  */

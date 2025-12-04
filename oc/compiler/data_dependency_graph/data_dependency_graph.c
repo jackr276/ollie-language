@@ -231,6 +231,16 @@ data_dependency_graph_node_t* get_dependency_node_for_given_instruction(data_dep
 
 
 /**
+ * Given two nodes "a" and "b" that are tied, use several other heuristics to break the tie
+ */
+data_dependency_graph_node_t* tie_break(data_dependency_graph_node_t* a, data_dependency_graph_node_t* b){
+	//TODO 
+	return a;
+
+}
+
+
+/**
  * Construct the adjacency matrix for a given graph
  *
  * NOTE: This should be done *after* the topological sort has been done
