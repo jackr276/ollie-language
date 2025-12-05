@@ -493,10 +493,24 @@ static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* 
  * for each neighbor u of v
  * 	if u is unvisited:
  * 		DFS(vertex, component)
- * 		
  */
 static void connected_component_rec_DFS(data_dependency_graph_node_t* vertex, dynamic_array_t* connected_component){
+	//Mark our vertex as visited
+	vertex->visited = TRUE;
 
+	//Add this vertex to the component array
+	dynamic_array_add(connected_component, vertex);
+
+	//Run through every neighbor of the vertex
+	for(u_int16_t i = 0; i < vertex->neighbors->current_index; i++){
+		//Extract it
+		data_dependency_graph_node_t* neighbor = dynamic_array_get_at(vertex->neighbors, i);
+
+		//If this hasn't been visited, add it in
+		if(neighbor->visited == FALSE){
+			connected_component_rec_DFS(neighbor, connected_component);
+		}
+	}
 }
 
 
@@ -506,8 +520,12 @@ static void connected_component_rec_DFS(data_dependency_graph_node_t* vertex, dy
  * We are using a subset of our graph that is independent of a given node, 
  * so we will only be creating connected components over this graph
  *
+ * for each node in the subgraph:
+ * 	component = get_connected_component_dfs(node)
+ * 	add component to components
+ *
  */
-static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, dynamic_array_t* connect_components){
+static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, dynamic_array_t* connected_components){
 	//Mark everything in the subgraph as unvisited
 	for(u_int16_t i = 0; i < subgraph->current_index; i++){
 		//Extract it
@@ -518,12 +536,26 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
 	}
 
 	//Wipe out the connected components graph from the prior run
-	reset_dynamic_array(connect_components);
-	
+	reset_dynamic_array(connected_components);
 
-	
-	return NULL;
+	for(u_int16_t i = 0; i < subgraph->current_index; i++){
+		//Extract it
+		data_dependency_graph_node_t* node = dynamic_array_get_at(subgraph, i);
 
+		//If it has been visited, move on
+		if(node->visited == TRUE){
+			continue;
+		}
+
+		//Allocate this, it will need to be freed at a later point
+		dynamic_array_t* connected_component = dynamic_array_alloc();
+
+		//Otherwise it hasn't been visited, so find it's connected components
+		connected_component_rec_DFS(node, connected_component);
+	}
+
+	//Give back the dynamic array of dynamic arrays of connected components
+	return connected_components;
 }
 
 
@@ -562,20 +594,10 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 		//that has had everything related to the above node removed
 		get_nodes_independent_of_given(graph, node, independent);
 
-		//Now that we have the independent nodes from given, we will iterate
-		//over every connected component that they have
-		for(u_int16_t j = 0; j < independent->current_index; j++){
-			//Get the node out
-			data_dependency_graph_node_t* node = dynamic_array_get_at(independent, i);
+		//Create the connected component array for this subgraph(the nodes in independent)
+		//so that we can search through it
+		get_all_connected_components(independent, connected_components);
 
-			//Create the connected component array for this subgraph(the nodes in independent)
-			//so that we can search through it
-			get_all_connected_components(independent, connected_components);
-
-			//For every connected component
-
-
-		}
 	}
 
 	//Let go of these now that we're done
