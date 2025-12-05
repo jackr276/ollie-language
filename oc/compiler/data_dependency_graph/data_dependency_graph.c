@@ -438,11 +438,16 @@ static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
  * 	if TC[node][N] == 0 and TC[N][Node] == 0:
  * 		independent = independent U {N}
  *
- * Essentially, we are checking to see if both nodes never cross paths
+ * Essentially, we are checking to see if both nodes never cross paths. We should also check here to see if
+ * we ever find a load instruction. If we find no load instructions, then the rest of this entire procedure is meaningless.
+ * We will return a flag letting the caller know if there are any loads inpendent of this given one
  */
-static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* independent){
+static u_int8_t get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* independent){
 	//Wipe the dynamic array - we are avoiding reallocation for efficiency
 	reset_dynamic_array(independent);
+
+	//Assume that we have found no load instructions
+	u_int8_t found_load = FALSE;
 
 	//In the transitive closure, the nodes that are independent of the given node are the ones that are not in
 	//it's row(not dependended on by it) and not in its column(not a dependency of it)
@@ -476,8 +481,8 @@ static dynamic_array_t* get_nodes_independent_of_given(data_dependency_graph_t* 
 		dynamic_array_add(independent, graph->nodes[i]);
 	}
 
-	//Give the array back
-	return independent;
+	//
+	return found_load;
 }
 
 
@@ -551,11 +556,43 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
 		dynamic_array_t* connected_component = dynamic_array_alloc();
 
 		//Otherwise it hasn't been visited, so find it's connected components
-		connected_component_rec_DFS(node, connected_component);
+		connected_component_rec_DFS(node, connected_component, found_load);
 	}
 
 	//Give back the dynamic array of dynamic arrays of connected components
 	return connected_components;
+}
+
+
+/**
+ * Compute the maximum number of loads through any given path in this graph
+ *
+ * The convenient part is, the graph will come to us in topological order. Using this,
+ * it should be pretty easy to compute all possible paths through our graph. We can
+ * start up at the very front and run through every path through there. This only works
+ * because our graph is acyclic
+ *
+ * For efficiency's sake here, we do have a reusable array that we keep using for efficiency
+ *
+ * Pseudocode:
+ */
+static u_int32_t maximum_loads_through_any_path_in_graph(dynamic_array_t* graph, u_int8_t* load_counts){
+	for(u_int16_t i = 0; i < graph->current_index; i++){
+	 	//Extract it
+	 	data_dependency_graph_node_t* node = dynamic_array_get_at(graph, i);
+
+		//If this is a load instruction, we already have one along the path. If not, then
+		//we have 0
+		if(is_load_instruction(node->instruction) == TRUE){
+			load_counts[i] = 1;
+		} else {
+			load_counts[i] = 0;
+		}
+
+	}
+
+
+	return 0;
 }
 
 
@@ -592,12 +629,21 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 		//Get a list of all nodes independent of this one(will be loaded
 		//into "independent"). This essentially gives us a sub-graph
 		//that has had everything related to the above node removed
-		get_nodes_independent_of_given(graph, node, independent);
+		u_int8_t found_load = get_nodes_independent_of_given(graph, node, independent);
 
 		//Create the connected component array for this subgraph(the nodes in independent)
 		//so that we can search through it
 		get_all_connected_components(independent, connected_components);
 
+		//Run through every connected component in here
+		for(u_int16_t i = 0; i < connected_components->current_index; i++){
+			//Extract it
+			dynamic_array_t* connected_component = dynamic_array_get_at(connected_components, i);
+
+
+			//Once we're done using it, we can release this entire thing
+			dynamic_array_dealloc(connected_component);
+		}
 	}
 
 	//Let go of these now that we're done
