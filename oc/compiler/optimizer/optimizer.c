@@ -2006,12 +2006,23 @@ static void delete_unreachable_blocks(cfg_t* cfg){
  *
  * We can traverse the entire graph in a breadth-first way, determining
  * what kind of block we have along the way and updating the frequency accordingly
+ *
+ * We will determine the estimated execution frequency of a block by multiplying how many
+ * times we think it will execute by the number of times we think that it's predecessor will
+ * execute. In the event that there are more than one predecessor, we will take the one with the highest
+ * execution frequency. This scheme should allow us to effectively estimate spill costs for variables that
+ * exist within nested loops, for instance
  */
 static void estimate_execution_frequencies(cfg_t* cfg){
+	//For holding our blocks
+	basic_block_t* block;
+
 	//First, we'll reset every single block here
 	reset_visited_status(cfg, FALSE);
 
-	//We'll need a queue for our BFS
+	//We'll need a queue for our BFS. Since BFS runs until the heap
+	//queue is empty anyway, we actually don't need to deal with any
+	//resetting here
 	heap_queue_t* queue = heap_queue_alloc();
 
 	//Run through every single function inside of the CFG
@@ -2019,11 +2030,9 @@ static void estimate_execution_frequencies(cfg_t* cfg){
 		//Extract the entry out
 		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
 		
-		//We assume that the entry block only goes once
+		//We assume that the entry block only goes once. This is our seed
+		//for the entire process
 		function_entry->estimated_execution_frequency = 1;
-		//For holding our blocks
-		basic_block_t* block;
-
 
 		//Seed the search by adding the funciton block into the queue
 		enqueue(queue, dynamic_array_get_at(cfg->function_entry_blocks, i));
@@ -2033,13 +2042,38 @@ static void estimate_execution_frequencies(cfg_t* cfg){
 			//Pop off of the queue
 			block = dequeue(queue);
 
-			//If this wasn't visited, we'll print
-			if(block->visited == FALSE){
-				print_block_three_addr_code(block, print_df);	
-			}
-
 			//Now we'll mark this as visited
 			block->visited = TRUE;
+
+			//Certain blocks are guaranteed to only ever execute once. We will
+			//account for such cases here
+			switch(block->block_terminal_type){
+				case BLOCK_TERM_TYPE_BREAK:
+				case BLOCK_TERM_TYPE_CONTINUE:
+				case BLOCK_TERM_TYPE_RET:
+				case BLOCK_TERM_TYPE_USER_DEFINED_JUMP:
+			}
+
+			//Get the execution frequency of the highest predecessor
+			if(block->predecessors != NULL && block->predecessors->current_index != 0){
+				//The predecessors maximum execution count
+				u_int32_t maximum_execution_count = 0;
+
+				//Run through every predecessor
+				for(u_int16_t j = 0; j < block->predecessors->current_index; j++){
+					//Extract it
+					basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, j);
+					
+					//Does this have the highest execution count?
+					if(predecessor->estimated_execution_frequency > maximum_execution_count){
+						maximum_execution_count = predecessor->estimated_execution_frequency;
+					}
+				}
+
+				//Once we reach down here, we will update this block's estimated execution frequency
+				//by multiplying it by the highest predecessor frequency
+				block->estimated_execution_frequency *= maximum_execution_count;
+			}
 
 			//And finally we'll add all of these onto the queue
 			for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
@@ -2051,10 +2085,10 @@ static void estimate_execution_frequencies(cfg_t* cfg){
 				}
 			}
 		}
-
-		//Destroy the heap queue when done
-		heap_queue_dealloc(queue);
 	}
+
+	//Destroy the heap queue when done
+	heap_queue_dealloc(queue);
 }
 
 
