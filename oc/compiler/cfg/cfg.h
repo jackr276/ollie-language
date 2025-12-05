@@ -145,7 +145,8 @@ struct basic_block_t{
 	int32_t block_id;
 	//The number of instructions that the given block has
 	u_int32_t number_of_instructions;
-	//The estimated execution frequency
+	//The estimated execution frequency. This will change
+	//if a block is in a loop, etc.
 	u_int32_t estimated_execution_frequency;
 	//What is the general classification of this block
 	block_type_t block_type;

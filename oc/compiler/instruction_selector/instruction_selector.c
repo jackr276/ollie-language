@@ -245,6 +245,17 @@ static void order_blocks(cfg_t* cfg){
 
 
 /**
+ * For each individual function, update the estimated execution frequencies
+ * of given blocks. This mainly involves detecting if a given block is inside 
+ * of a loop or not
+ */
+static void update_block_execution_frequencies(cfg_t* cfg){
+	//TODO probably a DFS problem
+
+}
+
+
+/**
  * Print a block our for reading
 */
 static void print_ordered_block(basic_block_t* block, instruction_printing_mode_t mode){
@@ -5788,6 +5799,10 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//straight line. This step is also able to recognize and exploit some early optimizations,
 	//such as when a block ends in a jump to the block right below it
 	order_blocks(cfg);
+
+	//Now that we have blocks ordered, the next thing that we should do is update the estimated execution
+	//frequencies. This mainly involves detecting if any blocks exist in a loop
+	update_block_execution_frequencies(cfg);
 
 	//Do we need to print intermediate representations?
 	u_int8_t print_irs = options->print_irs;
