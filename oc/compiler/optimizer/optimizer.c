@@ -2007,11 +2007,14 @@ static void delete_unreachable_blocks(cfg_t* cfg){
  * We can traverse the entire graph in a breadth-first way, determining
  * what kind of block we have along the way and updating the frequency accordingly
  *
- * We will determine the estimated execution frequency of a block by multiplying how many
- * times we think it will execute by the number of times we think that it's predecessor will
- * execute. In the event that there are more than one predecessor, we will take the one with the highest
- * execution frequency. This scheme should allow us to effectively estimate spill costs for variables that
- * exist within nested loops, for instance
+ * Rules for estimation:
+ * 	Return statements and user defined jumps can only ever execute once
+ *
+ *	If a block has one predecessor and the predecessor has one successor(1-to-1):
+ *		carry over the execution frequency of the predecessor
+ *
+ *	If a block has a predecessor that ends in a branch:
+ *		Assume that the branch is taken half of the time to get into the block
  */
 static void estimate_execution_frequencies(cfg_t* cfg){
 	//For holding our blocks
@@ -2048,31 +2051,35 @@ static void estimate_execution_frequencies(cfg_t* cfg){
 			//Certain blocks are guaranteed to only ever execute once. We will
 			//account for such cases here
 			switch(block->block_terminal_type){
-				case BLOCK_TERM_TYPE_BREAK:
-				case BLOCK_TERM_TYPE_CONTINUE:
+				//Do not update anything in the below cases. These are for sure
+				//exit statements, so their estimated execution frequency
+				//will not go up from what it originally was
 				case BLOCK_TERM_TYPE_RET:
 				case BLOCK_TERM_TYPE_USER_DEFINED_JUMP:
-			}
+					//This can only ever execute one time
+					block->estimated_execution_frequency = 1;
+					break;
+				default:
+					//Get the execution frequency of the highest predecessor
+					if(block->predecessors != NULL && block->predecessors->current_index != 0){
+						//The predecessors maximum execution count
+						u_int32_t maximum_execution_count = 0;
 
-			//Get the execution frequency of the highest predecessor
-			if(block->predecessors != NULL && block->predecessors->current_index != 0){
-				//The predecessors maximum execution count
-				u_int32_t maximum_execution_count = 0;
+						//Run through every predecessor
+						for(u_int16_t j = 0; j < block->predecessors->current_index; j++){
+							//Extract it
+							basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, j);
+							
+							//Does this have the highest execution count?
+							if(predecessor->estimated_execution_frequency > maximum_execution_count){
+								maximum_execution_count = predecessor->estimated_execution_frequency;
+							}
+						}
 
-				//Run through every predecessor
-				for(u_int16_t j = 0; j < block->predecessors->current_index; j++){
-					//Extract it
-					basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, j);
-					
-					//Does this have the highest execution count?
-					if(predecessor->estimated_execution_frequency > maximum_execution_count){
-						maximum_execution_count = predecessor->estimated_execution_frequency;
+						//Once we reach down here, we will update this block's estimated execution frequency
+						//by multiplying it by the highest predecessor frequency
+						//block->estimated_execution_frequency *= maximum_execution_count;
 					}
-				}
-
-				//Once we reach down here, we will update this block's estimated execution frequency
-				//by multiplying it by the highest predecessor frequency
-				block->estimated_execution_frequency *= maximum_execution_count;
 			}
 
 			//And finally we'll add all of these onto the queue
