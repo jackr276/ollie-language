@@ -5408,7 +5408,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Create our exit block. We assume that the exit only happens once
 	basic_block_t* for_stmt_exit_block = basic_block_alloc(1);
 	//We will explicitly declare that this is an exit here
-	for_stmt_exit_block->block_type = BLOCK_TYPE_FOR_STMT_END;
+	for_stmt_exit_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
 	//All breaks will go to the exit block
 	//Hold off on the continue block for now
@@ -5463,6 +5463,8 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//The second and third condition in the for loop are the ones that execute continously. The third condition
 	//always executes at the end of each iteration
 	basic_block_t* condition_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	//Flag that this is a loop start
+	condition_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We will now emit a jump from the entry block, to the condition block
 	emit_jump(for_stmt_entry_block, condition_block);
@@ -5486,7 +5488,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//Create the update block
 	basic_block_t* for_stmt_update_block = basic_block_alloc(LOOP_ESTIMATED_COST);
-	for_stmt_update_block->block_type = BLOCK_TYPE_FOR_STMT_UPDATE;
 
 	//If the third one is not blank
 	if(ast_cursor->first_child != NULL){
@@ -5558,10 +5559,12 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 
 	//Create our entry block. This in reality will be the compound statement
 	basic_block_t* do_while_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	//This is an entry block
+	do_while_stmt_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 	//The true ending block. We assume that the exit only happens once
 	basic_block_t* do_while_stmt_exit_block = basic_block_alloc(1);
 	//We will explicitly mark that this is an exit block
-	do_while_stmt_exit_block->block_type = BLOCK_TYPE_DO_WHILE_END;
+	do_while_stmt_exit_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
 	push(continue_stack, do_while_stmt_entry_block);
@@ -5653,10 +5656,12 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 	//Create our entry block
 	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	//This is an entry block
+	while_statement_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 	//And create our exit block. We assume that this executes once
 	basic_block_t* while_statement_end_block = basic_block_alloc(1);
 	//We will specifically mark the end block here as an ending block
-	while_statement_end_block->block_type = BLOCK_TYPE_WHILE_END;
+	while_statement_end_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
 	push(continue_stack, while_statement_entry_block);
@@ -5744,8 +5749,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//We always have an entry block and an exit block. We assume initially that
 	//these both happen once
 	basic_block_t* entry_block = basic_block_alloc(1);
+	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
 	basic_block_t* exit_block = basic_block_alloc(1);
-	exit_block->block_type = BLOCK_TYPE_IF_STMT_END;
+	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
 
 	//Note the starting and final blocks here
 	result_package.starting_block = entry_block;

@@ -45,17 +45,13 @@ typedef enum {
 typedef enum{
 	BLOCK_TYPE_NORMAL, //Normal block
 	BLOCK_TYPE_SWITCH, //The whole block is a switch statement
-	BLOCK_TYPE_ASM, //Very special case -- entire block is dedicated to asm inline
 	BLOCK_TYPE_CASE, //Case statement -- it also encapsulates default(just a special kind of case)
 	BLOCK_TYPE_FUNC_ENTRY, //Block is a function entry
 	BLOCK_TYPE_FUNC_EXIT, //Block is a function exit
-	BLOCK_TYPE_DO_WHILE_END, //End of a do-while
-	BLOCK_TYPE_IF_STMT_END, //End of an if-statement
-	BLOCK_TYPE_WHILE_ENTRY, //While statement entry
-	BLOCK_TYPE_WHILE_END, //End of a while statement
-	BLOCK_TYPE_FOR_STMT_END, //End of a for statement
-	BLOCK_TYPE_FOR_STMT_CONDITIONAL, //For statement conditional block
-	BLOCK_TYPE_FOR_STMT_UPDATE, //Update block of a for statement
+	BLOCK_TYPE_IF_ENTRY, //If statement entry
+	BLOCK_TYPE_IF_EXIT, //End of an if-statement
+	BLOCK_TYPE_LOOP_ENTRY, //Loop entry block
+	BLOCK_TYPE_LOOP_EXIT, //Loop exit block
 	BLOCK_TYPE_LABEL, //This block comes from a user-defined label
 } block_type_t;
 
