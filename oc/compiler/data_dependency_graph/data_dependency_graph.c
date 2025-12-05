@@ -586,12 +586,12 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
  * for each node "V" in the subgraph(which is in topological order):
  * 	for each node "U" in its neighbor set:
  * 		if U is a load:
- * 			add = 1
+ * 			add = 1 # one more load on V's path
  * 		else:
- * 			add = 0
+ * 			add = 0 # no more loads on V's path
  *	 	load_count[U index] = max(load_count[U_index], load_count[V_index] + add)
  */
-static u_int32_t get_maximum_loads_through_any_path_in_subgraph(dynamic_array_t* graph, u_int8_t* load_counts){
+static u_int32_t get_maximum_loads_through_any_path_in_subgraph(dynamic_array_t* graph, u_int32_t* load_counts){
 	for(u_int16_t i = 0; i < graph->current_index; i++){
 	 	//Extract it
 	 	data_dependency_graph_node_t* node = dynamic_array_get_at(graph, i);
@@ -636,7 +636,21 @@ static u_int32_t get_maximum_loads_through_any_path_in_subgraph(dynamic_array_t*
 		}
 	}
 
-	return 0;
+	//Maximum number of loads
+	u_int32_t max_loads = 0;
+
+	//One last quick loop to find the highest
+	for(u_int16_t i = 0; i < graph->current_index; i++){
+		//If this one is higher, it is the new max
+		if(max_loads < load_counts[i]){
+			max_loads = load_counts[i];
+		}
+	}
+
+	printf("MAX IS %d\n", max_loads);
+
+	//Give back whatever the max is
+	return max_loads;
 }
 
 
@@ -665,6 +679,10 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 	//The set of connected components is also reusable
 	dynamic_array_t* connected_components = dynamic_array_alloc();
 
+	//A reusable static array for load counts in the maximum load computation
+	//step. We can just initialize it to the size of the original graph
+	u_int32_t* load_counts = calloc(graph->node_count, sizeof(u_int32_t));
+
 	//Run through all of the nodes
 	for(u_int32_t i = 0; i < graph->node_count; i++){
 		//Graph each node
@@ -691,7 +709,8 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 			//Extract it
 			dynamic_array_t* connected_component = dynamic_array_get_at(connected_components, j);
 
-			u_int32_t maximum_loads = get_maximum_loads_through_any_path_in_subgraph(connected_component, u_int8_t *load_counts)
+			//Get the maximum number of loads through any given path in this connected component
+			u_int32_t maximum_loads = get_maximum_loads_through_any_path_in_subgraph(connected_component, load_counts);
 
 
 			//Once we're done using it, we can release this entire thing
@@ -699,6 +718,8 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 		}
 	}
 
+	//Release the load counts
+	free(load_counts);
 	//Let go of these now that we're done
 	dynamic_array_dealloc(independent);
 	//Let go of this now that we're done
