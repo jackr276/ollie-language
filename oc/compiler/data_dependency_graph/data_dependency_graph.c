@@ -562,6 +562,9 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
 
 		//Otherwise it hasn't been visited, so find it's connected components
 		connected_component_rec_DFS(node, connected_component);
+
+		//Once we're here, we can add this connected component to our overall array of them
+		dynamic_array_add(connected_components, connected_component);
 	}
 
 	//Give back the dynamic array of dynamic arrays of connected components
@@ -647,8 +650,6 @@ static u_int32_t get_maximum_loads_through_any_path_in_subgraph(dynamic_array_t*
 		}
 	}
 
-	printf("MAX IS %d\n", max_loads);
-
 	//Give back whatever the max is
 	return max_loads;
 }
@@ -712,9 +713,27 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 			//Get the maximum number of loads through any given path in this connected component
 			u_int32_t maximum_loads = get_maximum_loads_through_any_path_in_subgraph(connected_component, load_counts);
 
-
 			//Once we're done using it, we can release this entire thing
 			dynamic_array_dealloc(connected_component);
+
+			//If there are no loads along this path, just move along
+			if(maximum_loads == 0){
+				continue;
+			}
+
+			//One final loop here, we need to run through all of the instructions and update
+			//the load instructions
+			for(u_int16_t k =  0; k < graph->node_count; k++){
+				//Extract it
+				data_dependency_graph_node_t* updated_node = graph->nodes[k];
+
+				//Now we update it here. The formula is:
+				//	cycles(k) = cycles(k) + cycles(i) / maximum_loads 
+				u_int32_t cycle_count = updated_node->cycles_to_complete + (node->cycles_to_complete / maximum_loads);
+
+				//Now we update the node's cycle count
+				updated_node->cycles_to_complete = cycle_count;
+			}
 		}
 	}
 
