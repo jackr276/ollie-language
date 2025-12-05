@@ -440,14 +440,14 @@ static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
  *
  * Essentially, we are checking to see if both nodes never cross paths. We should also check here to see if
  * we ever find a load instruction. If we find no load instructions, then the rest of this entire procedure is meaningless.
- * We will return a flag letting the caller know if there are any loads inpendent of this given one
+ * We return the count of load operations that we found which are independent from our given instruction
  */
-static u_int8_t get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* independent){
+static u_int32_t get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* independent){
 	//Wipe the dynamic array - we are avoiding reallocation for efficiency
 	reset_dynamic_array(independent);
 
 	//Assume that we have found no load instructions
-	u_int8_t found_load = FALSE;
+	u_int32_t independent_load_count = 0;
 
 	//In the transitive closure, the nodes that are independent of the given node are the ones that are not in
 	//it's row(not dependended on by it) and not in its column(not a dependency of it)
@@ -476,13 +476,18 @@ static u_int8_t get_nodes_independent_of_given(data_dependency_graph_t* graph, d
 			continue;
 		}
 
+		//We found one more load
+		if(is_load_instruction(graph->nodes[i]->instruction) == TRUE){
+			independent_load_count++;
+		}
+
 		//If we survive to all the way down here, then we know for sure that i is neither
 		//a transitive predecessor or a transitive successor of the node
 		dynamic_array_add(independent, graph->nodes[i]);
 	}
 
-	//
-	return found_load;
+	//Return how many load instructions are independent
+	return independent_load_count;
 }
 
 
@@ -556,7 +561,7 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
 		dynamic_array_t* connected_component = dynamic_array_alloc();
 
 		//Otherwise it hasn't been visited, so find it's connected components
-		connected_component_rec_DFS(node, connected_component, found_load);
+		connected_component_rec_DFS(node, connected_component);
 	}
 
 	//Give back the dynamic array of dynamic arrays of connected components
@@ -590,7 +595,6 @@ static u_int32_t maximum_loads_through_any_path_in_graph(dynamic_array_t* graph,
 		}
 
 	}
-
 
 	return 0;
 }
@@ -629,16 +633,23 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 		//Get a list of all nodes independent of this one(will be loaded
 		//into "independent"). This essentially gives us a sub-graph
 		//that has had everything related to the above node removed
-		u_int8_t found_load = get_nodes_independent_of_given(graph, node, independent);
+		u_int32_t independent_load_count = get_nodes_independent_of_given(graph, node, independent);
+
+		//If there is no load on this path, then N will be 0
+		//and we will have done all of this work for no reason. As such,
+		//we will skip out here if this is the case
+		if(independent_load_count == 0){
+			continue;
+		}
 
 		//Create the connected component array for this subgraph(the nodes in independent)
 		//so that we can search through it
 		get_all_connected_components(independent, connected_components);
 
 		//Run through every connected component in here
-		for(u_int16_t i = 0; i < connected_components->current_index; i++){
+		for(u_int16_t j = 0; j < connected_components->current_index; j++){
 			//Extract it
-			dynamic_array_t* connected_component = dynamic_array_get_at(connected_components, i);
+			dynamic_array_t* connected_component = dynamic_array_get_at(connected_components, j);
 
 
 			//Once we're done using it, we can release this entire thing
