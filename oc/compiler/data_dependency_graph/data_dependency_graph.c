@@ -583,15 +583,15 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
  * for each node in the subgraph:
  * 	load_count[i] = 1 if node is load else 0
  *
- * for each node in the subgraph(which is in topological order):
- * 	for each node U in its neighbor set:
+ * for each node "V" in the subgraph(which is in topological order):
+ * 	for each node "U" in its neighbor set:
  * 		if U is a load:
  * 			add = 1
  * 		else:
  * 			add = 0
- *	 	load_count[U index] = max(load_count[U_index], load_count[V_index] + 0)
+ *	 	load_count[U index] = max(load_count[U_index], load_count[V_index] + add)
  */
-static u_int32_t maximum_loads_through_any_path_in_graph(dynamic_array_t* graph, u_int8_t* load_counts){
+static u_int32_t get_maximum_loads_through_any_path_in_subgraph(dynamic_array_t* graph, u_int8_t* load_counts){
 	for(u_int16_t i = 0; i < graph->current_index; i++){
 	 	//Extract it
 	 	data_dependency_graph_node_t* node = dynamic_array_get_at(graph, i);
@@ -610,14 +610,30 @@ static u_int32_t maximum_loads_through_any_path_in_graph(dynamic_array_t* graph,
 		//Extract it
 		data_dependency_graph_node_t* node = dynamic_array_get_at(graph, i);
 
-		//What are we adding
-		u_int32_t add = 0;
+		//For every node in the neighbor set, run through those
+		for(u_int16_t j = 0; j  < node->neighbors->current_index; j++){
+			//Extract the neighbor "U"
+			data_dependency_graph_node_t* U = dynamic_array_get_at(node->neighbors, j);
 
-		//If this is a load instruction, we are adding one more
-		if(is_load_instruction(node->instruction) == TRUE){
-			add = 1;
+			//What are we adding
+			u_int32_t add = 0;
+
+			//If this is a load instruction, we are adding one more
+			if(is_load_instruction(U->instruction) == TRUE){
+				add = 1;
+			}
+
+			//The load count that we have could potentially be the old load count on the U path
+			//plus one more. This path increment is representative of the parent node's load
+			//count plus either one more load or none at all
+			u_int32_t path_increment = load_counts[i] + add;
+
+			//Now we'll get U's final count
+			u_int32_t final_count = load_counts[j] > path_increment ? load_counts[j] : path_increment;
+
+			//Whatever one out there, we wadd it here
+			load_counts[j] = final_count;
 		}
-
 	}
 
 	return 0;
@@ -674,6 +690,8 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 		for(u_int16_t j = 0; j < connected_components->current_index; j++){
 			//Extract it
 			dynamic_array_t* connected_component = dynamic_array_get_at(connected_components, j);
+
+			u_int32_t maximum_loads = get_maximum_loads_through_any_path_in_subgraph(connected_component, u_int8_t *load_counts)
 
 
 			//Once we're done using it, we can release this entire thing
