@@ -44,7 +44,9 @@
 #define DEFAULT_DYNAMIC_STRING_LENGTH 60
 
 //Definitions for cycle counts on our known instructions
-#define LOAD_CYCLE_COUNT 4
+//Load cycle count is 1, we perform the real estimation
+//later on in the scheduler
+#define LOAD_CYCLE_COUNT 1
 #define STORE_CYCLE_COUNT 2
 #define UNSIGNED_INT_MULTIPLY_CYCLE_COUNT 3
 #define SIGNED_INT_MULTIPLY_CYCLE_COUNT 3

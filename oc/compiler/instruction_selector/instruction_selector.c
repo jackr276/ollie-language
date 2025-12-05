@@ -49,6 +49,64 @@ struct instruction_window_t{
 
 
 /**
+ * Simple utility for us to print out an instruction window in its three address code
+ * (before instruction selection) format
+ */
+static void print_instruction_window_three_address_code(instruction_window_t* window){
+	printf("----------- Instruction Window ------------\n");
+	//We'll just print out all three instructions
+	if(window->instruction1 != NULL){
+		print_three_addr_code_stmt(stdout, window->instruction1);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	if(window->instruction2 != NULL){
+		print_three_addr_code_stmt(stdout, window->instruction2);
+	} else {
+		printf("EMPTY\n");
+	}
+	
+	if(window->instruction3 != NULL){
+		print_three_addr_code_stmt(stdout, window->instruction3);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	printf("-------------------------------------------\n");
+}
+
+
+/**
+ * Simple utility for us to print out an instruction window in the post
+ * instruction selection format
+ */
+static void print_instruction_window(instruction_window_t* window){
+	printf("----------- Instruction Window ------------\n");
+	//We'll just print out all three instructions
+	if(window->instruction1 != NULL){
+		print_instruction(stdout, window->instruction1, PRINTING_VAR_IN_INSTRUCTION);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	if(window->instruction2 != NULL){
+		print_instruction(stdout, window->instruction2, PRINTING_VAR_IN_INSTRUCTION);
+	} else {
+		printf("EMPTY\n");
+	}
+	
+	if(window->instruction3 != NULL){
+		print_instruction(stdout, window->instruction3, PRINTING_VAR_IN_INSTRUCTION);
+	} else {
+		printf("EMPTY\n");
+	}
+
+	printf("-------------------------------------------\n");
+}
+
+
+/**
  * Does the block that we're passing in end in a direct(jmp) jump to
  * the very next block. If so, we'll return what block the jump goes to.
  * If not, we'll return null.
@@ -687,8 +745,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//We can now delete the very first statement
 			delete_statement(window->instruction1);
 
-			//Reconstruct the window with instruction2 as the start
-			reconstruct_window(window, window->instruction1);
+			//Reconstruct the window with instruction2's prior instruction as the start
+			reconstruct_window(window, window->instruction2->previous_statement);
 
 			//This does count as a change
 			changed = TRUE;
@@ -1831,7 +1889,6 @@ static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* entry){
 		//So long as we aren't at the end
 		} while(window.instruction1 != NULL);
 
-
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
@@ -2131,64 +2188,6 @@ static three_addr_var_t* create_and_insert_expanding_move_operation(instruction_
 
 	//Give back what the final assignee is
 	return destination_variable;
-}
-
-
-/**
- * Simple utility for us to print out an instruction window in its three address code
- * (before instruction selection) format
- */
-static void print_instruction_window_three_address_code(instruction_window_t* window){
-	printf("----------- Instruction Window ------------\n");
-	//We'll just print out all three instructions
-	if(window->instruction1 != NULL){
-		print_three_addr_code_stmt(stdout, window->instruction1);
-	} else {
-		printf("EMPTY\n");
-	}
-
-	if(window->instruction2 != NULL){
-		print_three_addr_code_stmt(stdout, window->instruction2);
-	} else {
-		printf("EMPTY\n");
-	}
-	
-	if(window->instruction3 != NULL){
-		print_three_addr_code_stmt(stdout, window->instruction3);
-	} else {
-		printf("EMPTY\n");
-	}
-
-	printf("-------------------------------------------\n");
-}
-
-
-/**
- * Simple utility for us to print out an instruction window in the post
- * instruction selection format
- */
-static void print_instruction_window(instruction_window_t* window){
-	printf("----------- Instruction Window ------------\n");
-	//We'll just print out all three instructions
-	if(window->instruction1 != NULL){
-		print_instruction(stdout, window->instruction1, PRINTING_VAR_IN_INSTRUCTION);
-	} else {
-		printf("EMPTY\n");
-	}
-
-	if(window->instruction2 != NULL){
-		print_instruction(stdout, window->instruction2, PRINTING_VAR_IN_INSTRUCTION);
-	} else {
-		printf("EMPTY\n");
-	}
-	
-	if(window->instruction3 != NULL){
-		print_instruction(stdout, window->instruction3, PRINTING_VAR_IN_INSTRUCTION);
-	} else {
-		printf("EMPTY\n");
-	}
-
-	printf("-------------------------------------------\n");
 }
 
 

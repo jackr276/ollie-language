@@ -656,7 +656,7 @@ static void update_use_assignment_for_destination_variable(instruction_t* instru
 		add_used_live_range(live_range, block);
 
 	//If this is being derefenced, then it's not a true assignment, just a use
-	} else if(is_destination_assigned(instruction) == FALSE){
+	} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
 		add_used_live_range(live_range, block);
 
 	//If we get all the way to here, then it was truly assigned
@@ -1219,7 +1219,7 @@ static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, ins
 			 * region. Since this is the case, we're not really assigning to the register here. In
 			 * fact, we're using it, so we'll need to add this to LIVE_NOW
 			 */
-			} else if(is_destination_assigned(operation) == FALSE){
+			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
 				//Add it to live now and we're done
 				add_live_now_live_range(operation->destination_register->associated_live_range, live_after);
 
@@ -1390,7 +1390,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 			 * region. Since this is the case, we're not really assigning to the register here. In
 			 * fact, we're using it, so we'll need to add this to LIVE_NOW
 			 */
-			} else if(is_destination_assigned(operation) == FALSE){
+			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
 				//Add it to live now and we're done
 				add_live_now_live_range(operation->destination_register->associated_live_range, live_now);
 
@@ -2511,7 +2511,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 				latest = instruction->next_statement;
 
 			//In the case like this, we just need to emit the load
-			} else if(is_destination_assigned(instruction) == FALSE){
+			} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
 				//Handle the source spill only
 				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->base_address);
 

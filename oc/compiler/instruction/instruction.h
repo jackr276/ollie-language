@@ -181,18 +181,6 @@ struct instruction_t{
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
 	instruction_t* previous_statement;
-	/**
-	 * Data dependency graph values
-	 *
-	 * It is more efficient for us to just store the dependency
-	 * graph in here rather than creating separate memory for it
-	 */
-	//The nodes that this instruction
-	//depends on(predecessors)
-	dynamic_array_t* predecessor_instructions;
-	//The nodes that depend on this
-	//These could be considered as our successors
-	dynamic_array_t* successor_instructions;
 	//A three address code always has 2 operands and an assignee
 	three_addr_var_t* op1;
 	three_addr_var_t* op2;
@@ -226,10 +214,6 @@ struct instruction_t{
 	symtab_function_record_t* function;
 	//Generic parameter list - could be used for phi functions or function calls
 	void* parameters;
-	//The priority in the list scheduler
-	u_int32_t priority;
-	//The order of our instruction in the block
-	u_int32_t block_order;
 	//What is the three address code type
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
@@ -303,6 +287,11 @@ u_int8_t is_store_operation(instruction_t* statement);
 u_int8_t is_load_operation(instruction_t* statement);
 
 /**
+ * Is the given instruction a load operation or not?
+ */
+u_int8_t is_load_instruction(instruction_t* instruction);
+
+/**
  * Helper function to determine if an operator is can be constant folded
  */
 u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op);
@@ -325,7 +314,7 @@ u_int8_t is_destination_also_operand(instruction_t* instruction);
 /**
  * Is the destination actually assigned?
  */
-u_int8_t is_destination_assigned(instruction_t* instruction);
+u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction);
 
 /**
  * Is this operation a pure copy? In other words, is it a move instruction

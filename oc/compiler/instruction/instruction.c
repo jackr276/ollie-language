@@ -267,6 +267,47 @@ u_int8_t is_load_operation(instruction_t* statement){
 
 
 /**
+ * Is the given instruction a load operation or not?
+ */
+u_int8_t is_load_instruction(instruction_t* instruction){
+	//Just to be safe here
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	//Run through all of our move operation types
+	switch(instruction->instruction_type){
+		case MOVQ:
+		case MOVL:
+		case MOVW:
+		case MOVB:
+		case MOVSBW:
+		case MOVSBL:
+		case MOVSBQ:
+		case MOVSWL:
+		case MOVSWQ:
+		case MOVSLQ:
+		case MOVZBW:
+		case MOVZBL:
+		case MOVZBQ:
+		case MOVZWL:
+		case MOVZWQ:
+			//Only if it's a memory read
+			if(instruction->memory_access_type == READ_FROM_MEMORY){
+				return TRUE;
+			}
+
+			//Otherwise no
+			return FALSE;
+
+		//Otherwise no
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Helper function to determine if an operator is can be constant folded
  */
 u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op){
@@ -385,7 +426,7 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 /**
  * Is the destination actually assigned?
  */
-u_int8_t is_destination_assigned(instruction_t* instruction){
+u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction){
 	switch(instruction->instruction_type){
 		case MOVQ:
 		case MOVL:
