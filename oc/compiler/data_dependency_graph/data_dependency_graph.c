@@ -580,6 +580,16 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
  * For efficiency's sake here, we do have a reusable array that we keep using for efficiency
  *
  * Pseudocode:
+ * for each node in the subgraph:
+ * 	load_count[i] = 1 if node is load else 0
+ *
+ * for each node in the subgraph(which is in topological order):
+ * 	for each node U in its neighbor set:
+ * 		if U is a load:
+ * 			add = 1
+ * 		else:
+ * 			add = 0
+ *	 	load_count[U index] = max(load_count[U_index], load_count[V_index] + 0)
  */
 static u_int32_t maximum_loads_through_any_path_in_graph(dynamic_array_t* graph, u_int8_t* load_counts){
 	for(u_int16_t i = 0; i < graph->current_index; i++){
@@ -592,6 +602,20 @@ static u_int32_t maximum_loads_through_any_path_in_graph(dynamic_array_t* graph,
 			load_counts[i] = 1;
 		} else {
 			load_counts[i] = 0;
+		}
+	}
+
+	//Now run through every instruction in the subgraph
+	for(u_int16_t i = 0; i < graph->current_index; i++){
+		//Extract it
+		data_dependency_graph_node_t* node = dynamic_array_get_at(graph, i);
+
+		//What are we adding
+		u_int32_t add = 0;
+
+		//If this is a load instruction, we are adding one more
+		if(is_load_instruction(node->instruction) == TRUE){
+			add = 1;
 		}
 
 	}
