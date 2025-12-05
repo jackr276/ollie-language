@@ -4965,7 +4965,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
 
 		//Seed the search by adding the funciton block into the queue
-		enqueue(queue, dynamic_array_get_at(cfg->function_entry_blocks, i));
+		enqueue(queue, function_entry_block);
 
 		//So long as the queue isn't empty
 		while(queue_is_empty(queue) == FALSE){
