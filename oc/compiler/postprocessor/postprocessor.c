@@ -223,6 +223,78 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 
 
 /**
+ * Is a given block empty? Recall that empty means
+ * we only have a jump instruction and no other *meaningful*
+ * instructions. However, we could have some PHI instructions in
+ * here that we have previously considered meaningful which are
+ * at this stage meaningless
+ */
+static u_int8_t is_block_jump_instruction_only(basic_block_t* block){
+	//If it's null then leave
+	if(block->exit_statement == NULL){
+		return FALSE;
+	}
+
+	//If it doesn't end in a jump then leave
+	if(block->exit_statement->instruction_type != JMP){
+		return FALSE;
+	}
+
+	//Real quick - if the instruction count here is 1, then we know for
+	//sure that it's just a jump instruction. The instruction count
+	//can be misleading though, so it not being 1 *does not* rule
+	//out the potential that this could just be a jump
+	if(block->number_of_instructions == 1){
+		return TRUE;
+	}
+
+	//Grab a block cursor to search the rest of the block
+	instruction_t* cursor = block->exit_statement->previous_statement;
+
+	//Run through the rest
+	while(cursor != NULL){
+		//Anything other than a phi-function immediately
+		//disqualifies us
+		switch (cursor->instruction_type) {
+			case PHI_FUNCTION:
+				break;
+			default:
+				return FALSE;
+		}
+
+		//Keep crawling up
+		cursor = cursor->previous_statement;
+	}
+	
+	//If we make it here then yes - it is only a jump instuction
+	return TRUE;
+}
+
+
+/**
+ * Does the block in question end in a jmp instruction? If so,
+ * give back what it's jumping ot
+ */
+static basic_block_t* get_jumping_to_block_if_exists(basic_block_t* block){
+	//If it's null then leave
+	if(block->exit_statement == NULL){
+		return NULL;
+	}
+
+	//Go based on our type here
+	switch(block->exit_statement->instruction_type){
+		//Direct jump, just use the if block
+		case JMP:
+			return block->exit_statement->if_block;
+
+		//By default no
+		default:
+			return NULL;
+	}
+}
+
+
+/**
  * The branch reduce function is what we use on each pass of the function
  * postorder
  *
@@ -261,12 +333,12 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
 			/**
-			 * If i is empty then
+			 * If i is empty(of important instuctions) then
 			 * 	replace transfers to i with transfers to j
 			 */
 			//We know it's empty if these are the same
-			if(current->exit_statement == current->leader_statement
-				&& current->block_type != BLOCK_TYPE_FUNC_ENTRY){
+			if(current->block_type != BLOCK_TYPE_FUNC_ENTRY
+				&& is_block_jump_instruction_only(current) == TRUE){
 				//Replace all jumps to the current block with those to the jumping block
 				replace_all_branch_targets(current, jumping_to_block);
 
@@ -344,30 +416,6 @@ static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
 
 
 /**
- * Does the block in question end in a jmp instruction? If so,
- * give back what it's jumping ot
- */
-static basic_block_t* does_block_end_in_jump_instruction(basic_block_t* block){
-	//If it's null then leave
-	if(block->exit_statement == NULL){
-		return NULL;
-	}
-
-	//Go based on our type here
-	switch(block->exit_statement->instruction_type){
-		//Direct jump, just use the if block
-		case JMP:
-			return block->exit_statement->if_block;
-
-		//By default no
-		default:
-			return NULL;
-	}
-}
-
-
-
-/**
  * Once we've done all of the reduction that we see fit to do, we'll need to 
  * find a way to reorder the blocks since it is likely that the control flow
  * changed
@@ -405,8 +453,8 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 			//We'll add this in as a direct successor
 			previous->direct_successor = current;
 
-			//Do we end in a jump?
-			basic_block_t* end_jumps_to = does_block_end_in_jump_instruction(previous);
+			//Do we end in a jump? If so grab the block
+			basic_block_t* end_jumps_to = get_jumping_to_block_if_exists(previous);
 
 			//If we do AND what we're jumping to is the direct successor, then we'll
 			//delete the jump statement as it is now unnecessary
@@ -424,7 +472,7 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 
 		//Let's first check for our special case - us jumping to a given block as the very last statement. If
 		//this turns back something that isn't null, it'll be the first thing we add in
-		basic_block_t* direct_end_jump = does_block_end_in_jump_instruction(current);
+		basic_block_t* direct_end_jump = get_jumping_to_block_if_exists(current);
 
 		//If this is the case, we'll add it in first
 		if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
