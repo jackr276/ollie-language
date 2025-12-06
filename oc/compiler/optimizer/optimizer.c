@@ -2002,104 +2002,6 @@ static void delete_unreachable_blocks(cfg_t* cfg){
 
 
 /**
- * Estimate all execution frequencies in the CFG
- *
- * We can traverse the entire graph in a breadth-first way, determining
- * what kind of block we have along the way and updating the frequency accordingly
- *
- * Rules for estimation:
- * 	Return statements and user defined jumps can only ever execute once
- *
- *	If a block has one predecessor and the predecessor has one successor(1-to-1):
- *		carry over the execution frequency of the predecessor
- *
- *	If a block has a predecessor that ends in a branch:
- *		Assume that the branch is taken half of the time to get into the block
- */
-static void estimate_execution_frequencies(cfg_t* cfg){
-	//For holding our blocks
-	basic_block_t* block;
-
-	//First, we'll reset every single block here
-	reset_visited_status(cfg, FALSE);
-
-	//We'll need a queue for our BFS. Since BFS runs until the heap
-	//queue is empty anyway, we actually don't need to deal with any
-	//resetting here
-	heap_queue_t* queue = heap_queue_alloc();
-
-	//Run through every single function inside of the CFG
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-		//Extract the entry out
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
-		
-		//We assume that the entry block only goes once. This is our seed
-		//for the entire process
-		function_entry->estimated_execution_frequency = 1;
-
-		//Seed the search by adding the funciton block into the queue
-		enqueue(queue, dynamic_array_get_at(cfg->function_entry_blocks, i));
-
-		//So long as the queue isn't empty
-		while(queue_is_empty(queue) == FALSE){
-			//Pop off of the queue
-			block = dequeue(queue);
-
-			//Now we'll mark this as visited
-			block->visited = TRUE;
-
-			//Certain blocks are guaranteed to only ever execute once. We will
-			//account for such cases here
-			switch(block->block_terminal_type){
-				//Do not update anything in the below cases. These are for sure
-				//exit statements, so their estimated execution frequency
-				//will not go up from what it originally was
-				case BLOCK_TERM_TYPE_RET:
-				case BLOCK_TERM_TYPE_USER_DEFINED_JUMP:
-					//This can only ever execute one time
-					block->estimated_execution_frequency = 1;
-					break;
-				default:
-					//Get the execution frequency of the highest predecessor
-					if(block->predecessors != NULL && block->predecessors->current_index != 0){
-						//The predecessors maximum execution count
-						u_int32_t maximum_execution_count = 0;
-
-						//Run through every predecessor
-						for(u_int16_t j = 0; j < block->predecessors->current_index; j++){
-							//Extract it
-							basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, j);
-							
-							//Does this have the highest execution count?
-							if(predecessor->estimated_execution_frequency > maximum_execution_count){
-								maximum_execution_count = predecessor->estimated_execution_frequency;
-							}
-						}
-
-						//Once we reach down here, we will update this block's estimated execution frequency
-						//by multiplying it by the highest predecessor frequency
-						//block->estimated_execution_frequency *= maximum_execution_count;
-					}
-			}
-
-			//And finally we'll add all of these onto the queue
-			for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
-				//Add the successor into the queue, if it has not yet been visited
-				basic_block_t* successor = block->successors->internal_array[j];
-
-				if(successor->visited == FALSE){
-					enqueue(queue, successor);
-				}
-			}
-		}
-	}
-
-	//Destroy the heap queue when done
-	heap_queue_dealloc(queue);
-}
-
-
-/**
  * The generic optimize function. We have the option to specific how many passes the optimizer
  * runs for in it's current iteration
 */
@@ -2139,11 +2041,6 @@ cfg_t* optimize(cfg_t* cfg){
 	//etc. So, to remedy this, we will recalculate everything in the CFG
 	//cleanup_all_control_relations(cfg);
 	recompute_all_dominance_relations(cfg);
-
-	//PASS 7: Estimate execution frequencies
-	//This will become important in the register allocation later on. We'll need to estimate how often a block will be executed in order
-	//to decide where to allocate registers appropriately.
-	estimate_execution_frequencies(cfg);
 
 	//Give back the CFG
 	return cfg;
