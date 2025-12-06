@@ -229,8 +229,60 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
  * here that we have previously considered meaningful which are
  * at this stage meaningless
  */
-static u_int8_t is_block_empty(basic_block_t* block){
-	return FALSE;
+static u_int8_t is_block_jump_instruction_only(basic_block_t* block){
+	//If it's null then leave
+	if(block->exit_statement == NULL){
+		return FALSE;
+	}
+
+	//If it doesn't end in a jump then leave
+	if(block->exit_statement->instruction_type != JMP){
+		return FALSE;
+	}
+
+	//Grab a block cursor to search the rest of the block
+	instruction_t* cursor = block->exit_statement->previous_statement;
+
+	//Run through the rest
+	while(cursor != NULL){
+		//Anything other than a phi-function immediately
+		//disqualifies us
+		switch (cursor->instruction_type) {
+			case PHI_FUNCTION:
+				break;
+			default:
+				return FALSE;
+		}
+
+		//Keep crawling up
+		cursor = cursor->previous_statement;
+	}
+	
+	//If we make it here then yes - it is only a jump instuction
+	return TRUE;
+}
+
+
+/**
+ * Does the block in question end in a jmp instruction? If so,
+ * give back what it's jumping ot
+ */
+static basic_block_t* does_block_end_in_jump_instruction(basic_block_t* block){
+	//If it's null then leave
+	if(block->exit_statement == NULL){
+		return NULL;
+	}
+
+	//Go based on our type here
+	switch(block->exit_statement->instruction_type){
+		//Direct jump, just use the if block
+		case JMP:
+			return block->exit_statement->if_block;
+
+		//By default no
+		default:
+			return NULL;
+	}
 }
 
 
@@ -267,13 +319,13 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 		/**
 		 * If block i ends in a jump to j then..
 		 */
-		if(current->exit_statement != NULL
-			&& current->exit_statement->instruction_type == JMP){
+		if(does_block_end_in_jump_instruction(current) == TRUE){
+			
 			//Extract the block(j) that we're going to
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
 			/**
-			 * If i is empty then
+			 * If i is empty(of important instuctions) then
 			 * 	replace transfers to i with transfers to j
 			 */
 			//We know it's empty if these are the same
@@ -353,30 +405,6 @@ static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
 }
-
-
-/**
- * Does the block in question end in a jmp instruction? If so,
- * give back what it's jumping ot
- */
-static basic_block_t* does_block_end_in_jump_instruction(basic_block_t* block){
-	//If it's null then leave
-	if(block->exit_statement == NULL){
-		return NULL;
-	}
-
-	//Go based on our type here
-	switch(block->exit_statement->instruction_type){
-		//Direct jump, just use the if block
-		case JMP:
-			return block->exit_statement->if_block;
-
-		//By default no
-		default:
-			return NULL;
-	}
-}
-
 
 
 /**
