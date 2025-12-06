@@ -68,6 +68,12 @@ u_int8_t nesting_stack_is_empty(nesting_stack_t* nesting_stack);
 u_int8_t nesting_stack_contains_level(nesting_stack_t* nesting_stack, nesting_level_t level);
 
 /**
+ * Get the estimated execution frequency of something given a nesting level using
+ * our custom rules
+ */
+u_int32_t get_estimated_execution_frequency_from_nesting_stack(nesting_stack_t* stack);
+
+/**
  * Remove the top value of the stack
  */
 nesting_level_t pop_nesting_level(nesting_stack_t* stack);

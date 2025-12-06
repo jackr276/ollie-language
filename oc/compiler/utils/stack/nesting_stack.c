@@ -59,6 +59,15 @@ u_int8_t nesting_stack_is_empty(nesting_stack_t* nesting_stack){
 
 
 /**
+ * Get the estimated execution frequency of something given a nesting level using
+ * our custom rules
+ */
+u_int32_t get_estimated_execution_frequency_from_nesting_stack(nesting_stack_t* stack){
+	return 0;
+}
+
+
+/**
  * Pop the head off of the stack and return the data
  */
 nesting_level_t pop_nesting_level(nesting_stack_t* stack){
