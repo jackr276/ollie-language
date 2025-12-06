@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include "../utils/queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
+#include "../utils/stack/nesting_stack.h"
 #include "../utils/constants.h"
 
 //Our atomically incrementing integer
@@ -49,6 +50,8 @@ static generic_type_t* i64 = NULL;
 //to send value packages at each rule
 static heap_stack_t* break_stack = NULL;
 static heap_stack_t* continue_stack = NULL;
+//The overall nesting stack will tell us what level of nesting we're at(if, switch/case, loop)
+static nesting_stack_t* nesting_stack = NULL;
 //Keep a list of all lable statements in the function(block jumps are internal only)
 static dynamic_array_t* current_function_labeled_blocks = NULL;
 //Also keep a list of all custom jumps in the function
@@ -5685,6 +5688,10 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
 
+	//We are now entering the nesting stack
+	//push_nesting_level(nesting_stack, evel)
+
+
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
@@ -8481,9 +8488,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	type_symtab = results->type_symtab;
 	variable_symtab = results->variable_symtab;
 
-	//Allocate these two stacks
+	//Allocate these three stacks
 	break_stack = heap_stack_alloc();
 	continue_stack = heap_stack_alloc(); 
+	nesting_stack = nesting_stack_alloc();
 
 	//Keep these on hand
 	u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
@@ -8548,6 +8556,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	//Once we get here, we're done with these two stacks
 	heap_stack_dealloc(break_stack);	
 	heap_stack_dealloc(continue_stack);	
+	nesting_stack_dealloc(&nesting_stack);
 
 	//Give back the reference
 	return cfg;

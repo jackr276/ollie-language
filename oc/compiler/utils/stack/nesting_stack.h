@@ -19,13 +19,12 @@ typedef struct nesting_stack_node_t nesting_stack_node_t;
  */
 typedef enum {
 	NO_NESTING_LEVEL = 0, // Our default value
-	FUNCTION,
-	CASE_STATEMENT,
-	C_STYLE_CASE_STATEMENT, // This one allows breaks
-	LOOP_STATEMENT,
-	IF_STATEMENT,
-	DEFER_STATEMENT,
-	//TODO more probably needed
+	NESTING_FUNCTION,
+	NESTING_CASE_STATEMENT,
+	NESTING_C_STYLE_CASE_STATEMENT, // This one allows breaks
+	NESTING_LOOP_STATEMENT,
+	NESTING_IF_STATEMENT,
+	NESTING_DEFER_STATEMENT,
 } nesting_level_t;
 
 
