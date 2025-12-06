@@ -267,7 +267,7 @@ static u_int8_t is_block_jump_instruction_only(basic_block_t* block){
  * Does the block in question end in a jmp instruction? If so,
  * give back what it's jumping ot
  */
-static basic_block_t* does_block_end_in_jump_instruction(basic_block_t* block){
+static basic_block_t* get_jumping_to_block_if_exists(basic_block_t* block){
 	//If it's null then leave
 	if(block->exit_statement == NULL){
 		return NULL;
@@ -319,8 +319,8 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 		/**
 		 * If block i ends in a jump to j then..
 		 */
-		if(does_block_end_in_jump_instruction(current) == TRUE){
-			
+		if(current->exit_statement != NULL
+			&& current->exit_statement->instruction_type == JMP){
 			//Extract the block(j) that we're going to
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
@@ -329,8 +329,8 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			 * 	replace transfers to i with transfers to j
 			 */
 			//We know it's empty if these are the same
-			if(current->exit_statement == current->leader_statement
-				&& current->block_type != BLOCK_TYPE_FUNC_ENTRY){
+			if(current->block_type != BLOCK_TYPE_FUNC_ENTRY
+				&& is_block_jump_instruction_only(current) == TRUE){
 				//Replace all jumps to the current block with those to the jumping block
 				replace_all_branch_targets(current, jumping_to_block);
 
@@ -445,8 +445,8 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 			//We'll add this in as a direct successor
 			previous->direct_successor = current;
 
-			//Do we end in a jump?
-			basic_block_t* end_jumps_to = does_block_end_in_jump_instruction(previous);
+			//Do we end in a jump? If so grab the block
+			basic_block_t* end_jumps_to = get_jumping_to_block_if_exists(previous);
 
 			//If we do AND what we're jumping to is the direct successor, then we'll
 			//delete the jump statement as it is now unnecessary
@@ -464,7 +464,7 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 
 		//Let's first check for our special case - us jumping to a given block as the very last statement. If
 		//this turns back something that isn't null, it'll be the first thing we add in
-		basic_block_t* direct_end_jump = does_block_end_in_jump_instruction(current);
+		basic_block_t* direct_end_jump = get_jumping_to_block_if_exists(current);
 
 		//If this is the case, we'll add it in first
 		if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
