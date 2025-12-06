@@ -5560,14 +5560,19 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//First we'll allocate the result block
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
-	//Create our entry block. This in reality will be the compound statement
-	basic_block_t* do_while_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
-	//This is an entry block
-	do_while_stmt_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 	//The true ending block. We assume that the exit only happens once
 	basic_block_t* do_while_stmt_exit_block = basic_block_alloc(1);
 	//We will explicitly mark that this is an exit block
 	do_while_stmt_exit_block->block_type = BLOCK_TYPE_LOOP_EXIT;
+
+	//After we allocate the exit block, we will push on the 
+	//nesting level as the entry block is in the loop
+	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+
+	//Create our entry block. This in reality will be the compound statement
+	basic_block_t* do_while_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	//This is an entry block
+	do_while_stmt_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
 	push(continue_stack, do_while_stmt_entry_block);
@@ -5587,6 +5592,9 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 
 	//We go right into the compound statement here
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
+
+	//Once we're done pop the nesting level
+	pop_nesting_level(nesting_stack);
 
 	//It being NULL is ok, we'll just insert a dummy
 	if(compound_statement_results.starting_block == NULL){
@@ -5632,9 +5640,6 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 */
 	emit_branch(compound_stmt_end, do_while_stmt_entry_block, do_while_stmt_exit_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
-	//This is our condition block here, so we'll add the estimated cost
-	compound_stmt_end->estimated_execution_frequency = LOOP_ESTIMATED_COST;
-
 	//Set the termination type of this block
 	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 		compound_stmt_end->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
@@ -5657,18 +5662,22 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Initialize the result package
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
-	//Create our entry block
-	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
-	//This is an entry block
-	while_statement_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 	//And create our exit block. We assume that this executes once
 	basic_block_t* while_statement_end_block = basic_block_alloc(1);
 	//We will specifically mark the end block here as an ending block
 	while_statement_end_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
+	//We will not push to the nesting stack for the end block, but we will for the
+	//entry block because the entry block does execute in the loop
+	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+
+	//Create our entry block
+	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	//This is an entry block
+	while_statement_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
+
 	//We'll push the entry block onto the continue stack, because continues will go there.
 	push(continue_stack, while_statement_entry_block);
-
 	//And we'll push the end block onto the break stack, because all breaks go there
 	push(break_stack, while_statement_end_block);
 
@@ -5688,12 +5697,11 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//The very next node is a compound statement
 	ast_cursor = ast_cursor->next_sibling;
 
-	//We are now entering the nesting stack
-	//push_nesting_level(nesting_stack, evel)
-
-
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
+
+	//We're out of the compound statement - pop the nesting level
+	pop_nesting_level(nesting_stack);
 
 	//If it's null, that means that we were given an empty while loop here.
 	//We'll just allocate our own and use that
@@ -5753,8 +5761,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//The statement result package for our if statement
 	cfg_result_package_t result_package;
 
-	//We always have an entry block and an exit block. We assume initially that
-	//these both happen once
+	//We always have an entry block and an exit block
 	basic_block_t* entry_block = basic_block_alloc(1);
 	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
 	basic_block_t* exit_block = basic_block_alloc(1);
@@ -5786,8 +5793,14 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
 
+	//Push that we're in an if statement for the compound statement
+	push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+
 	//Visit the compound statement that we're required to have here
 	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
+
+	//And then pop it off
+	pop_nesting_level(nesting_stack);
 
 	//If the starting block is null, create a dummy one
 	if(if_compound_statement_results.starting_block == NULL){
@@ -5845,8 +5858,14 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//Advance it up -- we should now have a compound statement
 		else_if_cursor = else_if_cursor->next_sibling;
 
+		//Push that we're in an if statement
+		push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+
 		//Let this handle the compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
+
+		//And now pop it off
+		pop_nesting_level(nesting_stack);
 
 		//If this is NULL, then we need to emit dummy blocks
 		if(else_if_compound_statement_results.starting_block == NULL){
@@ -5889,8 +5908,14 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 	//Now that we're out of here - we may have an else statement on our hands
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_COMPOUND_STMT){
+		//Push the nesting level now that we're in a compound statement
+		push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+
 		//Grab the compound statement
 		cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
+
+		//Pop it off
+		pop_nesting_level(nesting_stack);
 
 		//Extract for convenience
 		instruction_t* branch_statement = previous_entry_block->exit_statement;
