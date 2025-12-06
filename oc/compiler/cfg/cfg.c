@@ -28,7 +28,7 @@ u_int32_t* num_warnings_ref;
 //Keep the type symtab up and running
 type_symtab_t* type_symtab;
 //The CFG that we're working with
-cfg_t* cfg_ref;
+cfg_t* cfg = NULL;
 //Keep a reference to whatever function we are currently in
 symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
@@ -371,7 +371,7 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
  */
 dynamic_array_t* compute_post_order_traversal(basic_block_t* entry){
 	//Reset the visited status
-	reset_visited_status(cfg_ref, FALSE);
+	reset_visited_status(cfg, FALSE);
 
 	//Create our dynamic array
 	dynamic_array_t* post_order_traversal = dynamic_array_alloc();
@@ -3975,7 +3975,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							add_statement(current_block, memory_address_statement);
 
 							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
-							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg_ref->stack_pointer, offset, memory_address_statement->assignee);
+							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, memory_address_statement->assignee);
 							store->is_branch_ending = is_branch_ending;
 
 							//This comes afterwards
@@ -3983,7 +3983,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
 							//a simple binary operation instruction
-							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, PLUS, offset);
+							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg->stack_pointer, PLUS, offset);
 							address->is_branch_ending = is_branch_ending;
 
 							//Add it into the block
@@ -3999,7 +3999,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
 							//a simple binary operation instruction
-							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, PLUS, offset);
+							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg->stack_pointer, PLUS, offset);
 							address->is_branch_ending = is_branch_ending;
 
 							//Add it into the block
@@ -4904,7 +4904,7 @@ basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	created->function_defined_in = current_function;
 
 	//Add this into the dynamic array
-	dynamic_array_add(cfg_ref->created_blocks, created);
+	dynamic_array_add(cfg->created_blocks, created);
 
 	return created;
 }
@@ -4938,7 +4938,7 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label, u_int
 	created->function_defined_in = current_function;
 
 	//Add this into the dynamic array
-	dynamic_array_add(cfg_ref->created_blocks, created);
+	dynamic_array_add(cfg->created_blocks, created);
 
 	return created;
 }
@@ -5389,7 +5389,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->number_of_instructions += b->number_of_instructions;
 
 	//We'll remove this from the list of created blocks
-	dynamic_array_delete(cfg_ref->created_blocks, b);
+	dynamic_array_delete(cfg->created_blocks, b);
 
 	//And finally we'll deallocate b
 	basic_block_dealloc(b);
@@ -5462,6 +5462,10 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 			}
 		}
 
+	//Once we reach here, we are officially in the loop. Everything beyond this point
+	//is going to happen repeatedly
+	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
 	//The second and third condition in the for loop are the ones that execute continously. The third condition
 	//always executes at the end of each iteration
@@ -5510,6 +5514,9 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
+
+	//Once we're done with the compound statement, we are no longer in the loop
+	pop_nesting_level(nesting_stack);
 
 	//If we have an empty interior just emit a dummy block. It will be optimized away 
 	//regardless
@@ -5576,7 +5583,6 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
 	push(continue_stack, do_while_stmt_entry_block);
-
 	//And we'll push the end block onto the break stack, because all breaks go there
 	push(break_stack, do_while_stmt_exit_block);
 
@@ -5662,7 +5668,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Initialize the result package
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
-	//And create our exit block. We assume that this executes once
+	//Create our exit block. We assume that this executes once
 	basic_block_t* while_statement_end_block = basic_block_alloc(1);
 	//We will specifically mark the end block here as an ending block
 	while_statement_end_block->block_type = BLOCK_TYPE_LOOP_EXIT;
@@ -8164,7 +8170,7 @@ static void visit_global_declare_statement(generic_ast_node_t* node){
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
 
 	//And add it into the CFG
-	dynamic_array_add(cfg_ref->global_variables, global_variable);
+	dynamic_array_add(cfg->global_variables, global_variable);
 }
 
 
@@ -8556,7 +8562,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	char_type = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
 
 	//We'll first create the fresh CFG here
-	cfg_t* cfg = calloc(1, sizeof(cfg_t));
+	cfg = calloc(1, sizeof(cfg_t));
 
 	//Store this along with it
 	cfg->type_symtab = type_symtab;
@@ -8566,9 +8572,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	cfg->function_entry_blocks = dynamic_array_alloc();
 	cfg->function_exit_blocks = dynamic_array_alloc();
 	cfg->global_variables = dynamic_array_alloc();
-
-	//Hold the cfg
-	cfg_ref = cfg;
 
 	//Set this to NULL initially
 	current_function = NULL;
