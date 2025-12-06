@@ -5952,6 +5952,9 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	//Declare and prepack our results
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
+	//This is nesting inside of a case statement
+	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+
 	//For a default statement, it performs very similarly to a case statement. 
 	//It will be handled slightly differently in the jump table, but we'll get to that 
 	//later on
@@ -5977,6 +5980,9 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 		results.final_block = default_stmt;
 	}
 
+	//Nesting here is no longer in a case statement
+	pop_nesting_level(nesting_stack);
+
 	//Give the block back
 	return results;
 }
@@ -5989,6 +5995,9 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	//Declare and prepack our results
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
+
+	//This is nesting inside of a case statement
+	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
 
 	//The case statement should have some kind of constant value here, whether
 	//it's an enum value or regular const. All validation should have been
@@ -6023,6 +6032,9 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 		results.final_block = case_stmt;
 	}
 
+	//Nesting here is no longer in a case statement
+	pop_nesting_level(nesting_stack);
+
 	//Give the block back
 	return results;
 }
@@ -6039,6 +6051,9 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* root_node){
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
+
+	//This is nested in a C-style case statement
+	push_nesting_level(nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
 
 	//Since a C-style case statement is just a collection of 
 	//statements, we'll use the statement sequence to process it here
@@ -6057,8 +6072,10 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 		//This is the starting and final block
 		result_package.starting_block = case_block;
 		result_package.final_block = case_block;
-
 	}
+
+	//Remove the nesting now
+	pop_nesting_level(nesting_stack);
 
 	//Give back the final results
 	return result_package;
@@ -6077,6 +6094,9 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
+	//This is nested in a C-style case statement
+	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+
 	//Since a C-style case statement is just a collection of 
 	//statements, we'll use the statement sequence to process it here
 	cfg_result_package_t statement_results = visit_statement_chain(root_node->first_child); 
@@ -6096,6 +6116,9 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 		result_package.final_block = case_block;
 
 	}
+
+	//Remove the nesting now
+	pop_nesting_level(nesting_stack);
 
 	//Give back the final results
 	return result_package;
@@ -7680,6 +7703,9 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
  * will always have it's own separate block
  */
 static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
+	//Push the nesting level that we're in
+	push_nesting_level(nesting_stack, NESTING_FUNCTION);
+	
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
 	//We will now store this as the current function
@@ -7799,6 +7825,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//Deallocate the current function's user defined jumps as well
 	dynamic_array_dealloc(current_function_user_defined_jump_statements);
 	current_function_user_defined_jump_statements = NULL;
+
+	//Remove it now that we're done
+	pop_nesting_level(nesting_stack);
 
 	//We always return the start block
 	return function_starting_block;
