@@ -240,6 +240,14 @@ static u_int8_t is_block_jump_instruction_only(basic_block_t* block){
 		return FALSE;
 	}
 
+	//Real quick - if the instruction count here is 1, then we know for
+	//sure that it's just a jump instruction. The instruction count
+	//can be misleading though, so it not being 1 *does not* rule
+	//out the potential that this could just be a jump
+	if(block->number_of_instructions == 1){
+		return TRUE;
+	}
+
 	//Grab a block cursor to search the rest of the block
 	instruction_t* cursor = block->exit_statement->previous_statement;
 
