@@ -223,6 +223,18 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 
 
 /**
+ * Is a given block empty? Recall that empty means
+ * we only have a jump instruction and no other *meaningful*
+ * instructions. However, we could have some PHI instructions in
+ * here that we have previously considered meaningful which are
+ * at this stage meaningless
+ */
+static u_int8_t is_block_empty(basic_block_t* block){
+	return FALSE;
+}
+
+
+/**
  * The branch reduce function is what we use on each pass of the function
  * postorder
  *
