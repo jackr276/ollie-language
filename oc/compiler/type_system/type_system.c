@@ -2252,14 +2252,19 @@ generic_type_t* dealias_type(generic_type_t* type){
  * Perform a symbolic dereference of a type
  */
 generic_type_t* dereference_type(generic_type_t* pointer_type){
-	//Dev check here
-	if(pointer_type->type_class != 	TYPE_CLASS_POINTER){
-		printf("Fatal internal compiler error: attempt to dereference a non-pointer\n");
-		exit(1);
+	//We're only able to dereference pointers, references
+	//and arrays
+	switch(pointer_type->type_class){
+		case TYPE_CLASS_POINTER:
+			return pointer_type->internal_types.points_to;
+		case TYPE_CLASS_REFERENCE:
+			return pointer_type->internal_types.references;
+		case TYPE_CLASS_ARRAY:
+			return pointer_type->internal_types.member_type;
+		default:
+			printf("Fatal internal compiler error: attempt to dereference a non-pointer\n");
+			exit(1);
 	}
-
-	//Otherwise, just use the internal storage to get it
-	return pointer_type->internal_types.points_to;
 }
 
 
