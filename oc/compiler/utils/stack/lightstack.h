@@ -17,13 +17,13 @@ typedef struct lightstack_t lightstack_t;
 
 //The lightstack structure
 struct lightstack_t{
+	//The actual stack array
+	u_int32_t* stack;
 	//The index of the top
 	//NOTE: the actual current top is 1 below this(top_index - 1)
 	u_int16_t top_index;
 	//The current size
 	u_int16_t current_size;
-	//The actual stack array
-	u_int32_t* stack;
 };
 
 //Due to the way a lightstack works, there is NO dedicated initialization. Any/all initialization
