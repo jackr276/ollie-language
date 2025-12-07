@@ -4,6 +4,7 @@
  */
 
 #include "heapstack.h"
+#include <exception>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -58,37 +59,28 @@ void push(heap_stack_t* stack, void* data){
 
 /**
  * Pop the head off of the stack and return the data
+ *
+ * We represent the stack internally with an array, so all that popping
+ * does is return the data at the last inserted index(back) of the array
  */
 void* pop(heap_stack_t* stack){
-	//Just in case
-	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return NULL;
-	}
-
-	//Special case: we have an empty stack
-	if(stack->top == NULL){
-		return NULL;
-	}
-
 	//If there are no nodes return 0
-	if(stack->num_nodes == 0){
+	if(stack->current_index == 0){
 		return NULL;
 	}
 
-	//Grab the data
-	void* top = stack->top->data;
+	//Decrement one from the current index. The pointer
+	//will now reference the last inserted node
+	stack->current_index--;
+
+	//Grab the data at the current index
+	void* top = stack->stack[stack->current_index];
+
+	//Null it out now to be safe so that future 
+	//callers don't mistake it for something else
+	stack->stack[stack->current_index] = NULL;
 	
-	stack_node_t* temp = stack->top;
-
-	//"Delete" the node from the stack
-	stack->top = stack->top->next;
-
-	//Free the node
-	free(temp);
-	//Decrement number of nodes
-	stack->num_nodes--;
-
+	//Give this back
 	return top;
 }
 
@@ -97,24 +89,14 @@ void* pop(heap_stack_t* stack){
  * Peek the top of the stack without removing it
  */
 void* peek(heap_stack_t* stack){
-	//Just in case
-	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return NULL;
-	}
-
-	//If the top is NULL, just return NULL
-	if(stack->top == NULL){
-		return NULL;
-	}
-
 	//If there are no nodes return 0
-	if(stack->num_nodes == 0){
+	if(stack->current_index == 0){
 		return NULL;
 	}
 
-	//Return the data pointer
-	return stack->top->data;
+	//Give back the value at the current index
+	//minus 1(last inserted index)
+	return stack->stack[stack->current_index - 1];
 }
 
 
