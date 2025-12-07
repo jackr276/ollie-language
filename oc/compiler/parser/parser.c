@@ -5813,9 +5813,6 @@ static generic_type_t* type_specifier(FILE* fl){
 
 			//Otherwise we already have it, no need to do any extra creation
 			} else {
-				printf("SAVED ARRAY ALLOCATION\n");
-
-
 				//Otherwise, just set the current type record to be what we found
 				current_type_record = found_array;
 			}

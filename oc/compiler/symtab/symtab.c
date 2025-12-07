@@ -230,6 +230,45 @@ static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
 
 
 /**
+ * A helper function that will hash the name of an array type
+ */
+static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
+	u_int32_t key = 37;
+	
+	char* cursor = type_name;
+	//Two primes(this should be good enough for us)
+	u_int32_t a = 54059;
+	u_int32_t b = 76963;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		//Sum this up for our key
+		key = (key * a) ^ (*cursor * b);
+	}
+
+	//This is an array, we'll add the bounds in to further
+	//stop collisions
+	key += num_members;
+
+	//If this is mutable, we will keep going by adding
+	//a duplicated version of the type's first character
+	//onto the hash. This should(in most cases) make the hash
+	//entirely different from the non-mutable version
+	if(mutability == MUTABLE){
+		//Update the key
+		key = (key * a) ^ ((*type_name) * b);
+		//Make it so that we have the '`' character, one
+		//that is not recognized at all be the lexer. This will
+		//ensure that we can never get a false positive
+		key = (key * a) ^ ('`' * b);
+	}
+
+	//Cut it down to our keyspace
+	return key % KEYSPACE;
+}
+
+
+/**
  * For arrays, type hashing will include their values
  *
  * For *mutable types*, the type hasher concatenates a
@@ -1104,8 +1143,8 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 	//Append the array signifiers to it
 	strcat(type_name, "[]");
 
-	//Now get the hash
-	u_int16_t hash = hash_type_name(type_name, mutability);
+	//Now get the hash. We need to be using a special helper for this
+	u_int16_t hash = hash_array_type_name(type_name, num_members, mutability);
 
 	//Grab the current lexical scope. We will search here and down
 	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
@@ -1115,7 +1154,7 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 	while(sheaf_cursor != NULL){
 		//Grab the record at the hash
 		record_cursor = sheaf_cursor->records[hash];
-		
+
 		//We could have had collisions so we'll have to hunt here
 		while(record_cursor != NULL){
 			//If it's not an array we don't care
