@@ -4915,10 +4915,12 @@ static basic_block_t* basic_block_alloc_with_stack_estimate(){
 	return created;
 }
 
+
 /**
- * Allocate a basic block using calloc. NO data assignment
- * happens in this function
-*/
+ * The standard basic_block_alloc function will take in the estimated
+ * execution frequency. If you are in the CFG, *you should not be
+ * using this function*
+ */
 basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
@@ -4947,7 +4949,7 @@ basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 /**
  * Allocate a basic block that comes from a user-defined label statement
 */
-static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label, u_int32_t estimated_execution_frequency){
+static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
@@ -4965,8 +4967,9 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label, u_int
 	//We'll mark this to indicate that this is a labeled block
 	created->block_type = BLOCK_TYPE_LABEL;
 
-	//What is the estimated execution cost of this block?
-	created->estimated_execution_frequency = estimated_execution_frequency;
+	//What is the estimated execution cost of this block? Rely on the nesting stack
+	//to do this
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
 
 	//Let's add in what function this block came from
 	created->function_defined_in = current_function;
@@ -7001,7 +7004,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			//given label name
 			case AST_NODE_TYPE_LABEL_STMT:
 				//Allocate the label statement as the current block
-				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
+				labeled_block = labeled_block_alloc(ast_cursor->variable);
 
 				//Add this into the current function's labeled blocks
 				dynamic_array_add(current_function_labeled_blocks, labeled_block);
@@ -7518,7 +7521,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			 */
 			case AST_NODE_TYPE_LABEL_STMT:
 				//Allocate the label statement as the current block
-				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
+				labeled_block = labeled_block_alloc(ast_cursor->variable);
 
 				//Add this into the current function's labeled blocks
 				dynamic_array_add(current_function_labeled_blocks, labeled_block);

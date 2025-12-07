@@ -4,6 +4,7 @@
  */
 
 #include "nesting_stack.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include "../constants.h"
@@ -63,9 +64,50 @@ u_int8_t nesting_stack_is_empty(nesting_stack_t* nesting_stack){
 /**
  * Get the estimated execution frequency of something given a nesting level using
  * our custom rules
+ *
+ * Algorithm:
+ * 	for each level in the stack from bottom to top
+ * 		if level == if:
+ * 			estimated_execution_frequency *= 1/2 
+ * 		if level == loop
+ * 			estimated_execution_frequency *= 10
+ * 		if level == case_statement
+ * 			estimated_execution_frequency *= 1/5
  */
 u_int32_t get_estimated_execution_frequency_from_nesting_stack(nesting_stack_t* stack){
-	return 0;
+	//Initialize our frequency to be 1 initially
+	u_int32_t estimated_execution_frequency = 1;
+
+	//Iterate over the entire nesting stack from bottom-to-top
+	for(int32_t i = stack->current_index - 1; i >= 0; i--){
+		//Extract it
+		nesting_level_t level = stack->stack[i];
+
+		//We update based on it
+		switch(level){
+			case NESTING_IF_STATEMENT:
+
+			//We assume that each loop executes 10 times
+			case NESTING_LOOP_STATEMENT:
+				estimated_execution_frequency *= 10;
+				break;
+
+			//We know for a fact that a defer statement
+			//will only ever execute once - so if we get
+			//here, we do a reset
+			case NESTING_DEFER_STATEMENT:
+				estimated_execution_frequency = 1;
+				break;
+
+			//By default do nothing - this just means that our
+			//estimated execution count remains the same
+			default:
+				break;
+		}
+	}
+
+	//Give back whatever we thought
+	return estimated_execution_frequency;
 }
 
 
