@@ -10,6 +10,8 @@
 //For the TRUE and FALSE values
 #include "../constants.h"
 
+//By default, our size is 10
+#define DEFAULT_STACK_SIZE 10
 
 /**
  * Create a stack
@@ -17,6 +19,8 @@
 heap_stack_t* heap_stack_alloc(){
 	//Allocate our stack
 	heap_stack_t* stack = calloc(1, sizeof(heap_stack_t));
+
+	//Now all
 
 	//Return the stack
 	return stack;

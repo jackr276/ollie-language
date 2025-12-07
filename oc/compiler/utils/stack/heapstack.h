@@ -3,34 +3,28 @@
  * An API for a heap allocated stack implementation. Fully integrated for all stack
  * operations like push, pop and peek, and provides cleanup support as well
  *
- * This is a fully generic stack, for use in DFS mostly
+ * This is a fully generic stack, for use in DFS mostly - that stores nothing but pointers
  */
 
 #ifndef HEAP_STACK_H
 #define HEAP_STACK_H
-
 #include <sys/types.h>
 
-//Allows us to use stack_node_t as a type
-typedef struct stack_node_t stack_node_t;
+//Predeclare the type
+typedef struct heap_stack_t heap_stack_t;
 
 /**
- * Nodes for our stack
+ * The stack contains a dynamically resizable
+ * array, an index, and the current maximum nod
  */
-struct stack_node_t {
-	stack_node_t* next;
-	void* data;
-};
-
-
-/**
- * A reference to the the stack object that allows us to
- * have more than one stack
- */
-typedef struct {
-	struct stack_node_t* top;
-	u_int16_t num_nodes;
-} heap_stack_t;
+struct heap_stack_t{
+	//Stack is a generic array
+	void** stack;
+	//Points to the next point in the array
+	u_int32_t current_index;
+	//Current highest size
+	u_int32_t current_max_index;
+}; 
 
 
 /**
