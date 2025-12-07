@@ -4,7 +4,6 @@
  */
 
 #include "nesting_stack.h"
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include "../constants.h"
@@ -122,31 +121,12 @@ u_int8_t nesting_stack_contains_level(nesting_stack_t* nesting_stack, nesting_le
  * Completely free all memory in the stack
  */
 void nesting_stack_dealloc(nesting_stack_t** stack){
-	//Just in case...
-	if(stack == NULL){
-		printf("ERROR: Attempt to free a null pointer\n");
-		return;
-	}
+	//Free the internal array
+	free((*stack)->stack);
 
-	//Define a cursor and a temp
-	void* temp;
-	nesting_stack_node_t* cursor = (*stack)->top;
-
-	//Free every node
-	while(cursor != NULL){
-		//Save the cursor
-		temp = cursor; 
-
-		//Advance the cursor
-		cursor = cursor->next;
-
-		//Free the node
-		free(temp);
-	}
-
-	//Finally free the stack
+	//Free the overall struct
 	free(*stack);
 
-	//Set to NULL as a warning
+	//Set it to NULL as a warning
 	*stack = NULL;
 }
