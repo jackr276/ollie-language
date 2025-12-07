@@ -5781,8 +5781,8 @@ static generic_type_t* type_specifier(FILE* fl){
 
 	//Now we'll go back through and unwind the lightstack
 	while(lightstack_is_empty(&lightstack) == FALSE){
-		//Grab the number of bounds out
-		u_int32_t num_bounds = lightstack_pop(&lightstack);
+		//Grab the member count
+		u_int32_t num_members = lightstack_pop(&lightstack);
 
 		//If we're trying to create an array out of a type that is not yet fully
 		//defined, we also need to fail out. There exists a special exception here for array types, because we can
@@ -5794,28 +5794,44 @@ static generic_type_t* type_specifier(FILE* fl){
 			return NULL;
 		}
 
-		//If we get here though, we know that this one is good
-		//Lets create the array type
-		//
-		//TODO NEED A LOOKUP HERE
-		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds, mutability);
+		//We can do some optimization with our allocations if we have a set array member count already
+		if(num_members != 0){
+			//Lookup the array type first
+			symtab_type_record_t* found_array = lookup_array_type(type_symtab, current_type_record->type, num_members, mutability);
 
-		//Let's see if we can find this one
-		symtab_type_record_t* found_array = lookup_type(type_symtab, array_type);
+			//If we did not find it, we will add it into the symbol table
+			if(found_array == NULL){
+				//If we get here, we need to create an array type
+				generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_members, mutability);
 
-		//If we did not find it, we will add it into the symbol table
-		if(found_array == NULL){
+				//Create the type record
+				symtab_type_record_t* created_array = create_type_record(array_type);
+				//Insert it into the symbol table
+				insert_type(type_symtab, created_array);
+				//We'll also set the current type record to be this
+				current_type_record = created_array;
+
+			//Otherwise we already have it, no need to do any extra creation
+			} else {
+				printf("SAVED ARRAY ALLOCATION\n");
+
+
+				//Otherwise, just set the current type record to be what we found
+				current_type_record = found_array;
+			}
+
+		//If we have 0 members, we need to create a distinct array type no matter what so we won't bother 
+		//checking
+		} else {
+			//If we get here, we need to create an array type
+			generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_members, mutability);
+
 			//Create the type record
 			symtab_type_record_t* created_array = create_type_record(array_type);
 			//Insert it into the symbol table
 			insert_type(type_symtab, created_array);
 			//We'll also set the current type record to be this
 			current_type_record = created_array;
-		} else {
-			//Otherwise, just set the current type record to be what we found
-			current_type_record = found_array;
-			//We don't need the other one if this is the case
-			type_dealloc(array_type);
 		}
 	}
 
