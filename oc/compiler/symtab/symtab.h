@@ -431,6 +431,11 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type);
 symtab_type_record_t* lookup_pointer_type(type_symtab_t* symtab, generic_type_t* points_to, mutability_type_t mutability);
 
 /**
+ * Specifically look for a reference type to the given type in the symtab
+ */
+symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_t* references, mutability_type_t mutability);
+
+/**
  * Lookup a type name in the symtab by the name only. This does not
  * do the array bound comparison that we need for strict equality
  *

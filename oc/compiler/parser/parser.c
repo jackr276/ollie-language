@@ -5605,8 +5605,6 @@ static generic_type_t* type_specifier(FILE* fl){
 	//As long as we are seeing pointer/reference specifiers
 	while(lookahead.tok == STAR || lookahead.tok == SINGLE_AND){
 		//Predeclare here due to switch rules
-		generic_type_t* pointer;
-		generic_type_t* reference;
 		symtab_type_record_t* found_pointer;
 		symtab_type_record_t* found_reference;
 		
@@ -5614,13 +5612,14 @@ static generic_type_t* type_specifier(FILE* fl){
 		switch(lookahead.tok){
 			//Pointer type(also called a raw pointer) here
 			case STAR:
-				//Let's see if we can find it first. We want to avoid creating memory if we're able to
+				//Let's see if we can find it first. We want to avoid creating memory if we're able to,
+				//so this step is important
 				found_pointer = lookup_pointer_type(type_symtab, current_type_record->type, mutability);
 
 				//If we did not find it, we will add it into the symbol table
 				if(found_pointer == NULL){
 					//Let's create the pointer type. This pointer type will point to the current type
-					pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
+					generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
 
 					//Create the type record
 					symtab_type_record_t* created_pointer = create_type_record(pointer);
@@ -5628,26 +5627,25 @@ static generic_type_t* type_specifier(FILE* fl){
 					insert_type(type_symtab, created_pointer);
 					//We'll also set the current type record to be this
 					current_type_record = created_pointer;
+
+				//Otherwise we've already gotten it, so just use it for our purposes here
 				} else {
 					//Otherwise, just set the current type record to be what we found
 					current_type_record = found_pointer;
-					//We don't need the other ponter if this is the case
-					type_dealloc(pointer);
 				}
 
 				break;
 
 			//Reference type - a pointer with more rules & restrictions
 			case SINGLE_AND:
-				//Let's create the reference type. This reference type will point to the current reference type
-				reference = create_reference_type(current_type_record->type, parser_line_num, mutability);
-
-				//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
-				//also not an issue
-				symtab_type_record_t* found_reference = lookup_type(type_symtab, reference);
+				//Let's see if we're able to find a reference type like this that already exists
+				found_reference = lookup_reference_type(type_symtab, current_type_record->type, mutability);
 
 				//If we did not find it, we will add it into the symbol table
 				if(found_reference == NULL){
+					//Create it using the helper. It will be pointing to our current type
+					generic_type_t* reference = create_reference_type(current_type_record->type, parser_line_num, mutability);
+
 					//Create the type record
 					symtab_type_record_t* created_reference = create_type_record(reference);
 					//Insert it into the symbol table
@@ -5657,8 +5655,6 @@ static generic_type_t* type_specifier(FILE* fl){
 				} else {
 					//Otherwise, just set the current type record to be what we found
 					current_type_record = found_reference;
-					//We don't need the other ponter if this is the case
-					type_dealloc(reference);
 				}
 
 				break;

@@ -1046,6 +1046,52 @@ symtab_type_record_t* lookup_pointer_type(type_symtab_t* symtab, generic_type_t*
 
 
 /**
+ * Specifically look for a reference type to the given type in the symtab
+ */
+symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_t* references, mutability_type_t mutability){
+	//Grab an array for the type name
+	char type_name[MAX_IDENT_LENGTH];
+
+	//Get the name in there by a copy
+	strcpy(type_name, references->type_name.string);
+
+	//Append the reference token to it
+	strcat(type_name, "&");
+
+	//Now get the hash
+	u_int16_t hash = hash_type_name(type_name, mutability);
+
+	//Grab the current lexical scope. We will search here and down
+	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
+	symtab_type_record_t* record_cursor;
+
+	//Go through all of the scopes
+	while(sheaf_cursor != NULL){
+		//Grab the record at the hash
+		record_cursor = sheaf_cursor->records[hash];
+		
+		//We could have had collisions so we'll have to hunt here
+		while(record_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strcmp(record_cursor->type->type_name.string, type_name) == 0){
+				//We have a match
+				return record_cursor;
+			}
+
+			//Otherwise no match, we advance it
+			record_cursor = record_cursor->next;
+		}
+
+		//Go up to a higher scope
+		sheaf_cursor = sheaf_cursor->previous_level;
+	}
+
+	//If we get all the way down here and it's a bust, return NULL
+	return NULL;
+}
+
+
+/**
  * Lookup the record in the symtab that corresponds to the following name.
  * 
  * We are ALWAYS biased to the most local(in scope) version of the name. If we
