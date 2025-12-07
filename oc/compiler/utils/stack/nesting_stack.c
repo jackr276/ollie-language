@@ -36,20 +36,20 @@ nesting_stack_t* nesting_stack_alloc(){
  * This function handles our dynamic resize if need be
  */
 void push_nesting_level(nesting_stack_t* stack, nesting_level_t level){
+	//Handle dynamic resize case
+	if(stack->current_index == stack->current_max_index){
+		//Double it
+		stack->current_max_index *= 2;
 
+		//Realloc the array
+		stack->stack = realloc(stack->stack, stack->current_max_index * sizeof(nesting_level_t));
+	}
 
-	//Allocate a new node
-	nesting_stack_node_t* new = calloc(1, sizeof(nesting_stack_node_t));
-	//Store the level
-	new->level = level;
+	//Insert the value at the current index
+	stack->stack[stack->current_index] = level;
 
-	//Attach to the front of the stack
-	new->next = stack->top;
-	//Assign the top of the stack to be the new
-	stack->top = new;
-
-	//Increment number of nodes
-	stack->num_nodes++;
+	//Increment the current index
+	stack->current_index++;
 }
 
 
@@ -65,25 +65,22 @@ u_int8_t nesting_stack_is_empty(nesting_stack_t* nesting_stack){
  * Pop the head off of the stack and return the data
  */
 nesting_level_t pop_nesting_level(nesting_stack_t* stack){
-	//Special case: we have an empty stack
-	if(stack->top == NULL){
+	//Handle the empty stack case
+	if(stack->current_index == 0){
 		return NO_NESTING_LEVEL;
 	}
 
-	//Grab the data
-	nesting_level_t top = stack->top->level;
-	
-	nesting_stack_node_t* temp = stack->top;
+	//Decrement the current index
+	stack->current_index--;
 
-	//"Delete" the node from the stack
-	stack->top = stack->top->next;
+	//Return the stack value at the decremented index
+	nesting_level_t data = stack->stack[stack->current_index];
 
-	//Free the node
-	free(temp);
-	//Decrement number of nodes
-	stack->num_nodes--;
+	//NULL this out just for safety
+	stack->stack[stack->current_index] = NO_NESTING_LEVEL;
 
-	return top;
+	//Give back the data
+	return data;
 }
 
 
