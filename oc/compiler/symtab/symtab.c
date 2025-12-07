@@ -1092,6 +1092,61 @@ symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_
 
 
 /**
+ * Specifically look for an array type with the given type as a member in the symtab
+ */
+symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* member_type, u_int32_t num_members, mutability_type_t mutability){
+	//Grab an array for the type name
+	char type_name[MAX_IDENT_LENGTH];
+
+	//Get the name in there by a copy
+	strcpy(type_name, member_type->type_name.string);
+
+	//Append the array signifiers to it
+	strcat(type_name, "[]");
+
+	//Now get the hash
+	u_int16_t hash = hash_type_name(type_name, mutability);
+
+	//Grab the current lexical scope. We will search here and down
+	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
+	symtab_type_record_t* record_cursor;
+
+	//Go through all of the scopes
+	while(sheaf_cursor != NULL){
+		//Grab the record at the hash
+		record_cursor = sheaf_cursor->records[hash];
+		
+		//We could have had collisions so we'll have to hunt here
+		while(record_cursor != NULL){
+			//If it's not an array we don't care
+			if(record_cursor->type->type_class != TYPE_CLASS_ARRAY){
+				record_cursor = record_cursor->next;
+				continue;
+			}
+
+			//If we find the right one, then we can get out
+			if(strcmp(record_cursor->type->type_name.string, type_name) == 0
+				//The member counts also need to match
+				&& record_cursor->type->internal_values.num_members == num_members){
+
+				//We have a match
+				return record_cursor;
+			}
+
+			//Otherwise no match, we advance it
+			record_cursor = record_cursor->next;
+		}
+
+		//Go up to a higher scope
+		sheaf_cursor = sheaf_cursor->previous_level;
+	}
+
+	//If we get all the way down here and it's a bust, return NULL
+	return NULL;
+}
+
+
+/**
  * Lookup the record in the symtab that corresponds to the following name.
  * 
  * We are ALWAYS biased to the most local(in scope) version of the name. If we

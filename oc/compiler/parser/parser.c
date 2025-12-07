@@ -5796,6 +5796,8 @@ static generic_type_t* type_specifier(FILE* fl){
 
 		//If we get here though, we know that this one is good
 		//Lets create the array type
+		//
+		//TODO NEED A LOOKUP HERE
 		generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_bounds, mutability);
 
 		//Let's see if we can find this one
