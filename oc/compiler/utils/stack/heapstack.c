@@ -4,9 +4,8 @@
  */
 
 #include "heapstack.h"
-#include <exception>
-#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 //For the TRUE and FALSE values
 #include "../constants.h"
@@ -110,27 +109,17 @@ u_int8_t heap_stack_is_empty(heap_stack_t* stack){
 
 /**
  * Completely wipe the heap stack out
+ *
+ * Note that we will not attempt to shrink the internal
+ * array - if that has grown beyond the default then it will
+ * stay. We're just wiping the whole thing out
  */
 void reset_heap_stack(heap_stack_t* stack){
-	//Define a cursor and a temp
-	void* temp;
-	stack_node_t* cursor = stack->top;
+	//Zero the whole thing out
+	memset(stack->stack, 0, stack->current_max_index * sizeof(void*));
 
-	//Free every node
-	while(cursor != NULL){
-		//Save the cursor
-		temp = cursor; 
-
-		//Advance the cursor
-		cursor = cursor->next;
-
-		//Free the node
-		free(temp);
-	}
-
-	//Completely reset these
-	stack->num_nodes = 0;
-	stack->top = NULL;
+	//And now reset the current index to be 0
+	stack->current_index = 0;
 }
 
 
@@ -140,28 +129,9 @@ void reset_heap_stack(heap_stack_t* stack){
  * NOTE: This does nothing to touch whatever void* actually is
  */
 void heap_stack_dealloc(heap_stack_t* stack){
-	//Just in case...
-	if(stack == NULL){
-		printf("ERROR: Attempt to free a null pointer\n");
-		return;
-	}
+	//Release the stack
+	free(stack->stack);
 
-	//Define a cursor and a temp
-	void* temp;
-	stack_node_t* cursor = stack->top;
-
-	//Free every node
-	while(cursor != NULL){
-		//Save the cursor
-		temp = cursor; 
-
-		//Advance the cursor
-		cursor = cursor->next;
-
-		//Free the node
-		free(temp);
-	}
-
-	//Finally free the stack
+	//And release the entire struct
 	free(stack);
 }
