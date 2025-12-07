@@ -5564,7 +5564,6 @@ static symtab_type_record_t* type_name(FILE* fl, mutability_type_t mutability){
  *
  * BNF Rule: <type-specifier> ::= {mut}? <type-name>{<type-address-specifier>}*
  *
- *
  * Array type mutability rules:
  *
  * mut i32[35] -> this creates a mutable array(so the actual arr var is mutable) of mutable i32's(every single member
@@ -5603,29 +5602,69 @@ static generic_type_t* type_specifier(FILE* fl){
 	//Let's see where we go from here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//As long as we are seeing pointer specifiers
-	while(lookahead.tok == STAR){
-		//We keep seeing STARS, so we have a pointer type
-		//Let's create the pointer type. This pointer type will point to the current type
-		generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
+	//As long as we are seeing pointer/reference specifiers
+	while(lookahead.tok == STAR || lookahead.tok == SINGLE_AND){
+		//Predeclare here due to switch rules
+		generic_type_t* pointer;
+		generic_type_t* reference;
+		
+		//Handle either a pointer or reference
+		switch(lookahead.tok){
+			//Pointer type(also called a raw pointer) here
+			case STAR:
+				//Let's create the pointer type. This pointer type will point to the current type
+				pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
 
-		//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
-		//also not an issue
-		symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer);
+				//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
+				//also not an issue
+				symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer);
 
-		//If we did not find it, we will add it into the symbol table
-		if(found_pointer == NULL){
-			//Create the type record
-			symtab_type_record_t* created_pointer = create_type_record(pointer);
-			//Insert it into the symbol table
-			insert_type(type_symtab, created_pointer);
-			//We'll also set the current type record to be this
-			current_type_record = created_pointer;
-		} else {
-			//Otherwise, just set the current type record to be what we found
-			current_type_record = found_pointer;
-			//We don't need the other ponter if this is the case
-			type_dealloc(pointer);
+				//If we did not find it, we will add it into the symbol table
+				if(found_pointer == NULL){
+					//Create the type record
+					symtab_type_record_t* created_pointer = create_type_record(pointer);
+					//Insert it into the symbol table
+					insert_type(type_symtab, created_pointer);
+					//We'll also set the current type record to be this
+					current_type_record = created_pointer;
+				} else {
+					//Otherwise, just set the current type record to be what we found
+					current_type_record = found_pointer;
+					//We don't need the other ponter if this is the case
+					type_dealloc(pointer);
+				}
+
+				break;
+
+			//Reference type - a pointer with more rules & restrictions
+			case SINGLE_AND:
+				//Let's create the reference type. This reference type will point to the current reference type
+				reference = create_reference_type(current_type_record->type, parser_line_num, mutability);
+
+				//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
+				//also not an issue
+				symtab_type_record_t* found_reference = lookup_type(type_symtab, reference);
+
+				//If we did not find it, we will add it into the symbol table
+				if(found_reference == NULL){
+					//Create the type record
+					symtab_type_record_t* created_reference = create_type_record(reference);
+					//Insert it into the symbol table
+					insert_type(type_symtab, created_reference);
+					//We'll also set the current type record to be this
+					current_type_record = created_reference;
+				} else {
+					//Otherwise, just set the current type record to be what we found
+					current_type_record = found_reference;
+					//We don't need the other ponter if this is the case
+					type_dealloc(reference);
+				}
+
+				break;
+				
+			//Should be unreachable
+			default:
+				break;
 		}
 
 		//Refresh the search, keep hunting

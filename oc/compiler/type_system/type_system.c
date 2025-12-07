@@ -1694,6 +1694,12 @@ generic_type_t* create_reference_type(generic_type_t* type_referenced, u_int32_t
 	//Put what it references in here
 	type->internal_types.references = type_referenced;
 
+	//This is always compelete at definition
+	type->type_complete = TRUE;
+
+	//A reference is always 8 bytes(it's just a pointer)
+	type->type_size = 8;
+
 	//Give the type back
 	return type;
 }
