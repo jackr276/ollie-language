@@ -80,7 +80,7 @@ u_int32_t get_estimated_execution_frequency_from_nesting_stack(nesting_stack_t* 
 	u_int32_t estimated_execution_frequency = 1;
 
 	//Iterate over the entire nesting stack from bottom-to-top
-	for(int32_t i = stack->current_index - 1; i >= 0; i--){
+	for(u_int32_t i = 0; i < stack->current_index; i++){
 		//Extract it
 		nesting_level_t level = stack->stack[i];
 
