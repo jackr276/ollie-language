@@ -88,13 +88,14 @@ nesting_level_t pop_nesting_level(nesting_stack_t* stack){
  * Peek the top of the stack without removing it
  */
 nesting_level_t peek_nesting_level(nesting_stack_t* stack){
-	//If the top is NULL, just return NULL
-	if(stack->top == NULL){
+	//If there's nothing on this then just give back our
+	//version of null
+	if(stack->current_index == 0){
 		return NO_NESTING_LEVEL;
 	}
 
-	//Return the data pointer
-	return stack->top->level;
+	//Return the data at the value before the current index
+	return stack->stack[stack->current_index - 1];
 }
 
 
@@ -102,21 +103,17 @@ nesting_level_t peek_nesting_level(nesting_stack_t* stack){
  * Perform a scan of the nesting stack to see if a given level is contained
  */
 u_int8_t nesting_stack_contains_level(nesting_stack_t* nesting_stack, nesting_level_t level){
-	//Grab a cursor to the current node
-	nesting_stack_node_t* current = nesting_stack->top;
-
-	//Run through the nesting stack from top to bottom
-	while(current != NULL){
-		//If these are equal then we're done, we've found it
-		if(current->level == level){
+	//We can simply crawl through the array to find this out. Remember
+	//that the top of the stack is the back of the array, so we go through
+	//backwards
+	for(int32_t i = nesting_stack->current_index - 1; i >= 0; i--){
+		//We do contain it
+		if(nesting_stack->stack[i] == level){
 			return TRUE;
 		}
-
-		//Otherwise we'll advance downwards
-		current = current->next;
 	}
 
-	//If we make it here, we didn't find it, so we're done
+	//IF we do a full scan of the array and still get down here, we didn't make it
 	return FALSE;
 }
 
