@@ -9,6 +9,9 @@
 #include <sys/types.h>
 #include "../constants.h"
 
+//By default we'll be 10 levels deep - but this module dynamically reallocates
+#define DEFAULT_NESTING_STACK_SIZE 10
+
 /**
  * Create a stack
  */
@@ -16,9 +19,11 @@ nesting_stack_t* nesting_stack_alloc(){
 	//Allocate our stack
 	nesting_stack_t* stack = calloc(1, sizeof(nesting_stack_t));
 
-	//Initialize these values
-	stack->num_nodes = 0;
-	stack->top = NULL;
+	//Allocate the internal array
+	stack->stack = calloc(DEFAULT_NESTING_STACK_SIZE, sizeof(nesting_level_t));
+
+	//Store the current max index
+	stack->current_max_index = DEFAULT_NESTING_STACK_SIZE;
 
 	//Return the stack
 	return stack;
@@ -27,13 +32,11 @@ nesting_stack_t* nesting_stack_alloc(){
 
 /**
  * Push data to the top of the stack
+ *
+ * This function handles our dynamic resize if need be
  */
 void push_nesting_level(nesting_stack_t* stack, nesting_level_t level){
-	//Just in case
-	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return;
-	}
+
 
 	//Allocate a new node
 	nesting_stack_node_t* new = calloc(1, sizeof(nesting_stack_node_t));
@@ -54,7 +57,7 @@ void push_nesting_level(nesting_stack_t* stack, nesting_level_t level){
  * Is the lex stack empty?
  */
 u_int8_t nesting_stack_is_empty(nesting_stack_t* nesting_stack){
-	return nesting_stack->num_nodes == 0 ? TRUE : FALSE;
+	return nesting_stack->current_index == 0 ? TRUE : FALSE;
 }
 
 
