@@ -478,8 +478,10 @@ static void add_assigned_live_range(live_range_t* live_range, basic_block_t* blo
 		dynamic_array_add(block->assigned_variables, live_range);
 	}
 
-	//This counts as an assigned live range - save for tracking
-	live_range->assignment_count++;
+	//Up the assignment count by adding the estimated execution frequency of the block
+	//For example, if the block is in a loop and the loop runs 10 times, this line of
+	//code will end up being executed 10 times instead of 1
+	live_range->assignment_count += block->estimated_execution_frequency;
 }
 
 
@@ -498,8 +500,10 @@ static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
 		dynamic_array_add(block->used_variables, live_range);
 	}
 
-	//No matter what, this increases
-	live_range->use_count++;
+	//Up the use count by adding the estimated execution frequency of the block
+	//For example, if the block is in a loop and the loop runs 10 times, this line of
+	//code will end up being executed 10 times instead of 1
+	live_range->use_count += block->estimated_execution_frequency;
 }
 
 
@@ -741,8 +745,8 @@ static void assign_live_range_to_implicit_source_variable(dynamic_array_t* live_
 	//Let the helper deal with this
 	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, source_variable);
 
-	//We will bump the use count, but this is not officially a read
-	live_range->use_count++;
+	//Bump the use count by using the blocks estimated execution frequency
+	live_range->use_count += block->estimated_execution_frequency;
 }
 
 
@@ -2082,8 +2086,11 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 
 
 /**
- * Recompute the used & assigned sets for the whole CFG
- * This is done after we coalesce at least one live range
+ * Recompute the used & assigned sets for a given function. These used
+ * and assigned sets also account for the frequencies of the blocks in which they exist.
+ * This is a very important step to ensure that our spill cost estimates are accurate and account
+ * not only for live range width but also *where* the live range is being used(think inside a of 2 or 3 level
+ * loop)
  */
 static void recompute_used_and_assigned_sets(basic_block_t* function_entry){
 	//Grab a cursor block

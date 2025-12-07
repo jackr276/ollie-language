@@ -66,12 +66,6 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 		a->jump_table = b->jump_table;
 	}
 
-	//If b is going to execute more than a, and it's now becoming a part of a, 
-	//then a will need to execute more as well. As such, we take the highest of the two
-	if(a->estimated_execution_frequency < b->estimated_execution_frequency){
-		a->estimated_execution_frequency = b->estimated_execution_frequency;
-	}
-
 	//Copy this over too
 	a->block_terminal_type = b->block_terminal_type;
 
@@ -1922,51 +1916,6 @@ static void clean(cfg_t* cfg){
 }
 
 
-
-/**
- * Estimate all execution frequencies in the CFG
- *
- * All execution frequencies are already done by this point. What we'll
- * do now is go through and update them using some simple rules
- */
-static void estimate_execution_frequencies(cfg_t* cfg){
-	//Run through all of the created blocks
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
-		//Grab the given block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
-
-		//If we have a return statement, we won't do any updates to it. These
-		//are guarnateed to only execute once. Also, if we have no predecessors, we also
-		//won't bother going further
-		if(block->block_terminal_type == BLOCK_TERM_TYPE_RET 
-			|| block->predecessors == NULL
-			|| block->predecessors->current_index == 0){
-			continue;
-		}
-
-		//The sum of the execution frequencies
-		u_int16_t sum_execution_freq = 0;
-
-		//Now run through all of the predecessors
-		for(u_int16_t i = 0; i < block->predecessors->current_index; i++){
-			//Grab it out
-			basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, i);
-
-			//Add this to the overall sum
-			sum_execution_freq += predecessor->estimated_execution_frequency;
-		}
-
-		//Now we'll get the average
-		u_int16_t average_frequency = sum_execution_freq / block->predecessors->current_index;
-
-		//If this average is *more* than what we currently have, we'll update the estimated cost
-		if(average_frequency > block->estimated_execution_frequency){
-			block->estimated_execution_frequency = average_frequency;
-		}
-	}
-}
-
-
 /**
  * After mark and sweep and clean run, we'll almost certainly have a litany of blocks in all
  * of the dominance relations that are now useless. As such, we'll need to completely recompute all
@@ -2086,11 +2035,6 @@ cfg_t* optimize(cfg_t* cfg){
 	//etc. So, to remedy this, we will recalculate everything in the CFG
 	//cleanup_all_control_relations(cfg);
 	recompute_all_dominance_relations(cfg);
-
-	//PASS 7: Estimate execution frequencies
-	//This will become important in the register allocation later on. We'll need to estimate how often a block will be executed in order
-	//to decide where to allocate registers appropriately.
-	estimate_execution_frequencies(cfg);
 
 	//Give back the CFG
 	return cfg;

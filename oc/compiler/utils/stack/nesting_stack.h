@@ -19,12 +19,12 @@ typedef struct nesting_stack_t nesting_stack_t;
  */
 typedef enum {
 	NO_NESTING_LEVEL = 0, // Our default value
-	FUNCTION,
-	CASE_STATEMENT,
-	C_STYLE_CASE_STATEMENT, // This one allows breaks
-	LOOP_STATEMENT,
-	IF_STATEMENT,
-	DEFER_STATEMENT,
+	NESTING_FUNCTION,
+	NESTING_CASE_STATEMENT,
+	NESTING_C_STYLE_CASE_STATEMENT, // This one allows breaks
+	NESTING_LOOP_STATEMENT,
+	NESTING_IF_STATEMENT,
+	NESTING_DEFER_STATEMENT,
 } nesting_level_t;
 
 
@@ -61,6 +61,12 @@ u_int8_t nesting_stack_is_empty(nesting_stack_t* nesting_stack);
  * Perform a scan of the nesting stack to see if a given level is contained
  */
 u_int8_t nesting_stack_contains_level(nesting_stack_t* nesting_stack, nesting_level_t level);
+
+/**
+ * Get the estimated execution frequency of something given a nesting level using
+ * our custom rules
+ */
+u_int32_t get_estimated_execution_frequency_from_nesting_stack(nesting_stack_t* stack);
 
 /**
  * Remove the top value of the stack

@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include "../utils/queue/heap_queue.h"
 #include "../jump_table/jump_table.h"
+#include "../utils/stack/nesting_stack.h"
 #include "../utils/constants.h"
 
 //Our atomically incrementing integer
@@ -27,7 +28,7 @@ u_int32_t* num_warnings_ref;
 //Keep the type symtab up and running
 type_symtab_t* type_symtab;
 //The CFG that we're working with
-cfg_t* cfg_ref;
+cfg_t* cfg = NULL;
 //Keep a reference to whatever function we are currently in
 symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
@@ -49,6 +50,8 @@ static generic_type_t* i64 = NULL;
 //to send value packages at each rule
 static heap_stack_t* break_stack = NULL;
 static heap_stack_t* continue_stack = NULL;
+//The overall nesting stack will tell us what level of nesting we're at(if, switch/case, loop)
+static nesting_stack_t* nesting_stack = NULL;
 //Keep a list of all lable statements in the function(block jumps are internal only)
 static dynamic_array_t* current_function_labeled_blocks = NULL;
 //Also keep a list of all custom jumps in the function
@@ -108,7 +111,6 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer, u_int8_t is_branch_ending);
-basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
  * Let's determine if a value is a positive power of 2.
@@ -177,6 +179,116 @@ void reset_block_variable_tracking(basic_block_t* block){
 		dynamic_array_dealloc(block->live_out);
 		block->live_out = NULL;
 	}
+}
+
+
+/**
+ * A helper function that makes a new block id. This ensures we have an atomically
+ * increasing block ID
+ */
+static int32_t increment_and_get(){
+	current_block_id++;
+	return current_block_id;
+}
+
+
+/**
+ * Create a basic block explicitly using the estimate
+ * that comes from the nesting stack that we maintain.
+ * 
+ * This automates the process of estimating execution
+ * frequencies, so long as we are keeping the nesting stack
+ * up-to-date
+ */
+static basic_block_t* basic_block_alloc_and_estimate(){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//What is the estimated execution cost of this block? We will
+	//rely entirely on the nesting stack to do this for us
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(cfg->created_blocks, created);
+
+	//Give it back
+	return created;
+}
+
+
+/**
+ * The standard basic_block_alloc function will take in the estimated
+ * execution frequency. If you are in the CFG, *you should not be
+ * using this function*
+ */
+basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//What is the estimated execution cost of this block?
+	created->estimated_execution_frequency = estimated_execution_frequency;
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(cfg->created_blocks, created);
+
+	return created;
+}
+
+
+/**
+ * Allocate a basic block that comes from a user-defined label statement
+*/
+static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in even though it is a labeled block
+	created->block_id = increment_and_get();
+
+	//This block's name will draw from the label
+	created->label = label;
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//We'll mark this to indicate that this is a labeled block
+	created->block_type = BLOCK_TYPE_LABEL;
+
+	//What is the estimated execution cost of this block? Rely on the nesting stack
+	//to do this
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(cfg->created_blocks, created);
+
+	return created;
 }
 
 
@@ -368,7 +480,7 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
  */
 dynamic_array_t* compute_post_order_traversal(basic_block_t* entry){
 	//Reset the visited status
-	reset_visited_status(cfg_ref, FALSE);
+	reset_visited_status(cfg, FALSE);
 
 	//Create our dynamic array
 	dynamic_array_t* post_order_traversal = dynamic_array_alloc();
@@ -3972,7 +4084,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							add_statement(current_block, memory_address_statement);
 
 							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
-							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg_ref->stack_pointer, offset, memory_address_statement->assignee);
+							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, memory_address_statement->assignee);
 							store->is_branch_ending = is_branch_ending;
 
 							//This comes afterwards
@@ -3980,7 +4092,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
 							//a simple binary operation instruction
-							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, PLUS, offset);
+							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg->stack_pointer, PLUS, offset);
 							address->is_branch_ending = is_branch_ending;
 
 							//Add it into the block
@@ -3996,7 +4108,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
 							//a simple binary operation instruction
-							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg_ref->stack_pointer, PLUS, offset);
+							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg->stack_pointer, PLUS, offset);
 							address->is_branch_ending = is_branch_ending;
 
 							//Add it into the block
@@ -4089,11 +4201,11 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t return_package;
 
 	//The if area block
-	basic_block_t* if_block = basic_block_alloc(1);
+	basic_block_t* if_block = basic_block_alloc_and_estimate();
 	//And the else area block
-	basic_block_t* else_block = basic_block_alloc(1);
+	basic_block_t* else_block = basic_block_alloc_and_estimate();
 	//The ending block for the whole thing
-	basic_block_t* end_block = basic_block_alloc(1);
+	basic_block_t* end_block = basic_block_alloc_and_estimate();
 
 	//This block could change, so we'll need to keep track of it in a current block variable
 	basic_block_t* current_block = starting_block;
@@ -4869,79 +4981,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 
 /**
- * A helper function that makes a new block id. This ensures we have an atomically
- * increasing block ID
- */
-static int32_t increment_and_get(){
-	current_block_id++;
-	return current_block_id;
-}
-
-
-/**
- * Allocate a basic block using calloc. NO data assignment
- * happens in this function
-*/
-basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
-	//Allocate the block
-	basic_block_t* created = calloc(1, sizeof(basic_block_t));
-
-	//Put the block ID in
-	created->block_id = increment_and_get();
-
-	//Our sane defaults here - normal termination and normal type
-	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
-	//By default we're normal here
-	created->block_type = BLOCK_TYPE_NORMAL;
-
-	//What is the estimated execution cost of this block?
-	created->estimated_execution_frequency = estimated_execution_frequency;
-
-	//Let's add in what function this block came from
-	created->function_defined_in = current_function;
-
-	//Add this into the dynamic array
-	dynamic_array_add(cfg_ref->created_blocks, created);
-
-	return created;
-}
-
-
-/**
- * Allocate a basic block that comes from a user-defined label statement
-*/
-static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label, u_int32_t estimated_execution_frequency){
-	//Allocate the block
-	basic_block_t* created = calloc(1, sizeof(basic_block_t));
-
-	//Put the block ID in even though it is a labeled block
-	created->block_id = increment_and_get();
-
-	//This block's name will draw from the label
-	created->label = label;
-
-	//Put the block ID in
-	created->block_id = increment_and_get();
-
-	//Our sane defaults here - normal termination and normal type
-	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
-	//We'll mark this to indicate that this is a labeled block
-	created->block_type = BLOCK_TYPE_LABEL;
-
-	//What is the estimated execution cost of this block?
-	created->estimated_execution_frequency = estimated_execution_frequency;
-
-	//Let's add in what function this block came from
-	created->function_defined_in = current_function;
-
-	//Add this into the dynamic array
-	dynamic_array_add(cfg_ref->created_blocks, created);
-
-	return created;
-}
-
-
-/**
  * Print out the whole program in order. Done using an iterative
  * bfs
  */
@@ -4965,7 +5004,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
 
 		//Seed the search by adding the funciton block into the queue
-		enqueue(queue, dynamic_array_get_at(cfg->function_entry_blocks, i));
+		enqueue(queue, function_entry_block);
 
 		//So long as the queue isn't empty
 		while(queue_is_empty(queue) == FALSE){
@@ -5351,11 +5390,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->jump_table = b->jump_table;
 	b->jump_table = NULL;
 
-	//If b executes more than A and it's now a part of A, we'll need to bump up A appropriately
-	if(a->estimated_execution_frequency < b->estimated_execution_frequency){
-		a->estimated_execution_frequency = b->estimated_execution_frequency;
-	}
-
 	//For each statement in b, all of it's old statements are now "defined" in a
 	instruction_t* b_stmt = b->leader_statement;
 
@@ -5386,7 +5420,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->number_of_instructions += b->number_of_instructions;
 
 	//We'll remove this from the list of created blocks
-	dynamic_array_delete(cfg_ref->created_blocks, b);
+	dynamic_array_delete(cfg->created_blocks, b);
 
 	//And finally we'll deallocate b
 	basic_block_dealloc(b);
@@ -5404,11 +5438,11 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Create our entry block. The entry block also only executes once
-	basic_block_t* for_stmt_entry_block = basic_block_alloc(1);
+	basic_block_t* for_stmt_entry_block = basic_block_alloc_and_estimate();
 	//Create our exit block. We assume that the exit only happens once
-	basic_block_t* for_stmt_exit_block = basic_block_alloc(1);
+	basic_block_t* for_stmt_exit_block = basic_block_alloc_and_estimate();
 	//We will explicitly declare that this is an exit here
-	for_stmt_exit_block->block_type = BLOCK_TYPE_FOR_STMT_END;
+	for_stmt_exit_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
 	//All breaks will go to the exit block
 	//Hold off on the continue block for now
@@ -5459,10 +5493,16 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 			}
 		}
 
+	//Once we reach here, we are officially in the loop. Everything beyond this point
+	//is going to happen repeatedly
+	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
 	//The second and third condition in the for loop are the ones that execute continously. The third condition
 	//always executes at the end of each iteration
-	basic_block_t* condition_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	basic_block_t* condition_block = basic_block_alloc_and_estimate();
+	//Flag that this is a loop start
+	condition_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We will now emit a jump from the entry block, to the condition block
 	emit_jump(for_stmt_entry_block, condition_block);
@@ -5485,8 +5525,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	ast_cursor = ast_cursor->next_sibling;
 
 	//Create the update block
-	basic_block_t* for_stmt_update_block = basic_block_alloc(LOOP_ESTIMATED_COST);
-	for_stmt_update_block->block_type = BLOCK_TYPE_FOR_STMT_UPDATE;
+	basic_block_t* for_stmt_update_block = basic_block_alloc_and_estimate();
 
 	//If the third one is not blank
 	if(ast_cursor->first_child != NULL){
@@ -5507,10 +5546,13 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//because that is what repeats on continue
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
+	//Once we're done with the compound statement, we are no longer in the loop
+	pop_nesting_level(nesting_stack);
+
 	//If we have an empty interior just emit a dummy block. It will be optimized away 
 	//regardless
 	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
@@ -5556,16 +5598,22 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//First we'll allocate the result block
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
-	//Create our entry block. This in reality will be the compound statement
-	basic_block_t* do_while_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
 	//The true ending block. We assume that the exit only happens once
-	basic_block_t* do_while_stmt_exit_block = basic_block_alloc(1);
+	basic_block_t* do_while_stmt_exit_block = basic_block_alloc_and_estimate();
 	//We will explicitly mark that this is an exit block
-	do_while_stmt_exit_block->block_type = BLOCK_TYPE_DO_WHILE_END;
+	do_while_stmt_exit_block->block_type = BLOCK_TYPE_LOOP_EXIT;
+
+	//After we allocate the exit block, we will push on the 
+	//nesting level as the entry block is in the loop
+	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+
+	//Create our entry block. This in reality will be the compound statement
+	basic_block_t* do_while_stmt_entry_block = basic_block_alloc_and_estimate();
+	//This is an entry block
+	do_while_stmt_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
 	push(continue_stack, do_while_stmt_entry_block);
-
 	//And we'll push the end block onto the break stack, because all breaks go there
 	push(break_stack, do_while_stmt_exit_block);
 
@@ -5582,9 +5630,12 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//We go right into the compound statement here
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
+	//Once we're done pop the nesting level
+	pop_nesting_level(nesting_stack);
+
 	//It being NULL is ok, we'll just insert a dummy
 	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
@@ -5626,9 +5677,6 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 */
 	emit_branch(compound_stmt_end, do_while_stmt_entry_block, do_while_stmt_exit_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
 
-	//This is our condition block here, so we'll add the estimated cost
-	compound_stmt_end->estimated_execution_frequency = LOOP_ESTIMATED_COST;
-
 	//Set the termination type of this block
 	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
 		compound_stmt_end->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
@@ -5651,16 +5699,22 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Initialize the result package
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
-	//Create our entry block
-	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
-	//And create our exit block. We assume that this executes once
-	basic_block_t* while_statement_end_block = basic_block_alloc(1);
+	//Create our exit block. We assume that this executes once
+	basic_block_t* while_statement_end_block = basic_block_alloc_and_estimate();
 	//We will specifically mark the end block here as an ending block
-	while_statement_end_block->block_type = BLOCK_TYPE_WHILE_END;
+	while_statement_end_block->block_type = BLOCK_TYPE_LOOP_EXIT;
+
+	//We will not push to the nesting stack for the end block, but we will for the
+	//entry block because the entry block does execute in the loop
+	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+
+	//Create our entry block
+	basic_block_t* while_statement_entry_block = basic_block_alloc_and_estimate();
+	//This is an entry block
+	while_statement_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
 	push(continue_stack, while_statement_entry_block);
-
 	//And we'll push the end block onto the break stack, because all breaks go there
 	push(break_stack, while_statement_end_block);
 
@@ -5683,11 +5737,14 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
+	//We're out of the compound statement - pop the nesting level
+	pop_nesting_level(nesting_stack);
+
 	//If it's null, that means that we were given an empty while loop here.
 	//We'll just allocate our own and use that
 	if(compound_statement_results.starting_block == NULL){
 		//Just give a dummy here
-		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
@@ -5741,11 +5798,11 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//The statement result package for our if statement
 	cfg_result_package_t result_package;
 
-	//We always have an entry block and an exit block. We assume initially that
-	//these both happen once
-	basic_block_t* entry_block = basic_block_alloc(1);
-	basic_block_t* exit_block = basic_block_alloc(1);
-	exit_block->block_type = BLOCK_TYPE_IF_STMT_END;
+	//We always have an entry block and an exit block
+	basic_block_t* entry_block = basic_block_alloc_and_estimate();
+	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
+	basic_block_t* exit_block = basic_block_alloc_and_estimate();
+	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
 
 	//Note the starting and final blocks here
 	result_package.starting_block = entry_block;
@@ -5773,12 +5830,18 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//No we'll move one step beyond, the next node must be a compound statement
 	cursor = cursor->next_sibling;
 
+	//Push that we're in an if statement for the compound statement
+	push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+
 	//Visit the compound statement that we're required to have here
 	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
 
+	//And then pop it off
+	pop_nesting_level(nesting_stack);
+
 	//If the starting block is null, create a dummy one
 	if(if_compound_statement_results.starting_block == NULL){
-		if_compound_statement_results.starting_block = basic_block_alloc(1);
+		if_compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		if_compound_statement_results.final_block = if_compound_statement_results.starting_block;
 	}
 
@@ -5811,7 +5874,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		generic_ast_node_t* else_if_cursor = cursor->first_child;
 
 		//Make a new one
-		basic_block_t* new_entry_block = basic_block_alloc(1);
+		basic_block_t* new_entry_block = basic_block_alloc_and_estimate();
 
 		//Extract the old branch statement from the previous entry block
 		instruction_t* branch_statement = previous_entry_block->exit_statement;
@@ -5832,12 +5895,18 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//Advance it up -- we should now have a compound statement
 		else_if_cursor = else_if_cursor->next_sibling;
 
+		//Push that we're in an if statement
+		push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+
 		//Let this handle the compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
 
+		//And now pop it off
+		pop_nesting_level(nesting_stack);
+
 		//If this is NULL, then we need to emit dummy blocks
 		if(else_if_compound_statement_results.starting_block == NULL){
-			else_if_compound_statement_results.starting_block = basic_block_alloc(1);
+			else_if_compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 			else_if_compound_statement_results.final_block = else_if_compound_statement_results.starting_block;
 		}
 
@@ -5876,8 +5945,14 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 	//Now that we're out of here - we may have an else statement on our hands
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_COMPOUND_STMT){
+		//Push the nesting level now that we're in a compound statement
+		push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+
 		//Grab the compound statement
 		cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
+
+		//Pop it off
+		pop_nesting_level(nesting_stack);
 
 		//Extract for convenience
 		instruction_t* branch_statement = previous_entry_block->exit_statement;
@@ -5939,6 +6014,9 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	//Declare and prepack our results
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
+	//This is nesting inside of a case statement
+	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+
 	//For a default statement, it performs very similarly to a case statement. 
 	//It will be handled slightly differently in the jump table, but we'll get to that 
 	//later on
@@ -5957,12 +6035,15 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 
 	} else {
 		//Create it. We assume that this happens once
-		basic_block_t* default_stmt = basic_block_alloc(1);
+		basic_block_t* default_stmt = basic_block_alloc_and_estimate();
 
 		//Prepackage these now
 		results.starting_block = default_stmt;
 		results.final_block = default_stmt;
 	}
+
+	//Nesting here is no longer in a case statement
+	pop_nesting_level(nesting_stack);
 
 	//Give the block back
 	return results;
@@ -5976,6 +6057,9 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	//Declare and prepack our results
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
+
+	//This is nesting inside of a case statement
+	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
 
 	//The case statement should have some kind of constant value here, whether
 	//it's an enum value or regular const. All validation should have been
@@ -6000,7 +6084,7 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 
 	} else {
 		//We need to make the block first
-		basic_block_t* case_stmt = basic_block_alloc(1);
+		basic_block_t* case_stmt = basic_block_alloc_and_estimate();
 
 		//Grab the value -- this should've already been done by the parser
 		case_stmt->case_stmt_val = case_stmt_cursor->constant_value.signed_int_value;
@@ -6009,6 +6093,9 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 		results.starting_block = case_stmt;
 		results.final_block = case_stmt;
 	}
+
+	//Nesting here is no longer in a case statement
+	pop_nesting_level(nesting_stack);
 
 	//Give the block back
 	return results;
@@ -6027,6 +6114,9 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
+	//This is nested in a C-style case statement
+	push_nesting_level(nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
+
 	//Since a C-style case statement is just a collection of 
 	//statements, we'll use the statement sequence to process it here
 	cfg_result_package_t statement_results = visit_statement_chain(root_node->first_child); 
@@ -6039,13 +6129,15 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 
 	} else {
 		//If it is NULL, we're going to need to create our own block here
-		basic_block_t* case_block = basic_block_alloc(1);
+		basic_block_t* case_block = basic_block_alloc_and_estimate();
 
 		//This is the starting and final block
 		result_package.starting_block = case_block;
 		result_package.final_block = case_block;
-
 	}
+
+	//Remove the nesting now
+	pop_nesting_level(nesting_stack);
 
 	//Give back the final results
 	return result_package;
@@ -6064,6 +6156,9 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 	//Declare and initialize off the bat
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
+	//This is nested in a C-style case statement
+	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+
 	//Since a C-style case statement is just a collection of 
 	//statements, we'll use the statement sequence to process it here
 	cfg_result_package_t statement_results = visit_statement_chain(root_node->first_child); 
@@ -6076,13 +6171,16 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 
 	} else {
 		//If it is NULL, we're going to need to create our own block here
-		basic_block_t* case_block = basic_block_alloc(1);
+		basic_block_t* case_block = basic_block_alloc_and_estimate();
 
 		//This is the starting and final block
 		result_package.starting_block = case_block;
 		result_package.final_block = case_block;
 
 	}
+
+	//Remove the nesting now
+	pop_nesting_level(nesting_stack);
 
 	//Give back the final results
 	return result_package;
@@ -6099,14 +6197,14 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Th starting and ending blocks for the switch statements
-	basic_block_t* root_level_block = basic_block_alloc(1);
+	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
 	//The upper bound check block
-	basic_block_t* upper_bound_check_block = basic_block_alloc(1);
+	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
 	//The jump calculation block
-	basic_block_t* jump_calculation_block = basic_block_alloc(1);
+	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
 	//Since C-style switches support break statements, we'll need
 	//this as well
-	basic_block_t* ending_block = basic_block_alloc(1);
+	basic_block_t* ending_block = basic_block_alloc_and_estimate();
 
 	//The ending block now goes onto the breaking stack
 	push(break_stack, ending_block);
@@ -6376,13 +6474,13 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//The starting block for the switch statement - we'll want this in a new
 	//block
-	basic_block_t* root_level_block = basic_block_alloc(1);
+	basic_block_t* root_level_block = basic_block_alloc_and_estimate();
 	//We will need to new blocks to check the bounds
-	basic_block_t* upper_bound_check_block = basic_block_alloc(1);
+	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate();
 	//This is the block where the actual jump calculation happens
-	basic_block_t* jump_calculation_block = basic_block_alloc(1);
+	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
 	//We also need to know the ending block here
-	basic_block_t* ending_block = basic_block_alloc(1);
+	basic_block_t* ending_block = basic_block_alloc_and_estimate();
 
 	//We can already fill in the result package
 	result_package.starting_block = root_level_block;
@@ -6631,7 +6729,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
 					//We assume that this only happens once
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -6742,7 +6840,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					//We'll assume that this only happens once
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -6779,7 +6877,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					}
 
 					//We'll need a new block here - this will count as a branch
-					basic_block_t* new_block = basic_block_alloc(1);
+					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
@@ -6807,7 +6905,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -6833,7 +6931,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 				} else {
 					//We'll also need a new block to jump to, since this is a conditional break
-					basic_block_t* new_block = basic_block_alloc(1);
+					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//First let's emit the conditional code
 					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
@@ -6900,7 +6998,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			//given label name
 			case AST_NODE_TYPE_LABEL_STMT:
 				//Allocate the label statement as the current block
-				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
+				labeled_block = labeled_block_alloc(ast_cursor->variable);
 
 				//Add this into the current function's labeled blocks
 				dynamic_array_add(current_function_labeled_blocks, labeled_block);
@@ -6923,7 +7021,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -6940,7 +7038,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 
 				//We'll need a block at the very end which we'll hit after we jump
-				basic_block_t* else_block = basic_block_alloc(1);
+				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
 				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
@@ -7023,7 +7121,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				//We'll need a new block here regardless
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -7035,7 +7133,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			case AST_NODE_TYPE_IDLE_STMT:
 				//Do we need a new block?
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -7048,7 +7146,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			default:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 				
@@ -7144,7 +7242,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
 					//We assume that this only happens once
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -7255,7 +7353,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					//We'll assume that this only happens once
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -7292,7 +7390,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					}
 
 					//We'll need a new block here - this will count as a branch
-					basic_block_t* new_block = basic_block_alloc(1);
+					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
@@ -7319,7 +7417,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -7345,7 +7443,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 				} else {
 					//We'll also need a new block to jump to, since this is a conditional break
-					basic_block_t* new_block = basic_block_alloc(1);
+					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//First let's emit the conditional code
 					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
@@ -7417,7 +7515,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			 */
 			case AST_NODE_TYPE_LABEL_STMT:
 				//Allocate the label statement as the current block
-				labeled_block = labeled_block_alloc(ast_cursor->variable, 1);
+				labeled_block = labeled_block_alloc(ast_cursor->variable);
 
 				//Add this into the current function's labeled blocks
 				dynamic_array_add(current_function_labeled_blocks, labeled_block);
@@ -7439,7 +7537,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -7456,7 +7554,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				//We'll need a block at the very end which we'll hit after we jump
-				basic_block_t* else_block = basic_block_alloc(1);
+				basic_block_t* else_block = basic_block_alloc_and_estimate();
 
 				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
@@ -7539,7 +7637,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//We'll need a new block here regardless
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -7551,7 +7649,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			case AST_NODE_TYPE_IDLE_STMT:
 				//Do we need a new block?
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 
@@ -7564,7 +7662,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			default:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
 				}
 				
@@ -7667,6 +7765,9 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
  * will always have it's own separate block
  */
 static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
+	//Push the nesting level that we're in
+	push_nesting_level(nesting_stack, NESTING_FUNCTION);
+	
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
 	//We will now store this as the current function
@@ -7682,9 +7783,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	set_new_function(func_record);
 
 	//The starting block
-	basic_block_t* function_starting_block = basic_block_alloc(1);
+	basic_block_t* function_starting_block = basic_block_alloc_and_estimate();
 	//The function exit block
-	function_exit_block = basic_block_alloc(1);
+	function_exit_block = basic_block_alloc_and_estimate();
 	//Mark that this is a starting block
 	function_starting_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
 	//Mark that this is an exit block
@@ -7786,6 +7887,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//Deallocate the current function's user defined jumps as well
 	dynamic_array_dealloc(current_function_user_defined_jump_statements);
 	current_function_user_defined_jump_statements = NULL;
+
+	//Remove it now that we're done
+	pop_nesting_level(nesting_stack);
 
 	//We always return the start block
 	return function_starting_block;
@@ -8097,7 +8201,7 @@ static void visit_global_declare_statement(generic_ast_node_t* node){
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
 
 	//And add it into the CFG
-	dynamic_array_add(cfg_ref->global_variables, global_variable);
+	dynamic_array_add(cfg->global_variables, global_variable);
 }
 
 
@@ -8210,7 +8314,7 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 	cfg_result_package_t let_results = {NULL, NULL, NULL, BLANK};
 
 	//What block are we emitting to?
-	basic_block_t* current_block = basic_block_alloc(1);
+	basic_block_t* current_block = basic_block_alloc_and_estimate();
 
 	//Extract the type here
 	generic_type_t* type = node->inferred_type;
@@ -8475,9 +8579,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	type_symtab = results->type_symtab;
 	variable_symtab = results->variable_symtab;
 
-	//Allocate these two stacks
+	//Allocate these three stacks
 	break_stack = heap_stack_alloc();
 	continue_stack = heap_stack_alloc(); 
+	nesting_stack = nesting_stack_alloc();
 
 	//Keep these on hand
 	u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
@@ -8488,7 +8593,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	char_type = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
 
 	//We'll first create the fresh CFG here
-	cfg_t* cfg = calloc(1, sizeof(cfg_t));
+	cfg = calloc(1, sizeof(cfg_t));
 
 	//Store this along with it
 	cfg->type_symtab = type_symtab;
@@ -8498,9 +8603,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	cfg->function_entry_blocks = dynamic_array_alloc();
 	cfg->function_exit_blocks = dynamic_array_alloc();
 	cfg->global_variables = dynamic_array_alloc();
-
-	//Hold the cfg
-	cfg_ref = cfg;
 
 	//Set this to NULL initially
 	current_function = NULL;
@@ -8542,6 +8644,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	//Once we get here, we're done with these two stacks
 	heap_stack_dealloc(break_stack);	
 	heap_stack_dealloc(continue_stack);	
+	nesting_stack_dealloc(&nesting_stack);
 
 	//Give back the reference
 	return cfg;
