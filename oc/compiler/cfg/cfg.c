@@ -4201,11 +4201,11 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	cfg_result_package_t return_package;
 
 	//The if area block
-	basic_block_t* if_block = basic_block_alloc(1);
+	basic_block_t* if_block = basic_block_alloc_and_estimate();
 	//And the else area block
-	basic_block_t* else_block = basic_block_alloc(1);
+	basic_block_t* else_block = basic_block_alloc_and_estimate();
 	//The ending block for the whole thing
-	basic_block_t* end_block = basic_block_alloc(1);
+	basic_block_t* end_block = basic_block_alloc_and_estimate();
 
 	//This block could change, so we'll need to keep track of it in a current block variable
 	basic_block_t* current_block = starting_block;
@@ -5443,9 +5443,9 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Create our entry block. The entry block also only executes once
-	basic_block_t* for_stmt_entry_block = basic_block_alloc(1);
+	basic_block_t* for_stmt_entry_block = basic_block_alloc_and_estimate();
 	//Create our exit block. We assume that the exit only happens once
-	basic_block_t* for_stmt_exit_block = basic_block_alloc(1);
+	basic_block_t* for_stmt_exit_block = basic_block_alloc_and_estimate();
 	//We will explicitly declare that this is an exit here
 	for_stmt_exit_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
@@ -5505,7 +5505,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
 	//The second and third condition in the for loop are the ones that execute continously. The third condition
 	//always executes at the end of each iteration
-	basic_block_t* condition_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	basic_block_t* condition_block = basic_block_alloc_and_estimate();
 	//Flag that this is a loop start
 	condition_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
@@ -5530,7 +5530,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	ast_cursor = ast_cursor->next_sibling;
 
 	//Create the update block
-	basic_block_t* for_stmt_update_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	basic_block_t* for_stmt_update_block = basic_block_alloc_and_estimate();
 
 	//If the third one is not blank
 	if(ast_cursor->first_child != NULL){
@@ -5557,7 +5557,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//If we have an empty interior just emit a dummy block. It will be optimized away 
 	//regardless
 	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
@@ -5604,7 +5604,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//The true ending block. We assume that the exit only happens once
-	basic_block_t* do_while_stmt_exit_block = basic_block_alloc(1);
+	basic_block_t* do_while_stmt_exit_block = basic_block_alloc_and_estimate();
 	//We will explicitly mark that this is an exit block
 	do_while_stmt_exit_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
@@ -5613,7 +5613,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//Create our entry block. This in reality will be the compound statement
-	basic_block_t* do_while_stmt_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	basic_block_t* do_while_stmt_entry_block = basic_block_alloc_and_estimate();
 	//This is an entry block
 	do_while_stmt_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
@@ -5640,7 +5640,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 
 	//It being NULL is ok, we'll just insert a dummy
 	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
@@ -5705,7 +5705,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Create our exit block. We assume that this executes once
-	basic_block_t* while_statement_end_block = basic_block_alloc(1);
+	basic_block_t* while_statement_end_block = basic_block_alloc_and_estimate(1);
 	//We will specifically mark the end block here as an ending block
 	while_statement_end_block->block_type = BLOCK_TYPE_LOOP_EXIT;
 
@@ -5714,7 +5714,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//Create our entry block
-	basic_block_t* while_statement_entry_block = basic_block_alloc(LOOP_ESTIMATED_COST);
+	basic_block_t* while_statement_entry_block = basic_block_alloc_and_estimate(LOOP_ESTIMATED_COST);
 	//This is an entry block
 	while_statement_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
@@ -5749,7 +5749,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//We'll just allocate our own and use that
 	if(compound_statement_results.starting_block == NULL){
 		//Just give a dummy here
-		compound_statement_results.starting_block = basic_block_alloc(1);
+		compound_statement_results.starting_block = basic_block_alloc_and_estimate(1);
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
@@ -5804,9 +5804,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t result_package;
 
 	//We always have an entry block and an exit block
-	basic_block_t* entry_block = basic_block_alloc(1);
+	basic_block_t* entry_block = basic_block_alloc_and_estimate(1);
 	entry_block->block_type = BLOCK_TYPE_IF_ENTRY;
-	basic_block_t* exit_block = basic_block_alloc(1);
+	basic_block_t* exit_block = basic_block_alloc_and_estimate(1);
 	exit_block->block_type = BLOCK_TYPE_IF_EXIT;
 
 	//Note the starting and final blocks here
@@ -5846,7 +5846,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 	//If the starting block is null, create a dummy one
 	if(if_compound_statement_results.starting_block == NULL){
-		if_compound_statement_results.starting_block = basic_block_alloc(1);
+		if_compound_statement_results.starting_block = basic_block_alloc_and_estimate(1);
 		if_compound_statement_results.final_block = if_compound_statement_results.starting_block;
 	}
 
@@ -5879,7 +5879,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		generic_ast_node_t* else_if_cursor = cursor->first_child;
 
 		//Make a new one
-		basic_block_t* new_entry_block = basic_block_alloc(1);
+		basic_block_t* new_entry_block = basic_block_alloc_and_estimate(1);
 
 		//Extract the old branch statement from the previous entry block
 		instruction_t* branch_statement = previous_entry_block->exit_statement;
@@ -5911,7 +5911,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 		//If this is NULL, then we need to emit dummy blocks
 		if(else_if_compound_statement_results.starting_block == NULL){
-			else_if_compound_statement_results.starting_block = basic_block_alloc(1);
+			else_if_compound_statement_results.starting_block = basic_block_alloc_and_estimate(1);
 			else_if_compound_statement_results.final_block = else_if_compound_statement_results.starting_block;
 		}
 
@@ -6040,7 +6040,7 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 
 	} else {
 		//Create it. We assume that this happens once
-		basic_block_t* default_stmt = basic_block_alloc(1);
+		basic_block_t* default_stmt = basic_block_alloc_and_estimate(1);
 
 		//Prepackage these now
 		results.starting_block = default_stmt;
@@ -6089,7 +6089,7 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 
 	} else {
 		//We need to make the block first
-		basic_block_t* case_stmt = basic_block_alloc(1);
+		basic_block_t* case_stmt = basic_block_alloc_and_estimate(1);
 
 		//Grab the value -- this should've already been done by the parser
 		case_stmt->case_stmt_val = case_stmt_cursor->constant_value.signed_int_value;
@@ -6134,7 +6134,7 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 
 	} else {
 		//If it is NULL, we're going to need to create our own block here
-		basic_block_t* case_block = basic_block_alloc(1);
+		basic_block_t* case_block = basic_block_alloc_and_estimate(1);
 
 		//This is the starting and final block
 		result_package.starting_block = case_block;
@@ -6176,7 +6176,7 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 
 	} else {
 		//If it is NULL, we're going to need to create our own block here
-		basic_block_t* case_block = basic_block_alloc(1);
+		basic_block_t* case_block = basic_block_alloc_and_estimate(1);
 
 		//This is the starting and final block
 		result_package.starting_block = case_block;
@@ -6202,14 +6202,14 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//Th starting and ending blocks for the switch statements
-	basic_block_t* root_level_block = basic_block_alloc(1);
+	basic_block_t* root_level_block = basic_block_alloc_and_estimate(1);
 	//The upper bound check block
-	basic_block_t* upper_bound_check_block = basic_block_alloc(1);
+	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate(1);
 	//The jump calculation block
-	basic_block_t* jump_calculation_block = basic_block_alloc(1);
+	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate(1);
 	//Since C-style switches support break statements, we'll need
 	//this as well
-	basic_block_t* ending_block = basic_block_alloc(1);
+	basic_block_t* ending_block = basic_block_alloc_and_estimate(1);
 
 	//The ending block now goes onto the breaking stack
 	push(break_stack, ending_block);
@@ -6479,13 +6479,13 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 
 	//The starting block for the switch statement - we'll want this in a new
 	//block
-	basic_block_t* root_level_block = basic_block_alloc(1);
+	basic_block_t* root_level_block = basic_block_alloc_and_estimate(1);
 	//We will need to new blocks to check the bounds
-	basic_block_t* upper_bound_check_block = basic_block_alloc(1);
+	basic_block_t* upper_bound_check_block = basic_block_alloc_and_estimate(1);
 	//This is the block where the actual jump calculation happens
-	basic_block_t* jump_calculation_block = basic_block_alloc(1);
+	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate(1);
 	//We also need to know the ending block here
-	basic_block_t* ending_block = basic_block_alloc(1);
+	basic_block_t* ending_block = basic_block_alloc_and_estimate(1);
 
 	//We can already fill in the result package
 	result_package.starting_block = root_level_block;
@@ -6734,7 +6734,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
 					//We assume that this only happens once
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -6845,7 +6845,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					//We'll assume that this only happens once
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -6882,7 +6882,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					}
 
 					//We'll need a new block here - this will count as a branch
-					basic_block_t* new_block = basic_block_alloc(1);
+					basic_block_t* new_block = basic_block_alloc_and_estimate(1);
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
@@ -6910,7 +6910,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -6936,7 +6936,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 				} else {
 					//We'll also need a new block to jump to, since this is a conditional break
-					basic_block_t* new_block = basic_block_alloc(1);
+					basic_block_t* new_block = basic_block_alloc_and_estimate(1);
 
 					//First let's emit the conditional code
 					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
@@ -7026,7 +7026,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -7043,7 +7043,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 
 				//We'll need a block at the very end which we'll hit after we jump
-				basic_block_t* else_block = basic_block_alloc(1);
+				basic_block_t* else_block = basic_block_alloc_and_estimate(1);
 
 				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
@@ -7126,7 +7126,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				//We'll need a new block here regardless
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -7138,7 +7138,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			case AST_NODE_TYPE_IDLE_STMT:
 				//Do we need a new block?
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -7151,7 +7151,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 			default:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 				
@@ -7247,7 +7247,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
 					//We assume that this only happens once
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -7358,7 +7358,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					//We'll assume that this only happens once
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -7395,7 +7395,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					}
 
 					//We'll need a new block here - this will count as a branch
-					basic_block_t* new_block = basic_block_alloc(1);
+					basic_block_t* new_block = basic_block_alloc_and_estimate(1);
 
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(continue_stack);
@@ -7422,7 +7422,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			case AST_NODE_TYPE_BREAK_STMT:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -7448,7 +7448,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Otherwise, we have a conditional break, which will generate a conditional jump instruction
 				} else {
 					//We'll also need a new block to jump to, since this is a conditional break
-					basic_block_t* new_block = basic_block_alloc(1);
+					basic_block_t* new_block = basic_block_alloc_and_estimate(1);
 
 					//First let's emit the conditional code
 					cfg_result_package_t ret_package = emit_expression(current_block, ast_cursor->first_child, TRUE, TRUE);
@@ -7542,7 +7542,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -7559,7 +7559,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				//We'll need a block at the very end which we'll hit after we jump
-				basic_block_t* else_block = basic_block_alloc(1);
+				basic_block_t* else_block = basic_block_alloc_and_estimate(1);
 
 				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
@@ -7642,7 +7642,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//We'll need a new block here regardless
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -7654,7 +7654,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			case AST_NODE_TYPE_IDLE_STMT:
 				//Do we need a new block?
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 
@@ -7667,7 +7667,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			default:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
-					starting_block = basic_block_alloc(1);
+					starting_block = basic_block_alloc_and_estimate(1);
 					current_block = starting_block;
 				}
 				
@@ -7788,9 +7788,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	set_new_function(func_record);
 
 	//The starting block
-	basic_block_t* function_starting_block = basic_block_alloc(1);
+	basic_block_t* function_starting_block = basic_block_alloc_and_estimate(1);
 	//The function exit block
-	function_exit_block = basic_block_alloc(1);
+	function_exit_block = basic_block_alloc_and_estimate(1);
 	//Mark that this is a starting block
 	function_starting_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
 	//Mark that this is an exit block
@@ -8319,7 +8319,7 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 	cfg_result_package_t let_results = {NULL, NULL, NULL, BLANK};
 
 	//What block are we emitting to?
-	basic_block_t* current_block = basic_block_alloc(1);
+	basic_block_t* current_block = basic_block_alloc_and_estimate();
 
 	//Extract the type here
 	generic_type_t* type = node->inferred_type;
