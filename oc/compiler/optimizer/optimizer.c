@@ -66,12 +66,6 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 		a->jump_table = b->jump_table;
 	}
 
-	//If b is going to execute more than a, and it's now becoming a part of a, 
-	//then a will need to execute more as well. As such, we take the highest of the two
-	if(a->estimated_execution_frequency < b->estimated_execution_frequency){
-		a->estimated_execution_frequency = b->estimated_execution_frequency;
-	}
-
 	//Copy this over too
 	a->block_terminal_type = b->block_terminal_type;
 

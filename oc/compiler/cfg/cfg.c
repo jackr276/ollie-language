@@ -5390,11 +5390,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->jump_table = b->jump_table;
 	b->jump_table = NULL;
 
-	//If b executes more than A and it's now a part of A, we'll need to bump up A appropriately
-	if(a->estimated_execution_frequency < b->estimated_execution_frequency){
-		a->estimated_execution_frequency = b->estimated_execution_frequency;
-	}
-
 	//For each statement in b, all of it's old statements are now "defined" in a
 	instruction_t* b_stmt = b->leader_statement;
 
