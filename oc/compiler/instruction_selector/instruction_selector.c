@@ -5379,7 +5379,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& window->instruction1->op == PLUS
-		&& window->instruction1->assignee->is_temporary == TRUE
 		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
