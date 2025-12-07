@@ -5607,20 +5607,21 @@ static generic_type_t* type_specifier(FILE* fl){
 		//Predeclare here due to switch rules
 		generic_type_t* pointer;
 		generic_type_t* reference;
+		symtab_type_record_t* found_pointer;
+		symtab_type_record_t* found_reference;
 		
 		//Handle either a pointer or reference
 		switch(lookahead.tok){
 			//Pointer type(also called a raw pointer) here
 			case STAR:
-				//Let's create the pointer type. This pointer type will point to the current type
-				pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
-
-				//We'll now add it into the type symbol table. If it's already in there, which it very well may be, that's
-				//also not an issue
-				symtab_type_record_t* found_pointer = lookup_type(type_symtab, pointer);
+				//Let's see if we can find it first. We want to avoid creating memory if we're able to
+				found_pointer = lookup_pointer_type(type_symtab, current_type_record->type, mutability);
 
 				//If we did not find it, we will add it into the symbol table
 				if(found_pointer == NULL){
+					//Let's create the pointer type. This pointer type will point to the current type
+					pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
+
 					//Create the type record
 					symtab_type_record_t* created_pointer = create_type_record(pointer);
 					//Insert it into the symbol table

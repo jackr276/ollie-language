@@ -997,6 +997,55 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 
 
 /**
+ * Specifically look for a pointer type to the given type in the symtab
+ *
+ * This function exists so that we do not need to allocate memory in the parser
+ * just to free it
+ */
+symtab_type_record_t* lookup_pointer_type(type_symtab_t* symtab, generic_type_t* points_to, mutability_type_t mutability){
+	//Grab an array for the type name
+	char type_name[MAX_IDENT_LENGTH];
+
+	//Get the name in there by a copy
+	strcpy(type_name, points_to->type_name.string);
+
+	//Append the pointer to it
+	strcat(type_name, "*");
+
+	//Now get the hash
+	u_int16_t hash = hash_type_name(type_name, mutability);
+
+	//Grab the current lexical scope. We will search here and down
+	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
+	symtab_type_record_t* record_cursor;
+
+	//Go through all of the scopes
+	while(sheaf_cursor != NULL){
+		//Grab the record at the hash
+		record_cursor = sheaf_cursor->records[hash];
+		
+		//We could have had collisions so we'll have to hunt here
+		while(record_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strcmp(record_cursor->type->type_name.string, type_name) == 0){
+				//We have a match
+				return record_cursor;
+			}
+
+			//Otherwise no match, we advance it
+			record_cursor = record_cursor->next;
+		}
+
+		//Go up to a higher scope
+		sheaf_cursor = sheaf_cursor->previous_level;
+	}
+
+	//If we get all the way down here and it's a bust, return NULL
+	return NULL;
+}
+
+
+/**
  * Lookup the record in the symtab that corresponds to the following name.
  * 
  * We are ALWAYS biased to the most local(in scope) version of the name. If we
