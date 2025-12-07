@@ -20,7 +20,11 @@ heap_stack_t* heap_stack_alloc(){
 	//Allocate our stack
 	heap_stack_t* stack = calloc(1, sizeof(heap_stack_t));
 
-	//Now all
+	//Now allocate the internal array
+	stack->stack = calloc(DEFAULT_STACK_SIZE, sizeof(void*));
+
+	//Current index is 10
+	stack->current_max_index = 10;
 
 	//Return the stack
 	return stack;
@@ -28,33 +32,27 @@ heap_stack_t* heap_stack_alloc(){
 
 
 /**
- * Push data to the top of the stack
+ * Push data to the top of the stack. We assume that
+ * the stack has already been initialized when we do
+ * this
+ *
+ * This function will dynamically resize stack as needed
  */
 void push(heap_stack_t* stack, void* data){
-	//Just in case
-	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return;
+	//Dynamic resize - do we need to do it
+	if(stack->current_max_index == stack->current_index){
+		//Double it
+		stack->current_max_index *= 2;
+
+		//Perform the resize
+		stack->stack = realloc(stack->stack, stack->current_max_index * sizeof(void*));
 	}
 
-	//Just in case
-	if(data == NULL){
-		printf("ERROR: Cannot enter null data\n");
-		return;
-	}
+	//Insert into the stack
+	stack->stack[stack->current_index] = data;
 
-	//Allocate a new node
-	stack_node_t* new = calloc(1, sizeof(stack_node_t));
-	//Store the data
-	new->data = data;
-
-	//Attach to the front of the stack
-	new->next = stack->top;
-	//Assign the top of the stack to be the new
-	stack->top = new;
-
-	//Increment number of nodes
-	stack->num_nodes++;
+	//And update the current index
+	stack->current_index++;
 }
 
 
@@ -124,7 +122,7 @@ void* peek(heap_stack_t* stack){
  * Is the stack empty or not? Return 1 if empty
  */
 u_int8_t heap_stack_is_empty(heap_stack_t* stack){
-	return stack->num_nodes == 0 ? TRUE : FALSE;
+	return stack->current_index == 0 ? TRUE : FALSE;
 }
 
 
