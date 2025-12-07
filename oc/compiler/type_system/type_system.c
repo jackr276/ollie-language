@@ -1670,6 +1670,36 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 
 
 /**
+ * Dynamically allocate and create a reference type
+ */
+generic_type_t* create_reference_type(generic_type_t* type_referenced, u_int32_t line_number, mutability_type_t mutability){
+	//Dynamically allocate it
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//This is a reference type
+	type->type_class = TYPE_CLASS_REFERENCE;
+
+	//Save the mutability
+	type->mutability = mutability;
+
+	//Save the line number
+	type->line_number = line_number;
+
+	//First we'll clone the type
+	type->type_name = clone_dynamic_string(&(type_referenced->type_name));
+
+	//Then we'll concatenate the reference operator onto it 
+	dynamic_string_add_char_to_back(&(type->type_name), '&');
+
+	//Put what it references in here
+	type->internal_types.references = type_referenced;
+
+	//Give the type back
+	return type;
+}
+
+
+/**
  * Does this struct contain said member? Return the variable if yes, NULL if not
  */
 void* get_struct_member(generic_type_t* structure, char* name){

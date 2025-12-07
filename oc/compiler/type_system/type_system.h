@@ -55,6 +55,7 @@ typedef enum type_class_t {
 	TYPE_CLASS_STRUCT,
 	TYPE_CLASS_ENUMERATED,
 	TYPE_CLASS_POINTER,
+	TYPE_CLASS_REFERENCE, /* Reference type */
 	TYPE_CLASS_FUNCTION_SIGNATURE, /* Function pointer type */
 	TYPE_CLASS_UNION, /* For discriminating union types */
 	TYPE_CLASS_ALIAS /* Alias types */
@@ -82,6 +83,8 @@ struct generic_type_t{
 		generic_type_t* member_type;
 		//What does a pointer type point to?
 		generic_type_t* points_to;
+		//What does a reference type reference?
+		generic_type_t* references;
 		//For function pointers
 		function_type_t* function_type;
 		//Store all values in a struct
@@ -259,6 +262,11 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
  * Dynamically allocate and create a union type
  */
 generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
+
+/**
+ * Dynamically allocate and create a reference type
+ */
+generic_type_t* create_reference_type(generic_type_t* type_referenced, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Is the given binary operation valid for the type that was specificed?
