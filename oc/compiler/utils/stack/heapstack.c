@@ -4,12 +4,14 @@
  */
 
 #include "heapstack.h"
-#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 //For the TRUE and FALSE values
 #include "../constants.h"
 
+//By default, our size is 10
+#define DEFAULT_HEAP_STACK_SIZE 10
 
 /**
  * Create a stack
@@ -18,75 +20,66 @@ heap_stack_t* heap_stack_alloc(){
 	//Allocate our stack
 	heap_stack_t* stack = calloc(1, sizeof(heap_stack_t));
 
+	//Now allocate the internal array
+	stack->stack = calloc(DEFAULT_HEAP_STACK_SIZE, sizeof(void*));
+
+	//Current index is 10
+	stack->current_max_index = 10;
+
 	//Return the stack
 	return stack;
 }
 
 
 /**
- * Push data to the top of the stack
+ * Push data to the top of the stack. We assume that
+ * the stack has already been initialized when we do
+ * this
+ *
+ * This function will dynamically resize stack as needed
  */
 void push(heap_stack_t* stack, void* data){
-	//Just in case
-	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return;
+	//Dynamic resize - do we need to do it
+	if(stack->current_max_index == stack->current_index){
+		//Double it
+		stack->current_max_index *= 2;
+
+		//Perform the resize
+		stack->stack = realloc(stack->stack, stack->current_max_index * sizeof(void*));
 	}
 
-	//Just in case
-	if(data == NULL){
-		printf("ERROR: Cannot enter null data\n");
-		return;
-	}
+	//Insert into the stack
+	stack->stack[stack->current_index] = data;
 
-	//Allocate a new node
-	stack_node_t* new = calloc(1, sizeof(stack_node_t));
-	//Store the data
-	new->data = data;
-
-	//Attach to the front of the stack
-	new->next = stack->top;
-	//Assign the top of the stack to be the new
-	stack->top = new;
-
-	//Increment number of nodes
-	stack->num_nodes++;
+	//And update the current index
+	stack->current_index++;
 }
 
 
 /**
  * Pop the head off of the stack and return the data
+ *
+ * We represent the stack internally with an array, so all that popping
+ * does is return the data at the last inserted index(back) of the array
  */
 void* pop(heap_stack_t* stack){
-	//Just in case
-	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return NULL;
-	}
-
-	//Special case: we have an empty stack
-	if(stack->top == NULL){
-		return NULL;
-	}
-
 	//If there are no nodes return 0
-	if(stack->num_nodes == 0){
+	if(stack->current_index == 0){
 		return NULL;
 	}
 
-	//Grab the data
-	void* top = stack->top->data;
+	//Decrement one from the current index. The pointer
+	//will now reference the last inserted node
+	stack->current_index--;
+
+	//Grab the data at the current index
+	void* top = stack->stack[stack->current_index];
+
+	//Null it out now to be safe so that future 
+	//callers don't mistake it for something else
+	stack->stack[stack->current_index] = NULL;
 	
-	stack_node_t* temp = stack->top;
-
-	//"Delete" the node from the stack
-	stack->top = stack->top->next;
-
-	//Free the node
-	free(temp);
-	//Decrement number of nodes
-	stack->num_nodes--;
-
+	//Give this back
 	return top;
 }
 
@@ -95,24 +88,14 @@ void* pop(heap_stack_t* stack){
  * Peek the top of the stack without removing it
  */
 void* peek(heap_stack_t* stack){
-	//Just in case
-	if(stack == NULL){
-		printf("ERROR: Stack was never initialized\n");
-		return NULL;
-	}
-
-	//If the top is NULL, just return NULL
-	if(stack->top == NULL){
-		return NULL;
-	}
-
 	//If there are no nodes return 0
-	if(stack->num_nodes == 0){
+	if(stack->current_index == 0){
 		return NULL;
 	}
 
-	//Return the data pointer
-	return stack->top->data;
+	//Give back the value at the current index
+	//minus 1(last inserted index)
+	return stack->stack[stack->current_index - 1];
 }
 
 
@@ -120,33 +103,23 @@ void* peek(heap_stack_t* stack){
  * Is the stack empty or not? Return 1 if empty
  */
 u_int8_t heap_stack_is_empty(heap_stack_t* stack){
-	return stack->num_nodes == 0 ? TRUE : FALSE;
+	return stack->current_index == 0 ? TRUE : FALSE;
 }
 
 
 /**
  * Completely wipe the heap stack out
+ *
+ * Note that we will not attempt to shrink the internal
+ * array - if that has grown beyond the default then it will
+ * stay. We're just wiping the whole thing out
  */
 void reset_heap_stack(heap_stack_t* stack){
-	//Define a cursor and a temp
-	void* temp;
-	stack_node_t* cursor = stack->top;
+	//Zero the whole thing out
+	memset(stack->stack, 0, stack->current_max_index * sizeof(void*));
 
-	//Free every node
-	while(cursor != NULL){
-		//Save the cursor
-		temp = cursor; 
-
-		//Advance the cursor
-		cursor = cursor->next;
-
-		//Free the node
-		free(temp);
-	}
-
-	//Completely reset these
-	stack->num_nodes = 0;
-	stack->top = NULL;
+	//And now reset the current index to be 0
+	stack->current_index = 0;
 }
 
 
@@ -156,28 +129,9 @@ void reset_heap_stack(heap_stack_t* stack){
  * NOTE: This does nothing to touch whatever void* actually is
  */
 void heap_stack_dealloc(heap_stack_t* stack){
-	//Just in case...
-	if(stack == NULL){
-		printf("ERROR: Attempt to free a null pointer\n");
-		return;
-	}
+	//Release the stack
+	free(stack->stack);
 
-	//Define a cursor and a temp
-	void* temp;
-	stack_node_t* cursor = stack->top;
-
-	//Free every node
-	while(cursor != NULL){
-		//Save the cursor
-		temp = cursor; 
-
-		//Advance the cursor
-		cursor = cursor->next;
-
-		//Free the node
-		free(temp);
-	}
-
-	//Finally free the stack
+	//And release the entire struct
 	free(stack);
 }

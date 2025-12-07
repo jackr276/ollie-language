@@ -9992,14 +9992,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	immut_char_ptr = lookup_type_name_only(type_symtab, "char*", NOT_MUTABLE)->type;
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
-	if(grouping_stack == NULL){
-		grouping_stack = lex_stack_alloc();
-	}
-
-	//Create a stack for recording our depth
-	if(nesting_stack == NULL){
-		nesting_stack = nesting_stack_alloc();
-	}
+	grouping_stack = lex_stack_alloc();
+	//Create a stack for recording our depth/nesting levels
+	nesting_stack = nesting_stack_alloc();
 
 	//Global entry/run point, will give us a tree with
 	//the root being here
