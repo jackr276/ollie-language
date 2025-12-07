@@ -11,7 +11,7 @@
 #include "../constants.h"
 
 //By default, our size is 10
-#define DEFAULT_STACK_SIZE 10
+#define DEFAULT_HEAP_STACK_SIZE 10
 
 /**
  * Create a stack
@@ -21,7 +21,7 @@ heap_stack_t* heap_stack_alloc(){
 	heap_stack_t* stack = calloc(1, sizeof(heap_stack_t));
 
 	//Now allocate the internal array
-	stack->stack = calloc(DEFAULT_STACK_SIZE, sizeof(void*));
+	stack->stack = calloc(DEFAULT_HEAP_STACK_SIZE, sizeof(void*));
 
 	//Current index is 10
 	stack->current_max_index = 10;

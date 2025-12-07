@@ -9,10 +9,10 @@
 
 #ifndef NESTING_STACK_H 
 #define NESTING_STACK_H 
-
 #include <sys/types.h>
 
-typedef struct nesting_stack_node_t nesting_stack_node_t;
+//Predeclare the entire stack type
+typedef struct nesting_stack_t nesting_stack_t;
 
 /**
  * All of our different possible nesting values
@@ -25,28 +25,22 @@ typedef enum {
 	LOOP_STATEMENT,
 	IF_STATEMENT,
 	DEFER_STATEMENT,
-	//TODO more probably needed
 } nesting_level_t;
 
 
 /**
- * Nodes for our stack
+ * The nesting stack is internally
+ * a dynamically resizing array
  */
-struct nesting_stack_node_t {
-	nesting_stack_node_t* next;
-	nesting_level_t level;
+struct nesting_stack_t {
+	//A dynamically resizing array of nesting
+	//levels
+	nesting_level_t* stack;
+	//The current index
+	u_int32_t current_index;
+	//The current max index
+	u_int32_t current_max_index;
 };
-
-
-/**
- * A reference to the the stack object that allows us to
- * have more than one stack
- */
-typedef struct {
-	nesting_stack_node_t* top;
-	u_int16_t num_nodes;
-} nesting_stack_t;
-
 
 /**
  * Initialize a stack
