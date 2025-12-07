@@ -4882,6 +4882,40 @@ static int32_t increment_and_get(){
 
 
 /**
+ * Create a basic block explicitly using the estimate
+ * that comes from the nesting stack that we maintain.
+ * 
+ * This automates the process of estimating execution
+ * frequencies, so long as we are keeping the nesting stack
+ * up-to-date
+ */
+static basic_block_t* basic_block_alloc_with_stack_estimate(){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//What is the estimated execution cost of this block? We will
+	//rely entirely on the nesting stack to do this for us
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(cfg->created_blocks, created);
+
+	//Give it back
+	return created;
+}
+
+/**
  * Allocate a basic block using calloc. NO data assignment
  * happens in this function
 */

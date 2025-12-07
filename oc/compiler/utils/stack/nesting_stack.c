@@ -121,7 +121,7 @@ u_int8_t nesting_stack_contains_level(nesting_stack_t* nesting_stack, nesting_le
 		}
 	}
 
-	//IF we do a full scan of the array and still get down here, we didn't make it
+	//If we do a full scan of the array and still get down here, we didn't make it
 	return FALSE;
 }
 
