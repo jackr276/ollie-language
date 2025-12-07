@@ -111,7 +111,6 @@ static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, ge
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_condition);
 static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer, u_int8_t is_branch_ending);
-basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
  * Let's determine if a value is a positive power of 2.
@@ -180,6 +179,116 @@ void reset_block_variable_tracking(basic_block_t* block){
 		dynamic_array_dealloc(block->live_out);
 		block->live_out = NULL;
 	}
+}
+
+
+/**
+ * A helper function that makes a new block id. This ensures we have an atomically
+ * increasing block ID
+ */
+static int32_t increment_and_get(){
+	current_block_id++;
+	return current_block_id;
+}
+
+
+/**
+ * Create a basic block explicitly using the estimate
+ * that comes from the nesting stack that we maintain.
+ * 
+ * This automates the process of estimating execution
+ * frequencies, so long as we are keeping the nesting stack
+ * up-to-date
+ */
+static basic_block_t* basic_block_alloc_and_estimate(){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//What is the estimated execution cost of this block? We will
+	//rely entirely on the nesting stack to do this for us
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(cfg->created_blocks, created);
+
+	//Give it back
+	return created;
+}
+
+
+/**
+ * The standard basic_block_alloc function will take in the estimated
+ * execution frequency. If you are in the CFG, *you should not be
+ * using this function*
+ */
+basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//What is the estimated execution cost of this block?
+	created->estimated_execution_frequency = estimated_execution_frequency;
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(cfg->created_blocks, created);
+
+	return created;
+}
+
+
+/**
+ * Allocate a basic block that comes from a user-defined label statement
+*/
+static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in even though it is a labeled block
+	created->block_id = increment_and_get();
+
+	//This block's name will draw from the label
+	created->label = label;
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//Our sane defaults here - normal termination and normal type
+	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
+	//We'll mark this to indicate that this is a labeled block
+	created->block_type = BLOCK_TYPE_LABEL;
+
+	//What is the estimated execution cost of this block? Rely on the nesting stack
+	//to do this
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(cfg->created_blocks, created);
+
+	return created;
 }
 
 
@@ -4868,116 +4977,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	//Give back what we assigned to
 	return result_package;
-}
-
-
-/**
- * A helper function that makes a new block id. This ensures we have an atomically
- * increasing block ID
- */
-static int32_t increment_and_get(){
-	current_block_id++;
-	return current_block_id;
-}
-
-
-/**
- * Create a basic block explicitly using the estimate
- * that comes from the nesting stack that we maintain.
- * 
- * This automates the process of estimating execution
- * frequencies, so long as we are keeping the nesting stack
- * up-to-date
- */
-static basic_block_t* basic_block_alloc_with_stack_estimate(){
-	//Allocate the block
-	basic_block_t* created = calloc(1, sizeof(basic_block_t));
-
-	//Put the block ID in
-	created->block_id = increment_and_get();
-
-	//Our sane defaults here - normal termination and normal type
-	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
-	//By default we're normal here
-	created->block_type = BLOCK_TYPE_NORMAL;
-
-	//What is the estimated execution cost of this block? We will
-	//rely entirely on the nesting stack to do this for us
-	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
-
-	//Let's add in what function this block came from
-	created->function_defined_in = current_function;
-
-	//Add this into the dynamic array
-	dynamic_array_add(cfg->created_blocks, created);
-
-	//Give it back
-	return created;
-}
-
-
-/**
- * The standard basic_block_alloc function will take in the estimated
- * execution frequency. If you are in the CFG, *you should not be
- * using this function*
- */
-basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
-	//Allocate the block
-	basic_block_t* created = calloc(1, sizeof(basic_block_t));
-
-	//Put the block ID in
-	created->block_id = increment_and_get();
-
-	//Our sane defaults here - normal termination and normal type
-	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
-	//By default we're normal here
-	created->block_type = BLOCK_TYPE_NORMAL;
-
-	//What is the estimated execution cost of this block?
-	created->estimated_execution_frequency = estimated_execution_frequency;
-
-	//Let's add in what function this block came from
-	created->function_defined_in = current_function;
-
-	//Add this into the dynamic array
-	dynamic_array_add(cfg->created_blocks, created);
-
-	return created;
-}
-
-
-/**
- * Allocate a basic block that comes from a user-defined label statement
-*/
-static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
-	//Allocate the block
-	basic_block_t* created = calloc(1, sizeof(basic_block_t));
-
-	//Put the block ID in even though it is a labeled block
-	created->block_id = increment_and_get();
-
-	//This block's name will draw from the label
-	created->label = label;
-
-	//Put the block ID in
-	created->block_id = increment_and_get();
-
-	//Our sane defaults here - normal termination and normal type
-	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
-	//We'll mark this to indicate that this is a labeled block
-	created->block_type = BLOCK_TYPE_LABEL;
-
-	//What is the estimated execution cost of this block? Rely on the nesting stack
-	//to do this
-	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
-
-	//Let's add in what function this block came from
-	created->function_defined_in = current_function;
-
-	//Add this into the dynamic array
-	dynamic_array_add(cfg->created_blocks, created);
-
-	return created;
 }
 
 
