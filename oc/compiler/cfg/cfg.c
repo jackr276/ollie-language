@@ -7942,7 +7942,8 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//Now we need to emit the store operation
 	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(true_base_address, offset_constant, NULL);
 
-	//This counts as a use
+	//This counts as a use for both of these
+	add_used_variable(current_block, base_address);
 	add_used_variable(current_block, true_base_address);
 
 	//If the last instruction is *not* a constant assignment, we can go ahead like this
