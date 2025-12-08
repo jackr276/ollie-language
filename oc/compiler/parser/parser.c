@@ -1470,9 +1470,20 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
-	//This types are not assignable
-	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY){
-		return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
+	//Sanitize based on the types here. Arrays and references specifically
+	//cannot be assigned in a traditional sense
+	switch(left_hand_unary->inferred_type->type_class){
+		case TYPE_CLASS_ARRAY:
+			return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
+
+		//Reference types, whether they are mutable or not, may not be reassigned after they are declared and
+		//initialized
+		case TYPE_CLASS_REFERENCE:
+			return print_and_return_error("Reference types may only be assigned to in a \"let\" statement", parser_line_num);
+
+		//If we don't have the 2 above, then we have no issue
+		default:
+			break;
 	}
 
 	//Otherwise it worked, so we'll add it in as the left child
