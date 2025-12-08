@@ -33,6 +33,7 @@ u_int8_t is_memory_region(generic_type_t* type){
 u_int8_t is_memory_address_type(generic_type_t* type){
 	switch(type->type_class){
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
@@ -93,6 +94,7 @@ u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
 		//These are memory addresses - so yes
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_STRUCT:
 			return TRUE;
 
@@ -166,6 +168,9 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
 			case TYPE_CLASS_POINTER:
 				current_type = current_type->internal_types.points_to;
 				break;
+			case TYPE_CLASS_REFERENCE:
+				current_type = current_type->internal_types.points_to;
+				break;
 			//Nothing for us here
 			default:
 				break;
@@ -189,6 +194,7 @@ u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 		//These are all essentially pointers
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
 			return TRUE;
@@ -229,6 +235,7 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type){
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_REFERENCE:
 			return FALSE;
 		case TYPE_CLASS_ENUMERATED:
 			return TRUE;
@@ -266,6 +273,7 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 		case TYPE_CLASS_STRUCT:
 			return FALSE;
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_REFERENCE:
 			return TRUE;
 		case TYPE_CLASS_ENUMERATED:
 			return TRUE;
@@ -1226,6 +1234,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 				case TYPE_CLASS_ARRAY:
 				case TYPE_CLASS_STRUCT:
 				case TYPE_CLASS_ALIAS:
+				case TYPE_CLASS_REFERENCE:
 				case TYPE_CLASS_FUNCTION_SIGNATURE:
 				case TYPE_CLASS_UNION:
 					return FALSE;
@@ -1242,13 +1251,14 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 
 		//We can only dereference arrays and pointers
 		case STAR:
-			//These are our valid cases
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_POINTER){
-				return TRUE;
+			//Only 2 kinds of valid types here
+			switch(type->type_class){
+				case TYPE_CLASS_ARRAY:
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+				default:
+					return FALSE;
 			}
-
-			//Anything else is invalid
-			return FALSE;
 
 		//We can take the address of anything besides a void type
 		case SINGLE_AND:
@@ -1277,9 +1287,15 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 
 		//We can negate pointers, enums and basic types that are not void
 		case L_NOT:
-			//These are bad, we fail out here
-			if(type->type_class == TYPE_CLASS_STRUCT || type->type_class == TYPE_CLASS_ARRAY){
-				return FALSE;
+			//Basic sanitation here, you can't negate these types
+			switch(type->type_class){
+				case TYPE_CLASS_ARRAY:
+				case TYPE_CLASS_REFERENCE:
+				case TYPE_CLASS_STRUCT:
+				case TYPE_CLASS_UNION:
+					return FALSE;
+				default:
+					break;
 			}
 
 			//Our other invalid case
@@ -1331,6 +1347,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		case TYPE_CLASS_UNION:
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			return FALSE;
 
@@ -1338,7 +1355,6 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		default:
 			break;
 	}
-
 
 	//Switch based on what the operator is
 	switch(binary_op){
