@@ -8067,6 +8067,14 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		return print_and_return_error(info, parser_line_num);
 	}
 
+	//Special restriction here - references must be initialized
+	//upon declaration. In other words, the user is mandated to
+	//use "let" to declare & initialize all at once
+	if(type_spec->type_class == TYPE_CLASS_REFERENCE){
+		sprintf(info, "Variable %s is of type %s. Reference types must be declared and intialized in the same step using the \"let\" keyword", name.string, type_spec->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
 	//One thing here, we aren't allowed to see void
 	if(strcmp(type_spec->type_name.string, "void") == 0){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
