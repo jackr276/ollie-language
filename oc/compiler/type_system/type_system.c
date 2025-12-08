@@ -366,7 +366,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		//if they're the exact same
 		case TYPE_CLASS_STRUCT:
 			//If the string compare works, they are the same type. We must now check for mutability
-			if(strcmp(destination_type->type_name.string, source_type->type_name.string) == 0){
+			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
 				//This is fine, we can assign to something immutable
 				if(destination_type->mutability == NOT_MUTABLE){
 					return destination_type;
@@ -375,7 +375,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				//that this works is if the source is also mutable
 				} else {
 					//Good case
-					if(source_type->mutability == MUTABLE){
+					if(true_source_type->mutability == MUTABLE){
 						return destination_type;
 					//Fail out
 					} else {
@@ -406,7 +406,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		//This will only work if they're the exact same
 		case TYPE_CLASS_UNION:
 			//If the string compare works, they are the same type. We must now check for mutability
-			if(strcmp(destination_type->type_name.string, source_type->type_name.string) == 0){
+			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
 				//This is fine, we can assign to something immutable
 				if(destination_type->mutability == NOT_MUTABLE){
 					return destination_type;
@@ -415,7 +415,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				//that this works is if the source is also mutable
 				} else {
 					//Good case
-					if(source_type->mutability == MUTABLE){
+					if(true_source_type->mutability == MUTABLE){
 						return destination_type;
 					//Fail out
 					} else {
@@ -431,12 +431,12 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		 */
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			//If this is not also a function signature, then we're done here
-			if(source_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+			if(true_source_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 				return NULL;
 			}
 
 			//Otherwise, we'll need to use the helper rule to determine if it's equivalent
-			if(function_signatures_identical(destination_type, source_type) == TRUE){
+			if(function_signatures_identical(destination_type, true_source_type) == TRUE){
 				return destination_type;
 			} else {
 				return NULL;
@@ -445,10 +445,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		//Enum's can internally be any unsigned integer
 		case TYPE_CLASS_ENUMERATED:
 			//Go based on what the source it
-			switch(source_type->type_class){
+			switch(true_source_type->type_class){
 				case TYPE_CLASS_ENUMERATED:
 					//These need to be the exact same, otherwise this will not work
-					if(destination_type == source_type){
+					if(destination_type == true_source_type){
 						return destination_type;
 					} else {
 						return NULL;
@@ -456,14 +456,14 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 				//If we have a basic type, we can just compare it with the enum's internal int
 				case TYPE_CLASS_BASIC:
-					switch(source_type->basic_type_token){
+					switch(true_source_type->basic_type_token){
 						//These are all bad
 						case F32:
 						case F64:
 						case VOID:
 							return NULL;
 						default:
-							return types_assignable(destination_type->internal_values.enum_integer_type, source_type);
+							return types_assignable(destination_type->internal_values.enum_integer_type, true_source_type);
 					}
 
 				//Anything else is bad
@@ -481,7 +481,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			//If it's a pointer
 			if(source_type->type_class == TYPE_CLASS_POINTER){
-				generic_type_t* points_to = source_type->internal_types.points_to;
+				generic_type_t* points_to = true_source_type->internal_types.points_to;
 
 				//If it's not a basic type then leave
 				if(points_to->type_class != TYPE_CLASS_BASIC){
@@ -498,13 +498,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
-			switch(source_type->type_class){
+			switch(true_source_type->type_class){
 				//We don't care about mutability here - we'll
 				//be copying the u64 so the value there is actually irrelevant, it's not a pointer
 				//that we're copying over
 				case TYPE_CLASS_BASIC:
 					//This needs to be a u64, otherwise it's invalid
-					if(source_type->basic_type_token == U64){
+					if(true_source_type->basic_type_token == U64){
 						//We will keep this as the pointer
 						return destination_type;
 					//Any other basic type will not work here
@@ -520,13 +520,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					if(destination_type->mutability == MUTABLE){
 						//If the destination is mutable but the source
 						//is not, we can't go forward
-						if(source_type->mutability != MUTABLE){
+						if(true_source_type->mutability != MUTABLE){
 							return NULL;
 						}
 					}
 
 					//If this works, return the destination type
-					if(types_assignable(destination_type->internal_types.points_to, source_type->internal_types.member_type) != NULL){
+					if(types_assignable(destination_type->internal_types.points_to, true_source_type->internal_types.member_type) != NULL){
 						return destination_type;
 					}
 					
@@ -540,13 +540,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					if(destination_type->mutability == MUTABLE){
 						//If the destination is mutable but the source
 						//is not, we can't go forward
-						if(source_type->mutability != MUTABLE){
+						if(true_source_type->mutability != MUTABLE){
 							return NULL;
 						}
 					}
 
 					//If this itself is a void pointer, then we're good
-					if(source_type->internal_values.is_void_pointer == TRUE){
+					if(true_source_type->internal_values.is_void_pointer == TRUE){
 						return destination_type;
 					//This is also fine, we just give the destination type back
 					} else if(destination_type->internal_values.is_void_pointer == TRUE){
@@ -554,7 +554,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					//Let's see if what they point to is the exact same
 					} else {
 						//If this works, return the destination type
-						if(types_assignable(destination_type->internal_types.points_to, source_type->internal_types.points_to) != NULL){
+						if(types_assignable(destination_type->internal_types.points_to, true_source_type->internal_types.points_to) != NULL){
 							return destination_type;
 						}
 
@@ -585,9 +585,9 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				//Float64's can only be assigned to other float64's
 				case F64:
 					//We must see another f64 or an f32(widening) here
-					if(source_type->type_class == TYPE_CLASS_BASIC
-						&& (source_type->basic_type_token == F64
-						|| source_type->basic_type_token == F32)){
+					if(true_source_type->type_class == TYPE_CLASS_BASIC
+						&& (true_source_type->basic_type_token == F64
+						|| true_source_type->basic_type_token == F32)){
 						return destination_type;
 
 					//Otherwise nothing here will work
@@ -597,8 +597,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 				case F32:
 					//We must see another an f32 here
-					if(source_type->type_class == TYPE_CLASS_BASIC
-						&& source_type->basic_type_token == F32){
+					if(true_source_type->type_class == TYPE_CLASS_BASIC
+						&& true_source_type->basic_type_token == F32){
 						return destination_type;
 
 					//Otherwise nothing here will work
@@ -612,18 +612,18 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				//type is also a basic type. 
 				default:
 					//Special exception - the source type is an enum. These are good to be used with ints
-					if(source_type->type_class == TYPE_CLASS_ENUMERATED){
+					if(true_source_type->type_class == TYPE_CLASS_ENUMERATED){
 						return destination_type;
 					}
 
 					//Now if the source type is not a basic type, we're done here
-					if(source_type->type_class != TYPE_CLASS_BASIC){
+					if(true_source_type->type_class != TYPE_CLASS_BASIC){
 						return NULL;
 					}
 					
 					//Once we get here, we know that the source type is a basic type. We now
 					//need to check that it's not a float or void
-					source_basic_type = source_type->basic_type_token;
+					source_basic_type = true_source_type->basic_type_token;
 
 					//Go based on what we have here
 					switch(source_basic_type){
@@ -637,7 +637,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						//and integer/char type. We can now just compare the sizes and if the destination is more
 						//than or equal to the source, we're good
 						default:
-							if(source_type->type_size <= destination_type->type_size){
+							if(true_source_type->type_size <= destination_type->type_size){
 								return destination_type;
 							} else {
 								//These wouldn't fit
