@@ -1,11 +1,7 @@
 /**
 * Author: Jack Robbins
-* Test the usage of an immutable reference type
+* Test the case where we want to post-increment a reference
 */
-
-fn tester(x:i32&, y:i32&) -> i32 {
-	ret x + y;
-}
 
 pub fn main() -> i32 {
 	let x:mut i32 = 3;
@@ -15,5 +11,8 @@ pub fn main() -> i32 {
 	let x_ref:i32& = x;
 	let y_ref:i32& = y;
 
-	ret @tester(x_ref, y_ref);
+	x_ref++;
+	y_ref--;
+
+	ret x_ref + y_ref;
 }

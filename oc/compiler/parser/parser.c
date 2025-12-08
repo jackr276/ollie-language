@@ -8638,7 +8638,11 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	 * this flag is all that we need to do in the parser
 	 */
 	if(type_spec->type_class == TYPE_CLASS_REFERENCE){
+		//This is a stack variable
 		declared_var->stack_variable = TRUE;
+
+		//We should get this onto the stack now by creating a region for it
+		declared_var->stack_region = create_stack_region_for_type(&(current_function->data_area), declared_var->type_defined_as->internal_types.references);
 	}
 
 	//Add the reference into the root node
