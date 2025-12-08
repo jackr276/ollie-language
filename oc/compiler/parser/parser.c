@@ -8086,6 +8086,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 		//in the global scope
 		if(is_global == TRUE){
 			sprintf(info, "Variable %s is of type %s. Reference types cannot be used in the global scope", name.string, type_spec->type_name.string);
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Otherwise - another issue here. You can never declare a reference
@@ -8557,6 +8558,14 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	//One thing here, we aren't allowed to see void
 	if(is_void_type(type_spec) == TRUE){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
+	}
+
+	//We cannot have reference types in the global scope
+	if(type_spec->type_class == TYPE_CLASS_REFERENCE){
+		if(is_global == TRUE){
+			sprintf(info, "Variable %s is of type %s. Reference types cannot be used in the global scope", name.string, type_spec->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
 	}
 
 	//Now we know that it wasn't a duplicate, so we must see a valid assignment operator

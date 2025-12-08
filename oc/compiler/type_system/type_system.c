@@ -391,6 +391,24 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		//its address taken. As such, we are really able to compare the underlying referenced
 		//type to the reference here to see if they are assignable
 		case TYPE_CLASS_REFERENCE:
+			//We can assign a reference to a reference in special cases(function
+			//call). We will do the needed checking here to enable that. The parser
+			//has its own checkng where it will smack things down if they're invalid
+			//in that context
+			if(source_type->type_class == TYPE_CLASS_REFERENCE){
+				//Mutability checking happens first
+				if(destination_type->mutability == MUTABLE){
+					//Invalid - attempting to grab a mutable reference
+					//to an immutable variable
+					if(source_type->mutability == NOT_MUTABLE){
+						return NULL;
+					}
+				}
+
+				//Are these referenced types compatible?
+				return types_assignable(destination_type->internal_types.references, source_type->internal_types.references);
+			}
+
 			//Mutability checking happens first
 			if(destination_type->mutability == MUTABLE){
 				//Invalid - attempting to grab a mutable reference
