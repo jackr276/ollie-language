@@ -8082,6 +8082,13 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 	//upon declaration. In other words, the user is mandated to
 	//use "let" to declare & initialize all at once
 	if(type_spec->type_class == TYPE_CLASS_REFERENCE){
+		//First potential issue - you can't use references
+		//in the global scope
+		if(is_global == TRUE){
+			sprintf(info, "Variable %s is of type %s. Reference types cannot be used in the global scope", name.string, type_spec->type_name.string);
+		}
+
+		//Otherwise - another issue here. You can never declare a reference
 		sprintf(info, "Variable %s is of type %s. Reference types must be declared and intialized in the same step using the \"let\" keyword", name.string, type_spec->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -8612,7 +8619,19 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
-	
+
+	/**
+	 * If we have a reference type, then we know off the bat that whatever
+	 * variable we are assigning here will be stored/used by reference, even
+	 * if it is implicitly. As such, we will flag that our variable from above
+	 * is a "stack variable". This will tell the compiler to skip trying to keep
+	 * it in a register and throw it in the stack immediately. Luckily, setting
+	 * this flag is all that we need to do in the parser
+	 */
+	if(type_spec->type_class == TYPE_CLASS_REFERENCE){
+		declared_var->stack_variable = TRUE;
+	}
+
 	//Add the reference into the root node
 	let_stmt_node->variable = declared_var;
 	//Store the line number
