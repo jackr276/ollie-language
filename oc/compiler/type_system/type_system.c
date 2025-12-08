@@ -346,6 +346,21 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 	ollie_token_t source_basic_type;
 	ollie_token_t dest_basic_type;
 
+	//The true source type. We will use this to avoid having
+	//if statements everywhere. In most cases, the true source is
+	//just the source. Only in special cases(like if the source
+	//is a reference) will that be changed
+	generic_type_t* true_source_type = source_type;
+
+	//Remember that references on the RHS of an equation are implicitly
+	//dereferenced. So, we will represent that here be dereferencing a reference type
+	//off the bat
+	if(source_type->type_class == TYPE_CLASS_REFERENCE){
+		//The true source type is what we have underlying here if 
+		//it is in fact a reference
+		true_source_type = source_type->internal_types.references;
+	}
+
 	switch(destination_type->type_class){
 		//This is a simpler case - constructs can only be assigned
 		//if they're the exact same
@@ -370,6 +385,23 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 			}
 
 			return NULL;
+
+		//Reference types are implicitly dereferenced by the compiler. This means
+		//that if you're trying to assign an i32 to an i32&, the i32 is implicitly having
+		//its address taken. As such, we are really able to compare the underlying referenced
+		//type to the reference here to see if they are assignable
+		case TYPE_CLASS_REFERENCE:
+			//Mutability checking happens first
+			if(destination_type->mutability == MUTABLE){
+				//Invalid - attempting to grab a mutable reference
+				//to an immutable variable
+				if(true_source_type->mutability == NOT_MUTABLE){
+					return NULL;
+				}
+			}
+
+			//Recursively call the helper on this one
+			return types_assignable(destination_type->internal_types.references, true_source_type);
 
 		//This will only work if they're the exact same
 		case TYPE_CLASS_UNION:
