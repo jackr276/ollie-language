@@ -803,14 +803,36 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 	*a = dealias_type(*a);
 	*b = dealias_type(*b);
 
-	//Lookup what the enum type actually is and use that
-	if((*a)->type_class == TYPE_CLASS_ENUMERATED){
-		*a = (*a)->internal_values.enum_integer_type;
+	//Special treatment based on a's type class
+	switch((*a)->type_class){
+		//Dereference the enum int type
+		case TYPE_CLASS_ENUMERATED:
+			*a = (*a)->internal_values.enum_integer_type;
+			break;
+		//References are automatically dereferenced in this
+		//scenarios
+		case TYPE_CLASS_REFERENCE:
+			*a = (*a)->internal_types.references;
+			break;
+		//Do nothing
+		default:
+			break;
 	}
 
-	//Lookup what the enum type actually is and use that
-	if((*b)->type_class == TYPE_CLASS_ENUMERATED){
-		*b = (*b)->internal_values.enum_integer_type;
+	//Special treatment based on b's type class
+	switch((*b)->type_class){
+		//Dereference the enum int type
+		case TYPE_CLASS_ENUMERATED:
+			*b = (*b)->internal_values.enum_integer_type;
+			break;
+		//References are automatically dereferenced in this
+		//scenarios
+		case TYPE_CLASS_REFERENCE:
+			*b = (*b)->internal_types.references;
+			break;
+		//Do nothing
+		default:
+			break;
 	}
 	
 	/**
@@ -1338,6 +1360,13 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 	//Just to be safe, we'll always make sure here
 	type = dealias_type(type);
 
+	//Reference types, in the context of binary operations, 
+	//are dereferenced for the user automatically. We need to
+	//account for that here
+	if(type->type_class == TYPE_CLASS_REFERENCE){
+		type = type->internal_types.references;
+	}
+
 	//Deconstructed basic type(since we'll be using it so much)
 	ollie_token_t basic_type;
 
@@ -1345,9 +1374,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 	//series of types that never make sense for any unary operation
 	switch (type->type_class) {
 		case TYPE_CLASS_UNION:
-		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
-		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			return FALSE;
 
