@@ -2835,22 +2835,29 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 */
 	if(ident_node->side == SIDE_TYPE_RIGHT && 
 		(ident_node->variable->stack_variable == TRUE || ident_node->variable->membership == GLOBAL_VARIABLE)){
+		//Extract the "true type" here in case we are dealing with a reference type
+		generic_type_t* true_type = ident_node->variable->type_defined_as;
+
+		//If it is a reference, we need to grab what it references
+		if(true_type->type_class == TYPE_CLASS_REFERENCE){
+			true_type = true_type->internal_types.references;
+		}
+
 		//First we emit the memory address of the variable
 		instruction_t* memory_address_assignment = emit_memory_address_assignment(emit_temp_var(u64), emit_var(ident_node->variable));
 		//Counts as a use
 		add_used_variable(basic_block, memory_address_assignment->op1);
 
-		//Now emit the type adjusted address
+		//Now emit the type adjusted address using the "true type"
 		three_addr_var_t* type_adjusted_address = emit_var_copy(memory_address_assignment->assignee);
-		type_adjusted_address->type = ident_node->inferred_type;
+		type_adjusted_address->type = true_type;
 
 		//Get it in the block
 		add_statement(basic_block, memory_address_assignment);
 
-		//TODO YOU NEED STUFF FOR REFERENCES HERE - this is WRONG
-
-		//Emit the load instruction
-		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), type_adjusted_address);
+		//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
+		//a reference
+		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(true_type), type_adjusted_address);
 		load_instruction->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
