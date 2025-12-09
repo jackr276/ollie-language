@@ -3754,9 +3754,18 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		//Add it to the block
 		add_statement(current_block, memory_address_of_stmt);
 
-		//Get the version that represents our memory indirect
+		//Get the "true type". If we have a reference, this goes through an implicit dereference
+		generic_type_t* true_type = postfix_node->variable->type_defined_as; 
+
+		//The real type in this case is whatever is one layer beneath here
+		if(true_type->type_class == TYPE_CLASS_REFERENCE){
+			true_type = true_type->internal_types.references;
+		}
+
+		//Get the version that represents our memory indirection. Be sure to use the "true type" here
+		//just in case we were dealing with a reference
 		three_addr_var_t* indirect_version = emit_var_copy(memory_address_of_stmt->assignee);
-		indirect_version->type = postfix_node->variable->type_defined_as;
+		indirect_version->type = true_type;
 
 		//Now we need to add the final store
 		instruction_t* store_instruction = emit_store_ir_code(indirect_version, assignee); 
