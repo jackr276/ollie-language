@@ -2228,7 +2228,7 @@ variable_size_t get_type_size(generic_type_t* type){
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 		case TYPE_CLASS_ALIAS:
-		case TYPE_CLASS_UNION: //always a memory address
+		case TYPE_CLASS_UNION:
 			size = QUAD_WORD;
 			break;
 

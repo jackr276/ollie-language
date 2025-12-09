@@ -936,9 +936,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//We now need to set a flag that we do *not* dereference
-			//this reference value
-
+			//If this all worked, then we're set
 		}
 
 		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
