@@ -1247,6 +1247,21 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 		return FALSE;
 	}
 
+	//Some special rules based on the type class
+	switch (type->type_class) {
+		//Always invalid
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			return FALSE;
+		//Again here, references are automatically dereferenced
+		//so that needs to be accounted for
+		case TYPE_CLASS_REFERENCE:
+			type = type->internal_types.references;
+			break;
+		//By default nothing happens
+		default:
+			break;
+	}
+
 	//Go based on what token we're given
 	switch (unary_op) {
 		//This will pull double duty for pre/post increment operators
@@ -1256,7 +1271,6 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 				case TYPE_CLASS_ARRAY:
 				case TYPE_CLASS_STRUCT:
 				case TYPE_CLASS_ALIAS:
-				case TYPE_CLASS_REFERENCE:
 				case TYPE_CLASS_FUNCTION_SIGNATURE:
 				case TYPE_CLASS_UNION:
 					return FALSE;
@@ -1271,7 +1285,8 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 					return TRUE;
 			}
 
-		//We can only dereference arrays and pointers
+		//We can only dereference arrays and pointers. Note that
+		//it is *not* possible to dereference a reference - this is done automatically
 		case STAR:
 			//Only 2 kinds of valid types here
 			switch(type->type_class){

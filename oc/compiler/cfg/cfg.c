@@ -3759,49 +3759,61 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The assignee comes from our package. This is what we are ultimately using in the final result
 			assignee = unary_package.assignee;
 		
-			//If the assignee is not a pointer, we'll handle the normal case
-			if(assignee->type->type_class == TYPE_CLASS_BASIC){
-				//If we have a temporary variable, then we need to perform
-				//a reassignment here for analysis purposes
-				if(unary_package.assignee->is_temporary == TRUE){
-					//Emit the assignment
-					instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-					temp_assignment->is_branch_ending = is_branch_ending;
+			//Go based on what we have here
+			switch(assignee->type->type_class){
+				case TYPE_CLASS_BASIC:
+				//Reference types are treated like basic types
+				case TYPE_CLASS_REFERENCE:
+					//If we have a temporary variable, then we need to perform
+					//a reassignment here for analysis purposes
+					if(unary_package.assignee->is_temporary == TRUE){
+						//Emit the assignment
+						instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
+						temp_assignment->is_branch_ending = is_branch_ending;
 
-					//This now counts as a use
-					add_used_variable(current_block, assignee);
+						//This now counts as a use
+						add_used_variable(current_block, assignee);
 
-					//Throw it in the block
-					add_statement(current_block, temp_assignment);
+						//Throw it in the block
+						add_statement(current_block, temp_assignment);
 
-					//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
-					temp_assignment->cannot_be_combined = TRUE;
+						//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
+						temp_assignment->cannot_be_combined = TRUE;
 
-					//Now the new assignee equals this new temp that we have
-					assignee = temp_assignment->assignee;
-				}
+						//Now the new assignee equals this new temp that we have
+						assignee = temp_assignment->assignee;
+					}
+					
+					//Go based on the op here
+					switch(unary_operator_node->unary_operator){
+						case PLUSPLUS:
+							//We really just have an "inc" instruction here
+							assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+							break;
+							
+						case MINUSMINUS:
+							//We really just have an "dec" instruction here
+							assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+							break;
+
+						//We shouldn't ever hit here
+						default:	
+							break;
+					}
+
+					break;
+
+				//The pointer type is a special case
+				case TYPE_CLASS_POINTER:
+					//Let the helper deal with this
+					assignee = handle_pointer_arithmetic(current_block, unary_operator_node->unary_operator, assignee, is_branch_ending);
+
+					break;
 				
-				//Go based on the op here
-				switch(unary_operator_node->unary_operator){
-					case PLUSPLUS:
-						//We really just have an "inc" instruction here
-						assignee = emit_inc_code(current_block, assignee, is_branch_ending);
-						break;
-						
-					case MINUSMINUS:
-						//We really just have an "dec" instruction here
-						assignee = emit_dec_code(current_block, assignee, is_branch_ending);
-						break;
-
-					//We shouldn't ever hit here
-					default:	
-						break;
-				}
-
-			//If we actually do have a pointer, we need the helper to deal with this
-			} else {
-				//Let the helper deal with this
-				assignee = handle_pointer_arithmetic(current_block, unary_operator_node->unary_operator, assignee, is_branch_ending);
+				//This should never occur
+				default:
+					printf("Fatal internal compiler error: unreachable type for postincrement found\n");
+					exit(1);
 			}
 
 			/**

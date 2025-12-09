@@ -8,8 +8,8 @@ pub fn main() -> i32 {
 	let y:mut i32 = 5;
 
 	//Grab immutable references to them
-	let x_ref:i32& = x;
-	let y_ref:i32& = y;
+	let x_ref:mut i32& = x;
+	let y_ref:mut i32& = y;
 
 	x_ref++;
 	y_ref--;
