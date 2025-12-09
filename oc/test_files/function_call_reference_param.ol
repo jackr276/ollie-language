@@ -15,7 +15,7 @@ pub fn main() -> i32 {
 	let x_ref:mut i32& = x;
 	let y_ref:mut i32& = y;
 
-	//Test how it handles operations taking place
-	//inside of the call
+	//The compiler should recognize that we do *not*
+	//want to perform the implicit deref here
 	ret @add_vars(x_ref, y_ref);
 }

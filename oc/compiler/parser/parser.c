@@ -919,21 +919,26 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//TODO my thought here - this will generate an error because you're
-			//trying to manipulate a reference in a function call. We will stop
-			//the user from doing this because it would add a lot of overhead
-			//in the compiler
-			//
-			//
-			//We should also then set some kind of flag that we do not want to dereference
-			//here - we just want the memory address and that's it. We can then catch this
-			//flag in the CFG constructor and go from there
-			//
-			//Even beyond this - something like let x:mut i32& and then doing x + 1 should return an i32, 
-			//not a reference. TODO TYPE SYSTEM
-			if(current_param->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-				printf("NOT AN IDENT\n\n\n");
+			//Let's see if we're even able to assign this here
+			final_type = types_assignable(param_type, current_param->inferred_type);
+
+			//If this is null, it means that our check failed
+			if(final_type == NULL){
+				sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an input of type \"%s%s\". Defined as: %s",
+						function_name.string, 
+						(param_type->mutability == MUTABLE ? "mut ": ""),
+						param_type->type_name.string, num_params,
+						//Print the mut keyword if we need it
+						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						current_param->inferred_type->type_name.string, function_type->type_name.string);
+
+				//Use the helper to return this
+				return print_and_return_error(info, parser_line_num);
 			}
+
+			//We now need to set a flag that we do *not* dereference
+			//this reference value
+
 		}
 
 		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
@@ -2056,8 +2061,15 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 	//The parent node is a child of this one
 	add_child_node(postoperation_node, parent_node);
 
-	//The inferred type is the current type
-	postoperation_node->inferred_type = current_type;
+	//The inferred type is the current type *or* the dereferenced type
+	//if we have a reference
+	if(current_type->type_class != TYPE_CLASS_REFERENCE){
+		postoperation_node->inferred_type = current_type;
+	//Otherwise we have a reference - so on-the-fly deref here
+	} else {
+		postoperation_node->inferred_type = current_type->internal_types.references;
+	}
+
 	postoperation_node->line_number = parser_line_num;
 	//Store the unary operator too
 	postoperation_node->unary_operator = operator;
@@ -2424,8 +2436,14 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//Otherwise if we make it down here, the return type will be whatever type we put in
-			return_type = cast_expr->inferred_type;
+			//The inferred type is the current type *or* the dereferenced type
+			//if we have a reference
+			if(cast_expr->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+				return_type = cast_expr->inferred_type;
+			//Otherwise we have a reference - so on-the-fly deref here
+			} else {
+				return_type = cast_expr->inferred_type->internal_types.references;
+			}
 
 			//This is not assignable
 			is_assignable = FALSE;
@@ -2443,8 +2461,14 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//If we get all the way down here, the return type is what we had to begin with
-			return_type = cast_expr->inferred_type;
+			//The inferred type is the current type *or* the dereferenced type
+			//if we have a reference
+			if(cast_expr->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+				return_type = cast_expr->inferred_type;
+			//Otherwise we have a reference - so on-the-fly deref here
+			} else {
+				return_type = cast_expr->inferred_type->internal_types.references;
+			}
 
 			//This is not assignable
 			is_assignable = FALSE;
@@ -2474,8 +2498,14 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//Otherwise it worked just fine here. The return type is the same type that we had initially
-			return_type = cast_expr->inferred_type;
+			//The inferred type is the current type *or* the dereferenced type
+			//if we have a reference
+			if(cast_expr->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+				return_type = cast_expr->inferred_type;
+			//Otherwise we have a reference - so on-the-fly deref here
+			} else {
+				return_type = cast_expr->inferred_type->internal_types.references;
+			}
 
 			//This counts as mutation -- unless it's a constant
 			if(cast_expr->variable != NULL){
