@@ -5053,6 +5053,9 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//Extract the parameter type here
 		generic_type_t* paramter_type = signature->parameters[i - 1];
 
+		//TODO THIS IS NOT WORKING FOR REFERENCES - we need the actual memory address coming through
+		//here, not the base type
+
 		//We need one more assignment here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
 
