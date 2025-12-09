@@ -3726,7 +3726,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//store to get the variable back to where it needs to be
 	} else if (postfix_node->variable->stack_variable == TRUE){
 		//Grab the memory address
-		instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(postfix_node->variable->type_defined_as), emit_var(postfix_node->variable));
+		instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(u64), emit_var(postfix_node->variable));
 
 		//These will have the same memory regions
 		memory_address_of_stmt->assignee->stack_region = postfix_node->variable->stack_region;
@@ -3737,8 +3737,12 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		//Add it to the block
 		add_statement(current_block, memory_address_of_stmt);
 
+		//Get the version that represents our memory indirect
+		three_addr_var_t* indirect_version = emit_var_copy(memory_address_of_stmt->assignee);
+		indirect_version->type = postfix_node->variable->type_defined_as;
+
 		//Now we need to add the final store
-		instruction_t* store_instruction = emit_store_ir_code(memory_address_of_stmt->assignee, assignee); 
+		instruction_t* store_instruction = emit_store_ir_code(indirect_version, assignee); 
 
 		//Counts as a use
 		add_used_variable(current_block, assignee);
