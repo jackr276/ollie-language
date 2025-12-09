@@ -4723,16 +4723,23 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		instruction_t* memory_address_instruction = emit_memory_address_assignment(emit_temp_var(u64), left_hand_var);
 		//Counts as a use
 		add_used_variable(current_block, left_hand_var);
-		
-		//TODO HERE THIS DOES NOT WORK FOR REFERENCES
 
+		//We need to extract the "true type". For references, we implicitly dereference,
+		//so the true type is whatever it points to
+		generic_type_t* true_type = left_hand_var->type;
+
+		//If this is a reference type, we need to represent our implicit
+		//dereference here
+		if(true_type->type_class == TYPE_CLASS_REFERENCE){
+			true_type = true_type->internal_types.references;
+		}
 
 		//Put it in the block
 		add_statement(current_block, memory_address_instruction);
 
 		//NOTE: we use the type of the left hand var for our address because we are dereferencing
 		three_addr_var_t* true_base_address = emit_var_copy(memory_address_instruction->assignee);
-		true_base_address->type = left_hand_var->type;
+		true_base_address->type = true_type;
 
 		//Now for the final store code
 		instruction_t* final_assignment = emit_store_ir_code(true_base_address, NULL);
