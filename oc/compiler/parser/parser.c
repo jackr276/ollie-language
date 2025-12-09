@@ -877,6 +877,11 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//Parameters are in the form of a ternary expression
 		current_param = ternary_expression(fl, side);
 
+		//This is a reference type - special rules apply
+		if(param_type->type_class == TYPE_CLASS_REFERENCE){
+			printf("FOUND REFERENCE\n");
+		}
+
 		//We now have an error of some kind
 		if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Bad parameter passed to function call", current_line);
