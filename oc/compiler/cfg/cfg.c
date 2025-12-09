@@ -3634,17 +3634,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Initialize this off the bat
 	cfg_result_package_t postoperation_package = {basic_block, current_block, temp_assignment->assignee, BLANK};
 
-	//The true assignee type here - this is used in case we have a special situation like
-	//a reference
-	generic_type_t* true_assignee_type = assignee->type;
-
-	//Implicit dereference - represented here
-	if(true_assignee_type->type_class == TYPE_CLASS_REFERENCE){
-		true_assignee_type = true_assignee_type->internal_types.references;
-	}
-
 	//If the assignee is not a pointer, we'll handle the normal case
-	switch(true_assignee_type->type_class){
+	switch(assignee->type->type_class){
 		//If we have basic or reference types, we emit the
 		//inc codes
 		case TYPE_CLASS_BASIC:
@@ -3831,8 +3822,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Go based on what we have here
 			switch(assignee->type->type_class){
 				case TYPE_CLASS_BASIC:
-				//Reference types are treated like basic types
-				case TYPE_CLASS_REFERENCE:
 					//If we have a temporary variable, then we need to perform
 					//a reassignment here for analysis purposes
 					if(unary_package.assignee->is_temporary == TRUE){
@@ -3940,6 +3929,46 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//Add this into the block
 					add_statement(current_block, assignment_instruction);
 				}
+
+			//Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
+			//store to get the variable back to where it needs to be
+			} else if (unary_expression_child->variable->stack_variable == TRUE){
+				//Grab the memory address
+				instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(u64), emit_var(unary_expression_child->variable));
+
+				//These will have the same memory regions
+				memory_address_of_stmt->assignee->stack_region = unary_expression_child->variable->stack_region;
+
+				//This counts as a use
+				add_used_variable(current_block, memory_address_of_stmt->op1);
+
+				//Add it to the block
+				add_statement(current_block, memory_address_of_stmt);
+
+				//Get the "true type". If we have a reference, this goes through an implicit dereference
+				generic_type_t* true_type = unary_expression_child->variable->type_defined_as; 
+
+				//The real type in this case is whatever is one layer beneath here
+				if(true_type->type_class == TYPE_CLASS_REFERENCE){
+					true_type = true_type->internal_types.references;
+				}
+
+				//Get the version that represents our memory indirection. Be sure to use the "true type" here
+				//just in case we were dealing with a reference
+				three_addr_var_t* indirect_version = emit_var_copy(memory_address_of_stmt->assignee);
+				indirect_version->type = true_type;
+
+				//Now we need to add the final store
+				instruction_t* store_instruction = emit_store_ir_code(indirect_version, assignee); 
+
+				//Counts as a use
+				add_used_variable(current_block, assignee);
+
+				//Get this in there
+				add_statement(current_block, store_instruction);
+				
+				//This is always the new final block
+				unary_package.final_block = current_block;
 			}
 
 			//Store the assignee as this
