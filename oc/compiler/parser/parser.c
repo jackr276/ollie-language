@@ -880,6 +880,18 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//This is a reference type - special rules apply
 		if(param_type->type_class == TYPE_CLASS_REFERENCE){
 			printf("FOUND REFERENCE\n");
+			//TODO my thought here - this will generate an error because you're
+			//trying to manipulate a reference in a function call. We will stop
+			//the user from doing this because it would add a lot of overhead
+			//in the compiler
+			//
+			//
+			//We should also then set some kind of flag that we do not want to dereference
+			//here - we just want the memory address and that's it. We can then catch this
+			//flag in the CFG constructor and go from there
+			if(current_param->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+				printf("NOT AN IDENT\n\n\n");
+			}
 		}
 
 		//We now have an error of some kind
