@@ -2847,6 +2847,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//Get it in the block
 		add_statement(basic_block, memory_address_assignment);
 
+		//TODO YOU NEED STUFF FOR REFERENCES HERE - this is WRONG
+
 		//Emit the load instruction
 		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ident_node->inferred_type), type_adjusted_address);
 		load_instruction->is_branch_ending = is_branch_ending;
@@ -3625,12 +3627,20 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Initialize this off the bat
 	cfg_result_package_t postoperation_package = {basic_block, current_block, temp_assignment->assignee, BLANK};
 
+	//The true assignee type here - this is used in case we have a special situation like
+	//a reference
+	generic_type_t* true_assignee_type = assignee->type;
+
+	//Implicit dereference - represented here
+	if(true_assignee_type->type_class == TYPE_CLASS_REFERENCE){
+		true_assignee_type = true_assignee_type->internal_types.references;
+	}
+
 	//If the assignee is not a pointer, we'll handle the normal case
-	switch(assignee->type->type_class){
+	switch(true_assignee_type->type_class){
 		//If we have basic or reference types, we emit the
 		//inc codes
 		case TYPE_CLASS_BASIC:
-		case TYPE_CLASS_REFERENCE:
 			switch(node->unary_operator){
 				case PLUSPLUS:
 					//We really just have an "inc" instruction here
@@ -4643,7 +4653,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * emit a store operation
 	 */
 	} else if(left_hand_var->linked_var == NULL 
-		|| (left_hand_var->linked_var->stack_variable == FALSE && left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
+		|| (left_hand_var->linked_var->stack_variable == FALSE
+		&& left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
 		//Finally we'll struct the whole thing
 		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
@@ -4668,6 +4679,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//Counts as a use
 		add_used_variable(current_block, left_hand_var);
 		
+		//TODO HERE THIS DOES NOT WORK FOR REFERENCES
+
+
 		//Put it in the block
 		add_statement(current_block, memory_address_instruction);
 
