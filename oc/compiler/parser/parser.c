@@ -889,6 +889,9 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 			//We should also then set some kind of flag that we do not want to dereference
 			//here - we just want the memory address and that's it. We can then catch this
 			//flag in the CFG constructor and go from there
+			//
+			//Even beyond this - something like let x:mut i32& and then doing x + 1 should return an i32, 
+			//not a reference. TODO TYPE SYSTEM
 			if(current_param->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
 				printf("NOT AN IDENT\n\n\n");
 			}
@@ -918,7 +921,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 		//TODO let's add a flag for reference types that we do *not* want to dereference here
 		if(current_param->inferred_type->type_class == TYPE_CLASS_REFERENCE){
-			printf("HERE\n");
+			printf("HERE2\n");
 		}
 
 		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
@@ -8482,6 +8485,23 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			if(final_type == NULL){
 				generate_types_assignable_failure_message(info, initializer_node->inferred_type, return_type);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
+			}
+
+			//Additional validation here - it is not possible to assign a reference
+			//to another reference. The types_assignable will let that go because
+			//of our need to do it inside of function calls. But, if we catch that here,
+			//we can't have it. This is a hard fail
+			if(return_type->type_class == TYPE_CLASS_REFERENCE && initializer_node->inferred_type->type_class == TYPE_CLASS_REFERENCE){
+				//Detailed error message
+				sprintf(info, "Reference of type %s%s may not be assigned to another %s%s reference type",
+							return_type->mutability == MUTABLE ? "mut " : "",
+							return_type->type_name.string, 
+							initializer_node->inferred_type->mutability == MUTABLE ? "mut " : "",
+							initializer_node->inferred_type->type_name.string);
+
+				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				//NULL signifies failure
+				return NULL;
 			}
 
 			//If it is a constant node, we just force the type to be the array type
