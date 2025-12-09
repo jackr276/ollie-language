@@ -877,9 +877,48 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//Parameters are in the form of a ternary expression
 		current_param = ternary_expression(fl, side);
 
-		//This is a reference type - special rules apply
-		if(param_type->type_class == TYPE_CLASS_REFERENCE){
-			printf("FOUND REFERENCE\n");
+		//We now have an error of some kind
+		if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Bad parameter passed to function call", current_line);
+		}
+
+		//Needed in this scope
+		generic_type_t* final_type = NULL;
+
+		//If we do *not* have a reference type, we will go through the normal types_assignable
+		//pipeline(most common case)
+		if(param_type->type_class != TYPE_CLASS_REFERENCE){
+			//Let's see if we're even able to assign this here
+			final_type = types_assignable(param_type, current_param->inferred_type);
+
+			//If this is null, it means that our check failed
+			if(final_type == NULL){
+				sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an input of type \"%s%s\". Defined as: %s",
+						function_name.string, 
+						(param_type->mutability == MUTABLE ? "mut ": ""),
+						param_type->type_name.string, num_params,
+						//Print the mut keyword if we need it
+						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						current_param->inferred_type->type_name.string, function_type->type_name.string);
+
+				//Use the helper to return this
+				return print_and_return_error(info, parser_line_num);
+			}
+
+		//Otherwise, we have a reference type and we will do some special handling
+		} else {
+			//This is a hard no - we cannot have references being created on-the-fly
+			//here, so if the user is trying to do something like increment a reference - that's a no
+			if(current_param->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+				sprintf(info, "Attempt to pass type %s%s to parameter of type %s%s",
+							current_param->inferred_type->mutability == MUTABLE ? "mut ": "",
+							current_param->inferred_type->type_name.string,
+							param_type->mutability == MUTABLE ? "mut ": "",
+							param_type->type_name.string);
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
 			//TODO my thought here - this will generate an error because you're
 			//trying to manipulate a reference in a function call. We will stop
 			//the user from doing this because it would add a lot of overhead
@@ -895,33 +934,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 			if(current_param->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
 				printf("NOT AN IDENT\n\n\n");
 			}
-		}
-
-		//We now have an error of some kind
-		if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Bad parameter passed to function call", current_line);
-		}
-
-		//Let's see if we're even able to assign this here
-		generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
-
-		//If this is null, it means that our check failed
-		if(final_type == NULL){
-			sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an input of type \"%s%s\". Defined as: %s",
-		   			function_name.string, 
-		   			(param_type->mutability == MUTABLE ? "mut ": ""),
-		   			param_type->type_name.string, num_params,
-		   			//Print the mut keyword if we need it
-		   			(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-		   			current_param->inferred_type->type_name.string, function_type->type_name.string);
-
-			//Use the helper to return this
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//TODO let's add a flag for reference types that we do *not* want to dereference here
-		if(current_param->inferred_type->type_class == TYPE_CLASS_REFERENCE){
-			printf("HERE2\n");
 		}
 
 		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
