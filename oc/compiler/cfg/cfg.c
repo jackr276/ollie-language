@@ -3626,27 +3626,39 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	cfg_result_package_t postoperation_package = {basic_block, current_block, temp_assignment->assignee, BLANK};
 
 	//If the assignee is not a pointer, we'll handle the normal case
-	if(assignee->type->type_class == TYPE_CLASS_BASIC){
-		switch(node->unary_operator){
-			case PLUSPLUS:
-				//We really just have an "inc" instruction here
-				assignee = emit_inc_code(current_block, assignee, is_branch_ending);
-				break;
-				
-			case MINUSMINUS:
-				//We really just have an "dec" instruction here
-				assignee = emit_dec_code(current_block, assignee, is_branch_ending);
-				break;
+	switch(assignee->type->type_class){
+		//If we have basic or reference types, we emit the
+		//inc codes
+		case TYPE_CLASS_BASIC:
+		case TYPE_CLASS_REFERENCE:
+			switch(node->unary_operator){
+				case PLUSPLUS:
+					//We really just have an "inc" instruction here
+					assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+					break;
+					
+				case MINUSMINUS:
+					//We really just have an "dec" instruction here
+					assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+					break;
 
-			//We shouldn't ever hit here
-			default:
-				break;
-		}
+				//We shouldn't ever hit here
+				default:
+					break;
+			}
 
-	//If we actually do have a pointer, we need the helper to deal with this
-	} else {
-		//Let the helper deal with this
-		assignee = handle_pointer_arithmetic(current_block, node->unary_operator, assignee, is_branch_ending);
+			break;
+
+		//A pointer type is a special case
+		case TYPE_CLASS_POINTER:
+			//Let the helper deal with this
+			assignee = handle_pointer_arithmetic(current_block, node->unary_operator, assignee, is_branch_ending);
+			break;
+
+		//Everything else should be impossible
+		default:
+			printf("Fatal internal compiler error: Unreachable path hit for postinc in the CFG\n");
+			exit(1);
 	}
 
 	//Now that we've handled all of the emitting, we need to check and see if we have any special cases here where 
@@ -3655,7 +3667,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	 * Logic here: if this is not some simple identifier(it could be array access, struct access, etc.), then
 	 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
 	 */
-	if(node->first_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+	if(postfix_node->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
 		//Duplicate the subtree here for us to use
 		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
 
@@ -3707,6 +3719,33 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 			add_statement(current_block, assignment_instruction);
 		}
 
+		//This is always the new final block
+		postoperation_package.final_block = current_block;
+
+	//Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
+	//store to get the variable back to where it needs to be
+	} else if (postfix_node->variable->stack_variable == TRUE){
+		//Grab the memory address
+		instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(postfix_node->variable->type_defined_as), emit_var(postfix_node->variable));
+
+		//These will have the same memory regions
+		memory_address_of_stmt->assignee->stack_region = postfix_node->variable->stack_region;
+
+		//This counts as a use
+		add_used_variable(current_block, memory_address_of_stmt->op1);
+
+		//Add it to the block
+		add_statement(current_block, memory_address_of_stmt);
+
+		//Now we need to add the final store
+		instruction_t* store_instruction = emit_store_ir_code(memory_address_of_stmt->assignee, assignee); 
+
+		//Counts as a use
+		add_used_variable(current_block, assignee);
+
+		//Get this in there
+		add_statement(current_block, store_instruction);
+		
 		//This is always the new final block
 		postoperation_package.final_block = current_block;
 	}
