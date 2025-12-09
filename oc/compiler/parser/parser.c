@@ -874,7 +874,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//Grab the current function param
 		generic_type_t* param_type = function_signature->parameters[num_params - 1];
 
-		//Parameters are in the form of a conditional expression
+		//Parameters are in the form of a ternary expression
 		current_param = ternary_expression(fl, side);
 
 		//We now have an error of some kind
@@ -897,6 +897,11 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 
 			//Use the helper to return this
 			return print_and_return_error(info, parser_line_num);
+		}
+
+		//TODO let's add a flag for reference types that we do *not* want to dereference here
+		if(current_param->inferred_type->type_class == TYPE_CLASS_REFERENCE){
+			printf("HERE\n");
 		}
 
 		//If this is a constant node, we'll force it to be whatever we expect from the type assignability

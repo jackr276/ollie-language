@@ -5024,6 +5024,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//Emit whatever we have here into the basic block
 		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
 
+		//TODO WE NEED TO ADD STORE LOGIC HERE for references if we're messing with them
+		//
+		//
+		//OR - we need to completely stop the user from doing that. I honestly prefer to stop them
+
 		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
 		//to reassign
 		if(package.final_block != current){
@@ -5051,13 +5056,13 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
 		
 		//Extract the parameter type here
-		generic_type_t* paramter_type = signature->parameters[i - 1];
+		generic_type_t* parameter_type = signature->parameters[i - 1];
 
 		//TODO THIS IS NOT WORKING FOR REFERENCES - we need the actual memory address coming through
 		//here, not the base type
 
 		//We need one more assignment here
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result);
 
 		//Counts as a use
 		add_used_variable(basic_block, result);
