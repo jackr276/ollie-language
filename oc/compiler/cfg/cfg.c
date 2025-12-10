@@ -4890,21 +4890,49 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
-		//Emit whatever we have here into the basic block
-		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+		//Extract the parameter type here
+		generic_type_t* parameter_type = signature->parameters[current_func_param_idx - 1];
 
-		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
-		//to reassign
-		if(package.final_block != current){
-			//We've seen a ternary, reassign current
-			current = package.final_block;
+		//Assignee for us to use
+		three_addr_var_t* param_assignee;
 
-			//Reassign this as well, so that we stay current
-			result_package.final_block = current;
+		//Most common case - we aren't dealing with reference parameters here - we follow the
+		//normal pattern
+		if(parameter_type->type_class != TYPE_CLASS_REFERENCE || param_cursor->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+			//Emit whatever we have here into the basic block
+			cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+
+			//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
+			//to reassign
+			if(package.final_block != current){
+				//We've seen a ternary, reassign current
+				current = package.final_block;
+
+				//Reassign this as well, so that we stay current
+				result_package.final_block = current;
+			}
+
+			//For later down the road
+			param_assignee = package.assignee;
+
+		//Otherwise we have the unique case of a reference parameter. We need to bypass the
+		//entire identifier system and simply get the memory address of said identifier here
+		} else {
+			//Emit it
+			instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(u64), emit_var(param_cursor->variable));
+
+			//Counts as a use
+			add_used_variable(current, memory_address_statement->op1);
+
+			//Get it in the block
+			add_statement(current, memory_address_statement);
+
+			//The assignee is just this one's assignee
+			param_assignee = memory_address_statement->assignee;
 		}
 
-		//Add this into our function parameter results array
-		dynamic_array_add(function_parameter_results, package.assignee);
+		//Add this final result into our parameter results list
+		dynamic_array_add(function_parameter_results, param_assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
