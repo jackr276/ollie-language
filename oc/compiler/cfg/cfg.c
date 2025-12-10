@@ -8199,12 +8199,9 @@ static cfg_result_package_t emit_complex_initialization(basic_block_t* current_b
  * NOTE: declared global variables will always be initialized to be 0
  */
 static void visit_global_declare_statement(generic_ast_node_t* node){
-	//Let's first create a constant. The constant will be initialzed to 0. All
-	//declared global variables are automatically initialized to 0
-	three_addr_const_t* constant = emit_direct_integer_or_char_constant(0, u64);
-
-	//We'll store it inside of the global variable struct
-	global_variable_t* global_variable = create_global_variable(node->variable, constant);
+	//We'll store it inside of the global variable struct. Leave it as NULL
+	//here so that it's automatically initialized to 0
+	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
 
 	//And add it into the CFG
 	dynamic_array_add(cfg->global_variables, global_variable);
