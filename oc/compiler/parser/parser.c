@@ -1144,7 +1144,9 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			if(found_var != NULL){
 				//If this is the right hand side and our variable is not initialized,
 				//this is invalid as we are trying to use before initialization
-				if(side == SIDE_TYPE_RIGHT && found_var->initialized == FALSE){
+				if(side == SIDE_TYPE_RIGHT 
+					&& found_var->membership != GLOBAL_VARIABLE //We do not care for such checks with global vars
+					&& found_var->initialized == FALSE){
 					sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
 					return print_and_return_error(info, parser_line_num);
 				}
