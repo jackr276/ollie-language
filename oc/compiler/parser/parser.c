@@ -112,7 +112,7 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side);
 static generic_ast_node_t* function_predeclaration(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node);
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global);
 
 
 /**
@@ -8116,7 +8116,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 /**
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
-static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
+static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, u_int8_t is_global){
 	//Grab the member type here out as well
 	generic_type_t* member_type = array_type->internal_types.member_type;
 
@@ -8133,7 +8133,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//to the given array type
 	while(cursor != NULL){
 		//We'll use the same top level initialization check for this rule as well
-		generic_type_t* final_type = validate_intializer_types(member_type, cursor);
+		generic_type_t* final_type = validate_intializer_types(member_type, cursor, is_global);
 
 		//If these fail, then we're done here. No need for an error message, they'll have already been
 		//printed
@@ -8182,7 +8182,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
  * up
  */
-static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, u_int8_t is_global){
 	//We'll need to extract the struct table and that max index that it holds
 	dynamic_array_t* struct_table = struct_type->internal_types.struct_table;
 
@@ -8208,7 +8208,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		symtab_variable_record_t* variable = dynamic_array_get_at(struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor);
+		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor, is_global);
 
 		//Let's check to see if the types are assignable
 		if(final_type == NULL){
@@ -8295,7 +8295,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 /**
  * Top level initializer value for type validation
  */
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node){
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global){
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
@@ -8319,7 +8319,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 		//that we must use
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node);
+			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, is_global);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -8333,7 +8333,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 		//A struct initializer list also has it's own special checking function that we must use
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			//Run the validation step for a struct
-			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node);
+			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, is_global);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -8364,6 +8364,14 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				//Otherwise we'll just break out. The initializer node will have been properly
 				//set by the function above
 				return return_type;
+			}
+
+			//If it's a global VAR, the initialization here must be a constant
+			if(is_global == TRUE && initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
+				//Fail out if we hit this
+				sprintf(info, "Global variables may only be initialized to be constants");
+				print_parse_message(PARSE_ERROR, "Global variables may only be initialized to be constants", parser_line_num);
+				return NULL;
 			}
 
 			/**
@@ -8497,7 +8505,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	
 	//Store the return type here after we do all needed validations. This rule allows 
 	//for recursive validation, so that we can handle recursive initialization
-	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node);
+	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node, is_global);
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
