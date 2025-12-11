@@ -1297,9 +1297,6 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		return;
 	}
 
-	//Append to the .bss section
-	fprintf(fl, "\t.bss\n");
-
 	//If it's needed later on
 	dynamic_array_t* array_initializer_values;
 
@@ -1313,6 +1310,14 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 
 		//Mark that this is global(globl)
 		fprintf(fl, "\t.globl %s\n", name);
+
+		//If it's not initialized, it goes to .bss. If it is initialized, it
+		//goes to .data
+		if(variable->initializer_type == GLOBAL_VAR_INITIALIZER_NONE){
+			fprintf(fl, "\t.bss\n");
+		} else {
+			fprintf(fl, "\t.data\n");
+		}
 
 		//Now print out the alignment
 		fprintf(fl, "\t.align %d\n", get_base_alignment_type(variable->variable->type_defined_as)->type_size);
