@@ -8074,6 +8074,113 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 
 /**
+ * Emit a global variable array initializer. Unlike a normal array initializer - we do not put values in blocks. Instead, we store
+ * the constant values in a result array that is then passed along back to the caller for later use
+ *
+ * The switch statement here is intentional so that we may expand this later to structs, etc.
+ */
+static void emit_global_array_initializer(generic_ast_node_t* array_initializer, dynamic_array_t* initializer_values){
+	//Grab a cursor to the child
+	generic_ast_node_t* cursor = array_initializer->first_child;
+
+	//We can either see array initializers or constants here
+	while(cursor != NULL){
+		//Go based on what kind of node we have
+		switch(cursor->ast_node_type){
+			//If we have an array initializer - simply pass this along
+			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+				emit_global_array_initializer(cursor, initializer_values);
+				break;
+
+			//This is really our base case
+			case AST_NODE_TYPE_CONSTANT:
+				//Emit the constant and get it into the array
+				dynamic_array_add(initializer_values, emit_constant(cursor));
+				break;
+
+			default:
+				printf("Fatal internal compiler: Invalid or unimplemented global initializer node encountered\n");
+				exit(1);
+		}
+
+		//Advance to the next one
+		cursor = cursor->next_sibling;
+	}
+}
+
+
+/**
+ * Visit a global let statement and handle the initializer appropriately.
+ * Do note that we have already checked that the entire initialization
+ * only contains constants, so we can assume we're only processing constants
+ * here
+ */
+static void visit_global_let_statement(generic_ast_node_t* node){
+	//We'll store it inside of the global variable struct. Leave it as NULL
+	//here so that it's automatically initialized to 0
+	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
+
+	//This has been initialized already
+	global_variable->variable->initialized = TRUE;
+
+	//And add it into the CFG
+	dynamic_array_add(cfg->global_variables, global_variable);
+
+	//Grab out the initializer node
+	generic_ast_node_t* initializer = node->first_child;
+
+	//We can see arrays or constants here
+	switch(initializer->ast_node_type){
+		//Array init list - goes to the helper
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			//Initialized to an array
+			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
+
+			//Give it an array of values
+			global_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
+
+			//Let the helper take care of it
+			emit_global_array_initializer(initializer, global_variable->initializer_value.array_initializer_values);
+
+			break;
+		
+		//Should be our most common case - we just have a constant
+		case AST_NODE_TYPE_CONSTANT:
+			//Initialized to a constant
+			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
+
+			//All we need to do here
+			global_variable->initializer_value.constant_value = emit_constant(initializer);
+
+			break;
+
+		//This shouldn't be reachable
+		default:
+			printf("Fatal internal compiler error: Unrecognized/unimplemented global initializer node type encountered\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Visit a global variable declaration statement
+ *
+ * NOTE: declared global variables will always be initialized to be 0
+ */
+static void visit_global_declare_statement(generic_ast_node_t* node){
+	//We'll store it inside of the global variable struct. Leave it as NULL
+	//here so that it's automatically initialized to 0
+	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
+
+	//This has no initializer-so flag that here
+	global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_NONE;
+
+	//And add it into the CFG
+	dynamic_array_add(cfg->global_variables, global_variable);
+}
+
+
+/**
  * Visit a declaration statement. If we see an actual declaration node, then
  * we know that this is either a struct, array or union - it's something that
  * has to be allocated and placed onto the stack
@@ -8372,18 +8479,6 @@ static cfg_result_package_t emit_complex_initialization(basic_block_t* current_b
 
 
 /**
- * Visit a global variable declaration statement
- */
-static void visit_global_declare_statement(generic_ast_node_t* node){
-	//We'll store it inside of the global variable struct
-	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
-
-	//And add it into the CFG
-	dynamic_array_add(cfg->global_variables, global_variable);
-}
-
-
-/**
  * Emit a normal intialization
  *
  * We'll hit this when we have something like:
@@ -8580,27 +8675,19 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			 * are global variables
 			 */
 			case AST_NODE_TYPE_LET_STMT:
-				printf("NOT IMPLEMENTED\n");
-				exit(0);
-				//And we'll move along here
+				visit_global_let_statement(ast_cursor);
 				break;
 		
 			//Finally, we could see a declaration
 			case AST_NODE_TYPE_DECL_STMT:
-				//We'll visit the block here
 				visit_global_declare_statement(ast_cursor);
 				
-				//And we're done here
 				break;
 
-			//========= WARNING - NOT YET SUPPORTED ========================
-
-			//Some very weird error if we hit here
+			//Some very weird error if we hit here. Hard exit to avoid dev confusion
 			default:
-				print_parse_message(PARSE_ERROR, "Unrecognizable node found as child to prog node", ast_cursor->line_number);
-				(*num_errors_ref)++;
-				//Return this because we failed
-				return FALSE;
+				printf("Fatal internal compiler error: Unrecognized node type found in global scope\n");
+				exit(1);
 		}
 
 

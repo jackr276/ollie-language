@@ -55,7 +55,7 @@ global_variable_t* create_global_variable(symtab_variable_record_t* variable, th
 
 	//Copy these over
 	var->variable = variable;
-	var->value = value;
+	var->initializer_value.constant_value = value;
 
 	//Give the var back
 	return var;
@@ -1297,8 +1297,8 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		return;
 	}
 
-	//Append to the .bss section
-	fprintf(fl, "\t.bss\n");
+	//If it's needed later on
+	dynamic_array_t* array_initializer_values;
 
 	//Run through all of them
 	for(u_int16_t i = 0; i < global_variables->current_index; i++){
@@ -1310,6 +1310,14 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 
 		//Mark that this is global(globl)
 		fprintf(fl, "\t.globl %s\n", name);
+
+		//If it's not initialized, it goes to .bss. If it is initialized, it
+		//goes to .data
+		if(variable->initializer_type == GLOBAL_VAR_INITIALIZER_NONE){
+			fprintf(fl, "\t.bss\n");
+		} else {
+			fprintf(fl, "\t.data\n");
+		}
 
 		//Now print out the alignment
 		fprintf(fl, "\t.align %d\n", get_base_alignment_type(variable->variable->type_defined_as)->type_size);
@@ -1323,11 +1331,37 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		//Now fianlly we'll print the value out
 		fprintf(fl, "%s:\n", name);
 		
-		/**
-		 * If the value is NULL, we will initialize to be all zero
-		 */
-		if(variable->value == NULL){
-			fprintf(fl, "\t.zero %d\n", variable->variable->type_defined_as->type_size);
+		//Go based on what kind of initializer we have
+		switch(variable->initializer_type){
+			//If we have no initializer, we make everything go to zero
+			case GLOBAL_VAR_INITIALIZER_NONE:
+				fprintf(fl, "\t.zero %d\n", variable->variable->type_defined_as->type_size);
+				break;
+				
+			//For a constant, we print the value out as a .long
+			case GLOBAL_VAR_INITIALIZER_CONSTANT:
+				fprintf(fl, "\t.long %ld\n", variable->initializer_value.constant_value->constant_value.long_constant);
+				break;
+
+			//For an array, we loop through and print them all as constants in order
+			case GLOBAL_VAR_INITIALIZER_ARRAY:
+				//Extract this
+				array_initializer_values = variable->initializer_value.array_initializer_values;
+
+				//Run through all the values
+				for(u_int16_t i = 0; i < array_initializer_values->current_index; i++){
+					//These will always be constant values
+					three_addr_const_t* constant_value = dynamic_array_get_at(array_initializer_values, i);
+
+					//Emit the constant value here
+					fprintf(fl, "\t.long %ld\n", constant_value->constant_value.long_constant);
+				}
+
+				break;
+				
+			default:
+				printf("Fatal internal compiler error: Unrecognized global variable initializer type\n");
+				exit(1);
 		}
 	}
 }
