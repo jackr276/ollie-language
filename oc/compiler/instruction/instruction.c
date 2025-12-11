@@ -1300,6 +1300,9 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 	//Append to the .bss section
 	fprintf(fl, "\t.bss\n");
 
+	//If it's needed later on
+	dynamic_array_t* array_initializer_values;
+
 	//Run through all of them
 	for(u_int16_t i = 0; i < global_variables->current_index; i++){
 		//Grab the variable out
@@ -1330,9 +1333,26 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 				fprintf(fl, "\t.zero %d\n", variable->variable->type_defined_as->type_size);
 				break;
 				
+			//For a constant, we print the value out as a .long
 			case GLOBAL_VAR_INITIALIZER_CONSTANT:
+				fprintf(fl, "\t.long %ld\n", variable->initializer_value.constant_value->constant_value.long_constant);
+				break;
 
+			//For an array, we loop through and print them all as constants in order
 			case GLOBAL_VAR_INITIALIZER_ARRAY:
+				//Extract this
+				array_initializer_values = variable->initializer_value.array_initializer_values;
+
+				//Run through all the values
+				for(u_int16_t i = 0; i < array_initializer_values->current_index; i++){
+					//These will always be constant values
+					three_addr_const_t* constant_value = dynamic_array_get_at(array_initializer_values, i);
+
+					//Emit the constant value here
+					fprintf(fl, "\t.long %ld\n", constant_value->constant_value.long_constant);
+				}
+
+				break;
 				
 			default:
 				printf("Fatal internal compiler error: Unrecognized global variable initializer type\n");
