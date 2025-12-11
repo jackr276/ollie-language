@@ -8194,6 +8194,26 @@ static cfg_result_package_t emit_complex_initialization(basic_block_t* current_b
 
 
 /**
+ * Visit a global let statement and handle the initializer appropriately.
+ * Do note that we have already checked that the entire initialization
+ * only contains constants, so we can assume we're only processing constants
+ * here
+ */
+static void visit_global_let_statement(generic_ast_node_t* node){
+	generic_ast_node_t* initializer = node->first_child;
+
+
+
+	//We'll store it inside of the global variable struct. Leave it as NULL
+	//here so that it's automatically initialized to 0
+	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
+
+	//And add it into the CFG
+	dynamic_array_add(cfg->global_variables, global_variable);
+}
+
+
+/**
  * Visit a global variable declaration statement
  *
  * NOTE: declared global variables will always be initialized to be 0
@@ -8405,27 +8425,19 @@ static u_int8_t visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 			 * are global variables
 			 */
 			case AST_NODE_TYPE_LET_STMT:
-				printf("NOT IMPLEMENTED\n");
-				exit(0);
-				//And we'll move along here
+				visit_global_let_statement(ast_cursor);
 				break;
 		
 			//Finally, we could see a declaration
 			case AST_NODE_TYPE_DECL_STMT:
-				//We'll visit the block here
 				visit_global_declare_statement(ast_cursor);
 				
-				//And we're done here
 				break;
 
-			//========= WARNING - NOT YET SUPPORTED ========================
-
-			//Some very weird error if we hit here
+			//Some very weird error if we hit here. Hard exit to avoid dev confusion
 			default:
-				print_parse_message(PARSE_ERROR, "Unrecognizable node found as child to prog node", ast_cursor->line_number);
-				(*num_errors_ref)++;
-				//Return this because we failed
-				return FALSE;
+				printf("Fatal internal compiler error: Unrecognized node type found in global scope\n");
+				exit(1);
 		}
 
 
