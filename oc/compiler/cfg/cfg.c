@@ -7899,155 +7899,36 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 /**
  * Emit a global variable array initializer. Unlike a normal array initializer - we do not put values in blocks. Instead, we store
  * the constant values in a result array that is then passed along back to the caller for later use
+ *
+ * The switch statement here is intentional so that we may expand this later to structs, etc.
  */
 static void emit_global_array_initializer(generic_ast_node_t* array_initializer, dynamic_array_t* initializer_values){
 	//Grab a cursor to the child
 	generic_ast_node_t* cursor = array_initializer->first_child;
 
-	//What is the current index of the initializer? We start at 0
-	u_int32_t current_array_index = 0;
-
-	//For storing all of our results
-	cfg_result_package_t initializer_results;
-
-	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
+	//We can either see array initializers or constants here
 	while(cursor != NULL){
-		//Determine if we need to emit an indirection instruction or not
+		//Go based on what kind of node we have
 		switch(cursor->ast_node_type){
-			//If we have special cases, then the individual rules handle these
+			//If we have an array initializer - simply pass this along
 			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-				//Pass the new base offset along to this rule
-				initializer_results = emit_array_initializer(current_block, base_address, offset, cursor, is_branch_ending);
+				emit_global_array_initializer(cursor, initializer_values);
 				break;
 
-			case AST_NODE_TYPE_STRING_INITIALIZER:
-				//Pass the new base offset along to this rule
-				initializer_results = emit_string_initializer(current_block, base_address, offset, cursor, is_branch_ending);
+			//This is really our base case
+			case AST_NODE_TYPE_CONSTANT:
+				//Emit the constant and get it into the array
+				dynamic_array_add(initializer_values, emit_constant(cursor));
 				break;
 
-			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-				//Pass the new base offset along to this rule
-				initializer_results = emit_struct_initializer(current_block, base_address, offset, cursor, is_branch_ending);
-				break;
-
-			//When we hit the default case, that means that we've stopped seeing initializer values
 			default:
-				//Once we get here, we need to let the helper finish it off
-				initializer_results = emit_final_initialization(current_block, base_address, offset, cursor, is_branch_ending);
-				break;
+				printf("Fatal internal compiler: Invalid or unimplemented global initializer node encountered\n");
+				exit(1);
 		}
-
-		//Change the current block if there is a change. This is possible with ternary expressions
-		if(initializer_results.final_block != current_block){
-			current_block = initializer_results.final_block;
-		}
-
-		//The current array index goes up by one
-		current_array_index++;
 
 		//Advance to the next one
 		cursor = cursor->next_sibling;
 	}
-}
-
-/**
- * Emit a normal intialization
- *
- * We'll hit this when we have something like:
- *
- * let x:i32 = a + b + c;
- *
- * No array/string/struct initializers here
- */
-static cfg_result_package_t emit_simple_initialization(basic_block_t* current_block, three_addr_var_t* let_variable, generic_ast_node_t* expression_node, u_int8_t is_branch_ending){
-	//Allocate the return package here
-	cfg_result_package_t let_results = {current_block, current_block, let_variable, BLANK};
-
-	//Emit the right hand expression here
-	cfg_result_package_t package = emit_expression(current_block, expression_node, is_branch_ending, FALSE);
-
-	//Store the last instruction for later use
-	instruction_t* last_instruction = current_block->exit_statement;
-
-	//Reassign the block here
-	current_block = package.final_block;
-
-	//Now update the final block
-	let_results.final_block = current_block;
-
-	/**
-	 * Is the left hand variable a regular variable or is it a stack address variable? If it's a
-	 * variable that is on the stack, then a regular assignment just won't do. We'll need to
-	 * emit a store operation
-	 */
-	if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
-		//The actual statement is the assignment of right to left
-		instruction_t* assignment_statement = emit_assignment_instruction(let_variable, package.assignee);
-		assignment_statement->is_branch_ending = is_branch_ending;
-
-		//The let variable was assigned
-		add_assigned_variable(current_block, let_variable);
-
-		//If this is not temporary, then it counts as used
-		add_used_variable(current_block, package.assignee);
-
-		//Finally we'll add this into the overall block
-		add_statement(current_block, assignment_statement);
-			
-	/**
-	 * Otherwise, we'll need to emit a store operation here
-	 */
-	} else {
-		//First we get our memory address statement
-		instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(u64), let_variable);
-		memory_address_statement->is_branch_ending = is_branch_ending;
-
-		//Counts as a use
-		add_used_variable(current_block, let_variable);
-
-		//Add the statement in
-		add_statement(current_block, memory_address_statement);
-
-		//NOTE: We use the type of our let variable here for the address assignment
-		three_addr_var_t* true_base_address = emit_var_copy(memory_address_statement->assignee);
-		true_base_address->type = let_variable->type;
-		
-		//Emit the store code
-		instruction_t* store_statement = emit_store_ir_code(true_base_address, NULL);
-		store_statement->is_branch_ending = is_branch_ending;
-
-		//This counts as a use
-		add_used_variable(current_block, true_base_address);
-
-		//If the last instruction is *not* a constant assignment, we can go ahead like this
-		if(last_instruction == NULL
-			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-
-			//This is now our op1
-			store_statement->op1 = package.assignee;
-
-			//No matter what happened, we used this
-			add_used_variable(current_block, package.assignee);
-
-		//Otherwise, we can do a small optimization here by scrapping the 
-		//constant assignment and just putting the constant in directly
-		} else {
-			//Extract it
-			three_addr_const_t* constant_assignee = last_instruction->op1_const;
-
-			//This is now useless
-			delete_statement(last_instruction);
-
-			//Set the store statement's op1_const to be this
-			store_statement->op1_const = constant_assignee;
-		}
-				
-		//Now add thi statement in here
-		add_statement(current_block, store_statement);
-	}
-
-	//And give it back
-	return let_results;
 }
 
 
@@ -8058,7 +7939,12 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
  * here
  */
 static void visit_global_let_statement(generic_ast_node_t* node){
+	//Grab out the initializer node
 	generic_ast_node_t* initializer = node->first_child;
+
+	switch(initializer->ast_node_type){
+		
+	}
 
 
 
