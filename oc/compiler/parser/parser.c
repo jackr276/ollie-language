@@ -112,7 +112,7 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side);
 static generic_ast_node_t* function_predeclaration(FILE* fl);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(FILE* fl);
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node);
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global);
 
 
 /**
@@ -1144,7 +1144,9 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			if(found_var != NULL){
 				//If this is the right hand side and our variable is not initialized,
 				//this is invalid as we are trying to use before initialization
-				if(side == SIDE_TYPE_RIGHT && found_var->initialized == FALSE){
+				if(side == SIDE_TYPE_RIGHT 
+					&& found_var->membership != GLOBAL_VARIABLE //We do not care for such checks with global vars
+					&& found_var->initialized == FALSE){
 					sprintf(info, "Attempt to use variable %s before initialization", found_var->var_name.string);
 					return print_and_return_error(info, parser_line_num);
 				}
@@ -1697,10 +1699,10 @@ static generic_ast_node_t* union_pointer_accessor(FILE* fl, generic_type_t* curr
 
 
 /**
- * A construct accessor is used to access a construct either on the heap of or on the stack.
+ * A struct accessor is used to access a struct either on the heap of or on the stack.
  * Like all rules, it will return a reference to the root node of the tree that it created
  *
- * A constructor accessor node will be a subtree with the parent holding the actual operator
+ * A struct accessor node will be a subtree with the parent holding the actual operator
  * and its child holding the variable identifier
  *
  * BNF Rule: <struct-pointer-accessor> ::= => <variable-identifier> 
@@ -1743,7 +1745,7 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, current_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1770,7 +1772,7 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 
 
 /**
- * A construct accessor is used to access a construct either on the heap of or on the stack.
+ * A struct accessor is used to access a struct either on the heap of or on the stack.
  * Like all rules, it will return a reference to the root node of the tree that it created
  *
  * A constructor accessor node will be a subtree with the parent holding the actual operator
@@ -1811,7 +1813,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, current_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -3948,7 +3950,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* mutable_struct_type, gen
 
 	//Let's make sure it actually worked
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given as construct member name", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as struct member name", parser_line_num);
 		num_errors++;
 		//It's an error, so we'll propogate it up
 		return FAILURE;
@@ -4048,7 +4050,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 
 	//Fail case here
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unelaborated construct definition is not supported", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Unelaborated struct definition is not supported", parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -4070,7 +4072,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
-			print_parse_message(PARSE_ERROR, "Invalid construct member declaration", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Invalid struct member declaration", parser_line_num);
 			num_errors++;
 			//It's already an error node so just let it propogate
 			return FAILURE;
@@ -4081,7 +4083,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 
 		//We must now see a valid semicolon
 		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Construct members must be delimited by ;", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Struct members must be delimited by ;", parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
@@ -4094,7 +4096,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 
 	//Check for unamtched curlies
 	if(pop_token(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces in construct definition", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces in struct definition", parser_line_num);
 		num_errors++;
 		//Fail out here
 		return FAILURE;
@@ -8114,7 +8116,7 @@ static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global){
 /**
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
-static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
+static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, u_int8_t is_global){
 	//Grab the member type here out as well
 	generic_type_t* member_type = array_type->internal_types.member_type;
 
@@ -8131,7 +8133,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//to the given array type
 	while(cursor != NULL){
 		//We'll use the same top level initialization check for this rule as well
-		generic_type_t* final_type = validate_intializer_types(member_type, cursor);
+		generic_type_t* final_type = validate_intializer_types(member_type, cursor, is_global);
 
 		//If these fail, then we're done here. No need for an error message, they'll have already been
 		//printed
@@ -8180,7 +8182,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
  * up
  */
-static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, u_int8_t is_global){
 	//We'll need to extract the struct table and that max index that it holds
 	dynamic_array_t* struct_table = struct_type->internal_types.struct_table;
 
@@ -8206,7 +8208,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		symtab_variable_record_t* variable = dynamic_array_get_at(struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor);
+		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor, is_global);
 
 		//Let's check to see if the types are assignable
 		if(final_type == NULL){
@@ -8293,7 +8295,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 /**
  * Top level initializer value for type validation
  */
-static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node){
+static generic_type_t* validate_intializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, u_int8_t is_global){
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
@@ -8317,7 +8319,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 		//that we must use
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node);
+			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, is_global);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -8331,7 +8333,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 		//A struct initializer list also has it's own special checking function that we must use
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			//Run the validation step for a struct
-			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node);
+			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, is_global);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -8362,6 +8364,13 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				//Otherwise we'll just break out. The initializer node will have been properly
 				//set by the function above
 				return return_type;
+			}
+
+			//If it's a global VAR, the initialization here must be a constant
+			if(is_global == TRUE && initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
+				//Fail out if we hit this
+				print_parse_message(PARSE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
+				return NULL;
 			}
 
 			/**
@@ -8495,7 +8504,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	
 	//Store the return type here after we do all needed validations. This rule allows 
 	//for recursive validation, so that we can handle recursive initialization
-	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node);
+	generic_type_t* return_type = validate_intializer_types(type_spec, initializer_node, is_global);
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
