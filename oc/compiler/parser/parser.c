@@ -1699,10 +1699,10 @@ static generic_ast_node_t* union_pointer_accessor(FILE* fl, generic_type_t* curr
 
 
 /**
- * A construct accessor is used to access a construct either on the heap of or on the stack.
+ * A struct accessor is used to access a struct either on the heap of or on the stack.
  * Like all rules, it will return a reference to the root node of the tree that it created
  *
- * A constructor accessor node will be a subtree with the parent holding the actual operator
+ * A struct accessor node will be a subtree with the parent holding the actual operator
  * and its child holding the variable identifier
  *
  * BNF Rule: <struct-pointer-accessor> ::= => <variable-identifier> 
@@ -1745,7 +1745,7 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, current_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1772,7 +1772,7 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 
 
 /**
- * A construct accessor is used to access a construct either on the heap of or on the stack.
+ * A struct accessor is used to access a struct either on the heap of or on the stack.
  * Like all rules, it will return a reference to the root node of the tree that it created
  *
  * A constructor accessor node will be a subtree with the parent holding the actual operator
@@ -1813,7 +1813,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of construct %s", member_name, current_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, current_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -3950,7 +3950,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* mutable_struct_type, gen
 
 	//Let's make sure it actually worked
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given as construct member name", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Invalid identifier given as struct member name", parser_line_num);
 		num_errors++;
 		//It's an error, so we'll propogate it up
 		return FAILURE;
@@ -4050,7 +4050,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 
 	//Fail case here
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unelaborated construct definition is not supported", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Unelaborated struct definition is not supported", parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -4072,7 +4072,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
-			print_parse_message(PARSE_ERROR, "Invalid construct member declaration", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Invalid struct member declaration", parser_line_num);
 			num_errors++;
 			//It's already an error node so just let it propogate
 			return FAILURE;
@@ -4083,7 +4083,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 
 		//We must now see a valid semicolon
 		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Construct members must be delimited by ;", parser_line_num);
+			print_parse_message(PARSE_ERROR, "Struct members must be delimited by ;", parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
@@ -4096,7 +4096,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 
 	//Check for unamtched curlies
 	if(pop_token(grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces in construct definition", parser_line_num);
+		print_parse_message(PARSE_ERROR, "Unmatched curly braces in struct definition", parser_line_num);
 		num_errors++;
 		//Fail out here
 		return FAILURE;
@@ -8369,8 +8369,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//If it's a global VAR, the initialization here must be a constant
 			if(is_global == TRUE && initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
 				//Fail out if we hit this
-				sprintf(info, "Global variables may only be initialized to be constants");
-				print_parse_message(PARSE_ERROR, "Global variables may only be initialized to be constants", parser_line_num);
+				print_parse_message(PARSE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
 				return NULL;
 			}
 
