@@ -55,7 +55,7 @@ global_variable_t* create_global_variable(symtab_variable_record_t* variable, th
 
 	//Copy these over
 	var->variable = variable;
-	var->value = value;
+	var->initializer_value.constant_value = value;
 
 	//Give the var back
 	return var;
@@ -1324,9 +1324,10 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		fprintf(fl, "%s:\n", name);
 		
 		/**
-		 * If the value is NULL, we will initialize to be all zero
+		 * If the value is NULL, we will initialize to be all zero. It will be NULL
+		 * when we're dealing with a "declare" version of a global var
 		 */
-		if(variable->value == NULL){
+		if(variable->initializer_value.constant_value == NULL){
 			fprintf(fl, "\t.zero %d\n", variable->variable->type_defined_as->type_size);
 		}
 	}

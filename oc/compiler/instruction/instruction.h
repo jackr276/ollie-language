@@ -42,8 +42,12 @@ typedef struct global_variable_t global_variable_t;
 struct global_variable_t{
 	//The variable itself - stores the name
 	symtab_variable_record_t* variable;
-	//The value - if given - of the variable
-	three_addr_const_t* value;
+	union {
+		//The value - if given - of the variable
+		three_addr_const_t* constant_value;
+		//A dynamic array of constants, if we have that
+		dynamic_array_t* array_initializer_values;
+	} initializer_value;
 	//What is this variable's reference count?
 	u_int16_t reference_count;
 };
