@@ -7943,6 +7943,9 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 	//here so that it's automatically initialized to 0
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
 
+	//This has been initialized already
+	global_variable->variable->initialized = TRUE;
+
 	//And add it into the CFG
 	dynamic_array_add(cfg->global_variables, global_variable);
 
@@ -7953,6 +7956,9 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 	switch(initializer->ast_node_type){
 		//Array init list - goes to the helper
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			//Initialized to an array
+			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
+
 			//Give it an array of values
 			global_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
 
@@ -7963,6 +7969,9 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 		
 		//Should be our most common case - we just have a constant
 		case AST_NODE_TYPE_CONSTANT:
+			//Initialized to a constant
+			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
+
 			//All we need to do here
 			global_variable->initializer_value.constant_value = emit_constant(initializer);
 
@@ -7985,6 +7994,9 @@ static void visit_global_declare_statement(generic_ast_node_t* node){
 	//We'll store it inside of the global variable struct. Leave it as NULL
 	//here so that it's automatically initialized to 0
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
+
+	//This has no initializer-so flag that here
+	global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_NONE;
 
 	//And add it into the CFG
 	dynamic_array_add(cfg->global_variables, global_variable);

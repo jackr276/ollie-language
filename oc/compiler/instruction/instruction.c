@@ -1323,12 +1323,20 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		//Now fianlly we'll print the value out
 		fprintf(fl, "%s:\n", name);
 		
-		/**
-		 * If the value is NULL, we will initialize to be all zero. It will be NULL
-		 * when we're dealing with a "declare" version of a global var
-		 */
-		if(variable->initializer_value.constant_value == NULL){
-			fprintf(fl, "\t.zero %d\n", variable->variable->type_defined_as->type_size);
+		//Go based on what kind of initializer we have
+		switch(variable->initializer_type){
+			//If we have no initializer, we make everything go to zero
+			case GLOBAL_VAR_INITIALIZER_NONE:
+				fprintf(fl, "\t.zero %d\n", variable->variable->type_defined_as->type_size);
+				break;
+				
+			case GLOBAL_VAR_INITIALIZER_CONSTANT:
+
+			case GLOBAL_VAR_INITIALIZER_ARRAY:
+				
+			default:
+				printf("Fatal internal compiler error: Unrecognized global variable initializer type\n");
+				exit(1);
 		}
 	}
 }
