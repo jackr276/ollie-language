@@ -7939,21 +7939,40 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
  * here
  */
 static void visit_global_let_statement(generic_ast_node_t* node){
-	//Grab out the initializer node
-	generic_ast_node_t* initializer = node->first_child;
-
-	switch(initializer->ast_node_type){
-		
-	}
-
-
-
 	//We'll store it inside of the global variable struct. Leave it as NULL
 	//here so that it's automatically initialized to 0
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
 
 	//And add it into the CFG
 	dynamic_array_add(cfg->global_variables, global_variable);
+
+	//Grab out the initializer node
+	generic_ast_node_t* initializer = node->first_child;
+
+	//We can see arrays or constants here
+	switch(initializer->ast_node_type){
+		//Array init list - goes to the helper
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			//Give it an array of values
+			global_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
+
+			//Let the helper take care of it
+			emit_global_array_initializer(initializer, global_variable->initializer_value.array_initializer_values);
+
+			break;
+		
+		//Should be our most common case - we just have a constant
+		case AST_NODE_TYPE_CONSTANT:
+			//All we need to do here
+			global_variable->initializer_value.constant_value = emit_constant(initializer);
+
+			break;
+
+		//This shouldn't be reachable
+		default:
+			printf("Fatal internal compiler error: Unrecognized/unimplemented global initializer node type encountered\n");
+			exit(1);
+	}
 }
 
 
