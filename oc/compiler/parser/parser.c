@@ -9130,6 +9130,12 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 	//Store the current parameter number of it
 	param_record->function_parameter_order = current_parameter_number;
 
+	//If we have a reference type, we need to flag that this is
+	//a "stack variable" and needs to be dereferenced as we go
+	if(type->type_class == TYPE_CLASS_REFERENCE){
+		param_record->stack_variable = TRUE;
+	}
+
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
 
