@@ -18,5 +18,7 @@ pub fn main() -> i32 {
 	let x_ref:i32& = x;
 	let y_ref:i32& = y;
 
-	ret @get_max(x_ref, y_ref);
+	let ref:i32& = @get_max(x_ref, y_ref);
+
+	ret ref;
 }

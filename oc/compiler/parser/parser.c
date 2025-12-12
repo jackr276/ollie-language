@@ -8539,18 +8539,23 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//Additional validation here - it is not possible to assign a reference
 			//to another reference. The types_assignable will let that go because
 			//of our need to do it inside of function calls. But, if we catch that here,
-			//we can't have it. This is a hard fail
+			//we can't have it. However, we can have something like: assigning a reference
+			//to another reference that's returned from a function call. It all depends on
+			//what the return node type is here
 			if(return_type->type_class == TYPE_CLASS_REFERENCE && initializer_node->inferred_type->type_class == TYPE_CLASS_REFERENCE){
-				//Detailed error message
-				sprintf(info, "Reference of type %s%s may not be assigned to another %s%s reference type",
-							return_type->mutability == MUTABLE ? "mut " : "",
-							return_type->type_name.string, 
-							initializer_node->inferred_type->mutability == MUTABLE ? "mut " : "",
-							initializer_node->inferred_type->type_name.string);
+				//This is our real fail case. In this instance we fail out
+				if(initializer_node->ast_node_type == AST_NODE_TYPE_IDENTIFIER){
+					//Detailed error message
+					sprintf(info, "Reference of type %s%s may not be assigned to another %s%s reference type",
+								return_type->mutability == MUTABLE ? "mut " : "",
+								return_type->type_name.string, 
+								initializer_node->inferred_type->mutability == MUTABLE ? "mut " : "",
+								initializer_node->inferred_type->type_name.string);
 
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
-				//NULL signifies failure
-				return NULL;
+					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					//NULL signifies failure
+					return NULL;
+				}
 			}
 
 			//If it is a constant node, we just force the type to be the array type
