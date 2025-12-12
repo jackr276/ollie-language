@@ -6634,6 +6634,11 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
+	//Another special case - if we're trying to pass a non-reference as a reference return, we will fail
+	if(current_function->return_type->type_class == TYPE_CLASS_REFERENCE && expr_node->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+		return print_and_return_error("Ollie does not support implicit referencing in return statements", parser_line_num);
+	}
+
 	//If this is a constant, we'll force it to be whatever the new type is
 	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
 		expr_node->inferred_type = final_type;
