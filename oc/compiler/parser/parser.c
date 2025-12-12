@@ -1532,7 +1532,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		//Reference types, whether they are mutable or not, may not be reassigned after they are declared and
 		//initialized
 		case TYPE_CLASS_REFERENCE:
-			return print_and_return_error("Reference types may only be assigned to in a \"let\" statement", parser_line_num);
+			//Can't have an equals
+			if(assignment_operator == EQUALS){
+				return print_and_return_error("Reference types may only be assigned to in a \"let\" statement", parser_line_num);
+			}
+
+			//Other things are fine, like the compressed equality operators
+			break;
 
 		//If we don't have the 2 above, then we have no issue
 		default:
@@ -1606,6 +1612,11 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	} else {
 		//Convert this into the assignment operator
 		ollie_token_t binary_op = compressed_assignment_to_binary_op(assignment_operator);
+
+		//We need to account for the automatic dereference here
+		if(left_hand_type->type_class == TYPE_CLASS_REFERENCE){
+			left_hand_type = dereference_type(left_hand_type);
+		}
 
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
