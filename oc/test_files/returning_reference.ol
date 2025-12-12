@@ -15,10 +15,10 @@ pub fn main() -> i32 {
 	let x:mut i32 = 10;
 	let y:mut i32 = 15;
 
-	let x_ref:i32& = x;
-	let y_ref:i32& = y;
+	//The compiler should implicitly get the addresses of x and y here
+	@get_max(x, y);
 
-	let ref:i32& = @get_max(x_ref, y_ref);
-
-	ret ref;
+	//We should know that since we're returning
+	//an i32, but we have a reference, that we want to dereference
+	ret 0;
 }

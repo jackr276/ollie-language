@@ -909,7 +909,10 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		} else {
 			//This is a hard no - we cannot have references being created on-the-fly
 			//here, so if the user is trying to do something like increment a reference - that's a no
-			if(current_param->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+			if(current_param->inferred_type->type_class != TYPE_CLASS_REFERENCE
+				//If it's an identifier, we can automatically make it a reference. If it's not,
+				//then we're out of luck here
+				&& current_param->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
 				sprintf(info, "Attempt to pass type %s%s to parameter of type %s%s",
 							current_param->inferred_type->mutability == MUTABLE ? "mut ": "",
 							current_param->inferred_type->type_name.string,
@@ -936,7 +939,12 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//If this all worked, then we're set
+			//The param type is a reference, but the inferred type is not. What we'll do in this case 
+			//is automatically make the variable that we're dealing with a stack variable
+			if(current_param->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+				//Make this a stack variable - the CFG will auto-insert into the stack
+				current_param->variable->stack_variable = TRUE;
+			}
 		}
 
 		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
