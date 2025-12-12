@@ -413,8 +413,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					}
 				}
 
-				//Are these referenced types compatible?
-				return types_assignable(destination_type->internal_types.references, source_type->internal_types.references);
+				//Recursively check what the references point to. If that doesn't work, we'll need to fail
+				if(types_assignable(destination_type->internal_types.references, source_type->internal_types.references) == NULL){
+					return NULL;
+				}
+
+				//Otherwise, return the original type
+				return destination_type;
 			}
 
 			//Mutability checking happens first

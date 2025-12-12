@@ -9,7 +9,14 @@
 //This should return a reference - there should be no auto-deref
 //happening here
 fn get_max(a:i32&, b:i32&) -> i32& {
-	ret (a > b) ? a else b;
+	//ret (a > b) ? a else b;
+	//TODO NOT AT ALL WORKING
+
+	if(a > b){
+		ret a;
+	} else {
+		ret b;
+	}
 }
 
 pub fn main() -> i32 {

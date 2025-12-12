@@ -2570,6 +2570,15 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//a special case. We always need our return variable to be in %rax, and that may
 	//not happen all the time naturally. As such, we need this assignment here
 	if(ret_node->first_child != NULL){
+		//Most common case so it's the if for branch-pred
+		if(ret_node->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+
+		} else {
+			printf("RETURNING A REFERENCE\n");
+			
+		}
+
+
 		//Perform the binary operation here
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
 
