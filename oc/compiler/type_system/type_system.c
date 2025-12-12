@@ -431,8 +431,14 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				}
 			}
 
-			//Recursively call the helper on this one
-			return types_assignable(destination_type->internal_types.references, true_source_type);
+			//Recursively check what the references point to. If that doesn't work, we'll need to fail
+			if(types_assignable(destination_type->internal_types.references, true_source_type) == NULL){
+				return NULL;
+			}
+
+			//If that worked, we will be returning the original reference type - no implicit deref happening
+			//here
+			return destination_type;
 
 		//This will only work if they're the exact same
 		case TYPE_CLASS_UNION:

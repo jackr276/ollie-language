@@ -2574,8 +2574,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		if(ret_node->inferred_type->type_class != TYPE_CLASS_REFERENCE){
 
 		} else {
+			//If we're emitting an identifier, we need to hijack this and just get the memory address
+			//of it - not the full dereference
 			printf("RETURNING A REFERENCE\n");
-			
 		}
 
 
