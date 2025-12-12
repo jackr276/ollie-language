@@ -944,6 +944,9 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 			if(current_param->inferred_type->type_class != TYPE_CLASS_REFERENCE){
 				//Make this a stack variable - the CFG will auto-insert into the stack
 				current_param->variable->stack_variable = TRUE;
+
+				//Create the stack region here and now to avoid any confusion
+				current_param->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), current_param->inferred_type);
 			}
 		}
 
