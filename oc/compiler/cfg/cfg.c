@@ -2836,6 +2836,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	if(ident_node->side == SIDE_TYPE_RIGHT && 
 		(ident_node->variable->stack_variable == TRUE || ident_node->variable->membership == GLOBAL_VARIABLE)){
 		//Extract the "true type" here in case we are dealing with a reference type
+		generic_type_t* type = ident_node->variable->type_defined_as;
+		//"True" type for dereferencing
 		generic_type_t* true_type = ident_node->variable->type_defined_as;
 
 		//If it is a reference, we need to grab what it references
@@ -2843,21 +2845,36 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			true_type = true_type->internal_types.references;
 		}
 
-		//First we emit the memory address of the variable
-		instruction_t* memory_address_assignment = emit_memory_address_assignment(emit_temp_var(u64), emit_var(ident_node->variable));
-		//Counts as a use
-		add_used_variable(basic_block, memory_address_assignment->op1);
+		//Store for later on
+		three_addr_var_t* type_adjusted_memory_address;
 
-		//Now emit the type adjusted address using the "true type"
-		three_addr_var_t* type_adjusted_address = emit_var_copy(memory_address_assignment->assignee);
-		type_adjusted_address->type = true_type;
+		//There are 2 cases here - if we have a local stack variable, we'll need to load the memory
+		//address up itself. However, if we have a function parameter that's a reference variable,
+		//we know that it already is a memory address, so we can just adjust the base address and
+		//not load a memory address at all
+		if(type->type_class != TYPE_CLASS_REFERENCE || ident_node->variable->membership != FUNCTION_PARAMETER){
+			//First we emit the memory address of the variable
+			instruction_t* memory_address_assignment = emit_memory_address_assignment(emit_temp_var(u64), emit_var(ident_node->variable));
+			//Counts as a use
+			add_used_variable(basic_block, memory_address_assignment->op1);
 
-		//Get it in the block
-		add_statement(basic_block, memory_address_assignment);
+			//Now emit the type adjusted address using the "true type"
+			type_adjusted_memory_address = emit_var_copy(memory_address_assignment->assignee);
+			type_adjusted_memory_address->type = true_type;
+
+			//Get it in the block
+			add_statement(basic_block, memory_address_assignment);
+
+		//Otherwise this is our special case with a reference function parameter - so all we'll do
+		//is rememdiate the type
+		} else {
+			type_adjusted_memory_address = emit_var(ident_node->variable);
+			type_adjusted_memory_address->type = true_type;
+		}
 
 		//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
 		//a reference
-		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(true_type), type_adjusted_address);
+		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(true_type), type_adjusted_memory_address);
 		load_instruction->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
@@ -7982,8 +7999,11 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		//Extract the parameter
 		symtab_variable_record_t* parameter = func_record->func_params[i];
 
-		//If it's not a stack variable we don't care
-		if(parameter->stack_variable == FALSE){
+		//If it's not a stack variable we don't care *or* it's a reference
+		//type, we do not need to pre-load this into the stack. It's fine as 
+		//it is
+		if(parameter->stack_variable == FALSE 
+			|| parameter->type_defined_as->type_class == TYPE_CLASS_REFERENCE){
 			continue;
 		}
 
