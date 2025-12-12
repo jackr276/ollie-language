@@ -2573,6 +2573,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		//Perform the binary operation here
 		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
 
+		//Grab this out to look at
+		return_variable = expression_package.assignee;
+
 		//If we hit a ternary here, we'll need to reassign what our current block is
 		if(expression_package.final_block != current){
 			//Assign current to be the new end
@@ -2583,16 +2586,42 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		}
 
 		/**
+		 * Special case here - we have a reference that is the result of our expression, but we do *not* want to return a reference
+		 * As such, we will perform an automatic dereference here to get the actual value that we're after
+		 */
+		if(return_variable->type->type_class == TYPE_CLASS_REFERENCE && ret_node->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+			//Dereference the type
+			generic_type_t* dereferenced_type = dereference_type(return_variable->type);
+
+			//This is the return variable
+			three_addr_var_t* dereferenced_version = emit_var_copy(return_variable);
+			dereferenced_version->type = dereferenced_type; 
+			
+			//Dereference the return variable into this
+			instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ret_node->inferred_type), dereferenced_version);
+			
+			//Counts as a use
+			add_used_variable(current, load_instruction->op1);
+
+			//Get it into the block
+			add_statement(current, load_instruction);
+
+			//This is the new return variable
+			return_variable = load_instruction->assignee;
+		}
+
+		/**
 		 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
 		 * the function is returning the type as promised, and not what is done through type coercion
 		 */
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), expression_package.assignee);
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
 
 		//Add this in as a used variable - make sure we're using the "current" block
 		add_used_variable(current, expression_package.assignee);
 
 		//Add it into the block
 		add_statement(current, assignment);
+
 		//The return variable is now what was assigned
 		return_variable	= assignment->assignee;
 	}
