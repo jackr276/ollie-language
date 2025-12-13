@@ -413,6 +413,16 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					}
 				}
 
+
+				/**
+				 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+				 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+				 * memory regions of the same size
+				 */
+				if(get_type_size(destination_type->internal_types.references) != get_type_size(source_type->internal_types.references)){
+					return NULL;
+				}
+
 				//Recursively check what the references point to. If that doesn't work, we'll need to fail
 				if(types_assignable(destination_type->internal_types.references, source_type->internal_types.references) == NULL){
 					return NULL;
@@ -429,6 +439,15 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				if(true_source_type->mutability == NOT_MUTABLE){
 					return NULL;
 				}
+			}
+
+			/**
+			 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+			 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+			 * memory regions of the same size
+			 */
+			if(get_type_size(destination_type->internal_types.references) != get_type_size(true_source_type)){
+				return NULL;
 			}
 
 			//Recursively check what the references point to. If that doesn't work, we'll need to fail
