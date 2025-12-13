@@ -8583,13 +8583,6 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 					//NULL signifies failure
 					return NULL;
 				}
-
-				//Otherwise, we need to flag that the variable that is being referenced here *must* be stored
-				//on the stack going forward, because it is being referenced
-				initializer_node->variable->stack_variable = TRUE;
-
-				//Make the stack region right now while we're at it
-				initializer_node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), initializer_node->inferred_type);
 			}
 
 			//If it is a constant node, we just force the type to be the array type
@@ -8768,11 +8761,27 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	 * this flag is all that we need to do in the parser
 	 */
 	if(type_spec->type_class == TYPE_CLASS_REFERENCE){
-		//This is a stack variable
-		declared_var->stack_variable = TRUE;
+		//If the initialized node's variable is a thing and it's not a stack variable, we'll
+		//need to make it one
+		if(initializer_node->variable != NULL){
+			//If it's not already a stack variable, then make it
+			//one
+			if(initializer_node->variable->stack_region == NULL){
+				//Otherwise, we need to flag that the variable that is being referenced here *must* be stored
+				//on the stack going forward, because it is being referenced
+				initializer_node->variable->stack_variable = TRUE;
 
-		//This variable's stack region just points to the one that the referenced variable has
-		declared_var->stack_region = initializer_node->variable->stack_region;
+				//Make the stack region right now while we're at it
+				initializer_node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), initializer_node->inferred_type);
+			}
+
+			//This is a stack variable
+			declared_var->stack_variable = TRUE;
+
+			//This variable's stack region just points to the one that the referenced variable has. This may
+			//not always be the case, but it usually is
+			declared_var->stack_region = initializer_node->variable->stack_region;
+		}
 	}
 
 	//Add the reference into the root node

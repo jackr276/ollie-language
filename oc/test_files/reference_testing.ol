@@ -25,6 +25,7 @@ pub fn main() -> i32 {
 	x--;
 	--y;
 
-	//Should implicitly dereference
-	ret @return_reference(x_ref, y_ref);
+	let z_ref:i32& = @return_reference(x_ref, y_ref);
+
+	ret z_ref;
 }
