@@ -2570,29 +2570,30 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//a special case. We always need our return variable to be in %rax, and that may
 	//not happen all the time naturally. As such, we need this assignment here
 	if(ret_node->first_child != NULL){
-		//Most common case so it's the if for branch-pred
-		if(ret_node->inferred_type->type_class != TYPE_CLASS_REFERENCE){
+		//Most common case so it's the if for branch-pred. If we're not returning a
+		//reference that *is* an identifier, we go through all of the common steps
+		if(ret_node->inferred_type->type_class != TYPE_CLASS_REFERENCE || ret_node->first_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+			//Perform the binary operation here
+			cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
 
+			//If we hit a ternary here, we'll need to reassign what our current block is
+			if(expression_package.final_block != current){
+				//Assign current to be the new end
+				current = expression_package.final_block;
+
+				//The final block of the overall return chunk will be this
+				return_package.final_block = current;
+			}
+
+			//Grab this out to look at
+			return_variable = expression_package.assignee;
+
+		//If we get here, we know for a fact that we have the special case of returning a reference that is
+		//an identifier. Since this is the case, we need to hijack the normal identifier pipeline and emit
+		//this as-is
 		} else {
-			//If we're emitting an identifier, we need to hijack this and just get the memory address
-			//of it - not the full dereference
-			printf("RETURNING A REFERENCE\n");
-		}
-
-
-		//Perform the binary operation here
-		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
-
-		//Grab this out to look at
-		return_variable = expression_package.assignee;
-
-		//If we hit a ternary here, we'll need to reassign what our current block is
-		if(expression_package.final_block != current){
-			//Assign current to be the new end
-			current = expression_package.final_block;
-
-			//The final block of the overall return chunk will be this
-			return_package.final_block = current;
+			//Just emit the var like this - no dereference
+			return_variable = emit_var(ret_node->first_child->variable);
 		}
 
 		/**
@@ -2627,7 +2628,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(ret_node->inferred_type), return_variable);
 
 		//Add this in as a used variable - make sure we're using the "current" block
-		add_used_variable(current, expression_package.assignee);
+		add_used_variable(current, return_variable);
 
 		//Add it into the block
 		add_statement(current, assignment);
