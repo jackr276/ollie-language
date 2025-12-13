@@ -8612,6 +8612,15 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 		//Handle the implicit dereference here if appropriate
 		if(true_stored_type->type_class == TYPE_CLASS_REFERENCE){
+			//If we have something like let x:i32& = y;, we actually
+			//don't need to write anything down at all because why will
+			//have already been flagged as being on the stack. In this
+			//instance, we can just bail out here
+			if(expression_node->ast_node_type == AST_NODE_TYPE_IDENTIFIER){
+				return let_results;
+			}
+
+			//Otherwise we'll need to emit something, so derefernce this
 			true_stored_type = dereference_type(true_stored_type);
 		}
 

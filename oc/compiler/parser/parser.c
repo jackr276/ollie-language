@@ -8775,7 +8775,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 				initializer_node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), initializer_node->inferred_type);
 			}
 
-			//This is a stack variable
+			//This is a stack variable. We need to load to & from memory whenever we use it
 			declared_var->stack_variable = TRUE;
 
 			//This variable's stack region just points to the one that the referenced variable has. This may
