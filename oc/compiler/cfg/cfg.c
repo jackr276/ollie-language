@@ -4775,10 +4775,33 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * Otherwise, we'll need to emit a store operation here
 	 */
 	} else {
-		//Otherwise, we need to first get the memory address of this variable
-		instruction_t* memory_address_instruction = emit_memory_address_assignment(emit_temp_var(u64), left_hand_var);
-		//Counts as a use
-		add_used_variable(current_block, left_hand_var);
+		/**
+		 * Two possibilities here - we may have a memory address assignment if our variable is *not* a function
+		 * parameter. If it is a function parameter, then all we need to do here is emit the variable name itself
+		 */
+		three_addr_var_t* memory_address;
+
+		//If we actually have a stack region to deal with. Things like references as params will have no such thing. We will check to make
+		//sure we are *not* a reference function param. If we aren't then this is just fine for the memory address assignment
+		if(left_hand_var->membership != FUNCTION_PARAMETER || left_hand_var->linked_var->type_defined_as->type_class != TYPE_CLASS_REFERENCE){
+			//Otherwise, we need to first get the memory address of this variable
+			instruction_t* memory_address_instruction = emit_memory_address_assignment(emit_temp_var(u64), left_hand_var);
+
+			//Counts as a use
+			add_used_variable(current_block, left_hand_var);
+
+			//Put it in the block
+			add_statement(current_block, memory_address_instruction);
+
+			//This is the memory address
+			memory_address = memory_address_instruction->assignee;
+
+		//Otherwise, it's just the variable itself. This usually happens when we have function parameters
+		//that are references
+		} else {
+			//It's just the left hand var
+			memory_address = left_hand_var;
+		}
 
 		//We need to extract the "true type". For references, we implicitly dereference,
 		//so the true type is whatever it points to
@@ -4790,11 +4813,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			true_type = true_type->internal_types.references;
 		}
 
-		//Put it in the block
-		add_statement(current_block, memory_address_instruction);
-
 		//NOTE: we use the type of the left hand var for our address because we are dereferencing
-		three_addr_var_t* true_base_address = emit_var_copy(memory_address_instruction->assignee);
+		three_addr_var_t* true_base_address = emit_var_copy(memory_address);
 		true_base_address->type = true_type;
 
 		//Now for the final store code
