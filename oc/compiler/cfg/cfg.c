@@ -8606,6 +8606,15 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 * Otherwise, we'll need to emit a store operation here
 	 */
 	} else {
+		//Store the "true" stored type. This will only change if our type is a reference, because
+		//we need to account for the implicit dereference that's happening
+		generic_type_t* true_stored_type = let_variable->type;
+
+		//Handle the implicit dereference here if appropriate
+		if(true_stored_type->type_class == TYPE_CLASS_REFERENCE){
+			true_stored_type = dereference_type(true_stored_type);
+		}
+
 		//First we get our memory address statement
 		instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(u64), let_variable);
 		memory_address_statement->is_branch_ending = is_branch_ending;
@@ -8618,7 +8627,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 
 		//NOTE: We use the type of our let variable here for the address assignment
 		three_addr_var_t* true_base_address = emit_var_copy(memory_address_statement->assignee);
-		true_base_address->type = let_variable->type;
+		true_base_address->type = true_stored_type;
 		
 		//Emit the store code
 		instruction_t* store_statement = emit_store_ir_code(true_base_address, NULL);

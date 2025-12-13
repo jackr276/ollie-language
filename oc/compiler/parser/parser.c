@@ -8569,9 +8569,9 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//we can't have it. However, we can have something like: assigning a reference
 			//to another reference that's returned from a function call. It all depends on
 			//what the return node type is here
-			if(return_type->type_class == TYPE_CLASS_REFERENCE && initializer_node->inferred_type->type_class == TYPE_CLASS_REFERENCE){
-				//This is our real fail case. In this instance we fail out
-				if(initializer_node->ast_node_type == AST_NODE_TYPE_IDENTIFIER){
+			if(return_type->type_class == TYPE_CLASS_REFERENCE && initializer_node->ast_node_type == AST_NODE_TYPE_IDENTIFIER){
+				//This is a fail case
+				if(initializer_node->inferred_type->type_class == TYPE_CLASS_REFERENCE){
 					//Detailed error message
 					sprintf(info, "Reference of type %s%s may not be assigned to another %s%s reference type",
 								return_type->mutability == MUTABLE ? "mut " : "",
@@ -8583,6 +8583,13 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 					//NULL signifies failure
 					return NULL;
 				}
+
+				//Otherwise, we need to flag that the variable that is being referenced here *must* be stored
+				//on the stack going forward, because it is being referenced
+				initializer_node->variable->stack_variable = TRUE;
+
+				//Make the stack region right now while we're at it
+				initializer_node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), initializer_node->inferred_type);
 			}
 
 			//If it is a constant node, we just force the type to be the array type
@@ -8764,8 +8771,8 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 		//This is a stack variable
 		declared_var->stack_variable = TRUE;
 
-		//We should get this onto the stack now by creating a region for it
-		declared_var->stack_region = create_stack_region_for_type(&(current_function->data_area), declared_var->type_defined_as->internal_types.references);
+		//This variable's stack region just points to the one that the referenced variable has
+		declared_var->stack_region = initializer_node->variable->stack_region;
 	}
 
 	//Add the reference into the root node

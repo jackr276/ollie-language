@@ -22,6 +22,9 @@ pub fn main() -> i32 {
 	let x_ref:mut i32& = x;
 	let y_ref:mut i32& = y;
 
+	x--;
+	--y;
+
 	//Should implicitly dereference
 	ret @return_reference(x_ref, y_ref);
 }
