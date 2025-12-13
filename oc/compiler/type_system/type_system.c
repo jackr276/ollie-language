@@ -2315,10 +2315,21 @@ void generate_types_assignable_failure_message(char* info, generic_type_t* sourc
 	char* source_mutability = source_type->mutability == MUTABLE ? "mut " : "";
 	char* dest_mutability = destination_type->mutability == MUTABLE ? "mut " : "";
 
-	//Print into the buffer
-	sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
+	//Some more detailed error printing for references
+	if(destination_type->type_class == TYPE_CLASS_REFERENCE
+		&& destination_type->mutability == MUTABLE
+		&& source_type->mutability == NOT_MUTABLE){
+
+		//Print into the buffer
+		sprintf(info, "Mutable references to immutable variables are forbidden. Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
 			source_mutability, source_type->type_name.string,
 		 	dest_mutability, destination_type->type_name.string);
+	} else {
+		//Print into the buffer
+		sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
+				source_mutability, source_type->type_name.string,
+				dest_mutability, destination_type->type_name.string);
+	}
 }
 
 
