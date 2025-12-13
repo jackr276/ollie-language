@@ -5181,6 +5181,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count <= 1 //Be sure that we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
 
@@ -5208,6 +5209,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
@@ -5235,6 +5237,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
@@ -5262,6 +5265,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, TRUE) == TRUE){
 
@@ -5290,6 +5294,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
 		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 
@@ -5318,6 +5323,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
 		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
@@ -5344,9 +5350,9 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& window->instruction1->op == PLUS
+		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT
-		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE
-		&& window->instruction1->assignee->use_count <= 1){
+		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
 
 		//Let the helper deal with it
 		handle_two_instruction_address_calc_and_store(window->instruction1, window->instruction2);
@@ -5373,9 +5379,9 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& window->instruction1->op == PLUS
+		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT 
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE
-		&& window->instruction1->assignee->use_count <= 1){
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
 		//Let the helper deal with it
 		handle_two_instruction_address_calc_and_load(window->instruction1, window->instruction2);

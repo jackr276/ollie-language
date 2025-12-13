@@ -21,6 +21,12 @@ fn preinc_pointer(x:mut i32*) -> i32{
 }
 
 
+fn deref_after_add(x:mut i32*) -> i32{
+	//Should trigger pointer math
+	ret *(x + 1);
+}
+
+
 
 pub fn main(arg:i32, argv:char**) -> i32{
 	declare x:mut i32;

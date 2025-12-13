@@ -230,6 +230,45 @@ static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
 
 
 /**
+ * A helper function that will hash the name of an array type
+ */
+static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
+	u_int32_t key = 37;
+	
+	char* cursor = type_name;
+	//Two primes(this should be good enough for us)
+	u_int32_t a = 54059;
+	u_int32_t b = 76963;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		//Sum this up for our key
+		key = (key * a) ^ (*cursor * b);
+	}
+
+	//This is an array, we'll add the bounds in to further
+	//stop collisions
+	key += num_members;
+
+	//If this is mutable, we will keep going by adding
+	//a duplicated version of the type's first character
+	//onto the hash. This should(in most cases) make the hash
+	//entirely different from the non-mutable version
+	if(mutability == MUTABLE){
+		//Update the key
+		key = (key * a) ^ ((*type_name) * b);
+		//Make it so that we have the '`' character, one
+		//that is not recognized at all be the lexer. This will
+		//ensure that we can never get a false positive
+		key = (key * a) ^ ('`' * b);
+	}
+
+	//Cut it down to our keyspace
+	return key % KEYSPACE;
+}
+
+
+/**
  * For arrays, type hashing will include their values
  *
  * For *mutable types*, the type hasher concatenates a
@@ -993,6 +1032,156 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 
 	//And add the function in
 	dynamic_array_add(function->local_constants, constant);
+}
+
+
+/**
+ * Specifically look for a pointer type to the given type in the symtab
+ *
+ * This function exists so that we do not need to allocate memory in the parser
+ * just to free it
+ */
+symtab_type_record_t* lookup_pointer_type(type_symtab_t* symtab, generic_type_t* points_to, mutability_type_t mutability){
+	//Grab an array for the type name
+	char type_name[MAX_IDENT_LENGTH];
+
+	//Get the name in there by a copy
+	strcpy(type_name, points_to->type_name.string);
+
+	//Append the pointer to it
+	strcat(type_name, "*");
+
+	//Now get the hash
+	u_int16_t hash = hash_type_name(type_name, mutability);
+
+	//Grab the current lexical scope. We will search here and down
+	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
+	symtab_type_record_t* record_cursor;
+
+	//Go through all of the scopes
+	while(sheaf_cursor != NULL){
+		//Grab the record at the hash
+		record_cursor = sheaf_cursor->records[hash];
+		
+		//We could have had collisions so we'll have to hunt here
+		while(record_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strcmp(record_cursor->type->type_name.string, type_name) == 0){
+				//We have a match
+				return record_cursor;
+			}
+
+			//Otherwise no match, we advance it
+			record_cursor = record_cursor->next;
+		}
+
+		//Go up to a higher scope
+		sheaf_cursor = sheaf_cursor->previous_level;
+	}
+
+	//If we get all the way down here and it's a bust, return NULL
+	return NULL;
+}
+
+
+/**
+ * Specifically look for a reference type to the given type in the symtab
+ */
+symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_t* references, mutability_type_t mutability){
+	//Grab an array for the type name
+	char type_name[MAX_IDENT_LENGTH];
+
+	//Get the name in there by a copy
+	strcpy(type_name, references->type_name.string);
+
+	//Append the reference token to it
+	strcat(type_name, "&");
+
+	//Now get the hash
+	u_int16_t hash = hash_type_name(type_name, mutability);
+
+	//Grab the current lexical scope. We will search here and down
+	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
+	symtab_type_record_t* record_cursor;
+
+	//Go through all of the scopes
+	while(sheaf_cursor != NULL){
+		//Grab the record at the hash
+		record_cursor = sheaf_cursor->records[hash];
+		
+		//We could have had collisions so we'll have to hunt here
+		while(record_cursor != NULL){
+			//If we find the right one, then we can get out
+			if(strcmp(record_cursor->type->type_name.string, type_name) == 0){
+				//We have a match
+				return record_cursor;
+			}
+
+			//Otherwise no match, we advance it
+			record_cursor = record_cursor->next;
+		}
+
+		//Go up to a higher scope
+		sheaf_cursor = sheaf_cursor->previous_level;
+	}
+
+	//If we get all the way down here and it's a bust, return NULL
+	return NULL;
+}
+
+
+/**
+ * Specifically look for an array type with the given type as a member in the symtab
+ */
+symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* member_type, u_int32_t num_members, mutability_type_t mutability){
+	//Grab an array for the type name
+	char type_name[MAX_IDENT_LENGTH];
+
+	//Get the name in there by a copy
+	strcpy(type_name, member_type->type_name.string);
+
+	//Append the array signifiers to it
+	strcat(type_name, "[]");
+
+	//Now get the hash. We need to be using a special helper for this
+	u_int16_t hash = hash_array_type_name(type_name, num_members, mutability);
+
+	//Grab the current lexical scope. We will search here and down
+	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
+	symtab_type_record_t* record_cursor;
+
+	//Go through all of the scopes
+	while(sheaf_cursor != NULL){
+		//Grab the record at the hash
+		record_cursor = sheaf_cursor->records[hash];
+
+		//We could have had collisions so we'll have to hunt here
+		while(record_cursor != NULL){
+			//If it's not an array we don't care
+			if(record_cursor->type->type_class != TYPE_CLASS_ARRAY){
+				record_cursor = record_cursor->next;
+				continue;
+			}
+
+			//If we find the right one, then we can get out
+			if(strcmp(record_cursor->type->type_name.string, type_name) == 0
+				//The member counts also need to match
+				&& record_cursor->type->internal_values.num_members == num_members){
+
+				//We have a match
+				return record_cursor;
+			}
+
+			//Otherwise no match, we advance it
+			record_cursor = record_cursor->next;
+		}
+
+		//Go up to a higher scope
+		sheaf_cursor = sheaf_cursor->previous_level;
+	}
+
+	//If we get all the way down here and it's a bust, return NULL
+	return NULL;
 }
 
 

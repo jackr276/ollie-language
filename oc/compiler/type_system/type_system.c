@@ -33,6 +33,7 @@ u_int8_t is_memory_region(generic_type_t* type){
 u_int8_t is_memory_address_type(generic_type_t* type){
 	switch(type->type_class){
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
@@ -93,6 +94,7 @@ u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
 		//These are memory addresses - so yes
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_STRUCT:
 			return TRUE;
 
@@ -166,6 +168,9 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
 			case TYPE_CLASS_POINTER:
 				current_type = current_type->internal_types.points_to;
 				break;
+			case TYPE_CLASS_REFERENCE:
+				current_type = current_type->internal_types.points_to;
+				break;
 			//Nothing for us here
 			default:
 				break;
@@ -189,6 +194,7 @@ u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 		//These are all essentially pointers
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
 			return TRUE;
@@ -229,6 +235,7 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type){
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_REFERENCE:
 			return FALSE;
 		case TYPE_CLASS_ENUMERATED:
 			return TRUE;
@@ -266,6 +273,7 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 		case TYPE_CLASS_STRUCT:
 			return FALSE;
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_REFERENCE:
 			return TRUE;
 		case TYPE_CLASS_ENUMERATED:
 			return TRUE;
@@ -346,12 +354,27 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 	ollie_token_t source_basic_type;
 	ollie_token_t dest_basic_type;
 
+	//The true source type. We will use this to avoid having
+	//if statements everywhere. In most cases, the true source is
+	//just the source. Only in special cases(like if the source
+	//is a reference) will that be changed
+	generic_type_t* true_source_type = source_type;
+
+	//Remember that references on the RHS of an equation are implicitly
+	//dereferenced. So, we will represent that here be dereferencing a reference type
+	//off the bat
+	if(source_type->type_class == TYPE_CLASS_REFERENCE){
+		//The true source type is what we have underlying here if 
+		//it is in fact a reference
+		true_source_type = source_type->internal_types.references;
+	}
+
 	switch(destination_type->type_class){
 		//This is a simpler case - constructs can only be assigned
 		//if they're the exact same
 		case TYPE_CLASS_STRUCT:
 			//If the string compare works, they are the same type. We must now check for mutability
-			if(strcmp(destination_type->type_name.string, source_type->type_name.string) == 0){
+			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
 				//This is fine, we can assign to something immutable
 				if(destination_type->mutability == NOT_MUTABLE){
 					return destination_type;
@@ -360,7 +383,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				//that this works is if the source is also mutable
 				} else {
 					//Good case
-					if(source_type->mutability == MUTABLE){
+					if(true_source_type->mutability == MUTABLE){
 						return destination_type;
 					//Fail out
 					} else {
@@ -371,10 +394,75 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			return NULL;
 
+		//Reference types are implicitly dereferenced by the compiler. This means
+		//that if you're trying to assign an i32 to an i32&, the i32 is implicitly having
+		//its address taken. As such, we are really able to compare the underlying referenced
+		//type to the reference here to see if they are assignable
+		case TYPE_CLASS_REFERENCE:
+			//We can assign a reference to a reference in special cases(function
+			//call). We will do the needed checking here to enable that. The parser
+			//has its own checkng where it will smack things down if they're invalid
+			//in that context
+			if(source_type->type_class == TYPE_CLASS_REFERENCE){
+				//Mutability checking happens first
+				if(destination_type->mutability == MUTABLE){
+					//Invalid - attempting to grab a mutable reference
+					//to an immutable variable
+					if(source_type->mutability == NOT_MUTABLE){
+						return NULL;
+					}
+				}
+
+
+				/**
+				 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+				 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+				 * memory regions of the same size
+				 */
+				if(get_type_size(destination_type->internal_types.references) != get_type_size(source_type->internal_types.references)){
+					return NULL;
+				}
+
+				//Recursively check what the references point to. If that doesn't work, we'll need to fail
+				if(types_assignable(destination_type->internal_types.references, source_type->internal_types.references) == NULL){
+					return NULL;
+				}
+
+				//Otherwise, return the original type
+				return destination_type;
+			}
+
+			//Mutability checking happens first
+			if(destination_type->mutability == MUTABLE){
+				//Invalid - attempting to grab a mutable reference
+				//to an immutable variable
+				if(true_source_type->mutability == NOT_MUTABLE){
+					return NULL;
+				}
+			}
+
+			/**
+			 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+			 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+			 * memory regions of the same size
+			 */
+			if(get_type_size(destination_type->internal_types.references) != get_type_size(true_source_type)){
+				return NULL;
+			}
+
+			//Recursively check what the references point to. If that doesn't work, we'll need to fail
+			if(types_assignable(destination_type->internal_types.references, true_source_type) == NULL){
+				return NULL;
+			}
+
+			//If that worked, we will be returning the original reference type - no implicit deref happening
+			//here
+			return destination_type;
+
 		//This will only work if they're the exact same
 		case TYPE_CLASS_UNION:
 			//If the string compare works, they are the same type. We must now check for mutability
-			if(strcmp(destination_type->type_name.string, source_type->type_name.string) == 0){
+			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
 				//This is fine, we can assign to something immutable
 				if(destination_type->mutability == NOT_MUTABLE){
 					return destination_type;
@@ -383,7 +471,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				//that this works is if the source is also mutable
 				} else {
 					//Good case
-					if(source_type->mutability == MUTABLE){
+					if(true_source_type->mutability == MUTABLE){
 						return destination_type;
 					//Fail out
 					} else {
@@ -399,12 +487,12 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		 */
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			//If this is not also a function signature, then we're done here
-			if(source_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+			if(true_source_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 				return NULL;
 			}
 
 			//Otherwise, we'll need to use the helper rule to determine if it's equivalent
-			if(function_signatures_identical(destination_type, source_type) == TRUE){
+			if(function_signatures_identical(destination_type, true_source_type) == TRUE){
 				return destination_type;
 			} else {
 				return NULL;
@@ -413,10 +501,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		//Enum's can internally be any unsigned integer
 		case TYPE_CLASS_ENUMERATED:
 			//Go based on what the source it
-			switch(source_type->type_class){
+			switch(true_source_type->type_class){
 				case TYPE_CLASS_ENUMERATED:
 					//These need to be the exact same, otherwise this will not work
-					if(destination_type == source_type){
+					if(destination_type == true_source_type){
 						return destination_type;
 					} else {
 						return NULL;
@@ -424,14 +512,14 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 				//If we have a basic type, we can just compare it with the enum's internal int
 				case TYPE_CLASS_BASIC:
-					switch(source_type->basic_type_token){
+					switch(true_source_type->basic_type_token){
 						//These are all bad
 						case F32:
 						case F64:
 						case VOID:
 							return NULL;
 						default:
-							return types_assignable(destination_type->internal_values.enum_integer_type, source_type);
+							return types_assignable(destination_type->internal_values.enum_integer_type, true_source_type);
 					}
 
 				//Anything else is bad
@@ -449,7 +537,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			//If it's a pointer
 			if(source_type->type_class == TYPE_CLASS_POINTER){
-				generic_type_t* points_to = source_type->internal_types.points_to;
+				generic_type_t* points_to = true_source_type->internal_types.points_to;
 
 				//If it's not a basic type then leave
 				if(points_to->type_class != TYPE_CLASS_BASIC){
@@ -466,13 +554,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
-			switch(source_type->type_class){
+			switch(true_source_type->type_class){
 				//We don't care about mutability here - we'll
 				//be copying the u64 so the value there is actually irrelevant, it's not a pointer
 				//that we're copying over
 				case TYPE_CLASS_BASIC:
 					//This needs to be a u64, otherwise it's invalid
-					if(source_type->basic_type_token == U64){
+					if(true_source_type->basic_type_token == U64){
 						//We will keep this as the pointer
 						return destination_type;
 					//Any other basic type will not work here
@@ -488,13 +576,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					if(destination_type->mutability == MUTABLE){
 						//If the destination is mutable but the source
 						//is not, we can't go forward
-						if(source_type->mutability != MUTABLE){
+						if(true_source_type->mutability != MUTABLE){
 							return NULL;
 						}
 					}
 
 					//If this works, return the destination type
-					if(types_assignable(destination_type->internal_types.points_to, source_type->internal_types.member_type) != NULL){
+					if(types_assignable(destination_type->internal_types.points_to, true_source_type->internal_types.member_type) != NULL){
 						return destination_type;
 					}
 					
@@ -508,21 +596,30 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					if(destination_type->mutability == MUTABLE){
 						//If the destination is mutable but the source
 						//is not, we can't go forward
-						if(source_type->mutability != MUTABLE){
+						if(true_source_type->mutability != MUTABLE){
 							return NULL;
 						}
 					}
 
 					//If this itself is a void pointer, then we're good
-					if(source_type->internal_values.is_void_pointer == TRUE){
+					if(true_source_type->internal_values.is_void_pointer == TRUE){
 						return destination_type;
 					//This is also fine, we just give the destination type back
 					} else if(destination_type->internal_values.is_void_pointer == TRUE){
 						return destination_type;
 					//Let's see if what they point to is the exact same
 					} else {
+						/**
+						 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+						 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+						 * memory regions of the same size
+						 */
+						if(get_type_size(destination_type->internal_types.points_to) != get_type_size(true_source_type->internal_types.points_to)){
+							return NULL;
+						}
+
 						//If this works, return the destination type
-						if(types_assignable(destination_type->internal_types.points_to, source_type->internal_types.points_to) != NULL){
+						if(types_assignable(destination_type->internal_types.points_to, true_source_type->internal_types.points_to) != NULL){
 							return destination_type;
 						}
 
@@ -553,9 +650,9 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				//Float64's can only be assigned to other float64's
 				case F64:
 					//We must see another f64 or an f32(widening) here
-					if(source_type->type_class == TYPE_CLASS_BASIC
-						&& (source_type->basic_type_token == F64
-						|| source_type->basic_type_token == F32)){
+					if(true_source_type->type_class == TYPE_CLASS_BASIC
+						&& (true_source_type->basic_type_token == F64
+						|| true_source_type->basic_type_token == F32)){
 						return destination_type;
 
 					//Otherwise nothing here will work
@@ -565,8 +662,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 				case F32:
 					//We must see another an f32 here
-					if(source_type->type_class == TYPE_CLASS_BASIC
-						&& source_type->basic_type_token == F32){
+					if(true_source_type->type_class == TYPE_CLASS_BASIC
+						&& true_source_type->basic_type_token == F32){
 						return destination_type;
 
 					//Otherwise nothing here will work
@@ -580,18 +677,18 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				//type is also a basic type. 
 				default:
 					//Special exception - the source type is an enum. These are good to be used with ints
-					if(source_type->type_class == TYPE_CLASS_ENUMERATED){
+					if(true_source_type->type_class == TYPE_CLASS_ENUMERATED){
 						return destination_type;
 					}
 
 					//Now if the source type is not a basic type, we're done here
-					if(source_type->type_class != TYPE_CLASS_BASIC){
+					if(true_source_type->type_class != TYPE_CLASS_BASIC){
 						return NULL;
 					}
 					
 					//Once we get here, we know that the source type is a basic type. We now
 					//need to check that it's not a float or void
-					source_basic_type = source_type->basic_type_token;
+					source_basic_type = true_source_type->basic_type_token;
 
 					//Go based on what we have here
 					switch(source_basic_type){
@@ -605,7 +702,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						//and integer/char type. We can now just compare the sizes and if the destination is more
 						//than or equal to the source, we're good
 						default:
-							if(source_type->type_size <= destination_type->type_size){
+							if(true_source_type->type_size <= destination_type->type_size){
 								return destination_type;
 							} else {
 								//These wouldn't fit
@@ -745,14 +842,36 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 	*a = dealias_type(*a);
 	*b = dealias_type(*b);
 
-	//Lookup what the enum type actually is and use that
-	if((*a)->type_class == TYPE_CLASS_ENUMERATED){
-		*a = (*a)->internal_values.enum_integer_type;
+	//Special treatment based on a's type class
+	switch((*a)->type_class){
+		//Dereference the enum int type
+		case TYPE_CLASS_ENUMERATED:
+			*a = (*a)->internal_values.enum_integer_type;
+			break;
+		//References are automatically dereferenced in this
+		//scenarios
+		case TYPE_CLASS_REFERENCE:
+			*a = (*a)->internal_types.references;
+			break;
+		//Do nothing
+		default:
+			break;
 	}
 
-	//Lookup what the enum type actually is and use that
-	if((*b)->type_class == TYPE_CLASS_ENUMERATED){
-		*b = (*b)->internal_values.enum_integer_type;
+	//Special treatment based on b's type class
+	switch((*b)->type_class){
+		//Dereference the enum int type
+		case TYPE_CLASS_ENUMERATED:
+			*b = (*b)->internal_values.enum_integer_type;
+			break;
+		//References are automatically dereferenced in this
+		//scenarios
+		case TYPE_CLASS_REFERENCE:
+			*b = (*b)->internal_types.references;
+			break;
+		//Do nothing
+		default:
+			break;
 	}
 	
 	/**
@@ -1167,6 +1286,21 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 		return FALSE;
 	}
 
+	//Some special rules based on the type class
+	switch (type->type_class) {
+		//Always invalid
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			return FALSE;
+		//Again here, references are automatically dereferenced
+		//so that needs to be accounted for
+		case TYPE_CLASS_REFERENCE:
+			type = type->internal_types.references;
+			break;
+		//By default nothing happens
+		default:
+			break;
+	}
+
 	//Go based on what token we're given
 	switch (unary_op) {
 		//This will pull double duty for pre/post increment operators
@@ -1190,15 +1324,17 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 					return TRUE;
 			}
 
-		//We can only dereference arrays and pointers
+		//We can only dereference arrays and pointers. Note that
+		//it is *not* possible to dereference a reference - this is done automatically
 		case STAR:
-			//These are our valid cases
-			if(type->type_class == TYPE_CLASS_ARRAY || type->type_class == TYPE_CLASS_POINTER){
-				return TRUE;
+			//Only 2 kinds of valid types here
+			switch(type->type_class){
+				case TYPE_CLASS_ARRAY:
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+				default:
+					return FALSE;
 			}
-
-			//Anything else is invalid
-			return FALSE;
 
 		//We can take the address of anything besides a void type
 		case SINGLE_AND:
@@ -1227,9 +1363,15 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 
 		//We can negate pointers, enums and basic types that are not void
 		case L_NOT:
-			//These are bad, we fail out here
-			if(type->type_class == TYPE_CLASS_STRUCT || type->type_class == TYPE_CLASS_ARRAY){
-				return FALSE;
+			//Basic sanitation here, you can't negate these types
+			switch(type->type_class){
+				case TYPE_CLASS_ARRAY:
+				case TYPE_CLASS_REFERENCE:
+				case TYPE_CLASS_STRUCT:
+				case TYPE_CLASS_UNION:
+					return FALSE;
+				default:
+					break;
 			}
 
 			//Our other invalid case
@@ -1272,6 +1414,13 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 	//Just to be safe, we'll always make sure here
 	type = dealias_type(type);
 
+	//Reference types, in the context of binary operations, 
+	//are dereferenced for the user automatically. We need to
+	//account for that here
+	if(type->type_class == TYPE_CLASS_REFERENCE){
+		type = type->internal_types.references;
+	}
+
 	//Deconstructed basic type(since we'll be using it so much)
 	ollie_token_t basic_type;
 
@@ -1279,7 +1428,6 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 	//series of types that never make sense for any unary operation
 	switch (type->type_class) {
 		case TYPE_CLASS_UNION:
-		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			return FALSE;
@@ -1288,7 +1436,6 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		default:
 			break;
 	}
-
 
 	//Switch based on what the operator is
 	switch(binary_op){
@@ -1665,6 +1812,42 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 	type->internal_types.union_table = dynamic_array_alloc();
 
 	//And give the type pointer back
+	return type;
+}
+
+
+/**
+ * Dynamically allocate and create a reference type
+ */
+generic_type_t* create_reference_type(generic_type_t* type_referenced, u_int32_t line_number, mutability_type_t mutability){
+	//Dynamically allocate it
+	generic_type_t* type = calloc(1, sizeof(generic_type_t));
+
+	//This is a reference type
+	type->type_class = TYPE_CLASS_REFERENCE;
+
+	//Save the mutability
+	type->mutability = mutability;
+
+	//Save the line number
+	type->line_number = line_number;
+
+	//First we'll clone the type
+	type->type_name = clone_dynamic_string(&(type_referenced->type_name));
+
+	//Then we'll concatenate the reference operator onto it 
+	dynamic_string_add_char_to_back(&(type->type_name), '&');
+
+	//Put what it references in here
+	type->internal_types.references = type_referenced;
+
+	//This is always compelete at definition
+	type->type_complete = TRUE;
+
+	//A reference is always 8 bytes(it's just a pointer)
+	type->type_size = 8;
+
+	//Give the type back
 	return type;
 }
 
@@ -2079,11 +2262,12 @@ variable_size_t get_type_size(generic_type_t* type){
 
 		//These are always 64 bits
 		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 		case TYPE_CLASS_ALIAS:
-		case TYPE_CLASS_UNION: //always a memory address
+		case TYPE_CLASS_UNION:
 			size = QUAD_WORD;
 			break;
 
@@ -2159,10 +2343,21 @@ void generate_types_assignable_failure_message(char* info, generic_type_t* sourc
 	char* source_mutability = source_type->mutability == MUTABLE ? "mut " : "";
 	char* dest_mutability = destination_type->mutability == MUTABLE ? "mut " : "";
 
-	//Print into the buffer
-	sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
+	//Some more detailed error printing for references
+	if(destination_type->type_class == TYPE_CLASS_REFERENCE
+		&& destination_type->mutability == MUTABLE
+		&& source_type->mutability == NOT_MUTABLE){
+
+		//Print into the buffer
+		sprintf(info, "Mutable references to immutable variables are forbidden. Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
 			source_mutability, source_type->type_name.string,
 		 	dest_mutability, destination_type->type_name.string);
+	} else {
+		//Print into the buffer
+		sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
+				source_mutability, source_type->type_name.string,
+				dest_mutability, destination_type->type_name.string);
+	}
 }
 
 
@@ -2222,14 +2417,19 @@ generic_type_t* dealias_type(generic_type_t* type){
  * Perform a symbolic dereference of a type
  */
 generic_type_t* dereference_type(generic_type_t* pointer_type){
-	//Dev check here
-	if(pointer_type->type_class != 	TYPE_CLASS_POINTER){
-		printf("Fatal internal compiler error: attempt to dereference a non-pointer\n");
-		exit(1);
+	//We're only able to dereference pointers, references
+	//and arrays
+	switch(pointer_type->type_class){
+		case TYPE_CLASS_POINTER:
+			return pointer_type->internal_types.points_to;
+		case TYPE_CLASS_REFERENCE:
+			return pointer_type->internal_types.references;
+		case TYPE_CLASS_ARRAY:
+			return pointer_type->internal_types.member_type;
+		default:
+			printf("Fatal internal compiler error: attempt to dereference a non-pointer\n");
+			exit(1);
 	}
-
-	//Otherwise, just use the internal storage to get it
-	return pointer_type->internal_types.points_to;
 }
 
 
