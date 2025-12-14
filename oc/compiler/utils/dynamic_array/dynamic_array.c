@@ -36,6 +36,29 @@ dynamic_array_t dynamic_array_alloc(){
 
 
 /**
+ * Initialize a dynamic array on the heap 
+ * specifically. This should only be used
+ * when you absolutely need it
+ */
+dynamic_array_t* dynamic_array_heap_alloc(){
+	//First we'll create the overall structure
+ 	dynamic_array_t* array = calloc(1, sizeof(dynamic_array_t));
+
+	//Set the max size using the sane default 
+	array->current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
+
+	//Starts off at 0
+	array->current_index = 0;
+
+	//Now we'll allocate the overall internal array
+	array->internal_array = calloc(array->current_max_size, sizeof(void*));
+
+	//Now we're all set
+	return array;
+}
+
+
+/**
  * Initialize a dynamic array with an initial
  * size. This is useful if we already know
  * the size we need
@@ -388,4 +411,24 @@ void dynamic_array_dealloc(dynamic_array_t* array){
 	array->internal_array = NULL;
 	array->current_index = 0;
 	array->current_max_size = 0;
+}
+
+
+/**
+ * Deallocate a dynamic array that was on the heap
+ */
+void dynamic_array_heap_dealloc(dynamic_array_t** array){
+	//Let's just make sure here...
+	if((*array)->internal_array == NULL){
+		return;
+	}
+
+	//First we'll free the internal array
+	free((*array)->internal_array);
+
+	//Free the overall structure too
+	free(*array);
+
+	//Set this as a warning
+	*array = NULL;
 }

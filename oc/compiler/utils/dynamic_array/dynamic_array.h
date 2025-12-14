@@ -29,6 +29,11 @@ struct dynamic_array_t{
 	u_int16_t current_index;
 };
 
+/**
+ * Initialize a dynamic array on the heap 
+ * specifically
+ */
+dynamic_array_t* dynamic_array_heap_alloc();
 
 /**
  * Initialize a dynamic array. The resulting
@@ -126,5 +131,10 @@ void reset_dynamic_array(dynamic_array_t* array);
  * just the overall structure
 */
 void dynamic_array_dealloc(dynamic_array_t* array);
+
+/**
+ * Deallocate a dynamic array that was on the heap
+ */
+void dynamic_array_heap_dealloc(dynamic_array_t** array);
 
 #endif /* DYNAMIC_ARRAY_H */

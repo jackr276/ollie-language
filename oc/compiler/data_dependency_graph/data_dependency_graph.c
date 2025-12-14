@@ -557,14 +557,16 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
 			continue;
 		}
 
-		//Allocate this, it will need to be freed at a later point
-		dynamic_array_t connected_component = dynamic_array_alloc();
+		//Allocate this on the *heap* specifically. We do this becauase
+		//we will be passing this up to a parent, so we can't have it
+		//being on the stack
+		dynamic_array_t* connected_component = dynamic_array_heap_alloc();
 
 		//Otherwise it hasn't been visited, so find it's connected components
-		connected_component_rec_DFS(node, &connected_component);
+		connected_component_rec_DFS(node, connected_component);
 
 		//Once we're here, we can add this connected component to our overall array of them
-		dynamic_array_add(connected_components, &connected_component);
+		dynamic_array_add(connected_components, connected_component);
 	}
 
 	//Give back the dynamic array of dynamic arrays of connected components
@@ -713,8 +715,9 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 			//Get the maximum number of loads through any given path in this connected component
 			u_int32_t maximum_loads = get_maximum_loads_through_any_path_in_subgraph(connected_component, load_counts);
 
-			//Once we're done using it, we can release this entire thing
-			dynamic_array_dealloc(connected_component);
+			//Once we're done using it, we can release this entire thing. Remember that it was
+			//on the heap, so we need to use the heap deallocator for it
+			dynamic_array_heap_dealloc(&connected_component);
 
 			//If there are no loads along this path, just move along
 			if(maximum_loads == 0){
