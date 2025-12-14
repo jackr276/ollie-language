@@ -5345,18 +5345,18 @@ static u_int8_t enum_definer(FILE* fl){
 	immutable_enum_type->type_size = type_needed->type_size;
 
 	//We now go through and set the type now that we know what it is
-	for(u_int16_t i = 0; i < mutable_enum_type->internal_types.enumeration_table->current_index; i++){
+	for(u_int16_t i = 0; i < mutable_enum_type->internal_types.enumeration_table.current_index; i++){
 		//Grab it out
-		symtab_variable_record_t* var = dynamic_array_get_at(mutable_enum_type->internal_types.enumeration_table, i);
+		symtab_variable_record_t* var = dynamic_array_get_at(&(mutable_enum_type->internal_types.enumeration_table), i);
 
 		//Store the type that we have
 		var->type_defined_as = type_needed;
 	}
 
 	//Do the exact same for the immutable version
-	for(u_int16_t i = 0; i < immutable_enum_type->internal_types.enumeration_table->current_index; i++){
+	for(u_int16_t i = 0; i < immutable_enum_type->internal_types.enumeration_table.current_index; i++){
 		//Grab it out
-		symtab_variable_record_t* var = dynamic_array_get_at(immutable_enum_type->internal_types.enumeration_table, i);
+		symtab_variable_record_t* var = dynamic_array_get_at(&(immutable_enum_type->internal_types.enumeration_table), i);
 
 		//Store the type that we have
 		var->type_defined_as = type_needed;
@@ -8344,10 +8344,10 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  */
 static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, u_int8_t is_global){
 	//We'll need to extract the struct table and that max index that it holds
-	dynamic_array_t* struct_table = struct_type->internal_types.struct_table;
+	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
 
 	//The number of fields that were defined in the type is here
-	u_int32_t num_fields = struct_table->current_index;
+	u_int32_t num_fields = struct_table.current_index;
 
 	//Initialize a cursor to the initializer list node itself
 	generic_ast_node_t* cursor = initializer_list_node->first_child;
@@ -8365,7 +8365,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		}
 
 		//Grab the variable out
-		symtab_variable_record_t* variable = dynamic_array_get_at(struct_table, seen_count);
+		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
 		generic_type_t* final_type = validate_intializer_types(variable->type_defined_as, cursor, is_global);
