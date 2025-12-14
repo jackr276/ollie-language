@@ -12,6 +12,7 @@
 
 #include <sys/types.h>
 #include <stdio.h>
+#include "../utils/dynamic_array/dynamic_array.h"
 
 //Jump table structure
 typedef struct jump_table_t jump_table_t;
@@ -20,9 +21,9 @@ typedef struct jump_table_t jump_table_t;
  * A jump table is a simple ordered array of values. We will require the user
  * to declare the range of values for the jump
 */
-struct jump_table_t{
+struct jump_table_t {
 	//The list of all nodes. This is internally a dynamic array
-	void* nodes;
+	dynamic_array_t nodes;
 	//The default block
 	void* default_block;
 	//The number of nodes

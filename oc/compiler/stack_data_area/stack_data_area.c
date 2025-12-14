@@ -119,7 +119,7 @@ stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_ty
 	area->total_size = area->total_size + needed_padding + type->type_size;
 
 	//Add the region into the stack data area
-	dynamic_array_add(area->stack_regions, region);
+	dynamic_array_add(&(area->stack_regions), region);
 
 	//Give back the allocated region
 	return region;
@@ -135,9 +135,9 @@ static void realign_data_area(stack_data_area_t* area){
 	area->total_size = 0;
 
 	//Run through every single variable
-	for(u_int16_t i = 0; i < area->stack_regions->current_index; i++){
+	for(u_int16_t i = 0; i < area->stack_regions.current_index; i++){
 		//Grab it out
-		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
+		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
 
 		/**
 		 * To align new regions that are added onto the stack, we will pad
@@ -175,7 +175,7 @@ static void realign_data_area(stack_data_area_t* area){
  */
 void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region){
 	//Delete this variable
-	dynamic_array_delete(area->stack_regions, region);
+	dynamic_array_delete(&(area->stack_regions), region);
 
 	//Realign the entire thing now
 	realign_data_area(area);
@@ -189,16 +189,16 @@ void print_stack_data_area(stack_data_area_t* area){
 	printf("================== Stack Layout ===================\n");
 
 	//If it's empty we'll leave
-	if(area->stack_regions->current_index == 0){
+	if(area->stack_regions.current_index == 0){
 		printf("EMPTY\n");
 		printf("================== Stack Layout ===================\n");
 		return;
 	}
 
 	//Run through all of the regions backwards and print
-	for(int16_t i = area->stack_regions->current_index - 1; i >= 0; i--){
+	for(int16_t i = area->stack_regions.current_index - 1; i >= 0; i--){
 		//Extract it
-		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
+		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
 
 		//Print it
 		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->base_address, region->mark == TRUE ? "marked" : "unmarked");
@@ -220,9 +220,9 @@ stack_region_t* does_stack_contain_pointer_to_variable(stack_data_area_t* area, 
 	}
 
 	//Run through all of the regions backwards
-	for(int16_t i = area->stack_regions->current_index - 1; i >= 0; i--){
+	for(int16_t i = area->stack_regions.current_index - 1; i >= 0; i--){
 		//Grab a given one out
-		stack_region_t* region = dynamic_array_get_at(area->stack_regions, i);
+		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
 
 		//If we find it, give it back
 		if(region->variable_referenced == variable){
@@ -240,14 +240,14 @@ stack_region_t* does_stack_contain_pointer_to_variable(stack_data_area_t* area, 
  */
 void stack_data_area_dealloc(stack_data_area_t* stack_data_area){
 	//Run through all regions
-	for(u_int16_t i = 0; i < stack_data_area->stack_regions->current_index; i++){
+	for(u_int16_t i = 0; i < stack_data_area->stack_regions.current_index; i++){
 		//Grab it out
-		stack_region_t* region = dynamic_array_get_at(stack_data_area->stack_regions, i);
+		stack_region_t* region = dynamic_array_get_at(&(stack_data_area->stack_regions), i);
 
 		//Delete it
 		free(region);
 	}
 
 	//Finally deallocate the region here
-	dynamic_array_dealloc(stack_data_area->stack_regions);
+	dynamic_array_dealloc(&(stack_data_area->stack_regions));
 }
