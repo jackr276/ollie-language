@@ -41,7 +41,7 @@ typedef enum {
 u_int32_t line_num = 0;
 
 //Our lexer stack
-static lex_stack_t* pushed_back_tokens = NULL;
+static lex_stack_t pushed_back_tokens;
 
 //Token array, we will index using their enum values
 static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
@@ -166,9 +166,9 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 	char ch;
 
 	//First pop off all of the tokens if there are any on the stack
-	while(lex_stack_is_empty(pushed_back_tokens) == FALSE){
+	while(lex_stack_is_empty(&pushed_back_tokens) == FALSE){
 		//Pop whatever we have off
-		lexitem_t token = pop_token(pushed_back_tokens);
+		lexitem_t token = pop_token(&pushed_back_tokens);
 
 		//Concatenate the string here
 		dynamic_string_concatenate(&asm_string, token.lexeme.string);
@@ -200,9 +200,9 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 */
 lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t const_search){
 	//IF we have pushed back tokens, we need to return them first
-	if(lex_stack_is_empty(pushed_back_tokens) == FALSE){
+	if(lex_stack_is_empty(&pushed_back_tokens) == FALSE){
 		//Just pop this and leave
-		return pop_token(pushed_back_tokens);
+		return pop_token(&pushed_back_tokens);
 	}
 
 
@@ -910,7 +910,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
  */
 void push_back_token(lexitem_t l){
 	//All that we need to do here is push the token onto the stack
-	push_token(pushed_back_tokens, l);
+	push_token(&pushed_back_tokens, l);
 }
 
 

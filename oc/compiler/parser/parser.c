@@ -48,7 +48,7 @@ static symtab_function_record_t* current_function = NULL;
 static heap_queue_t* current_function_jump_statements = NULL;
 
 //Our stack for storing variables, etc
-static lex_stack_t* grouping_stack = NULL;
+static lex_stack_t grouping_stack;
 
 //Generic types here for us to repeatedly reference
 static generic_type_t* immut_char = NULL;
@@ -813,7 +813,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	}
 
 	//Push onto the grouping stack once we see this
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Let's check for this easy case first. If we have no parameters, then 
 	//we'll expect to immediately see an R_PAREN
@@ -832,7 +832,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		}
 
 		//Otherwise if it was fine, we'll now pop the grouping stack
-		pop_token(grouping_stack);
+		pop_token(&grouping_stack);
 
 		//And package up and return here
 		//Add the line number in
@@ -978,7 +978,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	}
 
 	//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		//Return the error node
 		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
 	}
@@ -1010,7 +1010,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	}
 
 	//Otherwise we'll push to the stack for checking
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//We now need to see a valid logical or expression. This expression will contain everything that we need to know, and the
 	//actual expression result will be unused. It's important to note that we will not actually evaluate the expression here at
@@ -1034,7 +1034,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	}
 
 	//We can also fail if we somehow see unmatched parenthesis
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected in typesize expression", parser_line_num);
 	}
 
@@ -1080,7 +1080,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	}
 
 	//Otherwise we'll push to the stack for checking
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid type-specifier. It is important to note that the type
 	//specifier requires that a type has actually been defined. If it wasn't defined,
@@ -1106,7 +1106,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	}
 
 	//We can also fail if we somehow see unmatched parenthesis
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected in typesize expression", parser_line_num);
 	}
 
@@ -1279,7 +1279,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 		//We could see a case where we have a parenthesis in an expression
 		case L_PAREN:
 			//We'll push it up to the stack for matching
-			push_token(grouping_stack, lookahead);
+			push_token(&grouping_stack, lookahead);
 
 			//We are now required to see a valid ternary expression
 			generic_ast_node_t* expr = ternary_expression(fl, side);
@@ -1300,7 +1300,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			}
 
 			//Another fail case, if they're unmatched
-			if(pop_token(grouping_stack).tok != L_PAREN){
+			if(pop_token(&grouping_stack).tok != L_PAREN){
 				return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 			}
 
@@ -1469,7 +1469,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	ollie_token_t assignment_operator = BLANK;
 
 	//Probably way too much, just to be safe
-	lex_stack_t* stack = lex_stack_alloc();
+	lex_stack_t stack = lex_stack_alloc();
 	
 	//Grab the next token
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -1477,7 +1477,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	//So long as we don't see a semicolon(end) or an assignment op, or a left or right curly
 	while(is_assignment_operator(lookahead.tok) == FALSE && lookahead.tok != SEMICOLON && lookahead.tok != L_CURLY && lookahead.tok != R_CURLY){
 		//Push lookahead onto the stack
-		push_token(stack, lookahead);
+		push_token(&stack, lookahead);
 
 		//Otherwise refresh
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -1491,9 +1491,9 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 	//Once we get here, we either found the assignment op or we didn't. First though, let's
 	//put everything back where we found it
-	while(lex_stack_is_empty(stack) == FALSE){
+	while(lex_stack_is_empty(&stack) == FALSE){
 		//Pop the token off and put it back
-		push_back_token(pop_token(stack));
+		push_back_token(pop_token(&stack));
 	}
 	
 	//Once we make it here the lexstack has served its purpose, so we can scrap it
@@ -2027,7 +2027,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 	}
 
 	//We also must check for matching with the brackets
-	if(pop_token(grouping_stack).tok != L_BRACKET){
+	if(pop_token(&grouping_stack).tok != L_BRACKET){
 		return print_and_return_error("Unmatched brackets detected in array accessor", current_line);
 	}
 
@@ -2163,7 +2163,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 			//Array accessor
 			case L_BRACKET:
 				//We'll push this onto the grouping stack for later matching
-				push_token(grouping_stack, lookahead);
+				push_token(&grouping_stack, lookahead);
 
 				operator_node = array_accessor(fl, current_type, side);
 				break;
@@ -2630,7 +2630,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	}
 
 	//Push onto the stack for matching
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Grab the type specifier
 	generic_type_t* type_spec = type_specifier(fl);
@@ -2649,7 +2649,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	}
 
 	//Make sure we match
-	if(pop_token(grouping_stack).tok != L_THAN){
+	if(pop_token(&grouping_stack).tok != L_THAN){
 		return print_and_return_error("Unmatched angle brackets given to cast statement", parser_line_num);
 	}
 
@@ -3845,7 +3845,7 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
 	}
 
 	//Pop the grouping stack and ensure it matches
-	if(pop_token(grouping_stack).tok != L_BRACKET){
+	if(pop_token(&grouping_stack).tok != L_BRACKET){
 		return print_and_return_error("Unmatched brackets detected in array initializer", parser_line_num);
 	}
 
@@ -3898,7 +3898,7 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 	}
 
 	//Pop the grouping stack and ensure it matches
-	if(pop_token(grouping_stack).tok != L_CURLY){
+	if(pop_token(&grouping_stack).tok != L_CURLY){
 		return print_and_return_error("Unmatched brackets detected in struct initializer", parser_line_num);
 	}
 
@@ -3921,7 +3921,7 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side){
 		//A left bracket symbol means that we're encountering an array initializer
 		case L_BRACKET:
 			//Push this onto the grouping stack
-			push_token(grouping_stack, lookahead);
+			push_token(&grouping_stack, lookahead);
 
 			//Let the helper handle it
 			return array_initializer(fl, side);
@@ -3929,7 +3929,7 @@ static generic_ast_node_t* initializer(FILE* fl, side_type_t side){
 		//An L_CURLY signifies the start of a struct initializer
 		case L_CURLY:
 			//Push this onto the grouping stack for matching later
-			push_token(grouping_stack, lookahead);
+			push_token(&grouping_stack, lookahead);
 
 			//Let the helper handle it
 			return struct_initializer(fl, side);
@@ -4155,7 +4155,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 	}
 
 	//Otherwise we'll push onto the stack for later matching
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//This is just to seed our search
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4193,7 +4193,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 	} while (lookahead.tok != R_CURLY);
 
 	//Check for unamtched curlies
-	if(pop_token(grouping_stack).tok != L_CURLY){
+	if(pop_token(&grouping_stack).tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces in struct definition", parser_line_num);
 		num_errors++;
 		//Fail out here
@@ -4230,7 +4230,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Otherwise push this onto the grouping stack for later
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Once we've gotten past this point, we're safe to allocate this type. Function
 	//pointers are always private
@@ -4299,7 +4299,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	}
 
 	//Ensure that we pop the grouping stack and get a match
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		//Fail out
 		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
 		num_errors++;
@@ -4915,7 +4915,7 @@ static u_int8_t union_member_list(FILE* fl, generic_type_t* mutable_union_type, 
 	}
 
 	//Otherwise push onto the grouping stack for matching
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Refresh the token once
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -4943,7 +4943,7 @@ static u_int8_t union_member_list(FILE* fl, generic_type_t* mutable_union_type, 
 
 	//Once we get down here then we know that we've got an R_CURLY. Let's ensure that we have a grouping
 	//stack match
-	if(pop_token(grouping_stack).tok != L_CURLY){
+	if(pop_token(&grouping_stack).tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
 		num_errors++;
 		return FAILURE;
@@ -5149,7 +5149,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Push onto the stack for grouping
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Are we using user-defined enum values? If so, then we need to always see those
 	//from the user
@@ -5322,7 +5322,7 @@ static u_int8_t enum_definer(FILE* fl){
 	}
 
 	//Ensure that the grouping stack matches
-	if(pop_token(grouping_stack).tok != L_CURLY){
+	if(pop_token(&grouping_stack).tok != L_CURLY){
 		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num); 
 		num_errors++;
 		return FAILURE;
@@ -6098,7 +6098,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	}
 
 	//Push onto the stack for matching later
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 	
 	//We now need to see a valid conditional expression
 	generic_ast_node_t* expression_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
@@ -6123,7 +6123,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	}
 
 	//Now let's check the stack, we need to have matching ones here
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", current_line);
 	}
 
@@ -6161,7 +6161,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		}
 
 		//Push onto the stack for matching later
-		push_token(grouping_stack, lookahead);
+		push_token(&grouping_stack, lookahead);
 	
 		//We now need to see a valid conditional expression
 		generic_ast_node_t* else_if_expression_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
@@ -6186,7 +6186,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 		}
 
 		//Now let's check the stack, we need to have matching ones here
-		if(pop_token(grouping_stack).tok != L_PAREN){
+		if(pop_token(&grouping_stack).tok != L_PAREN){
 			return print_and_return_error("Unmatched parenthesis detected", current_line);
 		}
 
@@ -6301,7 +6301,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 		}
 
 		//Otherwise we'll add this into the grouping stack
-		push_token(grouping_stack, lookahead);
+		push_token(&grouping_stack, lookahead);
 
 		//Now we need to see a valid conditional expression
 		generic_ast_node_t* conditional = logical_or_expression(fl, SIDE_TYPE_RIGHT);
@@ -6329,7 +6329,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 		}
 
 		//Pop the grouping stack and validate that we match
-		if(pop_token(grouping_stack).tok != L_PAREN){
+		if(pop_token(&grouping_stack).tok != L_PAREN){
 			return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 		}
 
@@ -6414,7 +6414,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 	}
 
 	//Push to the stack for grouping
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional expression
 	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
@@ -6436,7 +6436,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 	}
 
 	//Check for matching next
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
@@ -6505,7 +6505,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	}
 
 	//Push to the stack for grouping
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid expression
 	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
@@ -6527,7 +6527,7 @@ static generic_ast_node_t* break_statement(FILE* fl){
 	}
 
 	//Check for matching next
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
@@ -6708,7 +6708,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	}
 
 	//Push to stack for later matching
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Now we must see a valid ternary-level expression
 	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
@@ -6758,7 +6758,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	}
 
 	//Check to make sure that the parenthesis match up
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", current_line);
 	}
 
@@ -6775,7 +6775,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	initialize_type_scope(type_symtab);
 
 	//Push to stack for later matching
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//We'll need to keep track of whether or not we have any duplicated values. As such, we'll keep an array
 	//of all the values that we do have. Since we can only have 1024 values, this array need only be 1024
@@ -6955,7 +6955,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	
 	//By the time we reach this, we should have seen a right curly
 	//However, we could still have matching issues, so we'll check for that here
-	if(pop_token(grouping_stack).tok != L_CURLY){
+	if(pop_token(&grouping_stack).tok != L_CURLY){
 		return print_and_return_error("Unmatched curly braces detected", current_line);
 	}
 
@@ -7000,7 +7000,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	}
 
 	//Push it to the stack for later matching
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
 	generic_ast_node_t* conditional_expr = logical_or_expression(fl, SIDE_TYPE_RIGHT);
@@ -7028,7 +7028,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	}
 
 	//We also need to check for matching
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
@@ -7102,7 +7102,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	}
 
 	//Push it to the stack for later matching
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
 	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
@@ -7130,7 +7130,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	}
 
 	//We also need to check for matching
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
@@ -7181,7 +7181,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	}
 
 	//Push to the stack for later matching
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	/**
 	 * Important note: The parenthesized area of a for statement represents a new lexical scope
@@ -7332,7 +7332,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	}
 
 	//Now check for matching
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 	
@@ -7385,7 +7385,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 	}
 
 	//Push onto the grouping stack so we can check matching
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Now if we make it here, we're safe to create the actual node
 	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
@@ -7432,7 +7432,7 @@ static generic_ast_node_t* compound_statement(FILE* fl){
 	//Once we've escaped out of the while loop, we know that the token we currently have
 	//is an R_CURLY
 	//We still must check for matching
-	if(pop_token(grouping_stack).tok != L_CURLY){
+	if(pop_token(&grouping_stack).tok != L_CURLY){
 		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
 
@@ -9208,7 +9208,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 	}
 
 	//Otherwise, we'll push this onto the list to check for later
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
 	//done here and we'll just return an empty list
@@ -9218,7 +9218,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 		//If we see an R_PAREN immediately, we can check and leave
 		case R_PAREN:
 			//If we have a mismatch, we can return these
-			if(pop_token(grouping_stack).tok != L_PAREN){
+			if(pop_token(&grouping_stack).tok != L_PAREN){
 				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -9252,7 +9252,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			}
 
 			//Also check for grouping
-			if(pop_token(grouping_stack).tok != L_PAREN){
+			if(pop_token(&grouping_stack).tok != L_PAREN){
 				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -9396,7 +9396,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 	}
 
 	//Otherwise it worked, so we need to check matching
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 		num_errors++;
 		return FAILURE;
@@ -9492,7 +9492,7 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 	}
 
 	//Add this onto the grouping stack
-	push_token(grouping_stack, lookahead);
+	push_token(&grouping_stack, lookahead);
 
 	//Now we can begin processing our parameters
 	//Grab the next token
@@ -9552,7 +9552,7 @@ static generic_ast_node_t* function_predeclaration(FILE* fl){
 
 after_rparen:
 	//Make sure that we can pop the grouping stack and get a match
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(&grouping_stack).tok != L_PAREN){
 		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
 	}
 
