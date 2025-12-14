@@ -67,7 +67,7 @@ static generic_type_t* immut_void = NULL;
 static generic_type_t* immut_char_ptr = NULL;
 
 //THe specialized nesting stack that we'll use to keep track of what kind of control structure we're in(loop, switch, defer, etc)
-static nesting_stack_t* nesting_stack = NULL; 
+static nesting_stack_t nesting_stack;
 
 //The number of errors
 static u_int32_t num_errors;
@@ -5993,7 +5993,7 @@ static generic_ast_node_t* labeled_statement(FILE* fl){
 
 	//Do we contain a defer at any point in here? If so, that is invalid because we could
 	//have the defer block duplicated multiple times. As such, a label would become ambiguous
-	if(nesting_stack_contains_level(nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
 		return print_and_return_error("Label statements cannot be placed inside of deferred blocks", parser_line_num);
 	}
 
@@ -6083,7 +6083,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	lexitem_t lookahead2;
 
 	//Push the if statement nesting level
-	push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
 	//Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
 	//will be a child of this statement
@@ -6240,7 +6240,7 @@ static generic_ast_node_t* if_statement(FILE* fl){
 	if_stmt->line_number = current_line;
 
 	//Now that we're done, we'll pop this off of the stack
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Once we reach the end, return the root level node
 	return if_stmt;
@@ -6269,7 +6269,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 
 	//Do we contain a defer at any point in here? If so, that is invalid because we could
 	//have the defer block duplicated multiple times. As such, a label would become ambiguous
-	if(nesting_stack_contains_level(nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
 		return print_and_return_error("Direct jump statements cannot be placed inside of deferred blocks", parser_line_num);
 	}
 
@@ -6382,7 +6382,7 @@ static generic_ast_node_t* continue_statement(FILE* fl){
 
 	//We need to ensure that we're in a loop here of some kind. If we aren't then this is 
 	//invalid
-	if(nesting_stack_contains_level(nesting_stack, NESTING_LOOP_STATEMENT) == FALSE){
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_LOOP_STATEMENT) == FALSE){
 		return print_and_return_error("Continue statements must be used inside of loops", parser_line_num);
 	}
 
@@ -6470,8 +6470,8 @@ static generic_ast_node_t* break_statement(FILE* fl){
 
 	//We need to ensure that we're in a loop here of some kind. If we aren't then this is 
 	//invalid
-	if(nesting_stack_contains_level(nesting_stack, NESTING_LOOP_STATEMENT) == FALSE
-		&& nesting_stack_contains_level(nesting_stack, NESTING_C_STYLE_CASE_STATEMENT) == FALSE){
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_LOOP_STATEMENT) == FALSE
+		&& nesting_stack_contains_level(&nesting_stack, NESTING_C_STYLE_CASE_STATEMENT) == FALSE){
 	
 		//Fail out here
 		return print_and_return_error("Break statements must be used inside of loops or c-style case/default statements", parser_line_num);
@@ -6558,7 +6558,7 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//Do we contain a defer at any point in here? If so, that is invalid because we already
 	//have a return. If this happens, we'll need to reject it
-	if(nesting_stack_contains_level(nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
+	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
 		return print_and_return_error("Ret statements cannot be placed inside of defer blocks", parser_line_num);
 	}
 
@@ -6986,7 +6986,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 
 	//Push the looping statement onto here
-	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//First create the actual node
 	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_TYPE_WHILE_STMT, SIDE_TYPE_LEFT);
@@ -7046,7 +7046,7 @@ static generic_ast_node_t* while_statement(FILE* fl){
 	while_stmt_node->line_number = current_line;
 
 	//And now that we're done, pop this off of the nesting stack
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//And we'll return the root reference
 	return while_stmt_node;
@@ -7068,7 +7068,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	lexitem_t lookahead;
 
 	//Push this nesting level onto the stack
-	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//Let's first create the overall global root node
 	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_TYPE_DO_WHILE_STMT, SIDE_TYPE_LEFT);
@@ -7145,7 +7145,7 @@ static generic_ast_node_t* do_while_statement(FILE* fl){
 	do_while_stmt_node->line_number = current_line;
 
 	//Now that we're done, remove this from the stack
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 	
 	//Otherwise if we made it here, everything went well
 	return do_while_stmt_node;
@@ -7167,7 +7167,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	lexitem_t lookahead;
 
 	//Push this nesting level onto the stack
-	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//We've already seen the for keyword, so let's create the root level node
 	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_TYPE_FOR_STMT, SIDE_TYPE_LEFT);
@@ -7354,7 +7354,7 @@ static generic_ast_node_t* for_statement(FILE* fl){
 	for_stmt_node->line_number = current_line;
 
 	//Now that we're done, pop this off of the stack
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//It all worked here, so we'll return the root
 	return for_stmt_node;
@@ -7535,12 +7535,12 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	//statements can only be nested inside of a function, and nothing else. So, if
 	//the very first token that we see here is not a function, we're immediately
 	//failing out of this
-	if(peek_nesting_level(nesting_stack) != NESTING_FUNCTION){
+	if(peek_nesting_level(&nesting_stack) != NESTING_FUNCTION){
 		return print_and_return_error("Defer statements must be in the top lexical scope of a function", parser_line_num);
 	}
 
 	//Push this on as a nesting level
-	push_nesting_level(nesting_stack, NESTING_DEFER_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_DEFER_STATEMENT);
 
 	//Now if we see that this is NULL, we'll allocate here
 	if(deferred_stmts_node == NULL){
@@ -7559,7 +7559,7 @@ static generic_ast_node_t* defer_statement(FILE* fl){
 	add_child_node(deferred_stmts_node, compound_stmt_node);
 
 	//And pop it off now that we're done
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//And give back nothing, we're all set
 	return NULL;
@@ -7758,7 +7758,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	switch(lookahead.tok){
 		case ARROW:
 			//Record that we're in a default statement in here
-			push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+			push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 			//We'll let the helper deal with it
 			default_compound_statement = compound_statement(fl);
@@ -7778,7 +7778,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
 		//This now means that we're in a c-style default statement
 		case COLON:
 			//Record that we're in a case statement in here
-			push_nesting_level(nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
+			push_nesting_level(&nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
 
 			//We'll need to reassign the value of the original default statement
 			default_stmt->ast_node_type = AST_NODE_TYPE_C_STYLE_DEFAULT_STMT;
@@ -7818,7 +7818,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
 	}
 
 	//And pop it off now that we're done
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Otherwise it all worked, so we'll just return
 	return default_stmt;
@@ -7985,7 +7985,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	switch(lookahead.tok){
 		case ARROW:
 			//Push this onto the stack as a nesting level
-			push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+			push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 			//We'll let the helper deal with it
 			switch_compound_statement = compound_statement(fl);
@@ -8005,7 +8005,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		//This now means that we're in a c-style case statement
 		case COLON:
 			//Push the c-style version on, to differentiate from the other type
-			push_nesting_level(nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
+			push_nesting_level(&nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
 
 			//We'll need to reassign the value of the original case statement
 			case_stmt->ast_node_type = AST_NODE_TYPE_C_STYLE_CASE_STMT;
@@ -8045,7 +8045,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	}
 
 	//And now that we're done, pop this off of the stack
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Finally give this back
 	return case_stmt;
@@ -9645,7 +9645,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	}
 
 	//We also need to mark that we're in a function using the nesting stack
-	push_nesting_level(nesting_stack, NESTING_FUNCTION);
+	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 
 	//We need a stack for storing jump statements. We need to check these later because if
 	//we check them as we go, we don't get full jump functionality
@@ -9877,7 +9877,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	finalize_variable_scope(variable_symtab);
 
 	//Remove the nesting level now that we're not in a function
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//All good so we can get out
 	return function_node;
