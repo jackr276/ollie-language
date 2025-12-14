@@ -16,19 +16,20 @@
 
 
 /**
- * Create a stack
+ * Create a stack. The resulting control structure
+ * will be stack allocated
  */
-lex_stack_t* lex_stack_alloc(){
+lex_stack_t lex_stack_alloc(){
 	//Allocate our stack
-	lex_stack_t* stack = calloc(1, sizeof(lex_stack_t));
+	lex_stack_t stack;
 	
 	//Current token count is 0
-	stack->num_tokens = 0;
+	stack.num_tokens = 0;
 	//We start off with 10
-	stack->current_max_size = DEFAULT_INITIAL_LEXSTACK_SIZE;
+	stack.current_max_size = DEFAULT_INITIAL_LEXSTACK_SIZE;
 
 	//Now let's allocate our internal array
-	stack->tokens = calloc(stack->current_max_size, sizeof(lexitem_t));
+	stack.tokens = calloc(stack.current_max_size, sizeof(lexitem_t));
 	
 	//Return the stack
 	return stack;
@@ -136,19 +137,16 @@ lexitem_t peek_token(lex_stack_t* stack){
 /**
  * Completely free all memory in the stack
  */
-void lex_stack_dealloc(lex_stack_t** stack){
+void lex_stack_dealloc(lex_stack_t* stack){
 	//Fatal error here, something went wrong if the user is trying this
-	if(stack == NULL || *stack == NULL){
+	if(stack->tokens == NULL){
 		printf("Fatal internal compiler error: attempt to free a null lexstack\n");
 		exit(1);
 	}
 
 	//Free the internal array
-	free((*stack)->tokens);
+	free(stack->tokens);
 
-	//Now free the stack
-	free(*stack);
-
-	//NULL it as a warning
-	*stack = NULL;
+	//Set this to null as a warning
+	stack->tokens = NULL;
 }

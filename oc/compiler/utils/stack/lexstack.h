@@ -30,9 +30,10 @@ struct lex_stack_t {
 
 
 /**
- * Initialize a stack
+ * Initialize a lex stack. The resulting
+ * control structure will be stack allocated
  */
-lex_stack_t* lex_stack_alloc();
+lex_stack_t lex_stack_alloc();
 
 /**
  * Push a pointer onto the top of the stack
@@ -58,6 +59,6 @@ lexitem_t peek_token(lex_stack_t* stack);
 /**
  * Destroy the stack with a proper cleanup
  */
-void lex_stack_dealloc(lex_stack_t** stack);
+void lex_stack_dealloc(lex_stack_t* stack);
 
 #endif /* LEX_STACK_H */

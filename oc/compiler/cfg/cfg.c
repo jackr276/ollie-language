@@ -48,8 +48,8 @@ static generic_type_t* i64 = NULL;
 //hold values that we can break & continue
 //to. This is done here to avoid the need
 //to send value packages at each rule
-static heap_stack_t* break_stack = NULL;
-static heap_stack_t* continue_stack = NULL;
+static heap_stack_t break_stack;
+static heap_stack_t continue_stack;
 //The overall nesting stack will tell us what level of nesting we're at(if, switch/case, loop)
 static nesting_stack_t* nesting_stack = NULL;
 //Keep a list of all lable statements in the function(block jumps are internal only)
@@ -349,7 +349,7 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
  */
 dynamic_array_t* compute_reverse_post_order_traversal_reverse_cfg(basic_block_t* entry){
 	//For our postorder traversal
-	heap_stack_t* stack = heap_stack_alloc();
+	heap_stack_t stack = heap_stack_alloc();
 	//We'll need this eventually for postorder
 	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
 
@@ -359,16 +359,16 @@ dynamic_array_t* compute_reverse_post_order_traversal_reverse_cfg(basic_block_t*
 	}
 
 	//Invoke the recursive helper
-	reverse_post_order_traversal_reverse_cfg_rec(stack, entry);
+	reverse_post_order_traversal_reverse_cfg_rec(&stack, entry);
 
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
-	while(heap_stack_is_empty(stack) == FALSE){
-		dynamic_array_add(reverse_post_order_traversal, pop(stack));
+	while(heap_stack_is_empty(&stack) == FALSE){
+		dynamic_array_add(reverse_post_order_traversal, pop(&stack));
 	}
 
 	//And when we're done, get rid of the stack
-	heap_stack_dealloc(stack);
+	heap_stack_dealloc(&stack);
 
 	//Give back the reverse post order traversal
 	return reverse_post_order_traversal;
@@ -405,21 +405,21 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
  */
 dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry){
 	//For our postorder traversal
-	heap_stack_t* stack = heap_stack_alloc();
+	heap_stack_t stack = heap_stack_alloc();
 	//We'll need this eventually for postorder
 	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
 
 	//Invoke the recursive helper
-	reverse_post_order_traversal_rec(stack, entry);
+	reverse_post_order_traversal_rec(&stack, entry);
 
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
-	while(heap_stack_is_empty(stack) == FALSE){
-		dynamic_array_add(reverse_post_order_traversal, pop(stack));
+	while(heap_stack_is_empty(&stack) == FALSE){
+		dynamic_array_add(reverse_post_order_traversal, pop(&stack));
 	}
 
 	//And when we're done, get rid of the stack
-	heap_stack_dealloc(stack);
+	heap_stack_dealloc(&stack);
 
 	//Give back the reverse post order traversal
 	return reverse_post_order_traversal;
@@ -5700,7 +5700,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//All breaks will go to the exit block
 	//Hold off on the continue block for now
-	push(break_stack, for_stmt_exit_block);
+	push(&break_stack, for_stmt_exit_block);
 
 	//Once we get here, we already know what the start and exit are for this statement
 	result_package.starting_block = for_stmt_entry_block;
@@ -5791,7 +5791,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	emit_jump(for_stmt_update_block, condition_block);
 
 	//All continues will go to the update block
-	push(continue_stack, for_stmt_update_block);
+	push(&continue_stack, for_stmt_update_block);
 	
 	//Advance to the next sibling
 	ast_cursor = ast_cursor->next_sibling;
@@ -5836,8 +5836,8 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	}
 
 	//Now that we're done, we'll need to remove these both from the stack
-	pop(continue_stack);
-	pop(break_stack);
+	pop(&continue_stack);
+	pop(&break_stack);
 
 	//Give back the result package here
 	return result_package;
@@ -5867,9 +5867,9 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	do_while_stmt_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
-	push(continue_stack, do_while_stmt_entry_block);
+	push(&continue_stack, do_while_stmt_entry_block);
 	//And we'll push the end block onto the break stack, because all breaks go there
-	push(break_stack, do_while_stmt_exit_block);
+	push(&break_stack, do_while_stmt_exit_block);
 
 	//We can add these into the result package already
 	result_package.starting_block = do_while_stmt_entry_block;
@@ -5937,8 +5937,8 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	}
 
 	//Now that we're done here, pop the break/continue stacks to remove these blocks
-	pop(continue_stack);
-	pop(break_stack);
+	pop(&continue_stack);
+	pop(&break_stack);
 
 	//Always return the entry block
 	return result_package;
@@ -5968,9 +5968,9 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	while_statement_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
-	push(continue_stack, while_statement_entry_block);
+	push(&continue_stack, while_statement_entry_block);
 	//And we'll push the end block onto the break stack, because all breaks go there
-	push(break_stack, while_statement_end_block);
+	push(&break_stack, while_statement_end_block);
 
 	//We already know what to populate our result package with here
 	result_package.starting_block = while_statement_entry_block;
@@ -6037,8 +6037,8 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	}
 
 	//Now that we're done, pop these both off their respective stacks
-	pop(break_stack);
-	pop(continue_stack);
+	pop(&break_stack);
+	pop(&continue_stack);
 
 	//Now we're done, so
 	return result_package;
@@ -6461,7 +6461,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	basic_block_t* ending_block = basic_block_alloc_and_estimate();
 
 	//The ending block now goes onto the breaking stack
-	push(break_stack, ending_block);
+	push(&break_stack, ending_block);
 
 	//We already know what these will be, so populate them
 	result_package.starting_block = root_level_block;
@@ -7105,7 +7105,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
 
 					//Peek the continue block off of the stack
-					basic_block_t* continuing_to = peek(continue_stack);
+					basic_block_t* continuing_to = peek(&continue_stack);
 
 					//We always jump to the start of the loop statement unconditionally
 					emit_jump(current_block, continuing_to);
@@ -7134,7 +7134,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
-					basic_block_t* continuing_to = peek(continue_stack);
+					basic_block_t* continuing_to = peek(&continue_stack);
 
 					//Select the appropriate branch type using
 					//a normal jump
@@ -7170,7 +7170,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
 
 					//Peak off of the break stack to get what we're breaking to
-					basic_block_t* breaking_to = peek(break_stack);
+					basic_block_t* breaking_to = peek(&break_stack);
 
 					//We will jump to it -- this is always an uncoditional jump
 					emit_jump(current_block, breaking_to);
@@ -7202,7 +7202,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
-					basic_block_t* breaking_to = peek(break_stack);
+					basic_block_t* breaking_to = peek(&break_stack);
 
 					/**
 					 * Now we'll emit the branch like so:
@@ -7618,7 +7618,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
 
 					//Peek the continue block off of the stack
-					basic_block_t* continuing_to = peek(continue_stack);
+					basic_block_t* continuing_to = peek(&continue_stack);
 
 					//We always jump to the start of the loop statement unconditionally
 					emit_jump(current_block, continuing_to);
@@ -7647,7 +7647,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
-					basic_block_t* continuing_to = peek(continue_stack);
+					basic_block_t* continuing_to = peek(&continue_stack);
 
 					//Select the appropriate branch type, we will not use an inverse jump here
 					branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
@@ -7682,7 +7682,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
 
 					//Peak off of the break stack to get what we're breaking to
-					basic_block_t* breaking_to = peek(break_stack);
+					basic_block_t* breaking_to = peek(&break_stack);
 
 					//We will jump to it -- this is always an uncoditional jump
 					emit_jump(current_block, breaking_to);
@@ -7714,7 +7714,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
-					basic_block_t* breaking_to = peek(break_stack);
+					basic_block_t* breaking_to = peek(&break_stack);
 
 					/**
 					 * Now we'll emit the branch like so:
@@ -9005,8 +9005,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	rename_all_variables(cfg);
 
 	//Once we get here, we're done with these two stacks
-	heap_stack_dealloc(break_stack);	
-	heap_stack_dealloc(continue_stack);	
+	heap_stack_dealloc(&break_stack);	
+	heap_stack_dealloc(&continue_stack);	
 	nesting_stack_dealloc(&nesting_stack);
 
 	//Give back the reference
