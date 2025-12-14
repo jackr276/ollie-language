@@ -270,6 +270,46 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side){
 
 
 /**
+ * Emit the product of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 * constant2
+ */
+void multiply_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+
+}
+
+
+/**
+ * Emit the quotient of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 / constant2
+ */
+void divide_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+
+}
+
+
+/**
+ * Emit the sum of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 + constant2
+ */
+void add_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+
+}
+
+
+/**
+ * Emit the difference of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 - constant2
+ */
+void subtract_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+
+}
+
+
+/**
  * Simple function that handles all of the hard work for node allocation for us. The user gives us the pointer
  * that they want to use. It is assumed that the user already knows the proper type and takes appropriate action based
  * on that

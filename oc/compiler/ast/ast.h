@@ -186,6 +186,34 @@ generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t si
 generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side);
 
 /**
+ * Emit the product of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 * constant2
+ */
+void multiply_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the quotient of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 / constant2
+ */
+void divide_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the sum of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 + constant2
+ */
+void add_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the difference of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 - constant2
+ */
+void subtract_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
  * A utility function for node duplication
  */
 generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side);
