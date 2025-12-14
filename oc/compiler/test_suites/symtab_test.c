@@ -26,8 +26,7 @@ static void test_variables(){
 	initialize_variable_scope(symtab);
 
 	for(u_int8_t i = 0; i < 5; i++){
-		dynamic_string_t string;
-		dynamic_string_alloc(&string);
+		dynamic_string_t string = dynamic_string_alloc();
 		dynamic_string_set(&string, idents_l1[i]);
 
 		num_collisions += insert_variable(symtab, create_variable_record(string));
@@ -40,8 +39,7 @@ static void test_variables(){
 	symtab_variable_record_t* found;
 
 	for(u_int8_t i = 0; i < 2; i++){
-		dynamic_string_t string;
-		dynamic_string_alloc(&string);
+		dynamic_string_t string = dynamic_string_alloc();
 		dynamic_string_set(&string, idents_l2[i]);
 
 		num_collisions += insert_variable(symtab, create_variable_record(string));
