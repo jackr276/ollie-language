@@ -128,10 +128,9 @@ u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
  * Add an element into the dynamic array
  */
 void dynamic_array_add(dynamic_array_t* array, void* ptr){
-	//Let's just double check here
+	//Let's just double check here. Hard fail if this happens
 	if(ptr == NULL){
 		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
-		//This is a severe enough fail case that we should leave immediately
 		exit(1);
 	}
 	
@@ -180,9 +179,9 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
 	//Return NULL here. It is the caller's responsibility
 	//to check this
 	if(array->current_max_size <= index){
-		return NULL;
+		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_index);
+		exit(1);
 	}
-
 
 	//Otherwise we should be good to grab. Again we do not delete here
 	return array->internal_array[index];
@@ -197,8 +196,8 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
 void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index){
 	//Let's just double check here
 	if(ptr == NULL){
-		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
-		return;
+		printf("ERROR: Attempting to set index %d to a NULL pointer ino a dynamic array\n", index);
+		exit(1);
 	}
 
 	//There is always a chance that we'll need to resize here. If so, we'll resize

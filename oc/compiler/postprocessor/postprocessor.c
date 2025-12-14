@@ -42,7 +42,7 @@ static instruction_t* combine_blocks(cfg_t* cfg, basic_block_t* a, basic_block_t
 	//As such, we won't even bother looking at the predecessors
 
 	//Now merge successors
-	for(u_int16_t i = 0; b->successors.current_index; i++){
+	for(u_int16_t i = 0; i < b->successors.current_index; i++){
 		basic_block_t* successor = dynamic_array_get_at(&(b->successors), i);
 
 		//Add b's successors to be a's successors
