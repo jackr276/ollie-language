@@ -1170,7 +1170,7 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 	}
 
 	//Create the queue
-	heap_queue_t* queue = heap_queue_alloc();
+	heap_queue_t queue = heap_queue_alloc();
 
 	//The visited array
 	dynamic_array_t* visited = dynamic_array_alloc();
@@ -1182,12 +1182,12 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 	dynamic_array_t* postdominator_set = B->postdominator_set;
 
 	//Seed the search with B
-	enqueue(queue, B);
+	enqueue(&queue, B);
 
 	//So long as the queue isn't empty
-	while(queue_is_empty(queue) == FALSE){
+	while(queue_is_empty(&queue) == FALSE){
 		//Pop off of the queue
-		basic_block_t* current = dequeue(queue);
+		basic_block_t* current = dequeue(&queue);
 
 		/**
 		 * If we have found the first breadth-first successor that postdominates B,
@@ -1207,7 +1207,7 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 			basic_block_t* successor = current->successors->internal_array[j];
 
 			if(dynamic_array_contains(visited, successor) == NOT_FOUND){
-				enqueue(queue, successor);
+				enqueue(&queue, successor);
 			}
 		}
 	}
@@ -1216,7 +1216,7 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 	dynamic_array_dealloc(visited);
 
 	//Destroy the queue
-	heap_queue_dealloc(queue);
+	heap_queue_dealloc(&queue);
 
 	//Give it back
 	return ipdom;
@@ -5249,7 +5249,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 	//array. Each function will be printed using the BFS strategy
 	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
 		//We'll need a queue for our BFS
-		heap_queue_t* queue = heap_queue_alloc();
+		heap_queue_t queue = heap_queue_alloc();
 
 		//Grab this out for convenience
 		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
@@ -5258,12 +5258,12 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
 
 		//Seed the search by adding the funciton block into the queue
-		enqueue(queue, function_entry_block);
+		enqueue(&queue, function_entry_block);
 
 		//So long as the queue isn't empty
-		while(queue_is_empty(queue) == FALSE){
+		while(queue_is_empty(&queue) == FALSE){
 			//Pop off of the queue
-			block = dequeue(queue);
+			block = dequeue(&queue);
 
 			//If this wasn't visited, we'll print
 			if(block->visited == FALSE){
@@ -5279,13 +5279,13 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 				basic_block_t* successor = block->successors->internal_array[j];
 
 				if(successor->visited == FALSE){
-					enqueue(queue, successor);
+					enqueue(&queue, successor);
 				}
 			}
 		}
 
 		//Destroy the heap queue when done
-		heap_queue_dealloc(queue);
+		heap_queue_dealloc(&queue);
 	}
 }
 

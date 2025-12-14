@@ -11,13 +11,19 @@
 #include "../constants.h"
 
 /**
- * Allocate a heap queue structure
+ * Allocate a heap queue structure. The overall
+ * heap structure will be allocated to the stack
  */
-heap_queue_t* heap_queue_alloc(){
+heap_queue_t heap_queue_alloc(){
 	//First we allocate it
-	heap_queue_t* queue = calloc(1, sizeof(heap_queue_t));
+	heap_queue_t queue;
+
 	//We currently have nothing
-	queue->num_nodes = 0;
+	queue.num_nodes = 0;
+
+	//These are both initially NULL
+	queue.head = NULL;
+	queue.tail = NULL;
 
 	//And we're done, just return it
 	return queue;
