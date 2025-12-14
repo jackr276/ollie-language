@@ -5374,7 +5374,7 @@ void cleanup_all_control_relations(cfg_t* cfg){
 
 		//Deallocate the reverse post order set
 		if(block->reverse_post_order_reverse_cfg.internal_array != NULL){
-			dynamic_array_dealloc((&(block->reverse_post_order_reverse_cfg));
+			dynamic_array_dealloc(&(block->reverse_post_order_reverse_cfg));
 		}
 
 		//Deallocate the reverse post order set
@@ -8180,11 +8180,11 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	determine_and_insert_return_statements(function_exit_block);
 
 	//We'll need to go through and finalize all user defined jump statements if there are any
-	finalize_all_user_defined_jump_statements(current_function_labeled_blocks, current_function_user_defined_jump_statements);
+	finalize_all_user_defined_jump_statements(&current_function_labeled_blocks, &current_function_user_defined_jump_statements);
 
 	//Add the start and end blocks to their respective arrays
-	dynamic_array_add(cfg->function_entry_blocks, function_starting_block);
-	dynamic_array_add(cfg->function_exit_blocks, function_exit_block);
+	dynamic_array_add(&(cfg->function_entry_blocks), function_starting_block);
+	dynamic_array_add(&(cfg->function_exit_blocks), function_exit_block);
 
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;
@@ -8193,12 +8193,10 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	function_exit_block = NULL;
 
 	//Now we can scrap the labeled block array
-	dynamic_array_dealloc(current_function_labeled_blocks);
-	current_function_labeled_blocks = NULL;
+	dynamic_array_dealloc(&current_function_labeled_blocks);
 
 	//Deallocate the current function's user defined jumps as well
-	dynamic_array_dealloc(current_function_user_defined_jump_statements);
-	current_function_user_defined_jump_statements = NULL;
+	dynamic_array_dealloc(&current_function_user_defined_jump_statements);
 
 	//Remove it now that we're done
 	pop_nesting_level(&nesting_stack);
@@ -8259,7 +8257,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 	global_variable->variable->initialized = TRUE;
 
 	//And add it into the CFG
-	dynamic_array_add(cfg->global_variables, global_variable);
+	dynamic_array_add(&(cfg->global_variables), global_variable);
 
 	//Grab out the initializer node
 	generic_ast_node_t* initializer = node->first_child;
@@ -8275,7 +8273,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			global_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
 
 			//Let the helper take care of it
-			emit_global_array_initializer(initializer, global_variable->initializer_value.array_initializer_values);
+			emit_global_array_initializer(initializer, &(global_variable->initializer_value.array_initializer_values));
 
 			break;
 		
@@ -8311,7 +8309,7 @@ static void visit_global_declare_statement(generic_ast_node_t* node){
 	global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_NONE;
 
 	//And add it into the CFG
-	dynamic_array_add(cfg->global_variables, global_variable);
+	dynamic_array_add(&(cfg->global_variables), global_variable);
 }
 
 
@@ -8540,7 +8538,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
 	while(cursor != NULL){
 		//Grab it out
-		symtab_variable_record_t* member_variable = dynamic_array_get_at(struct_type->internal_types.struct_table, member_index);
+		symtab_variable_record_t* member_variable = dynamic_array_get_at(&(struct_type->internal_types.struct_table), member_index);
 
 		//We can calculate the offset by adding the struct offset to the starting offset
 		u_int32_t current_offset = offset + member_variable->struct_offset;
@@ -8863,7 +8861,7 @@ void print_all_cfg_blocks(cfg_t* cfg){
 	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
 
 	//Print all global variables after the blocks
-	print_all_global_variables(stdout, cfg->global_variables);
+	print_all_global_variables(stdout, &(cfg->global_variables));
 }
 
 
@@ -8872,9 +8870,9 @@ void print_all_cfg_blocks(cfg_t* cfg){
  */
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
 	//For each block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//Set it's visited status to 0
 		block->visited = FALSE;
@@ -8929,9 +8927,9 @@ void calculate_all_reverse_traversals(cfg_t* cfg){
 
 	//For each function entry block, recompute all reverse post order
 	//CFG work
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Reset the visited status
 		reset_visited_status(cfg, FALSE);

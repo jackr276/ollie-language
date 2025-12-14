@@ -39,19 +39,25 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	//In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
 	//As such, we won't even bother looking at the predecessors
 
-	//Now merge successors
-	for(u_int16_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(b->successors, i);
+	//If we have any successors
+	if(b->successors.internal_array != NULL){
+		//Now merge successors
+		for(u_int16_t i = 0; i < b->successors.current_index; i++){
+			basic_block_t* successor = dynamic_array_get_at(&(b->successors), i);
 
-		//Add b's successors to be a's successors
-		add_successor_only(a, successor);
+			//Add b's successors to be a's successors
+			add_successor_only(a, successor);
 
-		//Now for each of the predecessors that equals b, it needs to now point to A
-		for(u_int16_t j = 0; successor->predecessors != NULL && j < successor->predecessors->current_index; j++){
-			//If it's pointing to b, it needs to be updated
-			if(successor->predecessors->internal_array[j] == b){
-				//Update it to now be correct
-				successor->predecessors->internal_array[j] = a;
+			//If this given successor has any predecessors
+			if(successor->predecessors.internal_array != NULL){
+				//Now for each of the predecessors that equals b, it needs to now point to A
+				for(u_int16_t j = 0; j < successor->predecessors.current_index; j++){
+					//If it's pointing to b, it needs to be updated
+					if(successor->predecessors.internal_array[j] == b){
+						//Update it to now be correct
+						successor->predecessors.internal_array[j] = a;
+					}
+				}
 			}
 		}
 	}
@@ -84,7 +90,7 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	}
 	
 	//We'll remove this from the list of created blocks
-	dynamic_array_delete(cfg->created_blocks, b);
+	dynamic_array_delete(&(cfg->created_blocks), b);
 }
 
 
@@ -194,9 +200,9 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 	}
 
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//If it's not in the current function and it's temporary, get rid of it
 		if(variable->is_temporary == TRUE && block->function_defined_in != current_function){
@@ -291,12 +297,12 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
  */
 static void mark(cfg_t* cfg){
 	//First we'll need a worklist
-	dynamic_array_t* worklist = dynamic_array_alloc();
+	dynamic_array_t worklist = dynamic_array_alloc();
 
 	//Now we'll go through every single operation in every single block
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block we'll work on
-		basic_block_t* current = dynamic_array_get_at(cfg->created_blocks, _);
+		basic_block_t* current = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//Grab a cursor to the current statement
 		instruction_t* current_stmt = current->leader_statement;
@@ -325,7 +331,7 @@ static void mark(cfg_t* cfg){
 					//Mark this as useful
 					current_stmt->mark = TRUE;
 					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
+					dynamic_array_add(&worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
@@ -339,7 +345,7 @@ static void mark(cfg_t* cfg){
 				case THREE_ADDR_CODE_ASM_INLINE_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
+					dynamic_array_add(&worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
@@ -352,7 +358,7 @@ static void mark(cfg_t* cfg){
 				case THREE_ADDR_CODE_FUNC_CALL:
 					current_stmt->mark = TRUE;
 					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
+					dynamic_array_add(&worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
@@ -366,7 +372,7 @@ static void mark(cfg_t* cfg){
 				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 					current_stmt->mark = TRUE;
 					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
+					dynamic_array_add(&worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
@@ -379,7 +385,7 @@ static void mark(cfg_t* cfg){
 				case THREE_ADDR_CODE_IDLE_STMT:
 					current_stmt->mark = TRUE;
 					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
+					dynamic_array_add(&worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
@@ -393,7 +399,7 @@ static void mark(cfg_t* cfg){
 				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 					current_stmt->mark = TRUE;
 					//Add it to the list
-					dynamic_array_add(worklist, current_stmt);
+					dynamic_array_add(&worklist, current_stmt);
 					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
@@ -410,24 +416,28 @@ static void mark(cfg_t* cfg){
 
 	//Now that we've marked everything that is initially critical, we'll go through and trace
 	//these values back through the code
-	while(dynamic_array_is_empty(worklist) == FALSE){
+	while(dynamic_array_is_empty(&worklist) == FALSE){
 		//Grab out the operation from the worklist(delete from back-most efficient)
-		instruction_t* stmt = dynamic_array_delete_from_back(worklist);
+		instruction_t* stmt = dynamic_array_delete_from_back(&worklist);
 		//Generic array for holding parameters
-		dynamic_array_t* params;
+		dynamic_array_t params;
 
 		//There are several unique cases that require extra attention
 		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
 			case THREE_ADDR_CODE_PHI_FUNC:
 				params = stmt->parameters;
-				//Add this in here
-				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-					//Grab the param out
-					three_addr_var_t* phi_func_param = dynamic_array_get_at(params, i);
 
-					//Add the definitions in
-					mark_and_add_definition(cfg, phi_func_param, stmt->function, worklist);
+				//If we have any
+				if(params.internal_array != NULL){
+					//Add this in here
+					for(u_int16_t i = 0; i < params.current_index; i++){
+						//Grab the param out
+						three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
+
+						//Add the definitions in
+						mark_and_add_definition(cfg, phi_func_param, stmt->function, &worklist);
+					}
 				}
 
 				break;
@@ -438,9 +448,12 @@ static void mark(cfg_t* cfg){
 				//Grab the parameters out
 				params = stmt->parameters;
 
-				//Run through them all and mark them
-				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-					mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
+				//If we have any
+				if(params.internal_array != NULL){
+					//Run through them all and mark them
+					for(u_int16_t i = 0; i < params.current_index; i++){
+						mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
+					}
 				}
 
 				break;
@@ -452,18 +465,20 @@ static void mark(cfg_t* cfg){
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op1, stmt->function, &worklist);
 
 				//Grab the parameters out
 				params = stmt->parameters;
 
-				//Run through them all and mark them
-				for(u_int16_t i = 0; params != NULL && i < params->current_index; i++){
-					mark_and_add_definition(cfg, dynamic_array_get_at(params, i), stmt->function, worklist);
+				//If we have any
+				if(params.internal_array != NULL){
+					//Run through them all and mark them
+					for(u_int16_t i = 0; i < params.current_index; i++){
+						mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
+					}
 				}
 
 				break;
-
 
 			/**
 			 * There will be special rules for store statements because we have assignees
@@ -473,18 +488,18 @@ static void mark(cfg_t* cfg){
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				//Add the assignee as if it was a variable itself
-				mark_and_add_definition(cfg, stmt->assignee, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->assignee, stmt->function, &worklist);
 
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
-				mark_and_add_definition(cfg, stmt->op2, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op1, stmt->function, &worklist);
+				mark_and_add_definition(cfg, stmt->op2, stmt->function, &worklist);
 				break;
 
 			//In all other cases, we'll just mark and add the two operands 
 			default:
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(cfg, stmt->op1, stmt->function, worklist);
-				mark_and_add_definition(cfg, stmt->op2, stmt->function, worklist);
+				mark_and_add_definition(cfg, stmt->op1, stmt->function, &worklist);
+				mark_and_add_definition(cfg, stmt->op2, stmt->function, &worklist);
 
 				break;
 		}
@@ -502,59 +517,61 @@ static void mark(cfg_t* cfg){
 		 * 		mark j
 		 * 		add j to worklist
 		 */
+		//If this block even has an RDF(it may now)
+		if(block->reverse_dominance_frontier.internal_array != NULL){
+			for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+				//Grab the block out of the RDF
+				basic_block_t* rdf_block = dynamic_array_get_at(&(block->reverse_dominance_frontier), i);
 
-		for(u_int16_t i = 0; block->reverse_dominance_frontier != NULL && i < block->reverse_dominance_frontier->current_index; i++){
-			//Grab the block out of the RDF
-			basic_block_t* rdf_block = dynamic_array_get_at(block->reverse_dominance_frontier, i);
+				//Grab out the exit statement
+				instruction_t* exit_statement = rdf_block->exit_statement;
 
-			//Grab out the exit statement
-			instruction_t* exit_statement = rdf_block->exit_statement;
+				//We'll now go based on what the exit statement is
+				switch(exit_statement->statement_type){
+					/**
+					 * An indirect jump means that we had some kind of switch statement. This
+					 * will be marked as important
+					 */
+					case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+						//Avoids infinite loops
+						if(exit_statement->mark == FALSE){
+							//Mark it
+							exit_statement->mark = TRUE;
+							//Add it to the worklist
+							dynamic_array_add(&worklist, exit_statement);
+							//This now has a mark
+							rdf_block->contains_mark = TRUE;
+						}
 
-			//We'll now go based on what the exit statement is
-			switch(exit_statement->statement_type){
-				/**
-				 * An indirect jump means that we had some kind of switch statement. This
-				 * will be marked as important
-				 */
-				case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
-					//Avoids infinite loops
-					if(exit_statement->mark == FALSE){
-						//Mark it
-						exit_statement->mark = TRUE;
-						//Add it to the worklist
-						dynamic_array_add(worklist, exit_statement);
-						//This now has a mark
-						rdf_block->contains_mark = TRUE;
-					}
+						break;
 
-					break;
+					/**
+					 * This is the most common case, we'll have a branch that
+					 * ends the predecessor
+					 */
+					case THREE_ADDR_CODE_BRANCH_STMT:
+						//Avoids infinite loops
+						if(exit_statement->mark == FALSE){
+							//Mark it
+							exit_statement->mark = TRUE;
+							//Add it to the worklist
+							dynamic_array_add(&worklist, exit_statement);
+							//This now has a mark
+							rdf_block->contains_mark = TRUE;
+						}
 
-				/**
-				 * This is the most common case, we'll have a branch that
-				 * ends the predecessor
-				 */
-				case THREE_ADDR_CODE_BRANCH_STMT:
-					//Avoids infinite loops
-					if(exit_statement->mark == FALSE){
-						//Mark it
-						exit_statement->mark = TRUE;
-						//Add it to the worklist
-						dynamic_array_add(worklist, exit_statement);
-						//This now has a mark
-						rdf_block->contains_mark = TRUE;
-					}
+						break;
 
-					break;
-
-				//By default just leave
-				default:
-					break;
+					//By default just leave
+					default:
+						break;
+				}
 			}
 		}
 	}
 
 	//And get rid of the worklist
-	dynamic_array_dealloc(worklist);
+	dynamic_array_dealloc(&worklist);
 }
 
 
@@ -564,12 +581,12 @@ static void mark(cfg_t* cfg){
  */
 static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
 	//Use a clone since we are mutating
-	dynamic_array_t* clone = clone_dynamic_array(empty_block->predecessors);
+	dynamic_array_t clone = clone_dynamic_array(&(empty_block->predecessors));
 
 	//For everything in the predecessor set of the empty block
-	for(u_int16_t _ = 0; _ < clone->current_index; _++){
+	for(u_int16_t _ = 0; _ < clone.current_index; _++){
 		//Grab a given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(clone, _);
+		basic_block_t* predecessor = dynamic_array_get_at(&clone, _);
 
 		//The empty block is no longer a successor of this predecessor
 		delete_successor(predecessor, empty_block);
@@ -580,9 +597,9 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 		if(predecessor->jump_table != NULL){
 			for(u_int16_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
 				//If this equals the other node, we'll need to replace it
-				if(dynamic_array_get_at(predecessor->jump_table->nodes, idx) == empty_block){
+				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), idx) == empty_block){
 					//This now points to the replacement
-					dynamic_array_set_at(predecessor->jump_table->nodes, replacement, idx);
+					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, idx);
 
 					//The replacement is now a successor of this predecessor
 					add_successor(predecessor, replacement);
@@ -641,7 +658,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 	delete_successor(empty_block, replacement);
 
 	//Destroy the clone array
-	dynamic_array_dealloc(clone);
+	dynamic_array_dealloc(&clone);
 }
 
 
@@ -684,7 +701,7 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 		//	it to be in the postdominator set
 		//	it to have a mark
 		//	it to not equal itself
-		if(dynamic_array_contains(B->postdominator_set, candidate) != NOT_FOUND
+		if(dynamic_array_contains(&(B->postdominator_set), candidate) != NOT_FOUND
 		  && candidate->contains_mark == TRUE && B != candidate){
 			//We've found it, so we're done
 			nearest_marked_postdominator = candidate;
@@ -693,14 +710,17 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 		}
 
 		//Otherwise, we didn't find anything, so we'll keep going
-		//Enqueue all of the successors
-		for(u_int16_t i = 0; candidate->successors != NULL && i < candidate->successors->current_index; i++){
-			//Grab the successor out
-			basic_block_t* successor = dynamic_array_get_at(candidate->successors, i);
+		//If we have any successors
+		if(candidate->successors.internal_array != NULL){
+			//Enqueue all of the successors
+			for(u_int16_t i = 0; i < candidate->successors.current_index; i++){
+				//Grab the successor out
+				basic_block_t* successor = dynamic_array_get_at(&(candidate->successors), i);
 
-			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
-			if(successor->visited == FALSE){
-				enqueue(&queue, successor);
+				//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
+				if(successor->visited == FALSE){
+					enqueue(&queue, successor);
+				}
 			}
 		}
 	}
@@ -729,9 +749,9 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
  */
 static void sweep(cfg_t* cfg){
 	//For each and every operation in every basic block
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//Holder for the postdom
 		basic_block_t* nearest_marked_postdom;
@@ -914,7 +934,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				replace_all_branch_targets(current, jumping_to_block);
 
 				//Current is no longer in the picture
-				dynamic_array_delete(cfg->created_blocks, current);
+				dynamic_array_delete(&(cfg->created_blocks), current);
 
 				//Counts as a change
 				changed = TRUE;
@@ -927,7 +947,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * If j only has one predecessor then
 			 * 	merge i and j
 			 */
-			if(jumping_to_block->predecessors->current_index == 1){
+			if(jumping_to_block->predecessors.current_index == 1){
 				//Delete the jump statement because it's now useless
 				delete_statement(current->exit_statement);
 
@@ -1040,8 +1060,8 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
-	for(u_int16_t i = 0; i < original_block->successors->current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(original_block->successors, i);
+	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
 
 		//Remove the successor/predecessor link
 		delete_successor(original_block, successor);
@@ -1219,8 +1239,8 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
-	for(u_int16_t i = 0; i < original_block->successors->current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(original_block->successors, i);
+	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
 
 		//Remove the successor/predecessor link
 		delete_successor(original_block, successor);
@@ -1398,8 +1418,8 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
-	for(u_int16_t i = 0; i < original_block->successors->current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(original_block->successors, i);
+	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
 
 		//Remove the successor/predecessor link
 		delete_successor(original_block, successor);
@@ -1576,8 +1596,8 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
 	//Some bookkeeping - all of the original blocks successors should no longer point to it
-	for(u_int16_t i = 0; i < original_block->successors->current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(original_block->successors, i);
+	for(u_int16_t i = 0; i < original_block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(original_block->successors), i);
 
 		//Remove the successor/predecessor link
 		delete_successor(original_block, successor);
@@ -1778,9 +1798,9 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
  */
 static void optimize_short_circuit_logic(cfg_t* cfg){
 	//For every single block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//If it's empty then leave
 		if(block->leader_statement == NULL){
@@ -1807,7 +1827,7 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 
 		//Store all of our eligible statements in this block. This will be done in a FIFO
 		//fashion
-		dynamic_array_t* eligible_statements = dynamic_array_alloc();
+		dynamic_array_t eligible_statements = dynamic_array_alloc();
 
 		//Let's run through and see if we can find a statement that's eligible for short circuiting.
 		while(cursor != NULL){
@@ -1821,7 +1841,7 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 			if(cursor->op == DOUBLE_AND || cursor->op == DOUBLE_OR){
 				//Add the cursor. We will iterate over these statements in the order we found them,
 				//so going through in
-				dynamic_array_add(eligible_statements, cursor);
+				dynamic_array_add(&eligible_statements, cursor);
 			}
 
 			//move it back
@@ -1829,9 +1849,9 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 		}
 
 		//Now we'll iterate over the array and process what we have
-		for(u_int16_t i = 0; eligible_statements != NULL && i < eligible_statements->current_index; i++){
+		for(u_int16_t i = 0; i < eligible_statements.current_index; i++){
 			//Grab the block out
-			instruction_t* short_circuit_statement = dynamic_array_get_at(eligible_statements, i);
+			instruction_t* short_circuit_statement = dynamic_array_get_at(&eligible_statements, i);
 
 			//Make the helper call. These are treated differently based on what their
 			//operators are, so we'll need to use the appropriate call
@@ -1855,7 +1875,7 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 		}
 
 		//Deallocate the array
-		dynamic_array_dealloc(eligible_statements);
+		dynamic_array_dealloc(&eligible_statements);
 	}
 }
 
@@ -1889,15 +1909,15 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
  */
 static void clean(cfg_t* cfg){
 	//For each function in the CFG
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
 		//Have we seen change(modification) at all?
 		u_int8_t changed;
 
 		//Grab the function block out
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, _);
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), _);
 
 		//The postorder traversal array
-		dynamic_array_t* postorder;
+		dynamic_array_t postorder;
 
 		//Now we'll do the actual clean algorithm
 		do {
@@ -1905,10 +1925,10 @@ static void clean(cfg_t* cfg){
 			postorder = compute_post_order_traversal(function_entry);
 
 			//Call onepass() for the reduction
-			changed = branch_reduce(cfg, postorder);
+			changed = branch_reduce(cfg, &postorder);
 
 			//We can free up the old postorder now
-			dynamic_array_dealloc(postorder);
+			dynamic_array_dealloc(&postorder);
 			
 		//We keep going so long as branch_reduce changes something 
 		} while(changed == TRUE);
@@ -1924,37 +1944,32 @@ static void clean(cfg_t* cfg){
 static void recompute_all_dominance_relations(cfg_t* cfg){
 	//First, we'll go through and completely blow away anything related to
 	//a dominator in the entirety of the cfg
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the given block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//Now we're going to reset everything about this block
 		block->immediate_dominator = NULL;
 		block->immediate_postdominator = NULL;
 
-		if(block->dominator_set != NULL){
-			dynamic_array_dealloc(block->dominator_set);
-			block->dominator_set = NULL;
+		if(block->dominator_set.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominator_set));
 		}
 
-		if(block->postdominator_set != NULL){
-			dynamic_array_dealloc(block->postdominator_set);
-			block->postdominator_set = NULL;
+		if(block->postdominator_set.internal_array != NULL){
+			dynamic_array_dealloc(&(block->postdominator_set));
 		}
 
-		if(block->dominance_frontier != NULL){
-			dynamic_array_dealloc(block->dominance_frontier);
-			block->dominance_frontier = NULL;
+		if(block->dominance_frontier.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominance_frontier));
 		}
 
-		if(block->dominator_children != NULL){
-			dynamic_array_dealloc(block->dominator_children);
-			block->dominator_children = NULL;
+		if(block->dominator_children.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominator_children));
 		}
 
-		if(block->reverse_dominance_frontier != NULL){
-			dynamic_array_dealloc(block->reverse_dominance_frontier);
-			block->reverse_dominance_frontier = NULL;
+		if(block->reverse_dominance_frontier.internal_array != NULL){
+			dynamic_array_dealloc(&(block->reverse_dominance_frontier));
 		}
 	}
 
@@ -1971,12 +1986,12 @@ static void recompute_all_dominance_relations(cfg_t* cfg){
 static void delete_unreachable_blocks(cfg_t* cfg){
 	//Clone all blocks here - we will be messing with the original
 	//array, so we can't count on it for an accurate count
-	dynamic_array_t* all_blocks = clone_dynamic_array(cfg->created_blocks);
+	dynamic_array_t all_blocks = clone_dynamic_array(&(cfg->created_blocks));
 
 	//Run through all blocks
-	for(u_int16_t i = 0; i < all_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < all_blocks.current_index; i++){
 		//Extract this
-		basic_block_t* current = dynamic_array_get_at(all_blocks, i);
+		basic_block_t* current = dynamic_array_get_at(&all_blocks, i);
 
 		//Nothing we can do about this
 		if(current->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -1984,14 +1999,14 @@ static void delete_unreachable_blocks(cfg_t* cfg){
 		}
 
 		//This is our deletion case - this block is unreachable
-		if(current->predecessors == NULL || current->predecessors->current_index == 0){
+		if(current->predecessors.internal_array == NULL || current->predecessors.current_index == 0){
 			//Scrap it from here
-			dynamic_array_delete(cfg->created_blocks, current);
+			dynamic_array_delete(&(cfg->created_blocks), current);
 		}
 	}
 
 	//Once we're done, deallocate the all_blocks array
-	dynamic_array_dealloc(all_blocks);
+	dynamic_array_dealloc(&all_blocks);
 }
 
 
