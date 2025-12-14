@@ -4434,10 +4434,9 @@ static u_int8_t struct_definer(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token for our uses
 	lexitem_t lookahead;
-	dynamic_string_t type_name;
 
 	//Allocate it
-	dynamic_string_alloc(&type_name);
+	dynamic_string_t type_name = dynamic_string_alloc();
 
 	//Set it
 	dynamic_string_set(&type_name, "struct ");
@@ -4966,10 +4965,7 @@ static u_int8_t union_definer(FILE* fl){
 	//Lookahead token for searching
 	lexitem_t lookahead;
 	//Dynamic string for our type name
-	dynamic_string_t union_name;
-
-	//Allocate it
-	dynamic_string_alloc(&union_name);
+	dynamic_string_t union_name = dynamic_string_alloc();
 	
 	//Add the prefix in
 	dynamic_string_set(&union_name, "union ");
@@ -5108,10 +5104,7 @@ static u_int8_t enum_definer(FILE* fl){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Reserve space for the type name
-	dynamic_string_t type_name;
-
-	//Allocate it
-	dynamic_string_alloc(&type_name);
+	dynamic_string_t type_name = dynamic_string_alloc();
 
 	//Add the enum intro in
 	dynamic_string_set(&type_name, "enum ");
@@ -5480,10 +5473,7 @@ static symtab_type_record_t* type_name(FILE* fl, mutability_type_t mutability){
 	symtab_type_record_t* record;
 
 	//Create a dstring for the type name
-	dynamic_string_t type_name;
-
-	//Allocate it
-	dynamic_string_alloc(&type_name);
+	dynamic_string_t type_name = dynamic_string_alloc();
 
 	//Let's see what we have
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
@@ -7486,8 +7476,8 @@ static generic_ast_node_t* assembly_inline_statement(FILE* fl){
 	//Otherwise we're presumably good, so we can start hunting for assembly statements
 	generic_ast_node_t* assembly_node = ast_node_alloc(AST_NODE_TYPE_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
 
-	//Allocate the dynamic string in here
-	dynamic_string_alloc(&(assembly_node->string_value));
+	//Create the memory for the assembly
+	assembly_node->string_value = dynamic_string_alloc();
 
 	//Store this too
 	assembly_node->line_number = parser_line_num;

@@ -364,8 +364,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 	sprintf(variable_name, "t%d", temp_id);
 
 	//Create and set the name here
-	dynamic_string_t string;
-	dynamic_string_alloc(&string);
+	dynamic_string_t string = dynamic_string_alloc();
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
@@ -766,8 +765,7 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
  */
 symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 	//Create the var name
-	dynamic_string_t variable_name;
-	dynamic_string_alloc(&variable_name);
+	dynamic_string_t variable_name = dynamic_string_alloc();
 
 	//Set to be stack pointer
 	dynamic_string_set(&variable_name, "stack_pointer");
@@ -786,8 +784,7 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
  */
 symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 	//Create the var name
-	dynamic_string_t variable_name;
-	dynamic_string_alloc(&variable_name);
+	dynamic_string_t variable_name = dynamic_string_alloc();
 
 	//Set to be instruction pointer(rip)
 	dynamic_string_set(&variable_name, "rip");
