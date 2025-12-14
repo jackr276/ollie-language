@@ -654,22 +654,22 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
  */
 static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B){
 	//We'll need a queue for the BFS
-	heap_queue_t* queue = heap_queue_alloc();
+	heap_queue_t queue = heap_queue_alloc();
 
 	//First, we'll reset every single block here
 	reset_visited_status(cfg, FALSE);
 
 	//Seed the search with B
-	enqueue(queue, B);
+	enqueue(&queue, B);
 
 	//The nearest marked postdominator and a holder for our candidates
 	basic_block_t* nearest_marked_postdominator = NULL;
 	basic_block_t* candidate;
 
 	//So long as the queue is not empty
-	while(queue_is_empty(queue) == FALSE){
+	while(queue_is_empty(&queue) == FALSE){
 		//Grab the block off
-		candidate = dequeue(queue);
+		candidate = dequeue(&queue);
 		
 		//If we've been here before, continue;
 		if(candidate->visited == TRUE){
@@ -700,13 +700,13 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 
 			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
 			if(successor->visited == FALSE){
-				enqueue(queue, successor);
+				enqueue(&queue, successor);
 			}
 		}
 	}
 
 	//Destroy the queue when done
-	heap_queue_dealloc(queue);
+	heap_queue_dealloc(&queue);
 
 	//And give this back
 	return nearest_marked_postdominator;

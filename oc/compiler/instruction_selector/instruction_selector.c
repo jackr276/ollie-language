@@ -154,7 +154,7 @@ static void order_blocks(cfg_t* cfg){
 	//of procedures
 	
 	//We'll need to use a queue every time, we may as well just have one big one
-	heap_queue_t* queue = heap_queue_alloc();
+	heap_queue_t queue = heap_queue_alloc();
 
 	//For each function
 	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
@@ -166,12 +166,12 @@ static void order_blocks(cfg_t* cfg){
 		basic_block_t* previous = NULL;
 
 		//This function start block is the begging of our BFS	
-		enqueue(queue, func_block);
+		enqueue(&queue, func_block);
 		
 		//So long as the queue is not empty
-		while(queue_is_empty(queue) == FALSE){
+		while(queue_is_empty(&queue) == FALSE){
 			//Grab this block off of the queue
-			basic_block_t* current = dequeue(queue);
+			basic_block_t* current = dequeue(&queue);
 
 			//If previous is NULL, this is the first block
 			if(previous == NULL){
@@ -209,7 +209,7 @@ static void order_blocks(cfg_t* cfg){
 			//If this is the case, we'll add it in first
 			if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
 				//Add it into the queue
-				enqueue(queue, direct_end_jump);
+				enqueue(&queue, direct_end_jump);
 			}
 
 			//Now we'll go through each of the successors in this node
@@ -233,14 +233,14 @@ static void order_blocks(cfg_t* cfg){
 
 				//Otherwise it's not, so we'll add it in
 				if(successor->visited == FALSE){
-					enqueue(queue, successor);
+					enqueue(&queue, successor);
 				}
 			}
 		}
 	}
 
 	//Destroy the queue when done
-	heap_queue_dealloc(queue);
+	heap_queue_dealloc(&queue);
 }
 
 

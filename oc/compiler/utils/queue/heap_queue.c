@@ -48,9 +48,6 @@ void heap_queue_dealloc(heap_queue_t* heap_queue){
 		//Free this
 		free(temp);
 	}
-
-	//Finally free the node overall
-	free(heap_queue);
 }
 
 

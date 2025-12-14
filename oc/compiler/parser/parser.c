@@ -45,7 +45,7 @@ static generic_ast_node_t* prog = NULL;
 //What is the current function that we are "in"
 static symtab_function_record_t* current_function = NULL;
 //The queue that holds all of our jump statements for a given function
-static heap_queue_t* current_function_jump_statements = NULL;
+static heap_queue_t current_function_jump_statements;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
@@ -6355,7 +6355,7 @@ static generic_ast_node_t* jump_statement(FILE* fl){
 	jump_statement->line_number = parser_line_num;
 
 	//Add this jump statement into the queue for processing
-	enqueue(current_function_jump_statements, jump_statement);
+	enqueue(&current_function_jump_statements, jump_statement);
 
 	//Finally we'll give back the root reference
 	return jump_statement;
@@ -8959,9 +8959,9 @@ static int8_t check_jump_labels(){
 	generic_ast_node_t* current_jump_statement;
 
 	//So long as there are jump statements in the queue
-	while(queue_is_empty(current_function_jump_statements) == FALSE){
+	while(queue_is_empty(&current_function_jump_statements) == FALSE){
 		//Grab the jump statement
-		current_jump_statement = dequeue(current_function_jump_statements);
+		current_jump_statement = dequeue(&current_function_jump_statements);
 
 		//Grab the label ident node
 		generic_ast_node_t* label_ident_node = current_jump_statement->first_child;
@@ -9868,7 +9868,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	}
 	
 	//We're done with this, so destroy it
-	heap_queue_dealloc(current_function_jump_statements);
+	heap_queue_dealloc(&current_function_jump_statements);
 
 	//Store the line number
 	function_node->line_number = current_line;

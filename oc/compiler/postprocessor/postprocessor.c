@@ -428,18 +428,18 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 	//of the blocks to store them all in one chain
 	
 	//We'll need to use a queue every time, we may as well just have one big one
-	heap_queue_t* queue = heap_queue_alloc();
+	heap_queue_t queue = heap_queue_alloc();
 
 	//These are reset for every function we deal with
 	basic_block_t* previous = NULL;
 
 	//This function start block is the begging of our BFS	
-	enqueue(queue, function_entry_block);
+	enqueue(&queue, function_entry_block);
 	
 	//So long as the queue is not empty
-	while(queue_is_empty(queue) == FALSE){
+	while(queue_is_empty(&queue) == FALSE){
 		//Grab this block off of the queue
-		basic_block_t* current = dequeue(queue);
+		basic_block_t* current = dequeue(&queue);
 
 		//If previous is NULL, this is the first block
 		if(previous == NULL){
@@ -477,7 +477,7 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 		//If this is the case, we'll add it in first
 		if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
 			//Add it into the queue
-			enqueue(queue, direct_end_jump);
+			enqueue(&queue, direct_end_jump);
 		}
 
 		//Now we'll go through each of the successors in this node
@@ -501,13 +501,13 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 
 			//Otherwise it's not, so we'll add it in
 			if(successor->visited == FALSE){
-				enqueue(queue, successor);
+				enqueue(&queue, successor);
 			}
 		}
 	}
 
 	//Destroy the queue when done
-	heap_queue_dealloc(queue);
+	heap_queue_dealloc(&queue);
 }
 
 
