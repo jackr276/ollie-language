@@ -53,9 +53,9 @@ static heap_stack_t continue_stack;
 //The overall nesting stack will tell us what level of nesting we're at(if, switch/case, loop)
 static nesting_stack_t nesting_stack;
 //Keep a list of all lable statements in the function(block jumps are internal only)
-static dynamic_array_t* current_function_labeled_blocks = NULL;
+static dynamic_array_t current_function_labeled_blocks;
 //Also keep a list of all custom jumps in the function
-static dynamic_array_t* current_function_user_defined_jump_statements = NULL;
+static dynamic_array_t current_function_user_defined_jump_statements;
 //The current stack offset for any given function
 static u_int64_t stack_offset = 0;
 //For any/all error printing
@@ -155,29 +155,27 @@ static u_int8_t is_power_of_2(int64_t value){
 void reset_block_variable_tracking(basic_block_t* block){
 	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
 	//we'll allocate them fresh
-	if(block->assigned_variables == NULL){
+	if(block->assigned_variables.internal_array == NULL){
 		block->assigned_variables = dynamic_array_alloc();
 	} else {
-		reset_dynamic_array(block->assigned_variables);
+		reset_dynamic_array(&(block->assigned_variables));
 	}
 
 	//Do the same with the used variables
-	if(block->used_variables == NULL){
+	if(block->used_variables.internal_array == NULL){
 		block->used_variables = dynamic_array_alloc();
 	} else {
-		reset_dynamic_array(block->used_variables);
+		reset_dynamic_array(&(block->used_variables));
 	}
 
 	//Reset live in completely
-	if(block->live_in != NULL){
-		dynamic_array_dealloc(block->live_in);
-		block->live_in = NULL;
+	if(block->live_in.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_in));
 	}
 
 	//Reset live out completely
-	if(block->live_out != NULL){
-		dynamic_array_dealloc(block->live_out);
-		block->live_out = NULL;
+	if(block->live_out.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_out));
 	}
 }
 
@@ -220,7 +218,7 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	created->function_defined_in = current_function;
 
 	//Add this into the dynamic array
-	dynamic_array_add(cfg->created_blocks, created);
+	dynamic_array_add(&(cfg->created_blocks), created);
 
 	//Give it back
 	return created;
@@ -251,7 +249,7 @@ basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	created->function_defined_in = current_function;
 
 	//Add this into the dynamic array
-	dynamic_array_add(cfg->created_blocks, created);
+	dynamic_array_add(&(cfg->created_blocks), created);
 
 	return created;
 }
@@ -286,7 +284,7 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
 	created->function_defined_in = current_function;
 
 	//Add this into the dynamic array
-	dynamic_array_add(cfg->created_blocks, created);
+	dynamic_array_add(&(cfg->created_blocks), created);
 
 	return created;
 }
@@ -333,9 +331,11 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
 	entry->visited = TRUE;
 
 	//For every child(predecessor-it's reverse), we visit it as well
-	for(u_int16_t _ = 0; entry->predecessors != NULL && _ < entry->predecessors->current_index; _++){
-		//Visit each of the blocks
-		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(entry->predecessors, _));
+	if(entry->predecessors.internal_array != NULL){
+		for(u_int16_t _ = 0; _ < entry->predecessors.current_index; _++){
+			//Visit each of the blocks
+			reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(entry->predecessors), _));
+		}
 	}
 
 	//Now we can push entry onto the stack
@@ -347,11 +347,11 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
  * Get and return a reverse post order traversal of a function-level CFG where
  * we are going in reverse order. This is used mainly for data flow(liveness)
  */
-dynamic_array_t* compute_reverse_post_order_traversal_reverse_cfg(basic_block_t* entry){
+dynamic_array_t compute_reverse_post_order_traversal_reverse_cfg(basic_block_t* entry){
 	//For our postorder traversal
 	heap_stack_t stack = heap_stack_alloc();
 	//We'll need this eventually for postorder
-	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
+	dynamic_array_t reverse_post_order_traversal = dynamic_array_alloc();
 
 	//Go all the way to the bottom
 	while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
@@ -364,7 +364,7 @@ dynamic_array_t* compute_reverse_post_order_traversal_reverse_cfg(basic_block_t*
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
 	while(heap_stack_is_empty(&stack) == FALSE){
-		dynamic_array_add(reverse_post_order_traversal, pop(&stack));
+		dynamic_array_add(&reverse_post_order_traversal, pop(&stack));
 	}
 
 	//And when we're done, get rid of the stack
@@ -388,11 +388,13 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
 	//Mark it as visited
 	entry->visited = TRUE;
 
-	//We'll go in regular order
-	//For every child(successor), we visit it as well
-	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
-		//Visit each of the blocks
-		reverse_post_order_traversal_rec(stack, dynamic_array_get_at(entry->successors, _));
+	//If we have successors
+	if(entry->successors.internal_array != NULL){
+		//For every child(successor), we visit it as well
+		for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
+			//Visit each of the blocks
+			reverse_post_order_traversal_rec(stack, dynamic_array_get_at(&(entry->successors), _));
+		}
 	}
 
 	//Now we can push entry onto the stack
@@ -403,11 +405,11 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
 /**
  * Get and return a reverse-post order traversal for a function level CFG
  */
-dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry){
+dynamic_array_t compute_reverse_post_order_traversal(basic_block_t* entry){
 	//For our postorder traversal
 	heap_stack_t stack = heap_stack_alloc();
 	//We'll need this eventually for postorder
-	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
+	dynamic_array_t reverse_post_order_traversal = dynamic_array_alloc();
 
 	//Invoke the recursive helper
 	reverse_post_order_traversal_rec(&stack, entry);
@@ -415,7 +417,7 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry){
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
 	while(heap_stack_is_empty(&stack) == FALSE){
-		dynamic_array_add(reverse_post_order_traversal, pop(&stack));
+		dynamic_array_add(&reverse_post_order_traversal, pop(&stack));
 	}
 
 	//And when we're done, get rid of the stack
@@ -431,20 +433,18 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry){
  */
 void reset_reverse_post_order_sets(cfg_t* cfg){
 	//Run through all of the function blocks
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
 		//Grab the block out
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
+		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), _);
 
 		//Set the RPO to be null
-		if(function_entry_block->reverse_post_order != NULL){
-			dynamic_array_dealloc(function_entry_block->reverse_post_order);
-			function_entry_block->reverse_post_order = NULL;
+		if(function_entry_block->reverse_post_order.internal_array != NULL){
+			dynamic_array_dealloc(&(function_entry_block->reverse_post_order));
 		}
 
 		//Set the RPO reverse CFG to be null
-		if(function_entry_block->reverse_post_order_reverse_cfg != NULL){
-			dynamic_array_dealloc(function_entry_block->reverse_post_order_reverse_cfg);
-			function_entry_block->reverse_post_order_reverse_cfg = NULL;
+		if(function_entry_block->reverse_post_order_reverse_cfg.internal_array != NULL){
+			dynamic_array_dealloc(&(function_entry_block->reverse_post_order_reverse_cfg));
 		}
 	}
 }
@@ -462,10 +462,13 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
 	//Otherwise mark that we've visited
 	entry->visited = TRUE;
 
-	//We will visit the children first
-	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
-		//Recursive call to every child first
-		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(entry->successors, _));
+	//If we have successors
+	if(entry->successors.internal_array != NULL){
+		//Run through every successor
+		for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
+			//Recursive call to every child first
+			post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), _));
+		}
 	}
 	
 	//Now we'll finally visit the node
@@ -478,15 +481,15 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
 /**
  * Get and return the regular postorder traversal for a function-level CFG
  */
-dynamic_array_t* compute_post_order_traversal(basic_block_t* entry){
+dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
 	//Reset the visited status
 	reset_visited_status(cfg, FALSE);
 
 	//Create our dynamic array
-	dynamic_array_t* post_order_traversal = dynamic_array_alloc();
+	dynamic_array_t post_order_traversal = dynamic_array_alloc();
 
 	//Make the recursive call
-	post_order_traversal_rec(post_order_traversal, entry);
+	post_order_traversal_rec(&post_order_traversal, entry);
 
 	//Give the traversal back
 	return post_order_traversal;
@@ -537,20 +540,20 @@ void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	}
 
 	//If this is NULL, we'll need to allocate it
-	if(basic_block->used_variables == NULL){
+	if(basic_block->used_variables.internal_array == NULL){
 		basic_block->used_variables = dynamic_array_alloc();
 	}
 
 	//We need a special kind of comparison here, so we can't use the canned method
-	for(u_int16_t i = 0; i < basic_block->used_variables->current_index; i++){
+	for(u_int16_t i = 0; i < basic_block->used_variables.current_index; i++){
 		//If the linked variables are the same, we're out
-		if(((three_addr_var_t*)(basic_block->used_variables->internal_array[i]))->linked_var == var->linked_var){
+		if(((three_addr_var_t*)(basic_block->used_variables.internal_array[i]))->linked_var == var->linked_var){
 			return;
 		}
 	}
 	
 	//we didn't find it, so we will add
-	dynamic_array_add(basic_block->used_variables, var); 
+	dynamic_array_add(&(basic_block->used_variables), var); 
 }
 
 
@@ -566,20 +569,20 @@ void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	}
 
 	//If the assigned variable dynamic array is NULL, we'll allocate it here
-	if(basic_block->assigned_variables == NULL){
+	if(basic_block->assigned_variables.internal_array == NULL){
 		basic_block->assigned_variables = dynamic_array_alloc();
 	}
 
 	//We need a special kind of comparison here, so we can't use the canned method
-	for(u_int16_t i = 0; i < basic_block->assigned_variables->current_index; i++){
+	for(u_int16_t i = 0; i < basic_block->assigned_variables.current_index; i++){
 		//If the linked variables are the same, we're out
-		if(((three_addr_var_t*)(basic_block->assigned_variables->internal_array[i]))->linked_var == var->linked_var){
+		if(((three_addr_var_t*)(basic_block->assigned_variables.internal_array[i]))->linked_var == var->linked_var){
 			return;
 		}
 	}
 
 	//We didn't find it, so we'll add it
-	dynamic_array_add(basic_block->assigned_variables, var);
+	dynamic_array_add(&(basic_block->assigned_variables), var);
 }
 
 
@@ -610,16 +613,16 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 
 	//Now, we will print all of the active variables that this block has
-	if(block->used_variables != NULL){
+	if(block->used_variables.internal_array != NULL){
 		printf("(");
 
 		//Run through all of the live variables and print them out
-		for(u_int16_t i = 0; i < block->used_variables->current_index; i++){
+		for(u_int16_t i = 0; i < block->used_variables.current_index; i++){
 			//Print it out
-			print_variable(stdout, block->used_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+			print_variable(stdout, block->used_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->used_variables->current_index - 1){
+			if(i != block->used_variables.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -636,51 +639,56 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	printf("Predecessors: {");
 
-	for(u_int16_t i = 0; block->predecessors != NULL && i < block->predecessors->current_index; i++){
-		basic_block_t* predecessor = block->predecessors->internal_array[i];
+	//If we have predecessors
+	if(block->predecessors.internal_array != NULL){
+		for(u_int16_t i = 0; i < block->predecessors.current_index; i++){
+			basic_block_t* predecessor = block->predecessors.internal_array[i];
 
-		//Print the block's ID or the function name
-		if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", predecessor->function_defined_in->func_name.string);
-		} else {
-			printf(".L%d", predecessor->block_id);
-		}
+			//Print the block's ID or the function name
+			if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", predecessor->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", predecessor->block_id);
+			}
 
-		if(i != block->predecessors->current_index - 1){
-			printf(", ");
+			if(i != block->predecessors.current_index - 1){
+				printf(", ");
+			}
 		}
 	}
 
 	printf("}\n");
 
 	printf("Successors: {");
+	//If we have successor
+	if(block->successors.internal_array != NULL){
+		for(u_int16_t i = 0; i < block->successors.current_index; i++){
+			basic_block_t* successor = block->successors.internal_array[i];
 
-	for(u_int16_t i = 0; block->successors != NULL && i < block->successors->current_index; i++){
-		basic_block_t* successor = block->successors->internal_array[i];
+			//Print the block's ID or the function name
+			if(successor->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", successor->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", successor->block_id);
+			}
 
-		//Print the block's ID or the function name
-		if(successor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", successor->function_defined_in->func_name.string);
-		} else {
-			printf(".L%d", successor->block_id);
-		}
-
-		if(i != block->successors->current_index - 1){
-			printf(", ");
+			if(i != block->successors.current_index - 1){
+				printf(", ");
+			}
 		}
 	}
 
 	printf("}\n");
 
 	//If we have some assigned variables, we will dislay those for debugging
-	if(block->assigned_variables != NULL){
+	if(block->assigned_variables.internal_array != NULL){
 		printf("Assigned: (");
 
-		for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
-			print_variable(stdout, block->assigned_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+		for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
+			print_variable(stdout, block->assigned_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->assigned_variables->current_index - 1){
+			if(i != block->assigned_variables.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -688,14 +696,14 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	}
 
 	//Now if we have LIVE_IN variables, we'll print those out
-	if(block->live_in != NULL){
+	if(block->live_in.internal_array != NULL){
 		printf("LIVE_IN: (");
 
-		for(u_int16_t i = 0; i < block->live_in->current_index; i++){
-			print_variable(stdout, block->live_in->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+		for(u_int16_t i = 0; i < block->live_in.current_index; i++){
+			print_variable(stdout, block->live_in.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
-			if(i != block->live_in->current_index - 1){
+			if(i != block->live_in.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -705,14 +713,14 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	}
 
 	//Now if we have LIVE_IN variables, we'll print those out
-	if(block->live_out != NULL){
+	if(block->live_out.internal_array != NULL){
 		printf("LIVE_OUT: (");
 
-		for(u_int16_t i = 0; i < block->live_out->current_index; i++){
-			print_variable(stdout, block->live_out->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+		for(u_int16_t i = 0; i < block->live_out.current_index; i++){
+			print_variable(stdout, block->live_out.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
-			if(i != block->live_out->current_index - 1){
+			if(i != block->live_out.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -723,12 +731,12 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 
 	//Print out the dominance frontier if we're in DEBUG mode
-	if(print_df == EMIT_DOMINANCE_FRONTIER && block->dominance_frontier != NULL){
+	if(print_df == EMIT_DOMINANCE_FRONTIER && block->dominance_frontier.internal_array != NULL){
 		printf("Dominance frontier: {");
 
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->dominance_frontier->current_index; i++){
-			basic_block_t* printing_block = block->dominance_frontier->internal_array[i];
+		for(u_int16_t i = 0; i < block->dominance_frontier.current_index; i++){
+			basic_block_t* printing_block = block->dominance_frontier.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -738,7 +746,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 			}
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->dominance_frontier->current_index - 1){
+			if(i != block->dominance_frontier.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -748,12 +756,12 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	}
 
 	//Print out the reverse dominance frontier if we're in DEBUG mode
-	if(print_df == EMIT_DOMINANCE_FRONTIER && block->reverse_dominance_frontier != NULL){
+	if(print_df == EMIT_DOMINANCE_FRONTIER && block->reverse_dominance_frontier.internal_array != NULL){
 		printf("Reverse Dominance frontier: {");
 
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->reverse_dominance_frontier->current_index; i++){
-			basic_block_t* printing_block = block->reverse_dominance_frontier->internal_array[i];
+		for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+			basic_block_t* printing_block = block->reverse_dominance_frontier.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -763,7 +771,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 			}
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->reverse_dominance_frontier->current_index - 1){
+			if(i != block->reverse_dominance_frontier.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -775,10 +783,10 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Only if this is false - global var blocks don't have any of these
 	printf("Dominator set: {");
-	if(block->dominator_set != NULL){
+	if(block->dominator_set.internal_array != NULL){
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
-			basic_block_t* printing_block = block->dominator_set->internal_array[i];
+		for(u_int16_t i = 0; i < block->dominator_set.current_index; i++){
+			basic_block_t* printing_block = block->dominator_set.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -787,7 +795,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 				printf(".L%d", printing_block->block_id);
 			}
 			//If it isn't the very last one, we need a comma
-			if(i != block->dominator_set->current_index - 1){
+			if(i != block->dominator_set.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -797,10 +805,10 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	printf("}\n");
 
 	printf("Postdominator(reverse dominator) Set: {");
-	if(block->postdominator_set != NULL){
+	if(block->postdominator_set.internal_array != NULL){
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
-			basic_block_t* postdominator = block->postdominator_set->internal_array[i];
+		for(u_int16_t i = 0; i < block->postdominator_set.current_index; i++){
+			basic_block_t* postdominator = block->postdominator_set.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -809,7 +817,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 				printf(".L%d", postdominator->block_id);
 			}
 			//If it isn't the very last one, we need a comma
-			if(i != block->postdominator_set->current_index - 1){
+			if(i != block->postdominator_set.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -819,9 +827,10 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Now print out the dominator children
 	printf("Dominator Children: {");
-
-	for(u_int16_t i = 0; block->dominator_children != NULL && i < block->dominator_children->current_index; i++){
-			basic_block_t* printing_block = block->dominator_children->internal_array[i];
+	//If we have dominator children
+	if(block->dominator_children.internal_array != NULL){
+		for(u_int16_t i = 0; i < block->dominator_children.current_index; i++){
+			basic_block_t* printing_block = block->dominator_children.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -830,9 +839,10 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 				printf(".L%d", printing_block->block_id);
 			}
 			//If it isn't the very last one, we need a comma
-			if(i != block->dominator_children->current_index - 1){
+			if(i != block->dominator_children.current_index - 1){
 				printf(", ");
 			}
+		}
 	}
 
 	printf("}\n");

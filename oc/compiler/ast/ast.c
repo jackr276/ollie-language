@@ -11,7 +11,7 @@
 #include <sys/types.h>
 
 //Initialize our created nodes array to be empty
-static dynamic_array_t* created_nodes = NULL;
+static dynamic_array_t created_nodes;
 
 /**
  * Initialize the AST system by creating the created_nodes
@@ -262,7 +262,7 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side){
 	duplicated->side = side;
 
 	//Add this into the memory management structure
-	dynamic_array_add(created_nodes, duplicated);
+	dynamic_array_add(&created_nodes, duplicated);
 
 	//Give back the duplicated node
 	return duplicated;
@@ -279,7 +279,7 @@ generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t si
 	generic_ast_node_t* node = calloc(1, sizeof(generic_ast_node_t));
 
 	//Add this into our memoyr management structure
-	dynamic_array_add(created_nodes, node);
+	dynamic_array_add(&created_nodes, node);
 
 	//Assign the class
 	node->ast_node_type = ast_node_type;
@@ -325,9 +325,9 @@ void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child){
  */
 void ast_dealloc(){
 	//Run through all of the nodes in the created array
-	for(u_int16_t i = 0; i < created_nodes->current_index; i++){
+	for(u_int16_t i = 0; i < created_nodes.current_index; i++){
 		//Grab the node out
-		generic_ast_node_t* node = dynamic_array_get_at(created_nodes, i);
+		generic_ast_node_t* node = dynamic_array_get_at(&created_nodes, i);
 
 		//Some additional freeing may be needed
 		switch(node->ast_node_type){
@@ -353,5 +353,5 @@ void ast_dealloc(){
 	}
 
 	//Finally, we can destroy the entire array as well
-	dynamic_array_dealloc(created_nodes);
+	dynamic_array_dealloc(&created_nodes);
 }

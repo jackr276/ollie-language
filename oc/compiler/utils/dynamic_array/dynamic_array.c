@@ -384,4 +384,9 @@ void dynamic_array_dealloc(dynamic_array_t* array){
 
 	//First we'll free the internal array
 	free(array->internal_array);
+
+	//Set this to NULL as a warning
+	array->internal_array = NULL;
+	array->current_index = 0;
+	array->current_max_size = 0;
 }
