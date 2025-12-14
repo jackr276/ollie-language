@@ -71,9 +71,9 @@ static void topological_sort_visit_node(data_dependency_graph_node_t* node, data
 	}
 
 	//Run through all of the dependencies
-	for(u_int16_t i = 0; i < node->neighbors->current_index; i++){
+	for(u_int16_t i = 0; i < node->neighbors.current_index; i++){
 		//Recursive visit call
-		topological_sort_visit_node(dynamic_array_get_at(node->neighbors, i), sorted, sorted_index);
+		topological_sort_visit_node(dynamic_array_get_at(&(node->neighbors), i), sorted, sorted_index);
 	}
 
 	//Now that we're here, the node is truly visited
@@ -171,15 +171,15 @@ void add_data_dependency_node_for_instruction(data_dependency_graph_t* graph, in
 /**
  * Get the leaves of the data DAG. The leaves are simply instructions that have no dependencies
  */
-dynamic_array_t* get_data_dependency_graph_leaf_nodes(data_dependency_graph_t* graph){
+dynamic_array_t get_data_dependency_graph_leaf_nodes(data_dependency_graph_t* graph){
 	//Create the dynamic array first
-	dynamic_array_t* leaves = dynamic_array_alloc();
+	dynamic_array_t leaves = dynamic_array_alloc();
 
 	//Done via a simple linear scan
 	for(u_int32_t i = 0; i < graph->current_index; i++){
 		//We want nothing that we rely on here
 		if(graph->nodes[i]->relies_on_count == 0){
-			dynamic_array_add(leaves, graph->nodes[i]);
+			dynamic_array_add(&leaves, graph->nodes[i]);
 		}
 	}
 
@@ -191,15 +191,15 @@ dynamic_array_t* get_data_dependency_graph_leaf_nodes(data_dependency_graph_t* g
  * Get the roots of the data DAG. The roots are simply instructions that have nothing
  * else depends on. There will often be more than one root
  */
-dynamic_array_t* get_data_dependency_graph_root_nodes(data_dependency_graph_t* graph){
+dynamic_array_t get_data_dependency_graph_root_nodes(data_dependency_graph_t* graph){
 	//Create the dynamic array first
-	dynamic_array_t* roots = dynamic_array_alloc();
+	dynamic_array_t roots = dynamic_array_alloc();
 
 	//Done via a simple linear scan
 	for(u_int32_t i = 0; i < graph->current_index; i++){
 		//For a root, we want to be relied on by nothing
 		if(graph->nodes[i]->relied_on_by_count == 0){
-			dynamic_array_add(roots, graph->nodes[i]);
+			dynamic_array_add(&roots, graph->nodes[i]);
 		}
 	}
 
@@ -339,9 +339,9 @@ void construct_adjacency_matrix(data_dependency_graph_t* graph){
 		data_dependency_graph_node_t* depends_on_node = graph->nodes[i];
 
 		//Now we grab all of its dependencies
-		for(u_int16_t i = 0; i < depends_on_node->neighbors->current_index; i++){
+		for(u_int16_t i = 0; i < depends_on_node->neighbors.current_index; i++){
 			//Get his dependent
-			data_dependency_graph_node_t* dependent = dynamic_array_get_at(depends_on_node->neighbors, i);
+			data_dependency_graph_node_t* dependent = dynamic_array_get_at(&(depends_on_node->neighbors), i);
 
 			//Add it into the adjacency matrix. Recall, the pattern is row = from, column = to 
 			graph->adjacency_matrix[depends_on_node->index * node_count + dependent->index] = 1;
@@ -512,9 +512,9 @@ static void connected_component_rec_DFS(data_dependency_graph_node_t* vertex, dy
 	dynamic_array_add(connected_component, vertex);
 
 	//Run through every neighbor of the vertex
-	for(u_int16_t i = 0; i < vertex->neighbors->current_index; i++){
+	for(u_int16_t i = 0; i < vertex->neighbors.current_index; i++){
 		//Extract it
-		data_dependency_graph_node_t* neighbor = dynamic_array_get_at(vertex->neighbors, i);
+		data_dependency_graph_node_t* neighbor = dynamic_array_get_at(&(vertex->neighbors), i);
 
 		//If this hasn't been visited, add it in
 		if(neighbor->visited == FALSE){
@@ -557,8 +557,10 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
 			continue;
 		}
 
-		//Allocate this, it will need to be freed at a later point
-		dynamic_array_t* connected_component = dynamic_array_alloc();
+		//Allocate this on the *heap* specifically. We do this becauase
+		//we will be passing this up to a parent, so we can't have it
+		//being on the stack
+		dynamic_array_t* connected_component = dynamic_array_heap_alloc();
 
 		//Otherwise it hasn't been visited, so find it's connected components
 		connected_component_rec_DFS(node, connected_component);
@@ -614,9 +616,9 @@ static u_int32_t get_maximum_loads_through_any_path_in_subgraph(dynamic_array_t*
 		data_dependency_graph_node_t* node = dynamic_array_get_at(graph, i);
 
 		//For every node in the neighbor set, run through those
-		for(u_int16_t j = 0; j  < node->neighbors->current_index; j++){
+		for(u_int16_t j = 0; j  < node->neighbors.current_index; j++){
 			//Extract the neighbor "U"
-			data_dependency_graph_node_t* U = dynamic_array_get_at(node->neighbors, j);
+			data_dependency_graph_node_t* U = dynamic_array_get_at(&(node->neighbors), j);
 
 			//What are we adding
 			u_int32_t add = 0;
@@ -675,10 +677,10 @@ static u_int32_t get_maximum_loads_through_any_path_in_subgraph(dynamic_array_t*
  */
 void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 	//Let's create a reusable "independent" array to lighten memory pressure
-	dynamic_array_t* independent = dynamic_array_alloc();
+	dynamic_array_t independent = dynamic_array_alloc();
 
 	//The set of connected components is also reusable
-	dynamic_array_t* connected_components = dynamic_array_alloc();
+	dynamic_array_t connected_components = dynamic_array_alloc();
 
 	//A reusable static array for load counts in the maximum load computation
 	//step. We can just initialize it to the size of the original graph
@@ -692,7 +694,7 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 		//Get a list of all nodes independent of this one(will be loaded
 		//into "independent"). This essentially gives us a sub-graph
 		//that has had everything related to the above node removed
-		u_int32_t independent_load_count = get_nodes_independent_of_given(graph, node, independent);
+		u_int32_t independent_load_count = get_nodes_independent_of_given(graph, node, &independent);
 
 		//If there is no load on this path, then N will be 0
 		//and we will have done all of this work for no reason. As such,
@@ -703,18 +705,19 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 
 		//Create the connected component array for this subgraph(the nodes in independent)
 		//so that we can search through it
-		get_all_connected_components(independent, connected_components);
+		get_all_connected_components(&independent, &connected_components);
 
 		//Run through every connected component in here
-		for(u_int16_t j = 0; j < connected_components->current_index; j++){
+		for(u_int16_t j = 0; j < connected_components.current_index; j++){
 			//Extract it
-			dynamic_array_t* connected_component = dynamic_array_get_at(connected_components, j);
+			dynamic_array_t* connected_component = dynamic_array_get_at(&connected_components, j);
 
 			//Get the maximum number of loads through any given path in this connected component
 			u_int32_t maximum_loads = get_maximum_loads_through_any_path_in_subgraph(connected_component, load_counts);
 
-			//Once we're done using it, we can release this entire thing
-			dynamic_array_dealloc(connected_component);
+			//Once we're done using it, we can release this entire thing. Remember that it was
+			//on the heap, so we need to use the heap deallocator for it
+			dynamic_array_heap_dealloc(&connected_component);
 
 			//If there are no loads along this path, just move along
 			if(maximum_loads == 0){
@@ -740,9 +743,9 @@ void compute_cycle_counts_for_load_operations(data_dependency_graph_t* graph){
 	//Release the load counts
 	free(load_counts);
 	//Let go of these now that we're done
-	dynamic_array_dealloc(independent);
+	dynamic_array_dealloc(&independent);
 	//Let go of this now that we're done
-	dynamic_array_dealloc(connected_components);
+	dynamic_array_dealloc(&connected_components);
 }
 
 
@@ -799,9 +802,9 @@ static int32_t compute_longest_path_to_root_node(data_dependency_graph_t* graph,
 
 		//Otherwise, it is reachable from our source, so we need
 		//to check the weights for each edge
-		for(u_int16_t j = 0; j < U->neighbors->current_index; j++){
+		for(u_int16_t j = 0; j < U->neighbors.current_index; j++){
 			//Extract the neighbor
-			data_dependency_graph_node_t* V = dynamic_array_get_at(U->neighbors, j);
+			data_dependency_graph_node_t* V = dynamic_array_get_at(&(U->neighbors), j);
 
 			//The weight is the number of cycles that *U* takes to run
 			int32_t weight = U->cycles_to_complete;
@@ -878,7 +881,7 @@ static int32_t compute_longest_weighted_path_heuristic_for_node(data_dependency_
  */
 void compute_priorities_for_all_nodes(data_dependency_graph_t* graph){
 	//Extract the graph's roots
-	dynamic_array_t* roots = get_data_dependency_graph_root_nodes(graph);
+	dynamic_array_t roots = get_data_dependency_graph_root_nodes(graph);
 
 	//A reusable distances[] array - this lets us avoid allocating memory every time.
 	//The distances array itself is wiped out every time the helper runs, so this
@@ -888,14 +891,14 @@ void compute_priorities_for_all_nodes(data_dependency_graph_t* graph){
 	//Run through every single node in the graph
 	for(u_int16_t i = 0; i < graph->current_index; i++){
 		//Compute the priority for the given node
-		graph->nodes[i]->priority = compute_longest_weighted_path_heuristic_for_node(graph, graph->nodes[i], roots, distances);
+		graph->nodes[i]->priority = compute_longest_weighted_path_heuristic_for_node(graph, graph->nodes[i], &roots, distances);
 	}
 
 	//We're done with distances[] now
 	free(distances);
 
 	//We're done with the roots so scrap them
-	dynamic_array_dealloc(roots);
+	dynamic_array_dealloc(&roots);
 }
 
 
@@ -940,7 +943,7 @@ void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instr
 
 	//This is possible, if we have something like testl t6, t6, t6 may try to get in there
 	//twice
-	if(dynamic_array_contains(depends_on_node->neighbors, target_node) != NOT_FOUND){
+	if(dynamic_array_contains(&(depends_on_node->neighbors), target_node) != NOT_FOUND){
 		return;
 	}
 
@@ -952,7 +955,7 @@ void add_dependence(data_dependency_graph_t* graph, instruction_t* target, instr
 
 	//Now we link them together in the list. This will be added to the "depends_on" node's list because the list
 	//is a "from->to" type list. We have a dependency connection from the depends_on node to the target
-	dynamic_array_add(depends_on_node->neighbors, target_node);
+	dynamic_array_add(&(depends_on_node->neighbors), target_node);
 }
 
 
@@ -995,9 +998,9 @@ void print_data_dependence_graph(FILE* output, data_dependency_graph_t* graph){
 		fprintf(output, "Depended on by: [\n");
 
 		//Run through all of what we depend on
-		for(u_int16_t j = 0; j < node->neighbors->current_index; j++){
+		for(u_int16_t j = 0; j < node->neighbors.current_index; j++){
 			//Print out the successor 
-			data_dependency_graph_node_t* successor = dynamic_array_get_at(node->neighbors, j);
+			data_dependency_graph_node_t* successor = dynamic_array_get_at(&(node->neighbors), j);
 			print_instruction(stdout, successor->instruction, PRINTING_VAR_IN_INSTRUCTION);
 		}
 
@@ -1032,7 +1035,7 @@ void dependency_graph_dealloc(data_dependency_graph_t* graph){
 		data_dependency_graph_node_t* node = graph->nodes[i];
 
 		//Free the dynamic array
-		dynamic_array_dealloc(node->neighbors);
+		dynamic_array_dealloc(&(node->neighbors));
 
 		//Now deallocate the node itself
 		free(node);

@@ -88,11 +88,11 @@ struct generic_type_t{
 		//For function pointers
 		function_type_t* function_type;
 		//Store all values in a struct
-		dynamic_array_t* struct_table;
+		dynamic_array_t struct_table;
 		//The union table
-		dynamic_array_t* union_table;
+		dynamic_array_t union_table;
 		//The enumeration table stores all values in an enum
-		dynamic_array_t* enumeration_table;
+		dynamic_array_t enumeration_table;
 		//The aliased type
 		generic_type_t* aliased_type;
 	} internal_types;

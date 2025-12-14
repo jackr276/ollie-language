@@ -56,7 +56,7 @@ struct stack_region_t {
  */
 struct stack_data_area_t{
 	//Heap array for the regions
-	dynamic_array_t* stack_regions;
+	dynamic_array_t stack_regions;
 	//The total size of the data area
 	u_int32_t total_size;
 };

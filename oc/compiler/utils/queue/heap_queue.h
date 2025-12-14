@@ -32,9 +32,10 @@ struct heap_queue_node_t{
 
 
 /**
- * Allocate a heap queue structure
+ * Allocate a heap queue structure. The overall
+ * control structure will be allocated to the stack
  */
-heap_queue_t* heap_queue_alloc();
+heap_queue_t heap_queue_alloc();
 
 /**
  * Deallocate an entire heap queue structure

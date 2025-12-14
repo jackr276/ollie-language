@@ -28,9 +28,11 @@ struct heap_stack_t{
 
 
 /**
- * Initialize a stack
+ * Initialize a stack. The control
+ * structure itself will be on the
+ * stack in the end
  */
-heap_stack_t* heap_stack_alloc();
+heap_stack_t heap_stack_alloc();
 
 /**
  * Push a pointer onto the top of the stack

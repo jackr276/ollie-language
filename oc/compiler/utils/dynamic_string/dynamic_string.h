@@ -31,7 +31,7 @@ struct dynamic_string_t {
  * Allocate a dynamic string on the heap. The actual structure itself
  * will be stack allocated
  */
-void dynamic_string_alloc(dynamic_string_t* dynamic_string);
+dynamic_string_t dynamic_string_alloc();
 
 /**
  * Clone a dynamic string into a new one

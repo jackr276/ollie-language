@@ -62,9 +62,9 @@ static void print_assembly_block(FILE* fl, basic_block_t* block){
  */
 static void print_all_basic_blocks(FILE* fl, cfg_t* cfg){
 	//Run through all blocks here
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Grab the head block out
-		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* current = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//We can use the direct successor strategy here
 		while(current != NULL){
@@ -125,7 +125,7 @@ u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg){
 	print_text_section(options, output, cfg);
 
 	//Handle all of the global vars first
-	print_all_global_variables(output, cfg->global_variables);
+	print_all_global_variables(output, &(cfg->global_variables));
 
 	//Once we're done, close the file
 	fclose(output);

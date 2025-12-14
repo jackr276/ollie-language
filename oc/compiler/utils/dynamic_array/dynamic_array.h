@@ -29,11 +29,17 @@ struct dynamic_array_t{
 	u_int16_t current_index;
 };
 
+/**
+ * Initialize a dynamic array on the heap 
+ * specifically
+ */
+dynamic_array_t* dynamic_array_heap_alloc();
 
 /**
- * Initialize a dynamic array
+ * Initialize a dynamic array. The resulting
+ * control structure will be stack allocated
  */
-dynamic_array_t* dynamic_array_alloc();
+dynamic_array_t dynamic_array_alloc();
 
 
 /**
@@ -41,13 +47,13 @@ dynamic_array_t* dynamic_array_alloc();
  * size. This is useful if we already know
  * the size we need
  */
-dynamic_array_t* dynamic_array_alloc_initial_size(u_int16_t initial_size);
+dynamic_array_t dynamic_array_alloc_initial_size(u_int16_t initial_size);
 
 
 /**
  * Create an exact clone of the dynamic array that we're given
  */
-dynamic_array_t* clone_dynamic_array(dynamic_array_t* array);
+dynamic_array_t clone_dynamic_array(dynamic_array_t* array);
 
 /**
  * Does the dynamic array contain this pointer?
@@ -125,5 +131,10 @@ void reset_dynamic_array(dynamic_array_t* array);
  * just the overall structure
 */
 void dynamic_array_dealloc(dynamic_array_t* array);
+
+/**
+ * Deallocate a dynamic array that was on the heap
+ */
+void dynamic_array_heap_dealloc(dynamic_array_t** array);
 
 #endif /* DYNAMIC_ARRAY_H */

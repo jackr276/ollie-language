@@ -40,12 +40,12 @@ int main(int argc, char** argv){
 	//Here's our graph
 	interference_graph_t* graph = NULL;
 	
-	dynamic_array_t* live_ranges = dynamic_array_alloc();
+	dynamic_array_t live_ranges = dynamic_array_alloc();
 
 	//Just make some values
 	for(u_int16_t i = 0; i < 20; i++){
 		live_range_t* new_live_range = live_range_alloc(i);
-		dynamic_array_add(live_ranges, new_live_range);
+		dynamic_array_add(&live_ranges, new_live_range);
 	}
 
 	//Now add some more interference
@@ -54,23 +54,23 @@ int main(int argc, char** argv){
 		int32_t j = rand() % 20;
 
 		if(j != i){
-			add_interference(graph, dynamic_array_get_at(live_ranges, i), dynamic_array_get_at(live_ranges, j));
+			add_interference(graph, dynamic_array_get_at(&live_ranges, i), dynamic_array_get_at(&live_ranges, j));
 			printf("%d and %d interfere\n", i, j);
 		}
 	}
 
 	//Print out all adjacency lists here
-	print_adjacency_lists(live_ranges);
+	print_adjacency_lists(&live_ranges);
 
 	//Now let's construct the full graph from this
-	graph = construct_interference_graph_from_adjacency_lists(live_ranges);
+	graph = construct_interference_graph_from_adjacency_lists(&live_ranges);
 
 	//Print the full one
 	print_interference_graph(graph);
 
 	//Now run through and do the counts
 	for(u_int16_t i = 0; i < 20; i++){
-		live_range_t* range = dynamic_array_get_at(live_ranges, i);
+		live_range_t* range = dynamic_array_get_at(&live_ranges, i);
 
 		printf("LR%d has %d neighbors\n", range->live_range_id, get_live_range_degree(range));
 	}

@@ -62,12 +62,12 @@ typedef enum{
 struct cfg_t{
 	//This dynamic array contains all of the function
 	//entry blocks for each function that we have
-	dynamic_array_t* function_entry_blocks;
+	dynamic_array_t function_entry_blocks;
 	//Store the exit blocks as well. This makes RPO traversal much easier
-	dynamic_array_t* function_exit_blocks;
+	dynamic_array_t function_exit_blocks;
 	//An array of all blocks that are 
 	//All created blocks
-	dynamic_array_t* created_blocks;
+	dynamic_array_t created_blocks;
 	//We also need to hold onto the stack pointer
 	three_addr_var_t* stack_pointer;
 	//We also need to hold onto the instruction pointer
@@ -75,7 +75,7 @@ struct cfg_t{
 	//We'll want the type symtab too
 	type_symtab_t* type_symtab;
 	//All global variables
-	dynamic_array_t* global_variables;
+	dynamic_array_t global_variables;
 };
 
 
@@ -88,53 +88,53 @@ struct cfg_t{
  * by the "leader" and "exit" references for quick access
 */
 struct basic_block_t{
-	//The reference to a jump table. This is often not used at all
-	jump_table_t* jump_table;
-	//The function that we're defined in
-	symtab_function_record_t* function_defined_in;
-	//The variable that this block's name draws from if this block is a label block
-	symtab_variable_record_t* label;
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
 	instruction_t* leader_statement;
 	instruction_t* exit_statement;
 	//Predecessor nodes
-	dynamic_array_t* predecessors;
+	dynamic_array_t predecessors;
 	//Successor nodes
-	dynamic_array_t* successors;
+	dynamic_array_t successors;
 	//For convenience here. This is the successor that we use to
 	//"drill" to the bottom
 	basic_block_t* direct_successor;
 	//The array of used variables
-	dynamic_array_t* used_variables;
+	dynamic_array_t used_variables;
 	//The array of all assigned variables
-	dynamic_array_t* assigned_variables;
+	dynamic_array_t assigned_variables;
 	//The blocks dominance frontier
-	dynamic_array_t* dominance_frontier;
+	dynamic_array_t dominance_frontier;
 	//The reverse dominance frontier(for analysis)
-	dynamic_array_t* reverse_dominance_frontier;
+	dynamic_array_t reverse_dominance_frontier;
 	//The reverse post order set
-	dynamic_array_t* reverse_post_order;
+	dynamic_array_t reverse_post_order;
 	//The reverse post order set on the reverse cfg
-	dynamic_array_t* reverse_post_order_reverse_cfg;
+	dynamic_array_t reverse_post_order_reverse_cfg;
 	//The dynamic array for the dominator set
-	dynamic_array_t* dominator_set;
+	dynamic_array_t dominator_set;
 	//The dynamic array for the postdominator set. The postdominator
 	//set is the equivalent of the dominator set on the reverse CFG
-	dynamic_array_t* postdominator_set;
+	dynamic_array_t postdominator_set;
 	//The dominator children of a basic block. These are all
 	//of the blocks that this block directly dominates
-	dynamic_array_t* dominator_children;
+	dynamic_array_t dominator_children;
 	//The "LIVE_IN" variables for this node
-	dynamic_array_t* live_in;
+	dynamic_array_t live_in;
 	//The "LIVE_OUT" variables for this node
-	dynamic_array_t* live_out;
+	dynamic_array_t live_out;
 	//The immediate dominator - this reference isn't always used, but if we go through the work
 	//of calculating it, we may as well store it
 	basic_block_t* immediate_dominator;
 	//The immediate postdominator reference
 	basic_block_t* immediate_postdominator;
+	//The reference to a jump table. This is often not used at all
+	jump_table_t* jump_table;
+	//The function that we're defined in
+	symtab_function_record_t* function_defined_in;
+	//The variable that this block's name draws from if this block is a label block
+	symtab_variable_record_t* label;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//An integer ID
@@ -276,12 +276,12 @@ void basic_block_dealloc(basic_block_t* block);
 /**
  * Compute the postorder traversal for a function-level cfg
  */
-dynamic_array_t* compute_post_order_traversal(basic_block_t* entry);
+dynamic_array_t compute_post_order_traversal(basic_block_t* entry);
 
 /**
  * Get and return a reverse post order traversal for the CFG
  */
-dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry);
+dynamic_array_t compute_reverse_post_order_traversal(basic_block_t* entry);
 
 /**
  * Reset all reverse post order sets

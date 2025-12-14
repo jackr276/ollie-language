@@ -1595,8 +1595,7 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 	type->basic_type_token = basic_type;
 	
 	//Create and allocate the name
-	dynamic_string_t name;
-	dynamic_string_alloc(&name);
+	dynamic_string_t name = dynamic_string_alloc();
 
 	//Set this to be the type name
 	dynamic_string_set(&name, type_name);
@@ -1860,12 +1859,12 @@ void* get_struct_member(generic_type_t* structure, char* name){
 	symtab_variable_record_t* var;
 
 	//Extract for convenience
-	dynamic_array_t* struct_table = structure->internal_types.struct_table;
+	dynamic_array_t struct_table = structure->internal_types.struct_table;
 
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < struct_table->current_index; _++){
+	for(u_int16_t _ = 0; _ < struct_table.current_index; _++){
 		//Grab the variable out
-		var = dynamic_array_get_at(struct_table, _);
+		var = dynamic_array_get_at(&struct_table, _);
 
 		//Now we'll do a simple comparison. If they match, we're set
 		if(strcmp(var->var_name.string, name) == 0){
@@ -1887,12 +1886,12 @@ void* get_union_member(generic_type_t* union_type, char* name){
 	symtab_variable_record_t* var;
 
 	//Extract for convenience
-	dynamic_array_t* union_table = union_type->internal_types.union_table;
+	dynamic_array_t union_table = union_type->internal_types.union_table;
 
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < union_table->current_index; _++){
+	for(u_int16_t _ = 0; _ < union_table.current_index; _++){
 		//Grab the variable out
-		var = dynamic_array_get_at(union_table, _);
+		var = dynamic_array_get_at(&union_table, _);
 
 		//Now we'll do a simple comparison. If they match, we're set
 		if(strcmp(var->var_name.string, name) == 0){
@@ -1921,7 +1920,7 @@ void add_struct_member(generic_type_t* type, void* member_var){
 	var->membership = STRUCT_MEMBER;
 
 	//If this is the very first one, then we'll 
-	if(type->internal_types.struct_table->current_index == 0){
+	if(type->internal_types.struct_table.current_index == 0){
 		//This one's offset is 0
 		var->struct_offset = 0;
 
@@ -1929,7 +1928,7 @@ void add_struct_member(generic_type_t* type, void* member_var){
 		type->type_size += var->type_defined_as->type_size;
 
 		//Add the variable into the struct table
-		dynamic_array_add(type->internal_types.struct_table, var);
+		dynamic_array_add(&(type->internal_types.struct_table), var);
 
 		//The largest member size here is the alignment of the biggest type
 		type->internal_values.largest_member_type = get_base_alignment_type(var->type_defined_as);
@@ -1943,7 +1942,7 @@ void add_struct_member(generic_type_t* type, void* member_var){
 	//the size of the latest variable
 	
 	//The prior variable
-	symtab_variable_record_t* prior_variable = dynamic_array_get_at(type->internal_types.struct_table, type->internal_types.struct_table->current_index - 1);
+	symtab_variable_record_t* prior_variable = dynamic_array_get_at(&(type->internal_types.struct_table), type->internal_types.struct_table.current_index - 1);
 
 	//And the offset of this entry
 	u_int32_t offset = prior_variable->struct_offset;
@@ -1982,7 +1981,7 @@ void add_struct_member(generic_type_t* type, void* member_var){
 	type->type_size += var->type_defined_as->type_size + needed_padding;
 
 	//Add the variable into the table
-	dynamic_array_add(type->internal_types.struct_table, var);
+	dynamic_array_add(&(type->internal_types.struct_table), var);
 
 	//Done
 	return; 
@@ -2003,9 +2002,9 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 	//that already exist in the list
 	if(user_defined_values == TRUE){
 		//Extract the enum member's actual value
-		for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table->current_index; i++){
+		for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table.current_index; i++){
 			//Grab the variable out
-			symtab_variable_record_t* variable = dynamic_array_get_at(enum_type->internal_types.enumeration_table, i);
+			symtab_variable_record_t* variable = dynamic_array_get_at(&(enum_type->internal_types.enumeration_table), i);
 
 			//If these 2 equal, we fail out
 			if(variable->enum_member_value == ((symtab_variable_record_t*)enum_member)->enum_member_value){
@@ -2017,7 +2016,7 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 	}
 
 	//Just throw the member in
-	dynamic_array_add(enum_type->internal_types.enumeration_table, enum_member);
+	dynamic_array_add(&(enum_type->internal_types.enumeration_table), enum_member);
 
 	//All went well
 	return SUCCESS;
@@ -2035,7 +2034,7 @@ u_int8_t add_union_member(generic_type_t* union_type, void* member_var){
 	record->membership = UNION_MEMBER;
 
 	//Add this in
-	dynamic_array_add(union_type->internal_types.union_table, member_var);
+	dynamic_array_add(&(union_type->internal_types.union_table), member_var);
 
 	//If the size of this value is larger than the total size, we need to reassign
 	//the total size to this. Union types are always as large as their largest memeber
@@ -2107,7 +2106,7 @@ generic_type_t* create_aliased_type(char* name, generic_type_t* aliased_type, u_
 	type->line_number = line_number;
 
 	//Create the name
-	dynamic_string_alloc(&(type->type_name));
+	type->type_name = dynamic_string_alloc();
 	dynamic_string_set(&(type->type_name), name);
 
 	//Assign the mutability
@@ -2290,7 +2289,7 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	char var_string[MAX_IDENT_LENGTH];
 
 	//Allocate the type name
-	dynamic_string_alloc(&(function_pointer_type->type_name));
+	function_pointer_type->type_name =  dynamic_string_alloc();
 
 	//Extract this out
 	function_type_t* function_type = function_pointer_type->internal_types.function_type;
@@ -2440,17 +2439,17 @@ void type_dealloc(generic_type_t* type){
 	//Free based on what type of type we have
 	switch(type->type_class){
 		case TYPE_CLASS_ENUMERATED:
-			free(type->internal_types.enumeration_table);
+			dynamic_array_dealloc(&(type->internal_types.enumeration_table));
 			break;
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			free(type->internal_types.function_type);
 			break;
 		//For this one we can deallocate the struct table
 		case TYPE_CLASS_STRUCT:
-			dynamic_array_dealloc(type->internal_types.struct_table);
+			dynamic_array_dealloc(&(type->internal_types.struct_table));
 			break;
 		case TYPE_CLASS_UNION:
-			dynamic_array_dealloc(type->internal_types.union_table);
+			dynamic_array_dealloc(&(type->internal_types.union_table));
 			break;
 		default:
 			break;

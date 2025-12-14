@@ -13,17 +13,21 @@
 #define DEFAULT_NESTING_STACK_SIZE 10
 
 /**
- * Create a stack
+ * Create a stack. The resulting control structure will be stack
+ * allocated
  */
-nesting_stack_t* nesting_stack_alloc(){
+nesting_stack_t nesting_stack_alloc(){
 	//Allocate our stack
-	nesting_stack_t* stack = calloc(1, sizeof(nesting_stack_t));
+	nesting_stack_t stack;
 
 	//Allocate the internal array
-	stack->stack = calloc(DEFAULT_NESTING_STACK_SIZE, sizeof(nesting_level_t));
+	stack.stack = calloc(DEFAULT_NESTING_STACK_SIZE, sizeof(nesting_level_t));
 
 	//Store the current max index
-	stack->current_max_index = DEFAULT_NESTING_STACK_SIZE;
+	stack.current_max_index = DEFAULT_NESTING_STACK_SIZE;
+
+	//Set this to 0
+	stack.current_index = 0;
 
 	//Return the stack
 	return stack;
@@ -197,13 +201,10 @@ u_int8_t nesting_stack_contains_level(nesting_stack_t* nesting_stack, nesting_le
 /**
  * Completely free all memory in the stack
  */
-void nesting_stack_dealloc(nesting_stack_t** stack){
+void nesting_stack_dealloc(nesting_stack_t* stack){
 	//Free the internal array
-	free((*stack)->stack);
+	free(stack->stack);
 
-	//Free the overall struct
-	free(*stack);
-
-	//Set it to NULL as a warning
-	*stack = NULL;
+	//Set this to NULL as a warning
+	stack->stack = NULL;
 }

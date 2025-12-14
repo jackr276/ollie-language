@@ -95,7 +95,7 @@ void initialize_variable_scope(variable_symtab_t* symtab){
 	symtab_variable_sheaf_t* current = (symtab_variable_sheaf_t*)calloc(1, sizeof(symtab_variable_sheaf_t));
 
 	//Add it to the array
-	dynamic_array_add(symtab->sheafs, current);
+	dynamic_array_add(&(symtab->sheafs), current);
 	
 	//Increment(down the chain)
 	symtab->current_lexical_scope++;
@@ -119,7 +119,7 @@ void initialize_type_scope(type_symtab_t* symtab){
 	symtab_type_sheaf_t* current = (symtab_type_sheaf_t*)calloc(1, sizeof(symtab_type_sheaf_t));
 
 	//Add this into the dynamic array
-	dynamic_array_add(symtab->sheafs, current);
+	dynamic_array_add(&(symtab->sheafs), current);
 
 	//Increment(down the chain)
 	symtab->current_lexical_scope++;
@@ -364,8 +364,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 	sprintf(variable_name, "t%d", temp_id);
 
 	//Create and set the name here
-	dynamic_string_t string;
-	dynamic_string_alloc(&string);
+	dynamic_string_t string = dynamic_string_alloc();
 	dynamic_string_set(&string, variable_name);
 
 	//Now create and add the symtab record for this variable
@@ -766,8 +765,7 @@ u_int16_t add_all_basic_types(type_symtab_t* symtab){
  */
 symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
 	//Create the var name
-	dynamic_string_t variable_name;
-	dynamic_string_alloc(&variable_name);
+	dynamic_string_t variable_name = dynamic_string_alloc();
 
 	//Set to be stack pointer
 	dynamic_string_set(&variable_name, "stack_pointer");
@@ -786,8 +784,7 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types){
  */
 symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 	//Create the var name
-	dynamic_string_t variable_name;
-	dynamic_string_alloc(&variable_name);
+	dynamic_string_t variable_name = dynamic_string_alloc();
 
 	//Set to be instruction pointer(rip)
 	dynamic_string_set(&variable_name, "rip");
@@ -938,9 +935,9 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 	symtab_variable_record_t* records_cursor;
 
 	//So long as the cursor is not null
-	for(u_int16_t i = 0; i < symtab->sheafs->current_index; i++){
+	for(u_int16_t i = 0; i < symtab->sheafs.current_index; i++){
 		//Grab the current sheaf
-		cursor = dynamic_array_get_at(symtab->sheafs, i);
+		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Grab a records cursor
 		records_cursor = cursor->records[h];
@@ -1026,12 +1023,12 @@ local_constant_t* local_constant_alloc(dynamic_string_t* value){
 void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant){
 	//If we have no local constants, then we'll need to allocate
 	//the array
-	if(function->local_constants == NULL){
+	if(function->local_constants.internal_array == NULL){
 		function->local_constants = dynamic_array_alloc();
 	}
 
 	//And add the function in
-	dynamic_array_add(function->local_constants, constant);
+	dynamic_array_add(&(function->local_constants), constant);
 }
 
 
@@ -1257,15 +1254,15 @@ void print_function_record(symtab_function_record_t* record){
  */
 void print_local_constants(FILE* fl, symtab_function_record_t* record){
 	//This means that we have no local constants(which is a very common case), so we leave
-	if(record->local_constants == NULL || record->local_constants->current_index == 0){
+	if(record->local_constants.internal_array == NULL || record->local_constants.current_index == 0){
 		return;
 	}
 
 	//Otherwise, we do have local constants, so we will run through and print ones that have a reference
 	//count that is more than 0
-	for(u_int16_t i = 0; i < record->local_constants->current_index; i++){
+	for(u_int16_t i = 0; i < record->local_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(record->local_constants, i);
+		local_constant_t* constant = dynamic_array_get_at(&(record->local_constants), i);
 
 		//If this has no references, we leave
 		if(constant->reference_count == 0){
@@ -1527,9 +1524,9 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 	symtab_variable_record_t* record;
 
 	//So long as we have a sheaf
-	for(u_int16_t i = 0; i < symtab->sheafs->current_index; i++){
+	for(u_int16_t i = 0; i < symtab->sheafs.current_index; i++){
 		//Grab the actual sheaf out
-		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(symtab->sheafs, i);
+		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll run through every variable in here
 		for(u_int32_t i = 0; i < KEYSPACE; i++){
@@ -1598,14 +1595,14 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 
 			//If we have local constants, these will
 			//also need deallocation
-			if(temp->local_constants != NULL){
+			if(temp->local_constants.internal_array != NULL){
 				//Deallocate each local constant
-				for(u_int16_t i = 0; i < temp->local_constants->current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(temp->local_constants, i));
+				for(u_int16_t i = 0; i < temp->local_constants.current_index; i++){
+					local_constant_dealloc(dynamic_array_get_at(&(temp->local_constants), i));
 				}
 
 				//Then destroy the whole array
-				dynamic_array_dealloc(temp->local_constants);
+				dynamic_array_dealloc(&(temp->local_constants));
 			}
 
 			//Dealloate the function type
@@ -1644,9 +1641,9 @@ void variable_symtab_dealloc(variable_symtab_t* symtab){
 	symtab_variable_record_t* temp;
 
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < symtab->sheafs->current_index; i++){
+	for	(u_int16_t i = 0; i < symtab->sheafs.current_index; i++){
 		//Grab the current sheaf out
-		cursor = dynamic_array_get_at(symtab->sheafs, i);
+		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll free all non-null records
 		for(u_int16_t j = 0; j < KEYSPACE; j++){
@@ -1664,7 +1661,7 @@ void variable_symtab_dealloc(variable_symtab_t* symtab){
 	}
 
 	//Deallocate the dynamic array
-	dynamic_array_dealloc(symtab->sheafs);
+	dynamic_array_dealloc(&(symtab->sheafs));
 	
 	//Finally free the symtab itself
 	free(symtab);
@@ -1679,9 +1676,9 @@ void type_symtab_dealloc(type_symtab_t* symtab){
 	symtab_type_record_t* temp;
 
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < symtab->sheafs->current_index; i++){
+	for	(u_int16_t i = 0; i < symtab->sheafs.current_index; i++){
 		//Grab the current sheaf
-		cursor = dynamic_array_get_at(symtab->sheafs, i);
+		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll free all non-null records
 		for(u_int16_t j = 0; j < KEYSPACE; j++){
@@ -1701,7 +1698,7 @@ void type_symtab_dealloc(type_symtab_t* symtab){
 	}
 
 	//Destroy the dynamic array
-	dynamic_array_dealloc(symtab->sheafs);
+	dynamic_array_dealloc(&(symtab->sheafs));
 
 	//Finally free the symtab itself
 	free(symtab);

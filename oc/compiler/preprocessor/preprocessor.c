@@ -95,7 +95,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Keep a running list of what we need to compile
-	dynamic_array_t* dependency_list;
+	dynamic_array_t dependency_list;
 
 	//Open the file first off
 	FILE* fl = fopen(fname, "r");
@@ -220,7 +220,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	fclose(fl);
 
 	//We're done with our dependency list, so deallocate it
-	dynamic_array_dealloc(dependency_list);
+	dynamic_array_dealloc(&dependency_list);
 	
 	//Finally give back the root node that we made here
 	return root_node;

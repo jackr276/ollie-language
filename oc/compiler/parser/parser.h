@@ -55,7 +55,7 @@ struct front_end_results_package_t{
 	type_symtab_t* type_symtab;
 	constants_symtab_t* constant_symtab;
 	//Grouping stack
-	lex_stack_t* grouping_stack;
+	lex_stack_t grouping_stack;
 	//Global call graph entry point
 	call_graph_node_t* os;
 	//Number of errors

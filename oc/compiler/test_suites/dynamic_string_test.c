@@ -11,10 +11,7 @@
 
 int main(){
 	//Allocate the dynamic string
-	dynamic_string_t string = {NULL, 0, 0};
-
-	//Allocate the string
-	dynamic_string_alloc(&string);
+	dynamic_string_t string = dynamic_string_alloc();
 
 	//First set
 	dynamic_string_set(&string, "I am a simple string");
@@ -45,8 +42,8 @@ int main(){
 
 	printf("============ Testing char addition ================\n");
 
-	//Recreate this string
-	dynamic_string_alloc(&string);
+	//Reallocate it
+	string = dynamic_string_alloc();
 
 	//We will add this char by char
 	char addition_string[] = "This is a very long string that will test char addition inside of the dynamic string submodule for ollie language.";
@@ -67,7 +64,7 @@ int main(){
 	printf("============ Testing concatenation ================\n");
 
 	//Recreate the string
-	dynamic_string_alloc(&string);
+	string = dynamic_string_alloc();
 
 	dynamic_string_concatenate(&string, "I am a string before concatenation.");
 
@@ -101,7 +98,7 @@ int main(){
 	printf("=========== Testing char addition after setting ====================\n");
 
 	//Recreate the string
-	dynamic_string_alloc(&string);
+	string = dynamic_string_alloc();
 
 	//Set it
 	dynamic_string_set(&string, "I have been set");
@@ -119,7 +116,7 @@ int main(){
 	printf("=========== Testing functionality after clone ============\n");
 
 	//Recreate the string
-	dynamic_string_alloc(&string);
+	string = dynamic_string_alloc();
 
 	//Set it
 	dynamic_string_set(&string, "I have been set");

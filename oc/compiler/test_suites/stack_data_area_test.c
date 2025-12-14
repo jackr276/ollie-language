@@ -108,11 +108,11 @@ int main(int argc, char** argv){
 	symtab_variable_record_t* record;
 
 	//Create a dynamic array to hold all of the vars we make
-	dynamic_array_t* array_of_vars = dynamic_array_alloc();
+	dynamic_array_t array_of_vars = dynamic_array_alloc();
 
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < results->variable_symtab->sheafs->current_index; i++){
-		cursor = dynamic_array_get_at(results->variable_symtab->sheafs, i);
+	for	(u_int16_t i = 0; i < results->variable_symtab->sheafs.current_index; i++){
+		cursor = dynamic_array_get_at(&(results->variable_symtab->sheafs), i);
 
 		//Look for anything in the records that is an array
 		for(u_int16_t j = 0; j < KEYSPACE; j++){
@@ -127,7 +127,7 @@ int main(int argc, char** argv){
 				three_addr_var_t* var = emit_var(record);
 			
 				//Store for later
-				dynamic_array_add(array_of_vars, var);
+				dynamic_array_add(&array_of_vars, var);
 
 				//Let's print it out to see what we have
 				print_stack_data_area(&(main_function->data_area));
@@ -144,9 +144,9 @@ int main(int argc, char** argv){
 	printf("###################### Now testing removal ####################\n");
 
 	//Now let's run through and remove everything to test that
-	for(u_int16_t i = 0; i < array_of_vars->current_index; i++){
+	for(u_int16_t i = 0; i < array_of_vars.current_index; i++){
 		//Extract the variable
-		three_addr_var_t* variable = dynamic_array_get_at(array_of_vars, i);
+		three_addr_var_t* variable = dynamic_array_get_at(&array_of_vars, i);
 		//Delete it
 		remove_region_from_stack(&(main_function->data_area), variable->stack_region);
 		//Reprint the whole thing
@@ -154,7 +154,7 @@ int main(int argc, char** argv){
 	}
 
 	//We can scrap the dynamic array once here
-	dynamic_array_dealloc(array_of_vars);
+	dynamic_array_dealloc(&array_of_vars);
 
 	//Ensure that we can fully deallocate
 	stack_data_area_dealloc(&(main_function->data_area));

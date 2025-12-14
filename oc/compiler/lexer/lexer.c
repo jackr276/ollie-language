@@ -41,7 +41,7 @@ typedef enum {
 u_int32_t line_num = 0;
 
 //Our lexer stack
-static lex_stack_t* pushed_back_tokens = NULL;
+static lex_stack_t pushed_back_tokens;
 
 //Token array, we will index using their enum values
 static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
@@ -160,18 +160,15 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 	asm_statement.tok = ASM_STATEMENT;
 
 	//The dynamic string for our assembly statement
-	dynamic_string_t asm_string;
-
-	//We'll allocate it here
-	dynamic_string_alloc(&asm_string);
+	dynamic_string_t asm_string = dynamic_string_alloc();
 
 	//Searching char
 	char ch;
 
 	//First pop off all of the tokens if there are any on the stack
-	while(lex_stack_is_empty(pushed_back_tokens) == FALSE){
+	while(lex_stack_is_empty(&pushed_back_tokens) == FALSE){
 		//Pop whatever we have off
-		lexitem_t token = pop_token(pushed_back_tokens);
+		lexitem_t token = pop_token(&pushed_back_tokens);
 
 		//Concatenate the string here
 		dynamic_string_concatenate(&asm_string, token.lexeme.string);
@@ -203,9 +200,9 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 */
 lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t const_search){
 	//IF we have pushed back tokens, we need to return them first
-	if(lex_stack_is_empty(pushed_back_tokens) == FALSE){
+	if(lex_stack_is_empty(&pushed_back_tokens) == FALSE){
 		//Just pop this and leave
-		return pop_token(pushed_back_tokens);
+		return pop_token(&pushed_back_tokens);
 	}
 
 
@@ -341,8 +338,8 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						//If we're looking for a constant, there are more options
 						//here. This could be a negative sign.
 						} else if(const_search == SEARCHING_FOR_CONSTANT){
-							//Allocate the string here
-							dynamic_string_alloc(&lexeme);
+							//Allocate the lexeme
+							lexeme = dynamic_string_alloc();
 
 							//We're in an int
 							if(ch2 >= '0' && ch2 <= '9'){
@@ -547,8 +544,9 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						//Let's see what we have here
 						ch2 = get_next_char(fl);
 						if(ch2 >= '0' && ch2 <= '9'){
-							//Allocate our dynamic string
-							dynamic_string_alloc(&lexeme);
+							//Allocate the string
+							lexeme = dynamic_string_alloc();
+
 							//Add both of these in
 							dynamic_string_add_char_to_back(&lexeme, ch);
 							dynamic_string_add_char_to_back(&lexeme, ch2);
@@ -596,7 +594,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						//Say that we're in a string
 						current_state = IN_STRING;
 						//Allocate the lexeme
-						dynamic_string_alloc(&lexeme);
+						lexeme = dynamic_string_alloc();
 						break;
 
 					//Beginning of a char const
@@ -605,7 +603,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						ch2 = get_next_char(fl);
 
 						//Allocate the lexeme here
-						dynamic_string_alloc(&lexeme);
+						lexeme = dynamic_string_alloc();
 
 						//Add our char const ch2 in
 						dynamic_string_add_char_to_back(&lexeme, ch2);
@@ -689,7 +687,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 					default:
 						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#' || ch == '_'){
 							//Allocate the lexeme
-							dynamic_string_alloc(&lexeme);
+							lexeme = dynamic_string_alloc();
 							//Add the char in
 							dynamic_string_add_char_to_back(&lexeme, ch);
 							//We are now in an identifier
@@ -697,7 +695,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						//If we get here we have the start of either an int or a real
 						} else if(ch >= '0' && ch <= '9'){
 							//Allocate the lexeme
-							dynamic_string_alloc(&lexeme);
+							lexeme = dynamic_string_alloc();
 							//Add the character to the lexeme
 							dynamic_string_add_char_to_back(&lexeme, ch);
 							//We are not in an int
@@ -912,7 +910,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
  */
 void push_back_token(lexitem_t l){
 	//All that we need to do here is push the token onto the stack
-	push_token(pushed_back_tokens, l);
+	push_token(&pushed_back_tokens, l);
 }
 
 

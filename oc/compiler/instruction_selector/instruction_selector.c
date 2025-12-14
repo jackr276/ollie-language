@@ -154,24 +154,24 @@ static void order_blocks(cfg_t* cfg){
 	//of procedures
 	
 	//We'll need to use a queue every time, we may as well just have one big one
-	heap_queue_t* queue = heap_queue_alloc();
+	heap_queue_t queue = heap_queue_alloc();
 
 	//For each function
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
 		//Grab the function block out
-		basic_block_t* func_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
+		basic_block_t* func_block = dynamic_array_get_at(&(cfg->function_entry_blocks), _);
 
 		//These get reset for every function because each function has its own
 		//separate ordering
 		basic_block_t* previous = NULL;
 
 		//This function start block is the begging of our BFS	
-		enqueue(queue, func_block);
+		enqueue(&queue, func_block);
 		
 		//So long as the queue is not empty
-		while(queue_is_empty(queue) == FALSE){
+		while(queue_is_empty(&queue) == FALSE){
 			//Grab this block off of the queue
-			basic_block_t* current = dequeue(queue);
+			basic_block_t* current = dequeue(&queue);
 
 			//If previous is NULL, this is the first block
 			if(previous == NULL){
@@ -209,16 +209,16 @@ static void order_blocks(cfg_t* cfg){
 			//If this is the case, we'll add it in first
 			if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
 				//Add it into the queue
-				enqueue(queue, direct_end_jump);
+				enqueue(&queue, direct_end_jump);
 			}
 
 			//Now we'll go through each of the successors in this node
-			for(u_int16_t idx = 0; current->successors != NULL && idx < current->successors->current_index; idx++){
+			for(u_int16_t idx = 0; idx < current->successors.current_index; idx++){
 				//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
 				//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
 
 				//Grab the successor
-				basic_block_t* successor = dynamic_array_get_at(current->successors, idx);
+				basic_block_t* successor = dynamic_array_get_at(&(current->successors), idx);
 
 				//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
 				if(successor == direct_end_jump){
@@ -233,14 +233,14 @@ static void order_blocks(cfg_t* cfg){
 
 				//Otherwise it's not, so we'll add it in
 				if(successor->visited == FALSE){
-					enqueue(queue, successor);
+					enqueue(&queue, successor);
 				}
 			}
 		}
 	}
 
 	//Destroy the queue when done
-	heap_queue_dealloc(queue);
+	heap_queue_dealloc(&queue);
 }
 
 
@@ -299,9 +299,9 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
  */
 static void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
 	//Run through all of the functions
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the entry block. This is our starting point
-		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* current = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//So long as this one isn't NULL
 		while(current != NULL){
@@ -313,7 +313,7 @@ static void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
 	}
 
 	//Print all global variables after the blocks
-	print_all_global_variables(stdout, cfg->global_variables);
+	print_all_global_variables(stdout, &(cfg->global_variables));
 }
 
 
@@ -1906,9 +1906,9 @@ static void simplify(cfg_t* cfg){
 	//We will do each function individually for efficiency reasons. This way, if
 	//one function requires a lot of simplification, it will not drag the rest of the 
 	//functions along with it in each pass
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract it
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Let this keep going until we're done changing
 		while(simplifier_pass(cfg, function_entry) == TRUE);
@@ -5749,9 +5749,9 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
  */
 static void select_instructions(cfg_t* cfg){
 	//We will again do instruction selection on a per-function level basis
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the entry
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Save the current block here
 		basic_block_t* current = function_entry;

@@ -48,14 +48,14 @@ static generic_type_t* i64 = NULL;
 //hold values that we can break & continue
 //to. This is done here to avoid the need
 //to send value packages at each rule
-static heap_stack_t* break_stack = NULL;
-static heap_stack_t* continue_stack = NULL;
+static heap_stack_t break_stack;
+static heap_stack_t continue_stack;
 //The overall nesting stack will tell us what level of nesting we're at(if, switch/case, loop)
-static nesting_stack_t* nesting_stack = NULL;
+static nesting_stack_t nesting_stack;
 //Keep a list of all lable statements in the function(block jumps are internal only)
-static dynamic_array_t* current_function_labeled_blocks = NULL;
+static dynamic_array_t current_function_labeled_blocks;
 //Also keep a list of all custom jumps in the function
-static dynamic_array_t* current_function_user_defined_jump_statements = NULL;
+static dynamic_array_t current_function_user_defined_jump_statements;
 //The current stack offset for any given function
 static u_int64_t stack_offset = 0;
 //For any/all error printing
@@ -155,29 +155,27 @@ static u_int8_t is_power_of_2(int64_t value){
 void reset_block_variable_tracking(basic_block_t* block){
 	//Let's first wipe everything regarding this block's used and assigned variables. If they don't exist,
 	//we'll allocate them fresh
-	if(block->assigned_variables == NULL){
+	if(block->assigned_variables.internal_array == NULL){
 		block->assigned_variables = dynamic_array_alloc();
 	} else {
-		reset_dynamic_array(block->assigned_variables);
+		reset_dynamic_array(&(block->assigned_variables));
 	}
 
 	//Do the same with the used variables
-	if(block->used_variables == NULL){
+	if(block->used_variables.internal_array == NULL){
 		block->used_variables = dynamic_array_alloc();
 	} else {
-		reset_dynamic_array(block->used_variables);
+		reset_dynamic_array(&(block->used_variables));
 	}
 
 	//Reset live in completely
-	if(block->live_in != NULL){
-		dynamic_array_dealloc(block->live_in);
-		block->live_in = NULL;
+	if(block->live_in.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_in));
 	}
 
 	//Reset live out completely
-	if(block->live_out != NULL){
-		dynamic_array_dealloc(block->live_out);
-		block->live_out = NULL;
+	if(block->live_out.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_out));
 	}
 }
 
@@ -214,13 +212,13 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 
 	//What is the estimated execution cost of this block? We will
 	//rely entirely on the nesting stack to do this for us
-	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(&nesting_stack);
 
 	//Let's add in what function this block came from
 	created->function_defined_in = current_function;
 
 	//Add this into the dynamic array
-	dynamic_array_add(cfg->created_blocks, created);
+	dynamic_array_add(&(cfg->created_blocks), created);
 
 	//Give it back
 	return created;
@@ -251,7 +249,7 @@ basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	created->function_defined_in = current_function;
 
 	//Add this into the dynamic array
-	dynamic_array_add(cfg->created_blocks, created);
+	dynamic_array_add(&(cfg->created_blocks), created);
 
 	return created;
 }
@@ -280,13 +278,13 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
 
 	//What is the estimated execution cost of this block? Rely on the nesting stack
 	//to do this
-	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(&nesting_stack);
 
 	//Let's add in what function this block came from
 	created->function_defined_in = current_function;
 
 	//Add this into the dynamic array
-	dynamic_array_add(cfg->created_blocks, created);
+	dynamic_array_add(&(cfg->created_blocks), created);
 
 	return created;
 }
@@ -333,9 +331,9 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
 	entry->visited = TRUE;
 
 	//For every child(predecessor-it's reverse), we visit it as well
-	for(u_int16_t _ = 0; entry->predecessors != NULL && _ < entry->predecessors->current_index; _++){
+	for(u_int16_t _ = 0; _ < entry->predecessors.current_index; _++){
 		//Visit each of the blocks
-		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(entry->predecessors, _));
+		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(entry->predecessors), _));
 	}
 
 	//Now we can push entry onto the stack
@@ -347,11 +345,11 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
  * Get and return a reverse post order traversal of a function-level CFG where
  * we are going in reverse order. This is used mainly for data flow(liveness)
  */
-dynamic_array_t* compute_reverse_post_order_traversal_reverse_cfg(basic_block_t* entry){
+dynamic_array_t compute_reverse_post_order_traversal_reverse_cfg(basic_block_t* entry){
 	//For our postorder traversal
-	heap_stack_t* stack = heap_stack_alloc();
+	heap_stack_t stack = heap_stack_alloc();
 	//We'll need this eventually for postorder
-	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
+	dynamic_array_t reverse_post_order_traversal = dynamic_array_alloc();
 
 	//Go all the way to the bottom
 	while(entry->block_type != BLOCK_TYPE_FUNC_EXIT){
@@ -359,16 +357,16 @@ dynamic_array_t* compute_reverse_post_order_traversal_reverse_cfg(basic_block_t*
 	}
 
 	//Invoke the recursive helper
-	reverse_post_order_traversal_reverse_cfg_rec(stack, entry);
+	reverse_post_order_traversal_reverse_cfg_rec(&stack, entry);
 
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
-	while(heap_stack_is_empty(stack) == FALSE){
-		dynamic_array_add(reverse_post_order_traversal, pop(stack));
+	while(heap_stack_is_empty(&stack) == FALSE){
+		dynamic_array_add(&reverse_post_order_traversal, pop(&stack));
 	}
 
 	//And when we're done, get rid of the stack
-	heap_stack_dealloc(stack);
+	heap_stack_dealloc(&stack);
 
 	//Give back the reverse post order traversal
 	return reverse_post_order_traversal;
@@ -388,11 +386,10 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
 	//Mark it as visited
 	entry->visited = TRUE;
 
-	//We'll go in regular order
 	//For every child(successor), we visit it as well
-	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
+	for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
 		//Visit each of the blocks
-		reverse_post_order_traversal_rec(stack, dynamic_array_get_at(entry->successors, _));
+		reverse_post_order_traversal_rec(stack, dynamic_array_get_at(&(entry->successors), _));
 	}
 
 	//Now we can push entry onto the stack
@@ -403,23 +400,23 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
 /**
  * Get and return a reverse-post order traversal for a function level CFG
  */
-dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry){
+dynamic_array_t compute_reverse_post_order_traversal(basic_block_t* entry){
 	//For our postorder traversal
-	heap_stack_t* stack = heap_stack_alloc();
+	heap_stack_t stack = heap_stack_alloc();
 	//We'll need this eventually for postorder
-	dynamic_array_t* reverse_post_order_traversal = dynamic_array_alloc();
+	dynamic_array_t reverse_post_order_traversal = dynamic_array_alloc();
 
 	//Invoke the recursive helper
-	reverse_post_order_traversal_rec(stack, entry);
+	reverse_post_order_traversal_rec(&stack, entry);
 
 	//Now we'll pop everything off of the stack, and put it onto the RPO 
 	//array in backwards order
-	while(heap_stack_is_empty(stack) == FALSE){
-		dynamic_array_add(reverse_post_order_traversal, pop(stack));
+	while(heap_stack_is_empty(&stack) == FALSE){
+		dynamic_array_add(&reverse_post_order_traversal, pop(&stack));
 	}
 
 	//And when we're done, get rid of the stack
-	heap_stack_dealloc(stack);
+	heap_stack_dealloc(&stack);
 
 	//Give back the reverse post order traversal
 	return reverse_post_order_traversal;
@@ -431,20 +428,18 @@ dynamic_array_t* compute_reverse_post_order_traversal(basic_block_t* entry){
  */
 void reset_reverse_post_order_sets(cfg_t* cfg){
 	//Run through all of the function blocks
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
 		//Grab the block out
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, _);
+		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), _);
 
 		//Set the RPO to be null
-		if(function_entry_block->reverse_post_order != NULL){
-			dynamic_array_dealloc(function_entry_block->reverse_post_order);
-			function_entry_block->reverse_post_order = NULL;
+		if(function_entry_block->reverse_post_order.internal_array != NULL){
+			dynamic_array_dealloc(&(function_entry_block->reverse_post_order));
 		}
 
 		//Set the RPO reverse CFG to be null
-		if(function_entry_block->reverse_post_order_reverse_cfg != NULL){
-			dynamic_array_dealloc(function_entry_block->reverse_post_order_reverse_cfg);
-			function_entry_block->reverse_post_order_reverse_cfg = NULL;
+		if(function_entry_block->reverse_post_order_reverse_cfg.internal_array != NULL){
+			dynamic_array_dealloc(&(function_entry_block->reverse_post_order_reverse_cfg));
 		}
 	}
 }
@@ -462,10 +457,10 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
 	//Otherwise mark that we've visited
 	entry->visited = TRUE;
 
-	//We will visit the children first
-	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
+	//Run through every successor
+	for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
 		//Recursive call to every child first
-		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(entry->successors, _));
+		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), _));
 	}
 	
 	//Now we'll finally visit the node
@@ -478,15 +473,15 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
 /**
  * Get and return the regular postorder traversal for a function-level CFG
  */
-dynamic_array_t* compute_post_order_traversal(basic_block_t* entry){
+dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
 	//Reset the visited status
 	reset_visited_status(cfg, FALSE);
 
 	//Create our dynamic array
-	dynamic_array_t* post_order_traversal = dynamic_array_alloc();
+	dynamic_array_t post_order_traversal = dynamic_array_alloc();
 
 	//Make the recursive call
-	post_order_traversal_rec(post_order_traversal, entry);
+	post_order_traversal_rec(&post_order_traversal, entry);
 
 	//Give the traversal back
 	return post_order_traversal;
@@ -537,20 +532,20 @@ void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	}
 
 	//If this is NULL, we'll need to allocate it
-	if(basic_block->used_variables == NULL){
+	if(basic_block->used_variables.internal_array == NULL){
 		basic_block->used_variables = dynamic_array_alloc();
 	}
 
 	//We need a special kind of comparison here, so we can't use the canned method
-	for(u_int16_t i = 0; i < basic_block->used_variables->current_index; i++){
+	for(u_int16_t i = 0; i < basic_block->used_variables.current_index; i++){
 		//If the linked variables are the same, we're out
-		if(((three_addr_var_t*)(basic_block->used_variables->internal_array[i]))->linked_var == var->linked_var){
+		if(((three_addr_var_t*)(basic_block->used_variables.internal_array[i]))->linked_var == var->linked_var){
 			return;
 		}
 	}
 	
 	//we didn't find it, so we will add
-	dynamic_array_add(basic_block->used_variables, var); 
+	dynamic_array_add(&(basic_block->used_variables), var); 
 }
 
 
@@ -566,20 +561,20 @@ void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	}
 
 	//If the assigned variable dynamic array is NULL, we'll allocate it here
-	if(basic_block->assigned_variables == NULL){
+	if(basic_block->assigned_variables.internal_array == NULL){
 		basic_block->assigned_variables = dynamic_array_alloc();
 	}
 
 	//We need a special kind of comparison here, so we can't use the canned method
-	for(u_int16_t i = 0; i < basic_block->assigned_variables->current_index; i++){
+	for(u_int16_t i = 0; i < basic_block->assigned_variables.current_index; i++){
 		//If the linked variables are the same, we're out
-		if(((three_addr_var_t*)(basic_block->assigned_variables->internal_array[i]))->linked_var == var->linked_var){
+		if(((three_addr_var_t*)(basic_block->assigned_variables.internal_array[i]))->linked_var == var->linked_var){
 			return;
 		}
 	}
 
 	//We didn't find it, so we'll add it
-	dynamic_array_add(basic_block->assigned_variables, var);
+	dynamic_array_add(&(basic_block->assigned_variables), var);
 }
 
 
@@ -610,16 +605,16 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 
 	//Now, we will print all of the active variables that this block has
-	if(block->used_variables != NULL){
+	if(block->used_variables.internal_array != NULL){
 		printf("(");
 
 		//Run through all of the live variables and print them out
-		for(u_int16_t i = 0; i < block->used_variables->current_index; i++){
+		for(u_int16_t i = 0; i < block->used_variables.current_index; i++){
 			//Print it out
-			print_variable(stdout, block->used_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+			print_variable(stdout, block->used_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->used_variables->current_index - 1){
+			if(i != block->used_variables.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -636,51 +631,56 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	printf("Predecessors: {");
 
-	for(u_int16_t i = 0; block->predecessors != NULL && i < block->predecessors->current_index; i++){
-		basic_block_t* predecessor = block->predecessors->internal_array[i];
+	//If we have predecessors
+	if(block->predecessors.internal_array != NULL){
+		for(u_int16_t i = 0; i < block->predecessors.current_index; i++){
+			basic_block_t* predecessor = block->predecessors.internal_array[i];
 
-		//Print the block's ID or the function name
-		if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", predecessor->function_defined_in->func_name.string);
-		} else {
-			printf(".L%d", predecessor->block_id);
-		}
+			//Print the block's ID or the function name
+			if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", predecessor->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", predecessor->block_id);
+			}
 
-		if(i != block->predecessors->current_index - 1){
-			printf(", ");
+			if(i != block->predecessors.current_index - 1){
+				printf(", ");
+			}
 		}
 	}
 
 	printf("}\n");
 
 	printf("Successors: {");
+	//If we have successor
+	if(block->successors.internal_array != NULL){
+		for(u_int16_t i = 0; i < block->successors.current_index; i++){
+			basic_block_t* successor = block->successors.internal_array[i];
 
-	for(u_int16_t i = 0; block->successors != NULL && i < block->successors->current_index; i++){
-		basic_block_t* successor = block->successors->internal_array[i];
+			//Print the block's ID or the function name
+			if(successor->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", successor->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", successor->block_id);
+			}
 
-		//Print the block's ID or the function name
-		if(successor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			printf("%s", successor->function_defined_in->func_name.string);
-		} else {
-			printf(".L%d", successor->block_id);
-		}
-
-		if(i != block->successors->current_index - 1){
-			printf(", ");
+			if(i != block->successors.current_index - 1){
+				printf(", ");
+			}
 		}
 	}
 
 	printf("}\n");
 
 	//If we have some assigned variables, we will dislay those for debugging
-	if(block->assigned_variables != NULL){
+	if(block->assigned_variables.internal_array != NULL){
 		printf("Assigned: (");
 
-		for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
-			print_variable(stdout, block->assigned_variables->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+		for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
+			print_variable(stdout, block->assigned_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->assigned_variables->current_index - 1){
+			if(i != block->assigned_variables.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -688,14 +688,14 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	}
 
 	//Now if we have LIVE_IN variables, we'll print those out
-	if(block->live_in != NULL){
+	if(block->live_in.internal_array != NULL){
 		printf("LIVE_IN: (");
 
-		for(u_int16_t i = 0; i < block->live_in->current_index; i++){
-			print_variable(stdout, block->live_in->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+		for(u_int16_t i = 0; i < block->live_in.current_index; i++){
+			print_variable(stdout, block->live_in.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
-			if(i != block->live_in->current_index - 1){
+			if(i != block->live_in.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -705,14 +705,14 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	}
 
 	//Now if we have LIVE_IN variables, we'll print those out
-	if(block->live_out != NULL){
+	if(block->live_out.internal_array != NULL){
 		printf("LIVE_OUT: (");
 
-		for(u_int16_t i = 0; i < block->live_out->current_index; i++){
-			print_variable(stdout, block->live_out->internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+		for(u_int16_t i = 0; i < block->live_out.current_index; i++){
+			print_variable(stdout, block->live_out.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
 			//If it isn't the very last one, print out a comma
-			if(i != block->live_out->current_index - 1){
+			if(i != block->live_out.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -723,12 +723,12 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 
 	//Print out the dominance frontier if we're in DEBUG mode
-	if(print_df == EMIT_DOMINANCE_FRONTIER && block->dominance_frontier != NULL){
+	if(print_df == EMIT_DOMINANCE_FRONTIER && block->dominance_frontier.internal_array != NULL){
 		printf("Dominance frontier: {");
 
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->dominance_frontier->current_index; i++){
-			basic_block_t* printing_block = block->dominance_frontier->internal_array[i];
+		for(u_int16_t i = 0; i < block->dominance_frontier.current_index; i++){
+			basic_block_t* printing_block = block->dominance_frontier.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -738,7 +738,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 			}
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->dominance_frontier->current_index - 1){
+			if(i != block->dominance_frontier.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -748,12 +748,12 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	}
 
 	//Print out the reverse dominance frontier if we're in DEBUG mode
-	if(print_df == EMIT_DOMINANCE_FRONTIER && block->reverse_dominance_frontier != NULL){
+	if(print_df == EMIT_DOMINANCE_FRONTIER && block->reverse_dominance_frontier.internal_array != NULL){
 		printf("Reverse Dominance frontier: {");
 
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->reverse_dominance_frontier->current_index; i++){
-			basic_block_t* printing_block = block->reverse_dominance_frontier->internal_array[i];
+		for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+			basic_block_t* printing_block = block->reverse_dominance_frontier.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -763,7 +763,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 			}
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->reverse_dominance_frontier->current_index - 1){
+			if(i != block->reverse_dominance_frontier.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -775,10 +775,10 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Only if this is false - global var blocks don't have any of these
 	printf("Dominator set: {");
-	if(block->dominator_set != NULL){
+	if(block->dominator_set.internal_array != NULL){
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->dominator_set->current_index; i++){
-			basic_block_t* printing_block = block->dominator_set->internal_array[i];
+		for(u_int16_t i = 0; i < block->dominator_set.current_index; i++){
+			basic_block_t* printing_block = block->dominator_set.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -787,7 +787,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 				printf(".L%d", printing_block->block_id);
 			}
 			//If it isn't the very last one, we need a comma
-			if(i != block->dominator_set->current_index - 1){
+			if(i != block->dominator_set.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -797,10 +797,10 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	printf("}\n");
 
 	printf("Postdominator(reverse dominator) Set: {");
-	if(block->postdominator_set != NULL){
+	if(block->postdominator_set.internal_array != NULL){
 		//Run through and print them all out
-		for(u_int16_t i = 0; i < block->postdominator_set->current_index; i++){
-			basic_block_t* postdominator = block->postdominator_set->internal_array[i];
+		for(u_int16_t i = 0; i < block->postdominator_set.current_index; i++){
+			basic_block_t* postdominator = block->postdominator_set.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(postdominator->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -809,7 +809,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 				printf(".L%d", postdominator->block_id);
 			}
 			//If it isn't the very last one, we need a comma
-			if(i != block->postdominator_set->current_index - 1){
+			if(i != block->postdominator_set.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -819,9 +819,10 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 
 	//Now print out the dominator children
 	printf("Dominator Children: {");
-
-	for(u_int16_t i = 0; block->dominator_children != NULL && i < block->dominator_children->current_index; i++){
-			basic_block_t* printing_block = block->dominator_children->internal_array[i];
+	//If we have dominator children
+	if(block->dominator_children.internal_array != NULL){
+		for(u_int16_t i = 0; i < block->dominator_children.current_index; i++){
+			basic_block_t* printing_block = block->dominator_children.internal_array[i];
 
 			//Print the block's ID or the function name
 			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
@@ -830,9 +831,10 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 				printf(".L%d", printing_block->block_id);
 			}
 			//If it isn't the very last one, we need a comma
-			if(i != block->dominator_children->current_index - 1){
+			if(i != block->dominator_children.current_index - 1){
 				printf(", ");
 			}
+		}
 	}
 
 	printf("}\n");
@@ -898,13 +900,13 @@ static void add_phi_statement(basic_block_t* target, instruction_t* phi_statemen
  */
 static void add_phi_parameter(instruction_t* phi_statement, three_addr_var_t* var){
 	//If we've not yet given the dynamic array
-	if(phi_statement->parameters == NULL){
+	if(phi_statement->parameters.internal_array == NULL){
 		//Take care of allocation then
 		phi_statement->parameters = dynamic_array_alloc();
 	}
 
 	//Add this to the phi statement parameters
-	dynamic_array_add(phi_statement->parameters, var);
+	dynamic_array_add(&(phi_statement->parameters), var);
 }
 
 
@@ -1011,20 +1013,20 @@ void delete_statement(instruction_t* stmt){
  */
 static void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t* df_block){
 	//If the dominance frontier hasn't been allocated yet, we'll do that here
-	if(block->dominance_frontier == NULL){
+	if(block->dominance_frontier.internal_array == NULL){
 		block->dominance_frontier = dynamic_array_alloc();
 	}
 
 	//Let's just check - is this already in there. If it is, we will not add it
-	for(u_int16_t i = 0; i < block->dominance_frontier->current_index; i++){
+	for(u_int16_t i = 0; i < block->dominance_frontier.current_index; i++){
 		//This is not a problem at all, we just won't add it
-		if(block->dominance_frontier->internal_array[i] == df_block){
+		if(block->dominance_frontier.internal_array[i] == df_block){
 			return;
 		}
 	}
 
 	//Add this into the dominance frontier
-	dynamic_array_add(block->dominance_frontier, df_block);
+	dynamic_array_add(&(block->dominance_frontier), df_block);
 }
 
 
@@ -1033,20 +1035,20 @@ static void add_block_to_dominance_frontier(basic_block_t* block, basic_block_t*
  */
 static void add_block_to_reverse_dominance_frontier(basic_block_t* block, basic_block_t* rdf_block){
 	//If the dominance frontier hasn't been allocated yet, we'll do that here
-	if(block->reverse_dominance_frontier == NULL){
+	if(block->reverse_dominance_frontier.internal_array == NULL){
 		block->reverse_dominance_frontier = dynamic_array_alloc();
 	}
 
 	//Let's just check - is this already in there. If it is, we will not add it
-	for(u_int16_t i = 0; i < block->reverse_dominance_frontier->current_index; i++){
+	for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
 		//This is not a problem at all, we just won't add it
-		if(block->reverse_dominance_frontier->internal_array[i] == rdf_block){
+		if(block->reverse_dominance_frontier.internal_array[i] == rdf_block){
 			return;
 		}
 	}
 
 	//Add this into the dominance frontier
-	dynamic_array_add(block->reverse_dominance_frontier, rdf_block);
+	dynamic_array_add(&(block->reverse_dominance_frontier), rdf_block);
 }
 
 
@@ -1055,15 +1057,15 @@ static void add_block_to_reverse_dominance_frontier(basic_block_t* block, basic_
  */
 static u_int8_t does_block_assign_variable(basic_block_t* block, symtab_variable_record_t* variable){
 	//Sanity check - if this is NULL then it's false by default
-	if(block->assigned_variables == NULL){
+	if(block->assigned_variables.internal_array == NULL){
 		return FALSE;
 	}
 
 	//We'll need to use a special comparison here because we're comparing variables, not plain addresses.
 	//We will compare the linked var of each block in the assigned variables dynamic array
-	for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
+	for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
 		//Grab the variable out
-		three_addr_var_t* var = dynamic_array_get_at(block->assigned_variables, i);
+		three_addr_var_t* var = dynamic_array_get_at(&(block->assigned_variables), i);
 		
 		//Now we'll compare the linked variable to the record
 		if(var->linked_var == variable){
@@ -1096,12 +1098,13 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 	
 	//For each node in B's Dominance Frontier set(we call this node A)
 	//These nodes are our candidates for immediate dominator
-	for(u_int16_t i = 0; B->dominator_set != NULL && i < B->dominator_set->current_index; i++){
+	//If B even has a dominator ser
+	for(u_int16_t i = 0; i < B->dominator_set.current_index; i++){
 		//By default we assume A is an IDOM
 		A_is_IDOM = TRUE;
 
 		//A is our "candidate" for possibly being an immediate dominator
-		A = dynamic_array_get_at(B->dominator_set, i);
+		A = dynamic_array_get_at(&(B->dominator_set), i);
 
 		//If A == B, that means that A does NOT strictly dominate(SDOM)
 		//B, so it's disqualified
@@ -1118,14 +1121,14 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		//For everything in B's dominator set that IS NOT A, we need
 		//to check if this is an intermediary. As in, does C get in-between
 		//A and B in the dominance chain
-		for(u_int16_t j = 0; j < B->dominator_set->current_index; j++){
+		for(u_int16_t j = 0; j < B->dominator_set.current_index; j++){
 			//Skip this case
 			if(i == j){
 				continue;
 			}
 
 			//If it's aleady B or A, we're skipping
-			C = dynamic_array_get_at(B->dominator_set, j);
+			C = dynamic_array_get_at(&(B->dominator_set), j);
 
 			//If this is the case, disqualified
 			if(C == B || C == A){
@@ -1137,7 +1140,7 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 			//have an immediate dominator in A.
 			//
 			//This would look like A -Doms> C -Doms> B, so A is not an immediate dominator
-			if(dynamic_array_contains(C->dominator_set, A) != NOT_FOUND){
+			if(dynamic_array_contains(&(C->dominator_set), A) != NOT_FOUND){
 				//A is disqualified, it's not an IDOM
 				A_is_IDOM = FALSE;
 				break;
@@ -1170,53 +1173,53 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 	}
 
 	//Create the queue
-	heap_queue_t* queue = heap_queue_alloc();
+	heap_queue_t queue = heap_queue_alloc();
 
 	//The visited array
-	dynamic_array_t* visited = dynamic_array_alloc();
+	dynamic_array_t visited = dynamic_array_alloc();
 
 	//Save this for when we find it
 	basic_block_t* ipdom = NULL;
 
 	//Extract the postdominator set
-	dynamic_array_t* postdominator_set = B->postdominator_set;
+	dynamic_array_t postdominator_set = B->postdominator_set;
 
 	//Seed the search with B
-	enqueue(queue, B);
+	enqueue(&queue, B);
 
 	//So long as the queue isn't empty
-	while(queue_is_empty(queue) == FALSE){
+	while(queue_is_empty(&queue) == FALSE){
 		//Pop off of the queue
-		basic_block_t* current = dequeue(queue);
+		basic_block_t* current = dequeue(&queue);
 
 		/**
 		 * If we have found the first breadth-first successor that postdominates B,
 		 * we are done
 		 */
-		if(current != B && dynamic_array_contains(postdominator_set, current) != NOT_FOUND){
+		if(current != B && dynamic_array_contains(&postdominator_set, current) != NOT_FOUND){
 			ipdom = current;
 			break;
 		}
 
 		//Add to the visited set
-		dynamic_array_add(visited, current);
+		dynamic_array_add(&visited, current);
 
-		//And finally we'll add all of these onto the queue
-		for(u_int16_t j = 0; current->successors != NULL && j < current->successors->current_index; j++){
+		//Run through all successors
+		for(u_int16_t j = 0; j < current->successors.current_index; j++){
 			//Add the successor into the queue, if it has not yet been visited
-			basic_block_t* successor = current->successors->internal_array[j];
+			basic_block_t* successor = current->successors.internal_array[j];
 
-			if(dynamic_array_contains(visited, successor) == NOT_FOUND){
-				enqueue(queue, successor);
+			if(dynamic_array_contains(&visited, successor) == NOT_FOUND){
+				enqueue(&queue, successor);
 			}
 		}
 	}
 
 	//Destroy visited
-	dynamic_array_dealloc(visited);
+	dynamic_array_dealloc(&visited);
 
 	//Destroy the queue
-	heap_queue_dealloc(queue);
+	heap_queue_dealloc(&queue);
 
 	//Give it back
 	return ipdom;
@@ -1250,13 +1253,13 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 	//node by node and ensure that we've gotten everything
 	
 	//Run through every block
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Grab this from the array
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), i);
 
 		//If we have less than 2 successors,the rest of 
 		//the search here is useless
-		if(block->predecessors == NULL || block->predecessors->current_index < 2){
+		if(block->predecessors.internal_array == NULL || block->predecessors.current_index < 2){
 			//Hop out here, there is no need to analyze further
 			continue;
 		}
@@ -1265,9 +1268,9 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 		basic_block_t* cursor;
 
 		//Now we run through every predecessor of the block
-		for(u_int8_t i = 0; i < block->predecessors->current_index; i++){
+		for(u_int8_t i = 0; i < block->predecessors.current_index; i++){
 			//Grab it out
-			cursor = block->predecessors->internal_array[i];
+			cursor = block->predecessors.internal_array[i];
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != immediate_dominator(block)){
@@ -1310,13 +1313,13 @@ static void calculate_reverse_dominance_frontiers(cfg_t* cfg){
 	//node by node and ensure that we've gotten everything
 	
 	//Run through every block
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Grab this from the array
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), i);
 
 		//If we have less than 2 successors,the rest of 
 		//the search here is useless
-		if(block->successors == NULL || block->successors->current_index < 2){
+		if(block->successors.internal_array == NULL || block->successors.current_index < 2){
 			//Hop out here, there is no need to analyze further
 			continue;
 		}
@@ -1325,9 +1328,9 @@ static void calculate_reverse_dominance_frontiers(cfg_t* cfg){
 		basic_block_t* cursor;
 
 		//Now we run through every successor of the block
-		for(u_int8_t i = 0; i < block->successors->current_index; i++){
+		for(u_int8_t i = 0; i < block->successors.current_index; i++){
 			//Grab it out
-			cursor = block->successors->internal_array[i];
+			cursor = block->successors.internal_array[i];
 
 			//While cursor is not the immediate postdominator of block
 			while(cursor != immediate_postdominator(block)){
@@ -1348,13 +1351,13 @@ static void calculate_reverse_dominance_frontiers(cfg_t* cfg){
  */
 static void add_dominated_block(basic_block_t* dominator, basic_block_t* dominated){
 	//If this is NULL, then we'll allocate it right now
-	if(dominator->dominator_children == NULL){
+	if(dominator->dominator_children.internal_array == NULL){
 		dominator->dominator_children = dynamic_array_alloc();
 	}
 
 	//If we do not already have this in the dominator children, then we will add it
-	if(dynamic_array_contains(dominator->dominator_children, dominated) == NOT_FOUND){
-		dynamic_array_add(dominator->dominator_children, dominated);
+	if(dynamic_array_contains(&(dominator->dominator_children), dominated) == NOT_FOUND){
+		dynamic_array_add(&(dominator->dominator_children), dominated);
 	}
 }
 
@@ -1386,26 +1389,26 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 	basic_block_t* current;
 
 	//We'll first initialize everything here
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Grab the block out
-		current = dynamic_array_get_at(cfg->created_blocks, i);
+		current = dynamic_array_get_at(&(cfg->created_blocks), i);
 
 		//If it's an exit block, then it's postdominator set just has itself
 		if(current->block_type == BLOCK_TYPE_FUNC_EXIT){
 			//If it's an exit block, then this set just contains itself
 			current->postdominator_set = dynamic_array_alloc();
 			//Add the block to it's own set
-			dynamic_array_add(current->postdominator_set, current);
+			dynamic_array_add(&(current->postdominator_set), current);
 		} else {
 			//If it's not an exit block, then we set this to be the entire body of blocks
-			current->postdominator_set = clone_dynamic_array(cfg->created_blocks);
+			current->postdominator_set = clone_dynamic_array(&(cfg->created_blocks));
 		}
 	}
 
 	//Now that we've initialized, we'll perform the same while change algorithm as before
 	//For each and every function
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
-		basic_block_t* current_function_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		basic_block_t* current_function_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Have we seen a change
 		u_int8_t changed;
@@ -1416,9 +1419,9 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 			changed = FALSE;
 
 			//Now for each basic block in the reverse post order set
-			for(u_int16_t _ = 0; _ < current_function_block->reverse_post_order->current_index; _++){
+			for(u_int16_t _ = 0; _ < current_function_block->reverse_post_order.current_index; _++){
 				//Grab the block out
-				basic_block_t* current = dynamic_array_get_at(current_function_block->reverse_post_order, _);
+				basic_block_t* current = dynamic_array_get_at(&(current_function_block->reverse_post_order), _);
 
 				//If it's the exit block, we don't need to bother with it. The exit block is always postdominated
 				//by itself
@@ -1428,70 +1431,73 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 				}
 
 				//The temporary array that we will use as a holder for this iteration's postdominator set 
-				dynamic_array_t* temp = dynamic_array_alloc();
+				dynamic_array_t temp = dynamic_array_alloc();
 
 				//The temp will always have this block in it
-				dynamic_array_add(temp, current);
+				dynamic_array_add(&temp, current);
 
 				//The temporary array also has the intersection of all of the successor's of BB's postdominator 
 				//sets in it. As such, we'll now compute those
 
 				//If this block has any successors
-				if(current->successors != NULL){
+				if(current->successors.internal_array != NULL){
 					//Let's just grab out the very first successor
-					basic_block_t* first_successor = dynamic_array_get_at(current->successors, 0);
+					basic_block_t* first_successor = dynamic_array_get_at(&(current->successors), 0);
 
 					//Now, if a node IS in the set of all successor's postdominator sets, it must be in here. As such, any node that
 					//is not in the set of all successors will NOT be in here, and every node that IS in the set
 					//of all successors WILL be. So, we can just run through this entire array and see if each node is 
 					//everywhere else
 
-					//For each node in the first one's postdominator set
-					for(u_int16_t k = 0; first_successor->postdominator_set != NULL && k < first_successor->postdominator_set->current_index; k++){
-						//Are we in the intersection of the sets? By default we think so
-						u_int8_t in_intersection = TRUE;
+					//If we have any postdominators
+					if(first_successor->postdominator_set.internal_array != NULL){
+						//For each node in the first one's postdominator set
+						for(u_int16_t k = 0; k < first_successor->postdominator_set.current_index; k++){
+							//Are we in the intersection of the sets? By default we think so
+							u_int8_t in_intersection = TRUE;
 
-						//Grab out the postdominator
-						basic_block_t* postdominator = dynamic_array_get_at(first_successor->postdominator_set, k);
+							//Grab out the postdominator
+							basic_block_t* postdominator = dynamic_array_get_at(&(first_successor->postdominator_set), k);
 
-						//Now let's see if this postdominator is in every other postdominator set for the remaining successors
-						for(u_int16_t l = 1; l < current->successors->current_index; l++){
-							//Grab the successor out
-							basic_block_t* other_successor = dynamic_array_get_at(current->successors, l);
+							//Now let's see if this postdominator is in every other postdominator set for the remaining successors
+							for(u_int16_t l = 1; l < current->successors.current_index; l++){
+								//Grab the successor out
+								basic_block_t* other_successor = dynamic_array_get_at(&(current->successors), l);
 
-							//Now we'll check to see - is our given postdominator in this one's dominator set?
-							//If it isn't, we'll set the flag and break out. If it is we'll move on to the next one
-							if(dynamic_array_contains(other_successor->postdominator_set, postdominator) == NOT_FOUND){
-								//We didn't find it, set the flag and get out
-								in_intersection = FALSE;
-								break;
+								//Now we'll check to see - is our given postdominator in this one's dominator set?
+								//If it isn't, we'll set the flag and break out. If it is we'll move on to the next one
+								if(dynamic_array_contains(&(other_successor->postdominator_set), postdominator) == NOT_FOUND){
+									//We didn't find it, set the flag and get out
+									in_intersection = FALSE;
+									break;
+								}
+
+								//Otherwise we did find it, so we'll keep going
 							}
 
-							//Otherwise we did find it, so we'll keep going
-						}
-
-						//By the time we make it here, we'll either have our flag set to true or false. If the postdominator
-						//made it to true, it's in the intersection, and will add it to the new set
-						if(in_intersection == TRUE){
-							dynamic_array_add(temp, postdominator);
+							//By the time we make it here, we'll either have our flag set to true or false. If the postdominator
+							//made it to true, it's in the intersection, and will add it to the new set
+							if(in_intersection == TRUE){
+								dynamic_array_add(&temp, postdominator);
+							}
 						}
 					}
 				}
 
 				//Let's compare the two dynamic arrays - if they aren't the same, we've found a difference
-				if(dynamic_arrays_equal(temp, current->postdominator_set) == FALSE){
+				if(dynamic_arrays_equal(&temp, &(current->postdominator_set)) == FALSE){
 					//Set the flag
 					changed = TRUE;
 
 					//And we can get rid of the old one
-					dynamic_array_dealloc(current->postdominator_set);
+					dynamic_array_dealloc(&(current->postdominator_set));
 					
 					//Set temp to be the new postdominator set
 					current->postdominator_set = temp;
 
 				//Otherwise they weren't changed, so the new one that we made has to go
 				} else {
-					dynamic_array_dealloc(temp);
+					dynamic_array_dealloc(&temp);
 				}
 
 				//And now we're onto the next block
@@ -1527,50 +1533,50 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 static void calculate_dominator_sets(cfg_t* cfg){
 	//Every node in the CFG has a dominator set that is set
 	//to be identical to the list of all nodes
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Grab this out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), i);
 
 		//We will initialize the block's dominator set to be the entire set of nodes
-		block->dominator_set = clone_dynamic_array(cfg->created_blocks);
+		block->dominator_set = clone_dynamic_array(&(cfg->created_blocks));
 	}
 
 	//For each and every function that we have, we will perform this operation separately
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
 		//Initialize a "worklist" dynamic array for this particular function
-		dynamic_array_t* worklist = dynamic_array_alloc();
+		dynamic_array_t worklist = dynamic_array_alloc();
 
 		//Add this into the worklist as a seed
-		dynamic_array_add(worklist, dynamic_array_get_at(cfg->function_entry_blocks, _));
+		dynamic_array_add(&worklist, dynamic_array_get_at(&(cfg->function_entry_blocks), _));
 		
 		//The new dominance frontier that we have each time
-		dynamic_array_t* new;
+		dynamic_array_t new;
 
 		//So long as the worklist is not empty
-		while(dynamic_array_is_empty(worklist) == FALSE){
+		while(dynamic_array_is_empty(&worklist) == FALSE){
 			//Remove a node Y from the worklist(remove from back - most efficient{O(1)})
-			basic_block_t* Y = dynamic_array_delete_from_back(worklist);
+			basic_block_t* Y = dynamic_array_delete_from_back(&worklist);
 			
 			//Create the new dynamic array that will be used for the next
 			//dominator set
 			new = dynamic_array_alloc();
 
 			//We will add Y into it's own dominator set
-			dynamic_array_add(new, Y);
+			dynamic_array_add(&new, Y);
 
 			//If Y has predecessors, we will find the intersection of
 			//their dominator sets
-			if(Y->predecessors != NULL){
+			if(Y->predecessors.internal_array != NULL){
 				//Grab the very first predecessor's dominator set
-				dynamic_array_t* pred_dom_set = ((basic_block_t*)(Y->predecessors->internal_array[0]))->dominator_set;
+				dynamic_array_t pred_dom_set = ((basic_block_t*)(Y->predecessors.internal_array[0]))->dominator_set;
 
 				//Are we in the intersection of the dominator sets?
 				u_int8_t in_intersection;
 
 				//We will now search every item in this dominator set
-				for(u_int16_t i = 0; i < pred_dom_set->current_index; i++){
+				for(u_int16_t i = 0; i < pred_dom_set.current_index; i++){
 					//Grab the dominator out
-					basic_block_t* dominator = dynamic_array_get_at(pred_dom_set, i);
+					basic_block_t* dominator = dynamic_array_get_at(&pred_dom_set, i);
 
 					//By default we assume that this given dominator is in the set. If it
 					//isn't we'll set it appropriately
@@ -1581,15 +1587,15 @@ static void calculate_dominator_sets(cfg_t* cfg){
 					 * in all of the dominator sets of the predecessors of Y
 					*/
 					//We'll start at 1 here - we've already accounted for 0
-					for(u_int8_t j = 1; j < Y->predecessors->current_index; j++){
+					for(u_int8_t j = 1; j < Y->predecessors.current_index; j++){
 						//Grab our other predecessor
-						basic_block_t* other_predecessor = Y->predecessors->internal_array[j];
+						basic_block_t* other_predecessor = Y->predecessors.internal_array[j];
 
 						//Now we will go over this predecessor's dominator set, and see if "dominator"
 						//is also contained within it
 
 						//Let's check for it in here. If we can't find it, we set the flag to false and bail out
-						if(dynamic_array_contains(other_predecessor->dominator_set, dominator) == NOT_FOUND){
+						if(dynamic_array_contains(&(other_predecessor->dominator_set), dominator) == NOT_FOUND){
 							in_intersection = FALSE;
 							break;
 						}
@@ -1608,34 +1614,34 @@ static void calculate_dominator_sets(cfg_t* cfg){
 					//them
 					if(in_intersection == TRUE){
 						//Add the dominator in
-						dynamic_array_add(new, dominator);
+						dynamic_array_add(&new, dominator);
 					}
 				}
 			}
 
 			//Now we'll check - are these two dominator sets the same? If not, we'll need
 			//to update them
-			if(dynamic_arrays_equal(new, Y->dominator_set) == FALSE){
+			if(dynamic_arrays_equal(&new, &(Y->dominator_set)) == FALSE){
 				//Destroy the old one
-				dynamic_array_dealloc(Y->dominator_set);
+				dynamic_array_dealloc(&(Y->dominator_set));
 
 				//And replace it with the new
 				Y->dominator_set = new;
 
 				//Now for every successor of Y, add it into the worklist
-				for(u_int16_t i = 0; Y->successors != NULL && i < Y->successors->current_index; i++){
-					dynamic_array_add(worklist, Y->successors->internal_array[i]);
+				for(u_int16_t i = 0; i < Y->successors.current_index; i++){
+					dynamic_array_add(&worklist, Y->successors.internal_array[i]);
 				}
 
 			//Otherwise they are the same
 			} else {
 				//Destroy the dominator set that we just made
-				dynamic_array_dealloc(new);
+				dynamic_array_dealloc(&new);
 			}
 		}
 
 		//Destroy the worklist now that we're done with it
-		dynamic_array_dealloc(worklist);
+		dynamic_array_dealloc(&worklist);
 	}
 }
 
@@ -1768,8 +1774,8 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	u_int8_t difference_found;
 
 	//The "Prime" blocks are just ways to hold the old dynamic arrays
-	dynamic_array_t* in_prime;
-	dynamic_array_t* out_prime;
+	dynamic_array_t in_prime;
+	dynamic_array_t out_prime;
 
 	//A cursor for the current block
 	basic_block_t* current;
@@ -1779,9 +1785,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	 * are *separate*, we can run the do-while algorithm on each function independently. This
 	 * avoids us needing to recompute the entire CFG every time the disjoint-union-find does not work
 	 */
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract it
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Run the algorithm until we have no difference found
 		do{
@@ -1789,9 +1795,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 			difference_found = FALSE;
 
 			//Now we can go through the entire RPO set
-			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg->current_index; _++){
+			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg.current_index; _++){
 				//The current block is whichever we grab
-				current = dynamic_array_get_at(function_entry->reverse_post_order_reverse_cfg, _);
+				current = dynamic_array_get_at(&(function_entry->reverse_post_order_reverse_cfg), _);
 
 				//Transfer the pointers over
 				in_prime = current->live_in;
@@ -1799,19 +1805,23 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 				//Set live out to be a new array
 				current->live_out = dynamic_array_alloc();
-
+				
+				//If we have any successors
 				//Run through all of the successors
-				for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
+				for(u_int16_t k = 0; k < current->successors.current_index; k++){
 					//Grab the successor out
-					basic_block_t* successor = dynamic_array_get_at(current->successors, k);
+					basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
-					//Add everything in his live_in set into the live_out set
-					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
-						//Let's check to make sure we haven't already added this
-						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
+					//If it has a live in set
+					if(successor->live_in.internal_array != NULL){
+						//Add everything in his live_in set into the live_out set
+						for(u_int16_t l = 0; l < successor->live_in.current_index; l++){
+							//Let's check to make sure we haven't already added this
+							three_addr_var_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
 
-						//Let the helper method do it for us
-						variable_dynamic_array_add(current->live_out, successor_live_in_var);
+							//Let the helper method do it for us
+							variable_dynamic_array_add(&(current->live_out), successor_live_in_var);
+						}
 					}
 				}
 
@@ -1821,18 +1831,20 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 				//Since we need all of the used variables, we'll just clone this
 				//dynamic array so that we start off with them all
-				current->live_in = clone_dynamic_array(current->used_variables);
+				current->live_in = clone_dynamic_array(&(current->used_variables));
 
 				//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-				for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
+				//If we have any live out vars
+				//Run through them all
+				for(u_int16_t j = 0; j < current->live_out.current_index; j++){
 					//Grab a reference for our use
-					three_addr_var_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+					three_addr_var_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
 					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
 					//add it
-					if(variable_dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND){
+					if(variable_dynamic_array_contains(&(current->assigned_variables), live_out_var) == NOT_FOUND){
 						//If this is true we can add
-						variable_dynamic_array_add(current->live_in, live_out_var);
+						variable_dynamic_array_add(&(current->live_in), live_out_var);
 					}
 				}
 			
@@ -1842,16 +1854,16 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				//For efficiency - if there was a difference in one block, it's already done - no use in comparing
 				if(difference_found == FALSE){
 					//So we haven't found a difference so far - let's see if we can find one now
-					if(variable_dynamic_arrays_equal(in_prime, current->live_in) == FALSE 
-					  || variable_dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
+					if(variable_dynamic_arrays_equal(&in_prime, &(current->live_in)) == FALSE 
+					  || variable_dynamic_arrays_equal(&out_prime, &(current->live_out)) == FALSE){
 						//We have in fact found a difference
 						difference_found = TRUE;
 					}
 				}
 
 				//We made it down here, the prime variables are useless. We'll deallocate them
-				dynamic_array_dealloc(in_prime);
-				dynamic_array_dealloc(out_prime);
+				dynamic_array_dealloc(&in_prime);
+				dynamic_array_dealloc(&out_prime);
 			}
 		
 		//So long as this holds we repeat
@@ -1871,9 +1883,9 @@ static void build_dominator_trees(cfg_t* cfg){
 	basic_block_t* current;
 
 	//For each block in the CFG
-	for(int16_t _ = cfg->created_blocks->current_index - 1; _ >= 0; _--){
+	for(int16_t _ = cfg->created_blocks.current_index - 1; _ >= 0; _--){
 		//Grab out whatever block we're on
-		current = dynamic_array_get_at(cfg->created_blocks, _);
+		current = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//We will find this block's "immediate dominator". Once we have that,
 		//we will add this block to the "dominator children" set of said immediate
@@ -1928,9 +1940,9 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	// FIRST STEP: FOR EACH variable we have
 	//------------------------------------------
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < var_symtab->sheafs->current_index; i++){
+	for	(u_int16_t i = 0; i < var_symtab->sheafs.current_index; i++){
 		//Grab the current sheaf
-		sheaf_cursor = dynamic_array_get_at(var_symtab->sheafs, i);
+		sheaf_cursor = dynamic_array_get_at(&(var_symtab->sheafs), i);
 
 		//Now we'll free all non-null records
 		for(u_int16_t j = 0; j < KEYSPACE; j++){
@@ -1946,42 +1958,42 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 				// defines(assigns) said variable
 				//----------------------------------
 				//We'll need a "worklist" here - just a dynamic array 
-				dynamic_array_t* worklist = dynamic_array_alloc();
+				dynamic_array_t worklist = dynamic_array_alloc();
 				//Keep track of those that were ever on the worklist
-				dynamic_array_t* ever_on_worklist;
+				dynamic_array_t ever_on_worklist;
 
 				//We'll also need a dynamic array that contains everything relating
 				//to if we did or did not already put a phi function into this block
-				dynamic_array_t* already_has_phi_func = dynamic_array_alloc();
+				dynamic_array_t already_has_phi_func = dynamic_array_alloc();
 				
 				//Just run through the entire thing
-				for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+				for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
 					//Grab the block out of here
-					block_cursor = dynamic_array_get_at(cfg->created_blocks, i);
+					block_cursor = dynamic_array_get_at(&(cfg->created_blocks), i);
 
 					//Does this block define(assign) our variable?
 					if(does_block_assign_variable(block_cursor, record) == TRUE){
 						//Then we add this block onto the "worklist"
-						dynamic_array_add(worklist, block_cursor);
+						dynamic_array_add(&worklist, block_cursor);
 					}
 				}
 
 				//Now we can clone the "was ever on worklist" dynamic array
-				ever_on_worklist = clone_dynamic_array(worklist);
+				ever_on_worklist = clone_dynamic_array(&worklist);
 
 				//Now we can actually perform our insertions
 				//So long as the worklist is not empty
-				while(dynamic_array_is_empty(worklist) == FALSE){
+				while(dynamic_array_is_empty(&worklist) == FALSE){
 					//Remove the node from the back - more efficient
-					basic_block_t* node = dynamic_array_delete_from_back(worklist);
-					
+					basic_block_t* node = dynamic_array_delete_from_back(&worklist);
+
 					//Now we will go through each node in this worklist's dominance frontier
-					for(u_int16_t j = 0; node->dominance_frontier != NULL && j < node->dominance_frontier->current_index; j++){
+					for(u_int16_t j = 0; j < node->dominance_frontier.current_index; j++){
 						//Grab this node out
-						basic_block_t* df_node = dynamic_array_get_at(node->dominance_frontier, j);
+						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), j);
 
 						//If this node already has a phi function, we're not gonna bother with it
-						if(dynamic_array_contains(already_has_phi_func, df_node) != NOT_FOUND){
+						if(dynamic_array_contains(&already_has_phi_func, df_node) != NOT_FOUND){
 							//We DID find it, so we will NOT add anything, it already has one
 							continue;
 						}
@@ -2001,8 +2013,8 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						//----------------------------------------
 
 						//Let's see if we can find it in one of these. We'll record if we can
-						if(symtab_record_variable_dynamic_array_contains(df_node->used_variables, record) == NOT_FOUND
-							&& symtab_record_variable_dynamic_array_contains(df_node->live_out, record) == NOT_FOUND){
+						if(symtab_record_variable_dynamic_array_contains(&(df_node->used_variables), record) == NOT_FOUND
+							&& symtab_record_variable_dynamic_array_contains(&(df_node->live_out), record) == NOT_FOUND){
 							continue;
 						}
 
@@ -2014,23 +2026,23 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 						add_phi_statement(df_node, phi_stmt);
 
 						//We'll mark that this block already has one for the future
-						dynamic_array_add(already_has_phi_func, df_node); 
+						dynamic_array_add(&already_has_phi_func, df_node); 
 
 						//If this node has not ever been on the worklist, we'll add it
 						//to keep the search going
-						if(dynamic_array_contains(ever_on_worklist, df_node) == NOT_FOUND){
+						if(dynamic_array_contains(&ever_on_worklist, df_node) == NOT_FOUND){
 							//We did NOT find it, so we WILL add it
-							dynamic_array_add(worklist, df_node);
-							dynamic_array_add(ever_on_worklist, df_node);
+							dynamic_array_add(&worklist, df_node);
+							dynamic_array_add(&ever_on_worklist, df_node);
 						}
 					}
 				}
 
 				//Now that we're done with these, we'll remove them for
 				//the next round
-				dynamic_array_dealloc(worklist);
-				dynamic_array_dealloc(ever_on_worklist);
-				dynamic_array_dealloc(already_has_phi_func);
+				dynamic_array_dealloc(&worklist);
+				dynamic_array_dealloc(&ever_on_worklist);
+				dynamic_array_dealloc(&already_has_phi_func);
 			
 				//Advance to the next record in the chain
 				record = record->next;
@@ -2175,11 +2187,13 @@ static void rename_block(basic_block_t* entry){
 				
 				//Special case - do we have a function call?
 				//Grab it out
-				dynamic_array_t* func_params = cursor->parameters;
+				dynamic_array_t func_params = cursor->parameters;
+
+				//If we have any
 				//Run through them all
-				for(u_int16_t k = 0; func_params != NULL && k < func_params->current_index; k++){
+				for(u_int16_t k = 0; k < func_params.current_index; k++){
 					//Grab it out
-					three_addr_var_t* current_param = dynamic_array_get_at(func_params, k);
+					three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
 
 					//If it's not temporary, we rename
 					if(current_param->is_temporary == FALSE){
@@ -2241,9 +2255,9 @@ static void rename_block(basic_block_t* entry){
 	}
 
 	//Now for each successor of b, we'll need to add the phi-function parameters according
-	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
+	for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
 		//Grab the successor out
-		basic_block_t* successor = dynamic_array_get_at(entry->successors, _);
+		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), _);
 
 		//Now for each phi-function in this successor that uses something in the defined variables
 		//here, we'll want to add that newly renamed defined variable into the phi function parameters
@@ -2272,8 +2286,8 @@ static void rename_block(basic_block_t* entry){
 
 	//Now that we're done with the renaming, we'll go through each dominator child in this node
 	//and perform the same operation
-	for(u_int16_t _ = 0; entry->dominator_children != NULL && _ < entry->dominator_children->current_index; _++){
-		rename_block(dynamic_array_get_at(entry->dominator_children, _));
+	for(u_int16_t _ = 0; _ < entry->dominator_children.current_index; _++){
+		rename_block(dynamic_array_get_at(&(entry->dominator_children), _));
 	}
 
 	//Again if this is a function entry block, then we need to unwind the stack
@@ -2331,8 +2345,8 @@ static void rename_all_variables(cfg_t* cfg){
 
 	//All global variables have themselves been assigned. As such, we'll
 	//need to mark that by giving them a left hand rename
-	for(u_int16_t i = 0; i < cfg->global_variables->current_index; i++){
-		global_variable_t* variable = dynamic_array_get_at(cfg->global_variables, i);
+	for(u_int16_t i = 0; i < cfg->global_variables.current_index; i++){
+		global_variable_t* variable = dynamic_array_get_at(&(cfg->global_variables), i);
 		lhs_new_name_direct(variable->variable);
 	}
 
@@ -2341,9 +2355,9 @@ static void rename_all_variables(cfg_t* cfg){
 	//recursive, so that should in theory take care of everything for us
 	
 	//For each function block
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
 		//Invoke the rename function on it
-		rename_block(dynamic_array_get_at(cfg->function_entry_blocks, _));
+		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), _));
 	}
 }
 
@@ -2736,7 +2750,7 @@ static void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable
 	branch->block_contained_in = basic_block;
 
 	//Add this to the array of user defined jumps
-	dynamic_array_add(current_function_user_defined_jump_statements, branch);
+	dynamic_array_add(&current_function_user_defined_jump_statements, branch);
 
 	//Add this into the first block
 	add_statement(basic_block, branch);
@@ -4960,7 +4974,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	}
 
 	//Create a temporary storage array for all of our function parameter results
-	dynamic_array_t* function_parameter_results = dynamic_array_alloc();
+	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
 	u_int8_t current_func_param_idx = 1;
@@ -5009,7 +5023,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		}
 
 		//Add this final result into our parameter results list
-		dynamic_array_add(function_parameter_results, param_assignee);
+		dynamic_array_add(&function_parameter_results, param_assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -5022,7 +5036,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//themselves
 	for(u_int16_t i = 1; i < current_func_param_idx; i++){
 		//Get the result
-		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
+		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
 
 		//Extract the parameter type here
 		generic_type_t* paramter_type = signature->parameters[i - 1];
@@ -5040,7 +5054,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		add_statement(basic_block, assignment);
 
 		//Add the parameter in
-		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
+		dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
 
 		//The assignment here is used implicitly by the function call
 		add_used_variable(current, assignment->assignee);
@@ -5071,7 +5085,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	result_package.assignee = assignee;
 
 	//Destroy the function parameter results here
-	dynamic_array_dealloc(function_parameter_results);
+	dynamic_array_dealloc(&function_parameter_results);
 
 	//Give back what we assigned to
 	return result_package;
@@ -5122,7 +5136,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	u_int8_t current_func_param_idx = 1;
 
 	//Keep an array of all of our final results for the function call
-	dynamic_array_t* function_parameter_results = dynamic_array_alloc();
+	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
@@ -5168,7 +5182,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		}
 
 		//Add this final result into our parameter results list
-		dynamic_array_add(function_parameter_results, param_assignee);
+		dynamic_array_add(&function_parameter_results, param_assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -5181,7 +5195,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//themselves
 	for(u_int16_t i = 1; i < current_func_param_idx; i++){
 		//Get the result
-		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
+		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
 		
 		//Extract the parameter type here
 		generic_type_t* parameter_type = signature->parameters[i - 1];
@@ -5199,7 +5213,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		add_statement(basic_block, assignment);
 
 		//Add the parameter in
-		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
+		dynamic_array_add(&func_call_stmt->parameters, assignment->assignee);
 
 		//The assignment here is used implicitly by the function call
 		add_used_variable(current, assignment->assignee);
@@ -5227,7 +5241,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	result_package.assignee = assignee;
 
 	//Destroy the dynamic array now that we're done
-	dynamic_array_dealloc(function_parameter_results);
+	dynamic_array_dealloc(&function_parameter_results);
 
 	//Give back what we assigned to
 	return result_package;
@@ -5247,23 +5261,23 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 	//Now we'll print out each and every function inside of the function_entry_blocks
 	//array. Each function will be printed using the BFS strategy
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//We'll need a queue for our BFS
-		heap_queue_t* queue = heap_queue_alloc();
+		heap_queue_t queue = heap_queue_alloc();
 
 		//Grab this out for convenience
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//We'll want to see what the stack looks like
 		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
 
 		//Seed the search by adding the funciton block into the queue
-		enqueue(queue, function_entry_block);
+		enqueue(&queue, function_entry_block);
 
 		//So long as the queue isn't empty
-		while(queue_is_empty(queue) == FALSE){
+		while(queue_is_empty(&queue) == FALSE){
 			//Pop off of the queue
-			block = dequeue(queue);
+			block = dequeue(&queue);
 
 			//If this wasn't visited, we'll print
 			if(block->visited == FALSE){
@@ -5274,18 +5288,18 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			block->visited = TRUE;
 
 			//And finally we'll add all of these onto the queue
-			for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
+			for(u_int16_t j = 0; j < block->successors.current_index; j++){
 				//Add the successor into the queue, if it has not yet been visited
-				basic_block_t* successor = block->successors->internal_array[j];
+				basic_block_t* successor = block->successors.internal_array[j];
 
 				if(successor->visited == FALSE){
-					enqueue(queue, successor);
+					enqueue(&queue, successor);
 				}
 			}
 		}
 
 		//Destroy the heap queue when done
-		heap_queue_dealloc(queue);
+		heap_queue_dealloc(&queue);
 	}
 }
 
@@ -5295,51 +5309,44 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
  */
 void cleanup_all_control_relations(cfg_t* cfg){
 	//For each block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//Run through and destroy all of these old control flow constructs
 		//Deallocate the postdominator set
-		if(block->postdominator_set != NULL){
-			dynamic_array_dealloc(block->postdominator_set);
-			block->postdominator_set = NULL;
+		if(block->postdominator_set.internal_array != NULL){
+			dynamic_array_dealloc(&(block->postdominator_set));
 		}
 
 		//Deallocate the dominator set
-		if(block->dominator_set != NULL){
-			dynamic_array_dealloc(block->dominator_set);
-			block->dominator_set = NULL;
+		if(block->dominator_set.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominator_set));
 		}
 
 		//Deallocate the dominator children
-		if(block->dominator_children != NULL){
-			dynamic_array_dealloc(block->dominator_children);
-			block->dominator_children = NULL;
+		if(block->dominator_children.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominator_children));
 		}
 
 		//Deallocate the domninance frontier
-		if(block->dominance_frontier != NULL){
-			dynamic_array_dealloc(block->dominance_frontier);
-			block->dominance_frontier = NULL;
+		if(block->dominance_frontier.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominance_frontier));
 		}
 
 		//Deallocate the reverse dominance frontier
-		if(block->reverse_dominance_frontier != NULL){
-			dynamic_array_dealloc(block->reverse_dominance_frontier);
-			block->reverse_dominance_frontier = NULL;
+		if(block->reverse_dominance_frontier.internal_array != NULL){
+			dynamic_array_dealloc(&(block->reverse_dominance_frontier));
 		}
 
 		//Deallocate the reverse post order set
-		if(block->reverse_post_order_reverse_cfg != NULL){
-			dynamic_array_dealloc(block->reverse_post_order_reverse_cfg);
-			block->reverse_post_order_reverse_cfg = NULL;
+		if(block->reverse_post_order_reverse_cfg.internal_array != NULL){
+			dynamic_array_dealloc(&(block->reverse_post_order_reverse_cfg));
 		}
 
 		//Deallocate the reverse post order set
-		if(block->reverse_post_order != NULL){
-			dynamic_array_dealloc(block->reverse_post_order);
-			block->reverse_post_order = NULL;
+		if(block->reverse_post_order.internal_array != NULL){
+			dynamic_array_dealloc(&(block->reverse_post_order));
 		}
 	}
 }
@@ -5355,67 +5362,67 @@ void basic_block_dealloc(basic_block_t* block){
 	}
 
 	//Deallocate the live variable array
-	if(block->used_variables != NULL){
-		dynamic_array_dealloc(block->used_variables);
+	if(block->used_variables.internal_array != NULL){
+		dynamic_array_dealloc(&(block->used_variables));
 	}
 
 	//Deallocate the assigned variable array
-	if(block->assigned_variables != NULL){
-		dynamic_array_dealloc(block->assigned_variables);
+	if(block->assigned_variables.internal_array != NULL){
+		dynamic_array_dealloc(&(block->assigned_variables));
 	}
 
 	//Deallocate the postdominator set
-	if(block->postdominator_set != NULL){
-		dynamic_array_dealloc(block->postdominator_set);
+	if(block->postdominator_set.internal_array != NULL){
+		dynamic_array_dealloc(&(block->postdominator_set));
 	}
 
 	//Deallocate the dominator set
-	if(block->dominator_set != NULL){
-		dynamic_array_dealloc(block->dominator_set);
+	if(block->dominator_set.internal_array != NULL){
+		dynamic_array_dealloc(&(block->dominator_set));
 	}
 
 	//Deallocate the dominator children
-	if(block->dominator_children != NULL){
-		dynamic_array_dealloc(block->dominator_children);
+	if(block->dominator_children.internal_array != NULL){
+		dynamic_array_dealloc(&(block->dominator_children));
 	}
 
 	//Deallocate the domninance frontier
-	if(block->dominance_frontier != NULL){
-		dynamic_array_dealloc(block->dominance_frontier);
+	if(block->dominance_frontier.internal_array != NULL){
+		dynamic_array_dealloc(&(block->dominance_frontier));
 	}
 
 	//Deallocate the reverse dominance frontier
-	if(block->reverse_dominance_frontier != NULL){
-		dynamic_array_dealloc(block->reverse_dominance_frontier);
+	if(block->reverse_dominance_frontier.internal_array != NULL){
+		dynamic_array_dealloc(&(block->reverse_dominance_frontier));
 	}
 
 	//Deallocate the reverse post order set
-	if(block->reverse_post_order_reverse_cfg != NULL){
-		dynamic_array_dealloc(block->reverse_post_order_reverse_cfg);
+	if(block->reverse_post_order_reverse_cfg.internal_array != NULL){
+		dynamic_array_dealloc(&(block->reverse_post_order_reverse_cfg));
 	}
 
 	//Deallocate the reverse post order set
-	if(block->reverse_post_order != NULL){
-		dynamic_array_dealloc(block->reverse_post_order);
+	if(block->reverse_post_order.internal_array != NULL){
+		dynamic_array_dealloc(&(block->reverse_post_order));
 	}
 
 	//Deallocate the liveness sets
-	if(block->live_out != NULL){
-		dynamic_array_dealloc(block->live_out);
+	if(block->live_out.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_out));
 	}
 
-	if(block->live_in != NULL){
-		dynamic_array_dealloc(block->live_in);
+	if(block->live_in.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_in));
 	}
 
 	//Deallocate the successors
-	if(block->successors != NULL){
-		dynamic_array_dealloc(block->successors);
+	if(block->successors.internal_array != NULL){
+		dynamic_array_dealloc(&(block->successors));
 	}
 
 	//Deallocate the predecessors
-	if(block->predecessors != NULL){
-		dynamic_array_dealloc(block->predecessors);
+	if(block->predecessors.internal_array != NULL){
+		dynamic_array_dealloc(&(block->predecessors));
 	}
 
 	//If this is a switch statement entry block, then it will have a jump table
@@ -5447,9 +5454,9 @@ void basic_block_dealloc(basic_block_t* block){
  */
 void dealloc_cfg(cfg_t* cfg){
 	//Run through all of the blocks here and delete them
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Use this to deallocate
-		basic_block_dealloc(dynamic_array_get_at(cfg->created_blocks, i));
+		basic_block_dealloc(dynamic_array_get_at(&(cfg->created_blocks), i));
 	}
 
 	//Destroy all variables
@@ -5458,8 +5465,8 @@ void dealloc_cfg(cfg_t* cfg){
 	deallocate_all_consts();
 
 	//Destroy the dynamic arrays too
-	dynamic_array_dealloc(cfg->created_blocks);
-	dynamic_array_dealloc(cfg->function_entry_blocks);
+	dynamic_array_dealloc(&(cfg->created_blocks));
+	dynamic_array_dealloc(&(cfg->function_entry_blocks));
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
@@ -5471,18 +5478,18 @@ void dealloc_cfg(cfg_t* cfg){
  */
 void add_successor_only(basic_block_t* target, basic_block_t* successor){
 	//If this is null, we'll perform the initial allocation
-	if(target->successors == NULL){
+	if(target->successors.internal_array == NULL){
 		target->successors = dynamic_array_alloc();
 	}
 
 	//Does this block already contain the successor? If so we'll leave
-	if(dynamic_array_contains(target->successors, successor) != NOT_FOUND){
+	if(dynamic_array_contains(&(target->successors), successor) != NOT_FOUND){
 		//We DID find it, so we won't add
 		return;
 	}
 
 	//Otherwise we're set to add it in
-	dynamic_array_add(target->successors, successor);
+	dynamic_array_add(&(target->successors), successor);
 }
 
 
@@ -5492,18 +5499,18 @@ void add_successor_only(basic_block_t* target, basic_block_t* successor){
  */
 void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
 	//If this is NULL, we'll allocate here
-	if(target->predecessors == NULL){
+	if(target->predecessors.internal_array == NULL){
 		target->predecessors = dynamic_array_alloc();
 	}
 
 	//Does this contain the predecessor block already? If so we won't add
-	if(dynamic_array_contains(target->predecessors, predecessor) != NOT_FOUND){
+	if(dynamic_array_contains(&(target->predecessors), predecessor) != NOT_FOUND){
 		//We DID find it, so we won't add
 		return;
 	}
 
 	//Now we can add
-	dynamic_array_add(target->predecessors, predecessor);
+	dynamic_array_add(&(target->predecessors), predecessor);
 }
 
 
@@ -5536,7 +5543,7 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
  * Successor: the successor itself
  */
 void delete_successor_only(basic_block_t* target, basic_block_t* successor){
-	dynamic_array_delete(target->successors, successor);
+	dynamic_array_delete(&(target->successors), successor);
 }
 
 
@@ -5549,7 +5556,7 @@ void delete_successor_only(basic_block_t* target, basic_block_t* successor){
  * Predecessor: the predecessor itself
  */
 void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
-	dynamic_array_delete(target->predecessors, predecessor);
+	dynamic_array_delete(&(target->predecessors), predecessor);
 }
 
 
@@ -5603,32 +5610,36 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		a->exit_statement = b->exit_statement;
 	}
 
+
 	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
-	//Let's merge predecessors first
-	for(u_int16_t i = 0; b->predecessors != NULL && i < b->predecessors->current_index; i++){
+	//Let's merge predecessors first if we have any
+	for(u_int16_t i = 0; i < b->predecessors.current_index; i++){
 		//Add b's predecessor as one to a
-		add_predecessor_only(a, b->predecessors->internal_array[i]);
+		add_predecessor_only(a, b->predecessors.internal_array[i]);
 	}
 
-	//Now merge successors
-	for(u_int16_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
+	//Now merge successors if we have any
+	for(u_int16_t i = 0; i < b->successors.current_index; i++){
 		//Add b's successors to be a's successors
-		add_successor_only(a, b->successors->internal_array[i]);
+		add_successor_only(a, b->successors.internal_array[i]);
 	}
 
 	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
 	//This is now wrong though. So, for each successor of B, it will need
 	//to have A as predecessor
-	for(u_int8_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
+	for(u_int16_t i = 0; i < b->successors.current_index; i++){
 		//Grab the block first
-		basic_block_t* successor_block = b->successors->internal_array[i];
+		basic_block_t* successor_block = b->successors.internal_array[i];
 
-		//Now for each of the predecessors that equals b, it needs to now point to A
-		for(u_int8_t i = 0; successor_block->predecessors != NULL && i < successor_block->predecessors->current_index; i++){
-			//If it's pointing to b, it needs to be updated
-			if(successor_block->predecessors->internal_array[i] == b){
-				//Update it to now be correct
-				successor_block->predecessors->internal_array[i] = a;
+		//If the successor block has predecessors
+		if(successor_block->predecessors.internal_array != NULL){
+			//Now for each of the predecessors that equals b, it needs to now point to A
+			for(u_int8_t i = 0; i < successor_block->predecessors.current_index; i++){
+				//If it's pointing to b, it needs to be updated
+				if(successor_block->predecessors.internal_array[i] == b){
+					//Update it to now be correct
+					successor_block->predecessors.internal_array[i] = a;
+				}
 			}
 		}
 	}
@@ -5659,22 +5670,22 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	b->exit_statement = NULL;
 
 	//We'll now need to ensure that all of the used variables in B are also in A
-	for(u_int16_t i = 0; b->used_variables != NULL && i < b->used_variables->current_index; i++){
+	for(u_int16_t i = 0; i < b->used_variables.current_index; i++){
 		//Add these in one by one to A
-		add_used_variable(a, b->used_variables->internal_array[i]);
+		add_used_variable(a, b->used_variables.internal_array[i]);
 	}
 
 	//Copy over all of the assigned variables too
-	for(u_int16_t i = 0; b->assigned_variables != NULL && i < b->assigned_variables->current_index; i++){
+	for(u_int16_t i = 0; i < b->assigned_variables.current_index; i++){
 		//Add these in one by one
-		add_assigned_variable(a, b->assigned_variables->internal_array[i]);
+		add_assigned_variable(a, b->assigned_variables.internal_array[i]);
 	}
 
 	//Update the instruction counts
 	a->number_of_instructions += b->number_of_instructions;
 
 	//We'll remove this from the list of created blocks
-	dynamic_array_delete(cfg->created_blocks, b);
+	dynamic_array_delete(&(cfg->created_blocks), b);
 
 	//And finally we'll deallocate b
 	basic_block_dealloc(b);
@@ -5700,7 +5711,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//All breaks will go to the exit block
 	//Hold off on the continue block for now
-	push(break_stack, for_stmt_exit_block);
+	push(&break_stack, for_stmt_exit_block);
 
 	//Once we get here, we already know what the start and exit are for this statement
 	result_package.starting_block = for_stmt_entry_block;
@@ -5749,7 +5760,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//Once we reach here, we are officially in the loop. Everything beyond this point
 	//is going to happen repeatedly
-	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
 	//The second and third condition in the for loop are the ones that execute continously. The third condition
@@ -5791,7 +5802,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	emit_jump(for_stmt_update_block, condition_block);
 
 	//All continues will go to the update block
-	push(continue_stack, for_stmt_update_block);
+	push(&continue_stack, for_stmt_update_block);
 	
 	//Advance to the next sibling
 	ast_cursor = ast_cursor->next_sibling;
@@ -5801,7 +5812,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
 	//Once we're done with the compound statement, we are no longer in the loop
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//If we have an empty interior just emit a dummy block. It will be optimized away 
 	//regardless
@@ -5836,8 +5847,8 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	}
 
 	//Now that we're done, we'll need to remove these both from the stack
-	pop(continue_stack);
-	pop(break_stack);
+	pop(&continue_stack);
+	pop(&break_stack);
 
 	//Give back the result package here
 	return result_package;
@@ -5859,7 +5870,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 
 	//After we allocate the exit block, we will push on the 
 	//nesting level as the entry block is in the loop
-	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//Create our entry block. This in reality will be the compound statement
 	basic_block_t* do_while_stmt_entry_block = basic_block_alloc_and_estimate();
@@ -5867,9 +5878,9 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	do_while_stmt_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
-	push(continue_stack, do_while_stmt_entry_block);
+	push(&continue_stack, do_while_stmt_entry_block);
 	//And we'll push the end block onto the break stack, because all breaks go there
-	push(break_stack, do_while_stmt_exit_block);
+	push(&break_stack, do_while_stmt_exit_block);
 
 	//We can add these into the result package already
 	result_package.starting_block = do_while_stmt_entry_block;
@@ -5885,7 +5896,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
 	//Once we're done pop the nesting level
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//It being NULL is ok, we'll just insert a dummy
 	if(compound_statement_results.starting_block == NULL){
@@ -5937,8 +5948,8 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	}
 
 	//Now that we're done here, pop the break/continue stacks to remove these blocks
-	pop(continue_stack);
-	pop(break_stack);
+	pop(&continue_stack);
+	pop(&break_stack);
 
 	//Always return the entry block
 	return result_package;
@@ -5960,7 +5971,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 	//We will not push to the nesting stack for the end block, but we will for the
 	//entry block because the entry block does execute in the loop
-	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//Create our entry block
 	basic_block_t* while_statement_entry_block = basic_block_alloc_and_estimate();
@@ -5968,9 +5979,9 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	while_statement_entry_block->block_type = BLOCK_TYPE_LOOP_ENTRY;
 
 	//We'll push the entry block onto the continue stack, because continues will go there.
-	push(continue_stack, while_statement_entry_block);
+	push(&continue_stack, while_statement_entry_block);
 	//And we'll push the end block onto the break stack, because all breaks go there
-	push(break_stack, while_statement_end_block);
+	push(&break_stack, while_statement_end_block);
 
 	//We already know what to populate our result package with here
 	result_package.starting_block = while_statement_entry_block;
@@ -5992,7 +6003,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
 	//We're out of the compound statement - pop the nesting level
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//If it's null, that means that we were given an empty while loop here.
 	//We'll just allocate our own and use that
@@ -6037,8 +6048,8 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	}
 
 	//Now that we're done, pop these both off their respective stacks
-	pop(break_stack);
-	pop(continue_stack);
+	pop(&break_stack);
+	pop(&continue_stack);
 
 	//Now we're done, so
 	return result_package;
@@ -6085,13 +6096,13 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	cursor = cursor->next_sibling;
 
 	//Push that we're in an if statement for the compound statement
-	push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
 	//Visit the compound statement that we're required to have here
 	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
 
 	//And then pop it off
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//If the starting block is null, create a dummy one
 	if(if_compound_statement_results.starting_block == NULL){
@@ -6150,13 +6161,13 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		else_if_cursor = else_if_cursor->next_sibling;
 
 		//Push that we're in an if statement
-		push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
 		//Let this handle the compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
 
 		//And now pop it off
-		pop_nesting_level(nesting_stack);
+		pop_nesting_level(&nesting_stack);
 
 		//If this is NULL, then we need to emit dummy blocks
 		if(else_if_compound_statement_results.starting_block == NULL){
@@ -6200,13 +6211,13 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Now that we're out of here - we may have an else statement on our hands
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_COMPOUND_STMT){
 		//Push the nesting level now that we're in a compound statement
-		push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
 		//Grab the compound statement
 		cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
 
 		//Pop it off
-		pop_nesting_level(nesting_stack);
+		pop_nesting_level(&nesting_stack);
 
 		//Extract for convenience
 		instruction_t* branch_statement = previous_entry_block->exit_statement;
@@ -6251,7 +6262,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//If we have an exit block that has no predecessors, that means that we return through every
 	//control path. In this instance, we need to set the result package's final block to be the
 	//exit block
-	if(exit_block->predecessors == NULL || exit_block->predecessors->current_index == 0){
+	if(exit_block->predecessors.internal_array == NULL || exit_block->predecessors.current_index == 0){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -6269,7 +6280,7 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
 	//This is nesting inside of a case statement
-	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 	//For a default statement, it performs very similarly to a case statement. 
 	//It will be handled slightly differently in the jump table, but we'll get to that 
@@ -6297,7 +6308,7 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	}
 
 	//Nesting here is no longer in a case statement
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Give the block back
 	return results;
@@ -6313,7 +6324,7 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
 	//This is nesting inside of a case statement
-	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 	//The case statement should have some kind of constant value here, whether
 	//it's an enum value or regular const. All validation should have been
@@ -6349,7 +6360,7 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	}
 
 	//Nesting here is no longer in a case statement
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Give the block back
 	return results;
@@ -6369,7 +6380,7 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//This is nested in a C-style case statement
-	push_nesting_level(nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
 
 	//Since a C-style case statement is just a collection of 
 	//statements, we'll use the statement sequence to process it here
@@ -6391,7 +6402,7 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 	}
 
 	//Remove the nesting now
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Give back the final results
 	return result_package;
@@ -6411,7 +6422,7 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//This is nested in a C-style case statement
-	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 	//Since a C-style case statement is just a collection of 
 	//statements, we'll use the statement sequence to process it here
@@ -6434,7 +6445,7 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 	}
 
 	//Remove the nesting now
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Give back the final results
 	return result_package;
@@ -6461,7 +6472,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	basic_block_t* ending_block = basic_block_alloc_and_estimate();
 
 	//The ending block now goes onto the breaking stack
-	push(break_stack, ending_block);
+	push(&break_stack, ending_block);
 
 	//We already know what these will be, so populate them
 	result_package.starting_block = root_level_block;
@@ -6612,7 +6623,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//If the ending block has no successors at all, that means that we've returned through every control path. Instead
 	//of using the ending block, we can change it to be the function ending block
-	if(ending_block->predecessors == NULL || ending_block->predecessors->current_index == 0){
+	if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -6620,8 +6631,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//will be set to point to the default block
 	for(u_int16_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		//If it's null, we'll make it the default
-		if(dynamic_array_get_at(jump_calculation_block->jump_table->nodes, i) == NULL){
-			dynamic_array_set_at(jump_calculation_block->jump_table->nodes, default_block, i);
+		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
+			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 		}
 	}
 
@@ -6824,14 +6835,14 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//with the default value
 	for(u_int16_t _ = 0; _ < jump_calculation_block->jump_table->num_nodes; _++){
 		//If it's null, we'll make it the default
-		if(dynamic_array_get_at(jump_calculation_block->jump_table->nodes, _) == NULL){
-			dynamic_array_set_at(jump_calculation_block->jump_table->nodes, default_block, _);
+		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), _) == NULL){
+			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, _);
 		}
 	}
 
 	//If we have no predecessors, that means that every case statement ended in a return statement.
 	//If this is the case, then the final block should not be the ending block, it should be the function ending block
-	if(ending_block->predecessors == NULL || ending_block->predecessors->current_index == 0){
+	if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -7105,7 +7116,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
 
 					//Peek the continue block off of the stack
-					basic_block_t* continuing_to = peek(continue_stack);
+					basic_block_t* continuing_to = peek(&continue_stack);
 
 					//We always jump to the start of the loop statement unconditionally
 					emit_jump(current_block, continuing_to);
@@ -7134,7 +7145,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
-					basic_block_t* continuing_to = peek(continue_stack);
+					basic_block_t* continuing_to = peek(&continue_stack);
 
 					//Select the appropriate branch type using
 					//a normal jump
@@ -7170,7 +7181,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
 
 					//Peak off of the break stack to get what we're breaking to
-					basic_block_t* breaking_to = peek(break_stack);
+					basic_block_t* breaking_to = peek(&break_stack);
 
 					//We will jump to it -- this is always an uncoditional jump
 					emit_jump(current_block, breaking_to);
@@ -7202,7 +7213,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
-					basic_block_t* breaking_to = peek(break_stack);
+					basic_block_t* breaking_to = peek(&break_stack);
 
 					/**
 					 * Now we'll emit the branch like so:
@@ -7255,7 +7266,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				labeled_block = labeled_block_alloc(ast_cursor->variable);
 
 				//Add this into the current function's labeled blocks
-				dynamic_array_add(current_function_labeled_blocks, labeled_block);
+				dynamic_array_add(&current_function_labeled_blocks, labeled_block);
 
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
@@ -7618,7 +7629,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
 
 					//Peek the continue block off of the stack
-					basic_block_t* continuing_to = peek(continue_stack);
+					basic_block_t* continuing_to = peek(&continue_stack);
 
 					//We always jump to the start of the loop statement unconditionally
 					emit_jump(current_block, continuing_to);
@@ -7647,7 +7658,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					basic_block_t* new_block = basic_block_alloc_and_estimate();
 
 					//Peek the continue block off of the stack
-					basic_block_t* continuing_to = peek(continue_stack);
+					basic_block_t* continuing_to = peek(&continue_stack);
 
 					//Select the appropriate branch type, we will not use an inverse jump here
 					branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
@@ -7682,7 +7693,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
 
 					//Peak off of the break stack to get what we're breaking to
-					basic_block_t* breaking_to = peek(break_stack);
+					basic_block_t* breaking_to = peek(&break_stack);
 
 					//We will jump to it -- this is always an uncoditional jump
 					emit_jump(current_block, breaking_to);
@@ -7714,7 +7725,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
-					basic_block_t* breaking_to = peek(break_stack);
+					basic_block_t* breaking_to = peek(&break_stack);
 
 					/**
 					 * Now we'll emit the branch like so:
@@ -7772,7 +7783,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				labeled_block = labeled_block_alloc(ast_cursor->variable);
 
 				//Add this into the current function's labeled blocks
-				dynamic_array_add(current_function_labeled_blocks, labeled_block);
+				dynamic_array_add(&current_function_labeled_blocks, labeled_block);
 
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
@@ -7958,9 +7969,9 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	symtab_function_record_t* function_defined_in = function_exit_block->function_defined_in;
 
 	//Run through all of the predecessors
-	for(u_int16_t i = 0; i < function_exit_block->predecessors->current_index; i++){
+	for(u_int16_t i = 0; i < function_exit_block->predecessors.current_index; i++){
 		//Grab the predecessor out
-		basic_block_t* block = dynamic_array_get_at(function_exit_block->predecessors, i);
+		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
 		//If the exit statement is not a return statement, we need to know what's happening here
 		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
@@ -8020,7 +8031,7 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
  */
 static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
 	//Push the nesting level that we're in
-	push_nesting_level(nesting_stack, NESTING_FUNCTION);
+	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 	
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
@@ -8125,11 +8136,11 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	determine_and_insert_return_statements(function_exit_block);
 
 	//We'll need to go through and finalize all user defined jump statements if there are any
-	finalize_all_user_defined_jump_statements(current_function_labeled_blocks, current_function_user_defined_jump_statements);
+	finalize_all_user_defined_jump_statements(&current_function_labeled_blocks, &current_function_user_defined_jump_statements);
 
 	//Add the start and end blocks to their respective arrays
-	dynamic_array_add(cfg->function_entry_blocks, function_starting_block);
-	dynamic_array_add(cfg->function_exit_blocks, function_exit_block);
+	dynamic_array_add(&(cfg->function_entry_blocks), function_starting_block);
+	dynamic_array_add(&(cfg->function_exit_blocks), function_exit_block);
 
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;
@@ -8138,15 +8149,13 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	function_exit_block = NULL;
 
 	//Now we can scrap the labeled block array
-	dynamic_array_dealloc(current_function_labeled_blocks);
-	current_function_labeled_blocks = NULL;
+	dynamic_array_dealloc(&current_function_labeled_blocks);
 
 	//Deallocate the current function's user defined jumps as well
-	dynamic_array_dealloc(current_function_user_defined_jump_statements);
-	current_function_user_defined_jump_statements = NULL;
+	dynamic_array_dealloc(&current_function_user_defined_jump_statements);
 
 	//Remove it now that we're done
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//We always return the start block
 	return function_starting_block;
@@ -8204,7 +8213,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 	global_variable->variable->initialized = TRUE;
 
 	//And add it into the CFG
-	dynamic_array_add(cfg->global_variables, global_variable);
+	dynamic_array_add(&(cfg->global_variables), global_variable);
 
 	//Grab out the initializer node
 	generic_ast_node_t* initializer = node->first_child;
@@ -8220,7 +8229,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			global_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
 
 			//Let the helper take care of it
-			emit_global_array_initializer(initializer, global_variable->initializer_value.array_initializer_values);
+			emit_global_array_initializer(initializer, &(global_variable->initializer_value.array_initializer_values));
 
 			break;
 		
@@ -8256,7 +8265,7 @@ static void visit_global_declare_statement(generic_ast_node_t* node){
 	global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_NONE;
 
 	//And add it into the CFG
-	dynamic_array_add(cfg->global_variables, global_variable);
+	dynamic_array_add(&(cfg->global_variables), global_variable);
 }
 
 
@@ -8485,7 +8494,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
 	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
 	while(cursor != NULL){
 		//Grab it out
-		symtab_variable_record_t* member_variable = dynamic_array_get_at(struct_type->internal_types.struct_table, member_index);
+		symtab_variable_record_t* member_variable = dynamic_array_get_at(&(struct_type->internal_types.struct_table), member_index);
 
 		//We can calculate the offset by adding the struct offset to the starting offset
 		u_int32_t current_offset = offset + member_variable->struct_offset;
@@ -8808,7 +8817,7 @@ void print_all_cfg_blocks(cfg_t* cfg){
 	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
 
 	//Print all global variables after the blocks
-	print_all_global_variables(stdout, cfg->global_variables);
+	print_all_global_variables(stdout, &(cfg->global_variables));
 }
 
 
@@ -8817,9 +8826,9 @@ void print_all_cfg_blocks(cfg_t* cfg){
  */
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
 	//For each block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//Set it's visited status to 0
 		block->visited = FALSE;
@@ -8874,9 +8883,9 @@ void calculate_all_reverse_traversals(cfg_t* cfg){
 
 	//For each function entry block, recompute all reverse post order
 	//CFG work
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Reset the visited status
 		reset_visited_status(cfg, FALSE);
@@ -9005,8 +9014,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	rename_all_variables(cfg);
 
 	//Once we get here, we're done with these two stacks
-	heap_stack_dealloc(break_stack);	
-	heap_stack_dealloc(continue_stack);	
+	heap_stack_dealloc(&break_stack);	
+	heap_stack_dealloc(&continue_stack);	
 	nesting_stack_dealloc(&nesting_stack);
 
 	//Give back the reference

@@ -101,8 +101,7 @@ static void update_dependence_for_variable(data_dependency_graph_t* graph, instr
 static void build_dependency_graph_for_block(data_dependency_graph_t* graph, basic_block_t* block, instruction_t** instructions){
 	//Predeclare for any/all function parameter lists due to
 	//the nature of the switch
-	dynamic_array_t* function_parameters;
-
+	dynamic_array_t function_parameters;
 
 	//Run through the instruction list backwards. Logically speaking, we're going to
 	//find the instruction with the maximum number of dependencies later on down in the block
@@ -163,15 +162,10 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				//Really just acts as a cleaner cast
 				function_parameters = current->parameters;
 
-				//This can happen, in which case we just leave
-				if(function_parameters == NULL){
-					break;
-				}
-
 				//Otherwise, we update all of the parameters
-				for(u_int16_t j = 0; j < function_parameters->current_index; j++){
+				for(u_int16_t j = 0; j < function_parameters.current_index; j++){
 					//Invoke the helper for each given parameter
-					update_dependence_for_variable(graph, current, instructions, dynamic_array_get_at(function_parameters, j), i - 1);
+					update_dependence_for_variable(graph, current, instructions, dynamic_array_get_at(&function_parameters, j), i - 1);
 				}
 
 				break;
@@ -184,15 +178,10 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				//Really just acts as a cleaner cast
 				function_parameters = current->parameters;
 
-				//This can happen, in which case we just leave
-				if(function_parameters == NULL){
-					break;
-				}
-
 				//Otherwise, we update all of the parameters
-				for(u_int16_t j = 0; j < function_parameters->current_index; j++){
+				for(u_int16_t j = 0; j < function_parameters.current_index; j++){
 					//Invoke the helper for each given parameter
-					update_dependence_for_variable(graph, current, instructions, dynamic_array_get_at(function_parameters, j), i - 1);
+					update_dependence_for_variable(graph, current, instructions, dynamic_array_get_at(&function_parameters, j), i - 1);
 				}
 
 				break;
@@ -396,9 +385,9 @@ cfg_t* schedule_all_instructions(cfg_t* cfg, compiler_options_t* options){
 	 * anything like that here
 	*/
 	//For every single function
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Grab the function entry
-		basic_block_t* cursor = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* cursor = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Run through everything in here
 		while(cursor != NULL){

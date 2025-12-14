@@ -14,17 +14,21 @@
 #define DEFAULT_HEAP_STACK_SIZE 10
 
 /**
- * Create a stack
+ * Create a stack. The control structure itself
+ * will be on the stack
  */
-heap_stack_t* heap_stack_alloc(){
-	//Allocate our stack
-	heap_stack_t* stack = calloc(1, sizeof(heap_stack_t));
+heap_stack_t heap_stack_alloc(){
+	//Stack allocate
+	heap_stack_t stack;
 
 	//Now allocate the internal array
-	stack->stack = calloc(DEFAULT_HEAP_STACK_SIZE, sizeof(void*));
+	stack.stack = calloc(DEFAULT_HEAP_STACK_SIZE, sizeof(void*));
 
 	//Current index is 10
-	stack->current_max_index = 10;
+	stack.current_max_index = DEFAULT_HEAP_STACK_SIZE;
+
+	//Set the current index to be 0
+	stack.current_index = 0;
 
 	//Return the stack
 	return stack;
@@ -131,7 +135,4 @@ void reset_heap_stack(heap_stack_t* stack){
 void heap_stack_dealloc(heap_stack_t* stack){
 	//Release the stack
 	free(stack->stack);
-
-	//And release the entire struct
-	free(stack);
 }

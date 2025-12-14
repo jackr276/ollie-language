@@ -90,6 +90,9 @@ struct symtab_function_record_t{
 	u_int8_t assigned_registers[K_COLORS_GEN_USE];
 	//The name of the function
 	dynamic_string_t func_name;
+	//The local constants array. Not all functions 
+	//have this populated
+	dynamic_array_t local_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The associated call graph node with this function
@@ -100,9 +103,6 @@ struct symtab_function_record_t{
 	generic_type_t* signature;
 	//What's the return type?
 	generic_type_t* return_type;
-	//The local constants array. Not all functions 
-	//have this populated
-	dynamic_array_t* local_constants;
 	//The line number
 	u_int32_t line_number;
 	//The hash that we have
@@ -230,7 +230,7 @@ struct symtab_type_sheaf_t{
  */
 struct variable_symtab_t{
 	//Dynamic array of sheafs
-	dynamic_array_t* sheafs;
+	dynamic_array_t sheafs;
 	//The current symtab sheaf
 	symtab_variable_sheaf_t* current;
 	//The current lexical scope
@@ -243,7 +243,7 @@ struct variable_symtab_t{
  */
 struct type_symtab_t{
 	//Dynamic array of sheafs
-	dynamic_array_t* sheafs;
+	dynamic_array_t sheafs;
 	//The current symtab sheaf
 	symtab_type_sheaf_t* current;
 	//The current lexical scope
