@@ -12,15 +12,21 @@
 /**
  * Allocate a dynamic string on the heap
  */
-void dynamic_string_alloc(dynamic_string_t* dynamic_string){
+dynamic_string_t dynamic_string_alloc(){
+	//String stack allocated
+	dynamic_string_t string;
+
 	//Set the length to be the default length
-	dynamic_string->length = DEFAULT_DYNAMIC_STRING_LENGTH;
+	string.length = DEFAULT_DYNAMIC_STRING_LENGTH;
 
 	//Now we'll allocate this using the default strategy
-	dynamic_string->string = calloc(dynamic_string->length, sizeof(char));
+	string.string = calloc(string.length, sizeof(char));
 
 	//Set the current length to be zero
-	dynamic_string->current_length = 0;
+	string.current_length = 0;
+
+	//Give back the stack allocated version
+	return string;
 }
 
 

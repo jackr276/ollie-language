@@ -1595,8 +1595,7 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 	type->basic_type_token = basic_type;
 	
 	//Create and allocate the name
-	dynamic_string_t name;
-	dynamic_string_alloc(&name);
+	dynamic_string_t name = dynamic_string_alloc();
 
 	//Set this to be the type name
 	dynamic_string_set(&name, type_name);
@@ -2107,7 +2106,7 @@ generic_type_t* create_aliased_type(char* name, generic_type_t* aliased_type, u_
 	type->line_number = line_number;
 
 	//Create the name
-	dynamic_string_alloc(&(type->type_name));
+	type->type_name = dynamic_string_alloc();
 	dynamic_string_set(&(type->type_name), name);
 
 	//Assign the mutability
@@ -2290,7 +2289,7 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	char var_string[MAX_IDENT_LENGTH];
 
 	//Allocate the type name
-	dynamic_string_alloc(&(function_pointer_type->type_name));
+	function_pointer_type->type_name =  dynamic_string_alloc();
 
 	//Extract this out
 	function_type_t* function_type = function_pointer_type->internal_types.function_type;
