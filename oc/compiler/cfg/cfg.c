@@ -2375,8 +2375,8 @@ static void rename_all_variables(cfg_t* cfg){
 
 	//All global variables have themselves been assigned. As such, we'll
 	//need to mark that by giving them a left hand rename
-	for(u_int16_t i = 0; i < cfg->global_variables->current_index; i++){
-		global_variable_t* variable = dynamic_array_get_at(cfg->global_variables, i);
+	for(u_int16_t i = 0; i < cfg->global_variables.current_index; i++){
+		global_variable_t* variable = dynamic_array_get_at(&(cfg->global_variables), i);
 		lhs_new_name_direct(variable->variable);
 	}
 
@@ -2385,9 +2385,9 @@ static void rename_all_variables(cfg_t* cfg){
 	//recursive, so that should in theory take care of everything for us
 	
 	//For each function block
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
 		//Invoke the rename function on it
-		rename_block(dynamic_array_get_at(cfg->function_entry_blocks, _));
+		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), _));
 	}
 }
 
@@ -2780,7 +2780,7 @@ static void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable
 	branch->block_contained_in = basic_block;
 
 	//Add this to the array of user defined jumps
-	dynamic_array_add(current_function_user_defined_jump_statements, branch);
+	dynamic_array_add(&current_function_user_defined_jump_statements, branch);
 
 	//Add this into the first block
 	add_statement(basic_block, branch);
@@ -5004,7 +5004,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	}
 
 	//Create a temporary storage array for all of our function parameter results
-	dynamic_array_t* function_parameter_results = dynamic_array_alloc();
+	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
 	u_int8_t current_func_param_idx = 1;
@@ -5053,7 +5053,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		}
 
 		//Add this final result into our parameter results list
-		dynamic_array_add(function_parameter_results, param_assignee);
+		dynamic_array_add(&function_parameter_results, param_assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -5066,7 +5066,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//themselves
 	for(u_int16_t i = 1; i < current_func_param_idx; i++){
 		//Get the result
-		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
+		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
 
 		//Extract the parameter type here
 		generic_type_t* paramter_type = signature->parameters[i - 1];
@@ -5084,7 +5084,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		add_statement(basic_block, assignment);
 
 		//Add the parameter in
-		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
+		dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
 
 		//The assignment here is used implicitly by the function call
 		add_used_variable(current, assignment->assignee);
@@ -5115,7 +5115,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	result_package.assignee = assignee;
 
 	//Destroy the function parameter results here
-	dynamic_array_dealloc(function_parameter_results);
+	dynamic_array_dealloc(&function_parameter_results);
 
 	//Give back what we assigned to
 	return result_package;
@@ -5166,7 +5166,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	u_int8_t current_func_param_idx = 1;
 
 	//Keep an array of all of our final results for the function call
-	dynamic_array_t* function_parameter_results = dynamic_array_alloc();
+	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
@@ -5212,7 +5212,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		}
 
 		//Add this final result into our parameter results list
-		dynamic_array_add(function_parameter_results, param_assignee);
+		dynamic_array_add(&function_parameter_results, param_assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -5225,7 +5225,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//themselves
 	for(u_int16_t i = 1; i < current_func_param_idx; i++){
 		//Get the result
-		three_addr_var_t* result = dynamic_array_get_at(function_parameter_results, i - 1);
+		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
 		
 		//Extract the parameter type here
 		generic_type_t* parameter_type = signature->parameters[i - 1];
@@ -5243,7 +5243,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		add_statement(basic_block, assignment);
 
 		//Add the parameter in
-		dynamic_array_add(func_call_stmt->parameters, assignment->assignee);
+		dynamic_array_add(&func_call_stmt->parameters, assignment->assignee);
 
 		//The assignment here is used implicitly by the function call
 		add_used_variable(current, assignment->assignee);
@@ -5271,7 +5271,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	result_package.assignee = assignee;
 
 	//Destroy the dynamic array now that we're done
-	dynamic_array_dealloc(function_parameter_results);
+	dynamic_array_dealloc(&function_parameter_results);
 
 	//Give back what we assigned to
 	return result_package;
@@ -5291,12 +5291,12 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 	//Now we'll print out each and every function inside of the function_entry_blocks
 	//array. Each function will be printed using the BFS strategy
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//We'll need a queue for our BFS
 		heap_queue_t queue = heap_queue_alloc();
 
 		//Grab this out for convenience
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//We'll want to see what the stack looks like
 		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
@@ -5317,13 +5317,16 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			//Now we'll mark this as visited
 			block->visited = TRUE;
 
-			//And finally we'll add all of these onto the queue
-			for(u_int16_t j = 0; block->successors != NULL && j < block->successors->current_index; j++){
-				//Add the successor into the queue, if it has not yet been visited
-				basic_block_t* successor = block->successors->internal_array[j];
+			//If we have any successorss
+			if(block->successors.internal_array != NULL){
+				//And finally we'll add all of these onto the queue
+				for(u_int16_t j = 0; j < block->successors.current_index; j++){
+					//Add the successor into the queue, if it has not yet been visited
+					basic_block_t* successor = block->successors.internal_array[j];
 
-				if(successor->visited == FALSE){
-					enqueue(&queue, successor);
+					if(successor->visited == FALSE){
+						enqueue(&queue, successor);
+					}
 				}
 			}
 		}
@@ -5339,51 +5342,44 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
  */
 void cleanup_all_control_relations(cfg_t* cfg){
 	//For each block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, _);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//Run through and destroy all of these old control flow constructs
 		//Deallocate the postdominator set
-		if(block->postdominator_set != NULL){
-			dynamic_array_dealloc(block->postdominator_set);
-			block->postdominator_set = NULL;
+		if(block->postdominator_set.internal_array != NULL){
+			dynamic_array_dealloc(&(block->postdominator_set));
 		}
 
 		//Deallocate the dominator set
-		if(block->dominator_set != NULL){
-			dynamic_array_dealloc(block->dominator_set);
-			block->dominator_set = NULL;
+		if(block->dominator_set.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominator_set));
 		}
 
 		//Deallocate the dominator children
-		if(block->dominator_children != NULL){
-			dynamic_array_dealloc(block->dominator_children);
-			block->dominator_children = NULL;
+		if(block->dominator_children.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominator_children));
 		}
 
 		//Deallocate the domninance frontier
-		if(block->dominance_frontier != NULL){
-			dynamic_array_dealloc(block->dominance_frontier);
-			block->dominance_frontier = NULL;
+		if(block->dominance_frontier.internal_array != NULL){
+			dynamic_array_dealloc(&(block->dominance_frontier));
 		}
 
 		//Deallocate the reverse dominance frontier
-		if(block->reverse_dominance_frontier != NULL){
-			dynamic_array_dealloc(block->reverse_dominance_frontier);
-			block->reverse_dominance_frontier = NULL;
+		if(block->reverse_dominance_frontier.internal_array != NULL){
+			dynamic_array_dealloc(&(block->reverse_dominance_frontier));
 		}
 
 		//Deallocate the reverse post order set
-		if(block->reverse_post_order_reverse_cfg != NULL){
-			dynamic_array_dealloc(block->reverse_post_order_reverse_cfg);
-			block->reverse_post_order_reverse_cfg = NULL;
+		if(block->reverse_post_order_reverse_cfg.internal_array != NULL){
+			dynamic_array_dealloc((&(block->reverse_post_order_reverse_cfg));
 		}
 
 		//Deallocate the reverse post order set
-		if(block->reverse_post_order != NULL){
-			dynamic_array_dealloc(block->reverse_post_order);
-			block->reverse_post_order = NULL;
+		if(block->reverse_post_order.internal_array != NULL){
+			dynamic_array_dealloc(&(block->reverse_post_order));
 		}
 	}
 }
@@ -5399,67 +5395,67 @@ void basic_block_dealloc(basic_block_t* block){
 	}
 
 	//Deallocate the live variable array
-	if(block->used_variables != NULL){
-		dynamic_array_dealloc(block->used_variables);
+	if(block->used_variables.internal_array != NULL){
+		dynamic_array_dealloc(&(block->used_variables));
 	}
 
 	//Deallocate the assigned variable array
-	if(block->assigned_variables != NULL){
-		dynamic_array_dealloc(block->assigned_variables);
+	if(block->assigned_variables.internal_array != NULL){
+		dynamic_array_dealloc(&(block->assigned_variables));
 	}
 
 	//Deallocate the postdominator set
-	if(block->postdominator_set != NULL){
-		dynamic_array_dealloc(block->postdominator_set);
+	if(block->postdominator_set.internal_array != NULL){
+		dynamic_array_dealloc(&(block->postdominator_set));
 	}
 
 	//Deallocate the dominator set
-	if(block->dominator_set != NULL){
-		dynamic_array_dealloc(block->dominator_set);
+	if(block->dominator_set.internal_array != NULL){
+		dynamic_array_dealloc(&(block->dominator_set));
 	}
 
 	//Deallocate the dominator children
-	if(block->dominator_children != NULL){
-		dynamic_array_dealloc(block->dominator_children);
+	if(block->dominator_children.internal_array != NULL){
+		dynamic_array_dealloc(&(block->dominator_children));
 	}
 
 	//Deallocate the domninance frontier
-	if(block->dominance_frontier != NULL){
-		dynamic_array_dealloc(block->dominance_frontier);
+	if(block->dominance_frontier.internal_array != NULL){
+		dynamic_array_dealloc(&(block->dominance_frontier));
 	}
 
 	//Deallocate the reverse dominance frontier
-	if(block->reverse_dominance_frontier != NULL){
-		dynamic_array_dealloc(block->reverse_dominance_frontier);
+	if(block->reverse_dominance_frontier.internal_array != NULL){
+		dynamic_array_dealloc(&(block->reverse_dominance_frontier));
 	}
 
 	//Deallocate the reverse post order set
-	if(block->reverse_post_order_reverse_cfg != NULL){
-		dynamic_array_dealloc(block->reverse_post_order_reverse_cfg);
+	if(block->reverse_post_order_reverse_cfg.internal_array != NULL){
+		dynamic_array_dealloc(&(block->reverse_post_order_reverse_cfg));
 	}
 
 	//Deallocate the reverse post order set
-	if(block->reverse_post_order != NULL){
-		dynamic_array_dealloc(block->reverse_post_order);
+	if(block->reverse_post_order.internal_array != NULL){
+		dynamic_array_dealloc(&(block->reverse_post_order));
 	}
 
 	//Deallocate the liveness sets
-	if(block->live_out != NULL){
-		dynamic_array_dealloc(block->live_out);
+	if(block->live_out.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_out));
 	}
 
-	if(block->live_in != NULL){
-		dynamic_array_dealloc(block->live_in);
+	if(block->live_in.internal_array != NULL){
+		dynamic_array_dealloc(&(block->live_in));
 	}
 
 	//Deallocate the successors
-	if(block->successors != NULL){
-		dynamic_array_dealloc(block->successors);
+	if(block->successors.internal_array != NULL){
+		dynamic_array_dealloc(&(block->successors));
 	}
 
 	//Deallocate the predecessors
-	if(block->predecessors != NULL){
-		dynamic_array_dealloc(block->predecessors);
+	if(block->predecessors.internal_array != NULL){
+		dynamic_array_dealloc(&(block->predecessors));
 	}
 
 	//If this is a switch statement entry block, then it will have a jump table
@@ -5491,9 +5487,9 @@ void basic_block_dealloc(basic_block_t* block){
  */
 void dealloc_cfg(cfg_t* cfg){
 	//Run through all of the blocks here and delete them
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Use this to deallocate
-		basic_block_dealloc(dynamic_array_get_at(cfg->created_blocks, i));
+		basic_block_dealloc(dynamic_array_get_at(&(cfg->created_blocks), i));
 	}
 
 	//Destroy all variables
@@ -5502,8 +5498,8 @@ void dealloc_cfg(cfg_t* cfg){
 	deallocate_all_consts();
 
 	//Destroy the dynamic arrays too
-	dynamic_array_dealloc(cfg->created_blocks);
-	dynamic_array_dealloc(cfg->function_entry_blocks);
+	dynamic_array_dealloc(&(cfg->created_blocks));
+	dynamic_array_dealloc(&(cfg->function_entry_blocks));
 
 	//At the very end, be sure to destroy this too
 	free(cfg);
@@ -5515,18 +5511,18 @@ void dealloc_cfg(cfg_t* cfg){
  */
 void add_successor_only(basic_block_t* target, basic_block_t* successor){
 	//If this is null, we'll perform the initial allocation
-	if(target->successors == NULL){
+	if(target->successors.internal_array == NULL){
 		target->successors = dynamic_array_alloc();
 	}
 
 	//Does this block already contain the successor? If so we'll leave
-	if(dynamic_array_contains(target->successors, successor) != NOT_FOUND){
+	if(dynamic_array_contains(&(target->successors), successor) != NOT_FOUND){
 		//We DID find it, so we won't add
 		return;
 	}
 
 	//Otherwise we're set to add it in
-	dynamic_array_add(target->successors, successor);
+	dynamic_array_add(&(target->successors), successor);
 }
 
 
@@ -5536,18 +5532,18 @@ void add_successor_only(basic_block_t* target, basic_block_t* successor){
  */
 void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
 	//If this is NULL, we'll allocate here
-	if(target->predecessors == NULL){
+	if(target->predecessors.internal_array == NULL){
 		target->predecessors = dynamic_array_alloc();
 	}
 
 	//Does this contain the predecessor block already? If so we won't add
-	if(dynamic_array_contains(target->predecessors, predecessor) != NOT_FOUND){
+	if(dynamic_array_contains(&(target->predecessors), predecessor) != NOT_FOUND){
 		//We DID find it, so we won't add
 		return;
 	}
 
 	//Now we can add
-	dynamic_array_add(target->predecessors, predecessor);
+	dynamic_array_add(&(target->predecessors), predecessor);
 }
 
 
@@ -5580,7 +5576,7 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
  * Successor: the successor itself
  */
 void delete_successor_only(basic_block_t* target, basic_block_t* successor){
-	dynamic_array_delete(target->successors, successor);
+	dynamic_array_delete(&(target->successors), successor);
 }
 
 
@@ -5593,7 +5589,7 @@ void delete_successor_only(basic_block_t* target, basic_block_t* successor){
  * Predecessor: the predecessor itself
  */
 void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
-	dynamic_array_delete(target->predecessors, predecessor);
+	dynamic_array_delete(&(target->predecessors), predecessor);
 }
 
 
@@ -5647,32 +5643,41 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		a->exit_statement = b->exit_statement;
 	}
 
+
 	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
-	//Let's merge predecessors first
-	for(u_int16_t i = 0; b->predecessors != NULL && i < b->predecessors->current_index; i++){
-		//Add b's predecessor as one to a
-		add_predecessor_only(a, b->predecessors->internal_array[i]);
+	//Let's merge predecessors first if we have any
+	if(b->predecessors.internal_array != NULL){
+		//Add them all
+		for(u_int16_t i = 0; i < b->predecessors.current_index; i++){
+			//Add b's predecessor as one to a
+			add_predecessor_only(a, b->predecessors.internal_array[i]);
+		}
 	}
 
-	//Now merge successors
-	for(u_int16_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
-		//Add b's successors to be a's successors
-		add_successor_only(a, b->successors->internal_array[i]);
-	}
+	//Now merge successors if we have any
+	if(b->successors.internal_array != NULL){
+		for(u_int16_t i = 0; i < b->successors.current_index; i++){
+			//Add b's successors to be a's successors
+			add_successor_only(a, b->successors.internal_array[i]);
+		}
 
-	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
-	//This is now wrong though. So, for each successor of B, it will need
-	//to have A as predecessor
-	for(u_int8_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
-		//Grab the block first
-		basic_block_t* successor_block = b->successors->internal_array[i];
+		//FOR EACH Successor of B, it will have a reference to B as a predecessor.
+		//This is now wrong though. So, for each successor of B, it will need
+		//to have A as predecessor
+		for(u_int16_t i = 0; i < b->successors.current_index; i++){
+			//Grab the block first
+			basic_block_t* successor_block = b->successors.internal_array[i];
 
-		//Now for each of the predecessors that equals b, it needs to now point to A
-		for(u_int8_t i = 0; successor_block->predecessors != NULL && i < successor_block->predecessors->current_index; i++){
-			//If it's pointing to b, it needs to be updated
-			if(successor_block->predecessors->internal_array[i] == b){
-				//Update it to now be correct
-				successor_block->predecessors->internal_array[i] = a;
+			//If the successor block has predecessors
+			if(successor_block->predecessors.internal_array != NULL){
+				//Now for each of the predecessors that equals b, it needs to now point to A
+				for(u_int8_t i = 0; i < successor_block->predecessors.current_index; i++){
+					//If it's pointing to b, it needs to be updated
+					if(successor_block->predecessors.internal_array[i] == b){
+						//Update it to now be correct
+						successor_block->predecessors.internal_array[i] = a;
+					}
+				}
 			}
 		}
 	}
@@ -5702,23 +5707,29 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	b->leader_statement = NULL;
 	b->exit_statement = NULL;
 
-	//We'll now need to ensure that all of the used variables in B are also in A
-	for(u_int16_t i = 0; b->used_variables != NULL && i < b->used_variables->current_index; i++){
-		//Add these in one by one to A
-		add_used_variable(a, b->used_variables->internal_array[i]);
+	//If b has used variables
+	if(b->used_variables.internal_array != NULL){
+		//We'll now need to ensure that all of the used variables in B are also in A
+		for(u_int16_t i = 0; i < b->used_variables.current_index; i++){
+			//Add these in one by one to A
+			add_used_variable(a, b->used_variables.internal_array[i]);
+		}
 	}
 
-	//Copy over all of the assigned variables too
-	for(u_int16_t i = 0; b->assigned_variables != NULL && i < b->assigned_variables->current_index; i++){
-		//Add these in one by one
-		add_assigned_variable(a, b->assigned_variables->internal_array[i]);
+	//If b has assigned variables
+	if(b->assigned_variables.internal_array != NULL){
+		//Copy over all of the assigned variables too
+		for(u_int16_t i = 0; i < b->assigned_variables.current_index; i++){
+			//Add these in one by one
+			add_assigned_variable(a, b->assigned_variables.internal_array[i]);
+		}
 	}
 
 	//Update the instruction counts
 	a->number_of_instructions += b->number_of_instructions;
 
 	//We'll remove this from the list of created blocks
-	dynamic_array_delete(cfg->created_blocks, b);
+	dynamic_array_delete(&(cfg->created_blocks), b);
 
 	//And finally we'll deallocate b
 	basic_block_dealloc(b);
@@ -6295,7 +6306,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//If we have an exit block that has no predecessors, that means that we return through every
 	//control path. In this instance, we need to set the result package's final block to be the
 	//exit block
-	if(exit_block->predecessors == NULL || exit_block->predecessors->current_index == 0){
+	if(exit_block->predecessors.internal_array == NULL || exit_block->predecessors.current_index == 0){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -6656,7 +6667,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 
 	//If the ending block has no successors at all, that means that we've returned through every control path. Instead
 	//of using the ending block, we can change it to be the function ending block
-	if(ending_block->predecessors == NULL || ending_block->predecessors->current_index == 0){
+	if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -6664,8 +6675,8 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	//will be set to point to the default block
 	for(u_int16_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
 		//If it's null, we'll make it the default
-		if(dynamic_array_get_at(jump_calculation_block->jump_table->nodes, i) == NULL){
-			dynamic_array_set_at(jump_calculation_block->jump_table->nodes, default_block, i);
+		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
+			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 		}
 	}
 
@@ -6868,14 +6879,14 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	//with the default value
 	for(u_int16_t _ = 0; _ < jump_calculation_block->jump_table->num_nodes; _++){
 		//If it's null, we'll make it the default
-		if(dynamic_array_get_at(jump_calculation_block->jump_table->nodes, _) == NULL){
-			dynamic_array_set_at(jump_calculation_block->jump_table->nodes, default_block, _);
+		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), _) == NULL){
+			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, _);
 		}
 	}
 
 	//If we have no predecessors, that means that every case statement ended in a return statement.
 	//If this is the case, then the final block should not be the ending block, it should be the function ending block
-	if(ending_block->predecessors == NULL || ending_block->predecessors->current_index == 0){
+	if(ending_block->predecessors.internal_array == NULL || ending_block->predecessors.current_index == 0){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -7299,7 +7310,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				labeled_block = labeled_block_alloc(ast_cursor->variable);
 
 				//Add this into the current function's labeled blocks
-				dynamic_array_add(current_function_labeled_blocks, labeled_block);
+				dynamic_array_add(&current_function_labeled_blocks, labeled_block);
 
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
@@ -7816,7 +7827,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				labeled_block = labeled_block_alloc(ast_cursor->variable);
 
 				//Add this into the current function's labeled blocks
-				dynamic_array_add(current_function_labeled_blocks, labeled_block);
+				dynamic_array_add(&current_function_labeled_blocks, labeled_block);
 
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
@@ -8002,9 +8013,9 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	symtab_function_record_t* function_defined_in = function_exit_block->function_defined_in;
 
 	//Run through all of the predecessors
-	for(u_int16_t i = 0; i < function_exit_block->predecessors->current_index; i++){
+	for(u_int16_t i = 0; i < function_exit_block->predecessors.current_index; i++){
 		//Grab the predecessor out
-		basic_block_t* block = dynamic_array_get_at(function_exit_block->predecessors, i);
+		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
 		//If the exit statement is not a return statement, we need to know what's happening here
 		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
