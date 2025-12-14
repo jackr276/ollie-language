@@ -14,17 +14,21 @@
 #include "../constants.h"
 
 /**
- * Allocate an entire dynamic array
+ * Allocate an entire dynamic array. The resulting control
+ * structure will be stack allocated
 */
-dynamic_array_t* dynamic_array_alloc(){
+dynamic_array_t dynamic_array_alloc(){
 	//First we'll create the overall structure
- 	dynamic_array_t* array = calloc(sizeof(dynamic_array_t), 1);
+ 	dynamic_array_t array;
 
 	//Set the max size using the sane default 
-	array->current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
+	array.current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
+
+	//Starts off at 0
+	array.current_index = 0;
 
 	//Now we'll allocate the overall internal array
-	array->internal_array = calloc(array->current_max_size, sizeof(void*));
+	array.internal_array = calloc(array.current_max_size, sizeof(void*));
 
 	//Now we're all set
 	return array;
@@ -36,15 +40,18 @@ dynamic_array_t* dynamic_array_alloc(){
  * size. This is useful if we already know
  * the size we need
  */
-dynamic_array_t* dynamic_array_alloc_initial_size(u_int16_t initial_size){
+dynamic_array_t dynamic_array_alloc_initial_size(u_int16_t initial_size){
 //First we'll create the overall structure
- 	dynamic_array_t* array = calloc(sizeof(dynamic_array_t), 1);
+ 	dynamic_array_t array;
 
 	//Set the max size using the sane default 
-	array->current_max_size = initial_size;
+	array.current_max_size = initial_size;
+
+	//Set the current index flag
+	array.current_index = 0;
 
 	//Now we'll allocate the overall internal array
-	array->internal_array = calloc(array->current_max_size, sizeof(void*));
+	array.internal_array = calloc(array.current_max_size, sizeof(void*));
 
 	//Now we're all set
 	return array;
@@ -54,24 +61,24 @@ dynamic_array_t* dynamic_array_alloc_initial_size(u_int16_t initial_size){
 /**
  * Create an exact clone of the dynamic array that we're given
  */
-dynamic_array_t* clone_dynamic_array(dynamic_array_t* array){
+dynamic_array_t clone_dynamic_array(dynamic_array_t* array){
 	//If it's null then we'll just allocate for the user
 	if(array == NULL || array->current_index == 0){
 		return dynamic_array_alloc();
 	}
 
 	//First we create the overall structure
-	dynamic_array_t* cloned = calloc(sizeof(dynamic_array_t), 1);
+	dynamic_array_t cloned;
 
 	//Now we'll create the array for it - of the exact same size as the original
-	cloned->internal_array = calloc(array->current_max_size, sizeof(void*));
+	cloned.internal_array = calloc(array->current_max_size, sizeof(void*));
 
 	//Now we'll perform a memory copy
-	memcpy(cloned->internal_array, array->internal_array, array->current_max_size * sizeof(void*));
+	memcpy(cloned.internal_array, array->internal_array, array->current_max_size * sizeof(void*));
 	
 	//Finally copy over the rest of the information
-	cloned->current_index = array->current_index;
-	cloned->current_max_size = array->current_max_size;
+	cloned.current_index = array->current_index;
+	cloned.current_max_size = array->current_max_size;
 
 	//And return this pointer
 	return cloned;
@@ -371,13 +378,10 @@ void reset_dynamic_array(dynamic_array_t* array){
 */
 void dynamic_array_dealloc(dynamic_array_t* array){
 	//Let's just make sure here...
-	if(array == NULL){
+	if(array->internal_array == NULL){
 		return;
 	}
 
 	//First we'll free the internal array
 	free(array->internal_array);
-
-	//Then we'll free the overall structure
-	free(array);
 }
