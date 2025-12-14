@@ -27,12 +27,12 @@ typedef struct data_dependency_graph_node_t data_dependency_graph_node_t;
  * 	3.) The time(in cycles) that this node would take to execute
  */
 struct data_dependency_graph_node_t {
-	//What instruction does this graph reference
-	instruction_t* instruction;
 	//The list of all other nodes that *depend* on this instruction
 	//This is a strict one-way relationship. The neighbors depend on this
 	//node, and this node does not depend on the neighbors
-	dynamic_array_t* neighbors;
+	dynamic_array_t neighbors;
+	//What instruction does this graph reference
+	instruction_t* instruction;
 	//The cycle time that this instruction takes
 	u_int32_t cycles_to_complete;
 	//The priority of the instruction
@@ -88,13 +88,13 @@ void add_data_dependency_node_for_instruction(data_dependency_graph_t* graph, in
 /**
  * Get the leaves of the data DAG. The leaves are simply instructions that have no dependencies
  */
-dynamic_array_t* get_data_dependency_graph_leaf_nodes(data_dependency_graph_t* graph);
+dynamic_array_t get_data_dependency_graph_leaf_nodes(data_dependency_graph_t* graph);
 
 /**
  * Get the roots of the data DAG. The roots are simply instructions that have nothing
  * else depends on. There will often be more than one root
  */
-dynamic_array_t* get_data_dependency_graph_root_nodes(data_dependency_graph_t* graph);
+dynamic_array_t get_data_dependency_graph_root_nodes(data_dependency_graph_t* graph);
 
 /**
  * Compute the cycle counts for load operations using a special algorithm. This will

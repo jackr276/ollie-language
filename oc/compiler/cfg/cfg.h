@@ -88,12 +88,6 @@ struct cfg_t{
  * by the "leader" and "exit" references for quick access
 */
 struct basic_block_t{
-	//The reference to a jump table. This is often not used at all
-	jump_table_t* jump_table;
-	//The function that we're defined in
-	symtab_function_record_t* function_defined_in;
-	//The variable that this block's name draws from if this block is a label block
-	symtab_variable_record_t* label;
 	//There are consecutive statements(declare, define, let, assign, alias)
 	//in a node. These statements are a linked list
 	//Keep a reference to the "leader"(head) and "exit"(tail) statements
@@ -135,6 +129,12 @@ struct basic_block_t{
 	basic_block_t* immediate_dominator;
 	//The immediate postdominator reference
 	basic_block_t* immediate_postdominator;
+	//The reference to a jump table. This is often not used at all
+	jump_table_t* jump_table;
+	//The function that we're defined in
+	symtab_function_record_t* function_defined_in;
+	//The variable that this block's name draws from if this block is a label block
+	symtab_variable_record_t* label;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//An integer ID
