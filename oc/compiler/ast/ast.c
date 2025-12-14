@@ -184,6 +184,186 @@ void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 	}
 }
 
+
+/**
+ * Emit the product of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 * constant2
+ */
+void multiply_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+
+}
+
+
+/**
+ * Emit the quotient of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 / constant2
+ */
+void divide_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+
+}
+
+
+/**
+ * Emit the sum of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 + constant2
+ */
+void add_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the difference of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 - constant2
+ */
+void subtract_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+
+}
+
+
+
+
+
 /**
  * We will completely duplicate a deferred statement here. Since all deferred statements
  * are logical expressions, we will perform a deep copy to create an entirely new
@@ -266,46 +446,6 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side){
 
 	//Give back the duplicated node
 	return duplicated;
-}
-
-
-/**
- * Emit the product of two given constants. The result will overwrite the first constant given
- *
- * The result will be: constant1 = constant1 * constant2
- */
-void multiply_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
-
-}
-
-
-/**
- * Emit the quotient of two given constants. The result will overwrite the first constant given
- *
- * The result will be: constant1 = constant1 / constant2
- */
-void divide_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
-
-}
-
-
-/**
- * Emit the sum of two given constants. The result will overwrite the first constant given
- *
- * The result will be: constant1 = constant1 + constant2
- */
-void add_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
-
-}
-
-
-/**
- * Emit the difference of two given constants. The result will overwrite the first constant given
- *
- * The result will be: constant1 = constant1 - constant2
- */
-void subtract_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
-
 }
 
 
