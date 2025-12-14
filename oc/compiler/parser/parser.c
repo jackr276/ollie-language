@@ -2860,6 +2860,8 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* right_child;
 	//Hold the return type for us here
 	generic_type_t* return_type;
+	//In case we need it for the pointer math
+	symtab_variable_record_t* variable = NULL;
 
 	//No matter what, we do need to first see a valid multiplicative expression
 	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl, side);
@@ -2891,14 +2893,6 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
-
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid multiplicative expression again
 		right_child = multiplicative_expression(fl, side);
@@ -2943,19 +2937,38 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child, side);
 
 			//Copy the variable over here for later use
-			if(temp_holder->variable != NULL){
-				sub_tree_root->variable = temp_holder->variable;
-			}
+			variable = temp_holder->variable;
 
 			//Once we're done here, the right child is the pointer arithmetic
 			right_child = pointer_arithmetic;
 		}
+
+		/**
+		 * If we discover that the user is just trying to add/subtract two constants together, then we can do a preemptive
+		 * optimization by adding them together right now and just giving back a constant node
+		 */
+		if(temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT && sub_tree_root->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			printf("ADDING CONSTANTS\n");
+		}
+
+		//Now that everything above is good, we can make the operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 		
 		//Now we can finally assign the sub tree type
 		sub_tree_root->inferred_type = return_type;
+
+		//Copy over the variable. It will either be NULL(common case) or it will carry
+		//the value of the pointer that we manipulated
+		sub_tree_root->variable = variable;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
