@@ -48,13 +48,13 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 	}
 
 	//Add b to a's neighbors if it's not already there
-	if(dynamic_array_contains(a->neighbors, b) == NOT_FOUND){
-		dynamic_array_add(a->neighbors, b);
+	if(dynamic_array_contains(&(a->neighbors), b) == NOT_FOUND){
+		dynamic_array_add(&(a->neighbors), b);
 	}
 
 	//Add a to b's neighbors if it's not already there
-	if(dynamic_array_contains(b->neighbors, a) == NOT_FOUND){
-		dynamic_array_add(b->neighbors, a);
+	if(dynamic_array_contains(&(b->neighbors), a) == NOT_FOUND){
+		dynamic_array_add(&(b->neighbors), a);
 	}
 
 	//If the graph isn't null, we'll assume that the caller wants us to add this in
@@ -69,8 +69,8 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 	}
 
 	//Reset their degree values
-	a->degree = a->neighbors->current_index;
-	b->degree = b->neighbors->current_index;
+	a->degree = a->neighbors.current_index;
+	b->degree = b->neighbors.current_index;
 }
 
 
@@ -89,12 +89,12 @@ void remove_interference(interference_graph_t* graph, live_range_t* a, live_rang
 	graph->nodes[offset_b_a] = FALSE;
 
 	//And we'll remove them from eachother's adjacency lists
-	dynamic_array_delete(a->neighbors, b);
-	dynamic_array_delete(b->neighbors, a);
+	dynamic_array_delete(&(a->neighbors), b);
+	dynamic_array_delete(&(b->neighbors), a);
 
 	//Reset their degree values
-	a->degree = a->neighbors->current_index;
-	b->degree = b->neighbors->current_index;
+	a->degree = a->neighbors.current_index;
+	b->degree = b->neighbors.current_index;
 }
 
 
@@ -106,24 +106,24 @@ void remove_interference(interference_graph_t* graph, live_range_t* a, live_rang
  */
 void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, live_range_t* coalescee){
 	//All of these variables now belong to the target
-	for(u_int16_t i = 0; i < coalescee->variables->current_index; i++){
+	for(u_int16_t i = 0; i < coalescee->variables.current_index; i++){
 		//Grab it out
-		three_addr_var_t* new_var = dynamic_array_get_at(coalescee->variables, i);
+		three_addr_var_t* new_var = dynamic_array_get_at(&(coalescee->variables), i);
 
 		//Add it into the target's variables
-		dynamic_array_add(target->variables, new_var);
+		dynamic_array_add(&(target->variables), new_var);
 
 		//Update the associated live range to be the target
 		new_var->associated_live_range = target;
 	}
 
 	//Clone this because we will be messing with it
-	dynamic_array_t* clone = clone_dynamic_array(coalescee->neighbors);
+	dynamic_array_t clone = clone_dynamic_array(&(coalescee->neighbors));
 
 	//Go through all neighbors of the coalescee
-	for(u_int16_t i = 0; i < clone->current_index; i++){
+	for(u_int16_t i = 0; i < clone.current_index; i++){
 		//Extract the neighbor out
-		live_range_t* neighbor = dynamic_array_get_at(clone, i);
+		live_range_t* neighbor = dynamic_array_get_at(&clone, i);
 
 		//The neighbor and the coalescee no longer count
 		remove_interference(graph, neighbor, coalescee);
@@ -175,9 +175,9 @@ interference_graph_t* construct_interference_graph_from_adjacency_lists(dynamic_
 		live_range_t* range = dynamic_array_get_at(live_ranges, i);
 
 		//Now we iterate through it's adjacency list
-		for(u_int16_t j = 0; j < range->neighbors->current_index; j++){
+		for(u_int16_t j = 0; j < range->neighbors.current_index; j++){
 			//Grab it out
-			live_range_t* neighbor = dynamic_array_get_at(range->neighbors, j);
+			live_range_t* neighbor = dynamic_array_get_at(&(range->neighbors), j);
 
 			//Calculate the offsets
 			u_int16_t offset_a_b = range->interference_graph_index * graph->live_range_count + neighbor->interference_graph_index;
@@ -263,11 +263,11 @@ void print_adjacency_lists(dynamic_array_t* live_ranges){
 		printf("LR%d: {", live_range->live_range_id);
 
 		//Now we'll run through all of its interferees
-		for(u_int16_t j = 0; j < live_range->neighbors->current_index; j++){
-			live_range_t* neighbor = dynamic_array_get_at(live_range->neighbors, j);
+		for(u_int16_t j = 0; j < live_range->neighbors.current_index; j++){
+			live_range_t* neighbor = dynamic_array_get_at(&(live_range->neighbors), j);
 			printf("LR%d", neighbor->live_range_id);
 
-			if(j != live_range->neighbors->current_index - 1){
+			if(j != live_range->neighbors.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -283,7 +283,7 @@ void print_adjacency_lists(dynamic_array_t* live_ranges){
  * nodes that interfere with it. We also call these neighbors
  */
 u_int16_t get_live_range_degree(live_range_t* a){
-	return a->neighbors->current_index;
+	return a->neighbors.current_index;
 }
 
 
