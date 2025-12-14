@@ -51,7 +51,7 @@ static generic_type_t* i64 = NULL;
 static heap_stack_t break_stack;
 static heap_stack_t continue_stack;
 //The overall nesting stack will tell us what level of nesting we're at(if, switch/case, loop)
-static nesting_stack_t* nesting_stack = NULL;
+static nesting_stack_t nesting_stack;
 //Keep a list of all lable statements in the function(block jumps are internal only)
 static dynamic_array_t* current_function_labeled_blocks = NULL;
 //Also keep a list of all custom jumps in the function
@@ -214,7 +214,7 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 
 	//What is the estimated execution cost of this block? We will
 	//rely entirely on the nesting stack to do this for us
-	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(&nesting_stack);
 
 	//Let's add in what function this block came from
 	created->function_defined_in = current_function;
@@ -280,7 +280,7 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
 
 	//What is the estimated execution cost of this block? Rely on the nesting stack
 	//to do this
-	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(nesting_stack);
+	created->estimated_execution_frequency = get_estimated_execution_frequency_from_nesting_stack(&nesting_stack);
 
 	//Let's add in what function this block came from
 	created->function_defined_in = current_function;
@@ -5749,7 +5749,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//Once we reach here, we are officially in the loop. Everything beyond this point
 	//is going to happen repeatedly
-	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//We'll now need to create our repeating node. This is the node that will actually repeat from the for loop.
 	//The second and third condition in the for loop are the ones that execute continously. The third condition
@@ -5801,7 +5801,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
 	//Once we're done with the compound statement, we are no longer in the loop
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//If we have an empty interior just emit a dummy block. It will be optimized away 
 	//regardless
@@ -5859,7 +5859,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 
 	//After we allocate the exit block, we will push on the 
 	//nesting level as the entry block is in the loop
-	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//Create our entry block. This in reality will be the compound statement
 	basic_block_t* do_while_stmt_entry_block = basic_block_alloc_and_estimate();
@@ -5885,7 +5885,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
 	//Once we're done pop the nesting level
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//It being NULL is ok, we'll just insert a dummy
 	if(compound_statement_results.starting_block == NULL){
@@ -5960,7 +5960,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 
 	//We will not push to the nesting stack for the end block, but we will for the
 	//entry block because the entry block does execute in the loop
-	push_nesting_level(nesting_stack, NESTING_LOOP_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//Create our entry block
 	basic_block_t* while_statement_entry_block = basic_block_alloc_and_estimate();
@@ -5992,7 +5992,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
 
 	//We're out of the compound statement - pop the nesting level
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//If it's null, that means that we were given an empty while loop here.
 	//We'll just allocate our own and use that
@@ -6085,13 +6085,13 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	cursor = cursor->next_sibling;
 
 	//Push that we're in an if statement for the compound statement
-	push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
 	//Visit the compound statement that we're required to have here
 	cfg_result_package_t if_compound_statement_results = visit_compound_statement(cursor);
 
 	//And then pop it off
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//If the starting block is null, create a dummy one
 	if(if_compound_statement_results.starting_block == NULL){
@@ -6150,13 +6150,13 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		else_if_cursor = else_if_cursor->next_sibling;
 
 		//Push that we're in an if statement
-		push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
 		//Let this handle the compound statement
 		cfg_result_package_t else_if_compound_statement_results = visit_compound_statement(else_if_cursor);
 
 		//And now pop it off
-		pop_nesting_level(nesting_stack);
+		pop_nesting_level(&nesting_stack);
 
 		//If this is NULL, then we need to emit dummy blocks
 		if(else_if_compound_statement_results.starting_block == NULL){
@@ -6200,13 +6200,13 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Now that we're out of here - we may have an else statement on our hands
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_COMPOUND_STMT){
 		//Push the nesting level now that we're in a compound statement
-		push_nesting_level(nesting_stack, NESTING_IF_STATEMENT);
+		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
 		//Grab the compound statement
 		cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
 
 		//Pop it off
-		pop_nesting_level(nesting_stack);
+		pop_nesting_level(&nesting_stack);
 
 		//Extract for convenience
 		instruction_t* branch_statement = previous_entry_block->exit_statement;
@@ -6269,7 +6269,7 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
 	//This is nesting inside of a case statement
-	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 	//For a default statement, it performs very similarly to a case statement. 
 	//It will be handled slightly differently in the jump table, but we'll get to that 
@@ -6297,7 +6297,7 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	}
 
 	//Nesting here is no longer in a case statement
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Give the block back
 	return results;
@@ -6313,7 +6313,7 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	cfg_result_package_t results = {NULL, NULL, NULL, BLANK};
 
 	//This is nesting inside of a case statement
-	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 	//The case statement should have some kind of constant value here, whether
 	//it's an enum value or regular const. All validation should have been
@@ -6349,7 +6349,7 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	}
 
 	//Nesting here is no longer in a case statement
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Give the block back
 	return results;
@@ -6369,7 +6369,7 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//This is nested in a C-style case statement
-	push_nesting_level(nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_C_STYLE_CASE_STATEMENT);
 
 	//Since a C-style case statement is just a collection of 
 	//statements, we'll use the statement sequence to process it here
@@ -6391,7 +6391,7 @@ static cfg_result_package_t visit_c_style_case_statement(generic_ast_node_t* roo
 	}
 
 	//Remove the nesting now
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Give back the final results
 	return result_package;
@@ -6411,7 +6411,7 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 	cfg_result_package_t result_package = {NULL, NULL, NULL, BLANK};
 
 	//This is nested in a C-style case statement
-	push_nesting_level(nesting_stack, NESTING_CASE_STATEMENT);
+	push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 	//Since a C-style case statement is just a collection of 
 	//statements, we'll use the statement sequence to process it here
@@ -6434,7 +6434,7 @@ static cfg_result_package_t visit_c_style_default_statement(generic_ast_node_t* 
 	}
 
 	//Remove the nesting now
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//Give back the final results
 	return result_package;
@@ -8020,7 +8020,7 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
  */
 static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
 	//Push the nesting level that we're in
-	push_nesting_level(nesting_stack, NESTING_FUNCTION);
+	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 	
 	//Grab the function record
 	symtab_function_record_t* func_record = function_node->func_record;
@@ -8146,7 +8146,7 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	current_function_user_defined_jump_statements = NULL;
 
 	//Remove it now that we're done
-	pop_nesting_level(nesting_stack);
+	pop_nesting_level(&nesting_stack);
 
 	//We always return the start block
 	return function_starting_block;

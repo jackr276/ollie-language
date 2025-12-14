@@ -43,9 +43,10 @@ struct nesting_stack_t {
 };
 
 /**
- * Initialize a stack
+ * Initialize a stack. The resulting control
+ * structure will be stack allocated
  */
-nesting_stack_t* nesting_stack_alloc();
+nesting_stack_t nesting_stack_alloc();
 
 /**
  * Add a new nesting level to the top of the stack
@@ -82,6 +83,6 @@ nesting_level_t peek_nesting_level(nesting_stack_t* stack);
 /**
  * Destroy the stack with a proper cleanup
  */
-void nesting_stack_dealloc(nesting_stack_t** stack);
+void nesting_stack_dealloc(nesting_stack_t* stack);
 
 #endif /* NESTING_LEVEL_STACK_T */
