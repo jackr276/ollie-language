@@ -59,7 +59,7 @@ struct global_variable_t{
 		//The value - if given - of the variable
 		three_addr_const_t* constant_value;
 		//A dynamic array of constants, if we have that
-		dynamic_array_t* array_initializer_values;
+		dynamic_array_t array_initializer_values;
 	} initializer_value;
 
 	//What is this variable's reference count?
@@ -89,9 +89,9 @@ typedef enum{
  */
 struct live_range_t{
 	//Hold all the variables that it has
-	dynamic_array_t* variables;
+	dynamic_array_t variables;
 	//And we'll hold an adjacency list for interference
-	dynamic_array_t* neighbors;
+	dynamic_array_t neighbors;
 	//Hold the stack region as well
 	stack_region_t* stack_region;
 	//What function does this come from?
@@ -191,6 +191,8 @@ struct three_addr_const_t{
 struct instruction_t{
 	//Store inlined assembly in a string
 	dynamic_string_t inlined_assembly;
+	//Generic parameter list - could be used for phi functions or function calls
+	dynamic_array_t parameters;
 	//What block holds this?
 	void* block_contained_in;
 	//We have 2 ways to jump. The if jump is our affirmative jump,
@@ -232,8 +234,6 @@ struct instruction_t{
 	symtab_variable_record_t* var_record;
 	//What function are we currently in?
 	symtab_function_record_t* function;
-	//Generic parameter list - could be used for phi functions or function calls
-	void* parameters;
 	//What is the three address code type
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction

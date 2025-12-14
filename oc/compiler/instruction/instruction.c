@@ -20,9 +20,9 @@ static int32_t current_temp_id = 0;
 static symtab_function_record_t* current_function = NULL;
 
 //All created vars
-dynamic_array_t* emitted_vars;
+dynamic_array_t emitted_vars;
 //All created constants
-dynamic_array_t* emitted_consts;
+dynamic_array_t emitted_consts;
 
 
 /**
@@ -51,7 +51,7 @@ global_variable_t* create_global_variable(symtab_variable_record_t* variable, th
 	global_variable_t* var = calloc(1, sizeof(global_variable_t));
 
 	//Add into here for memory management
-	dynamic_array_add(emitted_vars, var);
+	dynamic_array_add(&emitted_vars, var);
 
 	//Copy these over
 	var->variable = variable;
@@ -640,7 +640,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
 
 	//Add into here for memory management
-	dynamic_array_add(emitted_vars, var);
+	dynamic_array_add(&emitted_vars, var);
 
 	//Mark this as temporary
 	var->is_temporary = TRUE;
@@ -669,7 +669,7 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
 	//Add into here for memory management
-	dynamic_array_add(emitted_vars, emitted_var);
+	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//This is not temporary
 	emitted_var->is_temporary = FALSE;
@@ -705,7 +705,7 @@ three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generi
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
 	//Add into here for memory management
-	dynamic_array_add(emitted_vars, emitted_var);
+	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//This is not temporary
 	emitted_var->is_temporary = FALSE;
@@ -731,14 +731,14 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range){
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
 	//Add into here for memory management
-	dynamic_array_add(emitted_vars, emitted_var);
+	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//This is temporary
 	emitted_var->is_temporary = TRUE;
 
 	//Link this in with our live range
 	emitted_var->associated_live_range = range;
-	dynamic_array_add(range->variables, emitted_var);
+	dynamic_array_add(&(range->variables), emitted_var);
 
 	//These are always quad words
 	emitted_var->variable_size = QUAD_WORD;
@@ -756,7 +756,7 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
 	//Add into here for memory management
-	dynamic_array_add(emitted_vars, emitted_var);
+	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//Copy the memory
 	memcpy(emitted_var, var, sizeof(three_addr_var_t));
@@ -1298,7 +1298,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 	}
 
 	//If it's needed later on
-	dynamic_array_t* array_initializer_values;
+	dynamic_array_t array_initializer_values;
 
 	//Run through all of them
 	for(u_int16_t i = 0; i < global_variables->current_index; i++){
@@ -1349,9 +1349,9 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 				array_initializer_values = variable->initializer_value.array_initializer_values;
 
 				//Run through all the values
-				for(u_int16_t i = 0; i < array_initializer_values->current_index; i++){
+				for(u_int16_t i = 0; i < array_initializer_values.current_index; i++){
 					//These will always be constant values
-					three_addr_const_t* constant_value = dynamic_array_get_at(array_initializer_values, i);
+					three_addr_const_t* constant_value = dynamic_array_get_at(&array_initializer_values, i);
 
 					//Emit the constant value here
 					fprintf(fl, "\t.long %ld\n", constant_value->constant_value.long_constant);
@@ -1507,7 +1507,7 @@ static char* branch_type_to_string(branch_type_t branch_type){
 */
 void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 	//For later use
-	dynamic_array_t* func_params;
+	dynamic_array_t func_params;
 
 	//Go based on what our statatement class is
 	switch(stmt->statement_type){
@@ -1763,17 +1763,20 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Grab this out
 			func_params = stmt->parameters;
 
-			//Now we can go through and print out all of our parameters here
-			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
-				//Grab it out
-				three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
-				
-				//Print this out here
-				print_variable(fl, func_param, PRINTING_VAR_INLINE);
+			//If we event have any
+			if(func_params.internal_array != NULL){
+				//Now we can go through and print out all of our parameters here
+				for(u_int16_t i = 0; i < func_params.current_index; i++){
+					//Grab it out
+					three_addr_var_t* func_param = dynamic_array_get_at(&func_params, i);
+					
+					//Print this out here
+					print_variable(fl, func_param, PRINTING_VAR_INLINE);
 
-				//If we need to, print out a comma
-				if(i != func_params->current_index - 1){
-					fprintf(fl, ", ");
+					//If we need to, print out a comma
+					if(i != func_params.current_index - 1){
+						fprintf(fl, ", ");
+					}
 				}
 			}
 
@@ -1801,17 +1804,20 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Grab this out
 			func_params = stmt->parameters;
 
-			//Now we can go through and print out all of our parameters here
-			for(u_int16_t i = 0; func_params != NULL && i < func_params->current_index; i++){
-				//Grab it out
-				three_addr_var_t* func_param = dynamic_array_get_at(func_params, i);
-				
-				//Print this out here
-				print_variable(fl, func_param, PRINTING_VAR_INLINE);
+			//If we event have any
+			if(func_params.internal_array != NULL){
+				//Now we can go through and print out all of our parameters here
+				for(u_int16_t i = 0; i < func_params.current_index; i++){
+					//Grab it out
+					three_addr_var_t* func_param = dynamic_array_get_at(&func_params, i);
+					
+					//Print this out here
+					print_variable(fl, func_param, PRINTING_VAR_INLINE);
 
-				//If we need to, print out a comma
-				if(i != func_params->current_index - 1){
-					fprintf(fl, ", ");
+					//If we need to, print out a comma
+					if(i != func_params.current_index - 1){
+						fprintf(fl, ", ");
+					}
 				}
 			}
 
@@ -1900,16 +1906,18 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- PHI(");
 
 			//For convenience
-			dynamic_array_t* phi_func_params = stmt->parameters;
+			dynamic_array_t phi_func_params = stmt->parameters;
 
-			//Now run through all of the parameters
-			for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
-				//Print out the variable
-				print_variable(fl, dynamic_array_get_at(phi_func_params, _), PRINTING_VAR_BLOCK_HEADER);
+			//Now run through all of the parameters if we have any
+			if(phi_func_params.internal_array != NULL){
+				for(u_int16_t _ = 0; _ < phi_func_params.current_index; _++){
+					//Print out the variable
+					print_variable(fl, dynamic_array_get_at(&phi_func_params, _), PRINTING_VAR_BLOCK_HEADER);
 
-				//If it isn't the very last one, add a comma space
-				if(_ != phi_func_params->current_index - 1){
-					fprintf(fl, ", ");
+					//If it isn't the very last one, add a comma space
+					if(_ != phi_func_params.current_index - 1){
+						fprintf(fl, ", ");
+					}
 				}
 			}
 
@@ -3438,16 +3446,18 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, " <- PHI(");
 
 			//For convenience
-			dynamic_array_t* phi_func_params = instruction->parameters;
+			dynamic_array_t phi_func_params = instruction->parameters;
 
-			//Now run through all of the parameters
-			for(u_int16_t _ = 0; phi_func_params != NULL && _ < phi_func_params->current_index; _++){
-				//Print out the variable
-				print_variable(fl, dynamic_array_get_at(phi_func_params, _), PRINTING_VAR_BLOCK_HEADER);
+			//Now run through all of the parameters if we have any
+			if(phi_func_params.internal_array != NULL){
+				for(u_int16_t _ = 0; _ < phi_func_params.current_index; _++){
+					//Print out the variable
+					print_variable(fl, dynamic_array_get_at(&phi_func_params, _), PRINTING_VAR_BLOCK_HEADER);
 
-				//If it isn't the very last one, add a comma space
-				if(_ != phi_func_params->current_index - 1){
-					fprintf(fl, ", ");
+					//If it isn't the very last one, add a comma space
+					if(_ != phi_func_params.current_index - 1){
+						fprintf(fl, ", ");
+					}
 				}
 			}
 
@@ -3616,7 +3626,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
 	//Add into here for memory management
-	dynamic_array_add(emitted_consts, constant);
+	dynamic_array_add(&emitted_consts, constant);
 
 	//Now we'll assign the appropriate values
 	constant->const_type = const_node->constant_type; 
@@ -3682,7 +3692,7 @@ three_addr_const_t* emit_string_constant(symtab_function_record_t* function, gen
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
 	//Add into here for memory management
-	dynamic_array_add(emitted_consts, constant);
+	dynamic_array_add(&emitted_consts, constant);
 
 	//Now we'll assign the appropriate values
 	constant->const_type = const_node->constant_type; 
@@ -4184,7 +4194,7 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
 	//Add into here for memory management
-	dynamic_array_add(emitted_consts, constant);
+	dynamic_array_add(&emitted_consts, constant);
 
 	//Store the type here
 	constant->type = type;
@@ -4387,14 +4397,13 @@ instruction_t* copy_instruction(instruction_t* copied){
 	//function calls
 	
 	//Null these out, better safe than sorry
-	copy->parameters = NULL;
 	copy->inlined_assembly = copied->inlined_assembly;
 	copy->next_statement = NULL;
 	copy->previous_statement = NULL;
 	
 	//If we have function call parameters, emit a copy of them
-	if(copied->parameters != NULL){
-		copy->parameters = clone_dynamic_array(copied->parameters);
+	if(copied->parameters.internal_array != NULL){
+		copy->parameters = clone_dynamic_array(&(copied->parameters));
 	}
 
 	//Give back the copied one
@@ -4883,8 +4892,8 @@ void instruction_dealloc(instruction_t* stmt){
 	}
 
 	//If we have a phi function, deallocate the dynamic array
-	if(stmt->parameters != NULL){
-		dynamic_array_dealloc(stmt->parameters);
+	if(stmt->parameters.internal_array != NULL){
+		dynamic_array_dealloc(&(stmt->parameters));
 	}
 	
 	//Free the overall stmt -- variables handled elsewhere
@@ -4897,16 +4906,16 @@ void instruction_dealloc(instruction_t* stmt){
 */
 void deallocate_all_vars(){
 	//Until we're empty
-	while(dynamic_array_is_empty(emitted_vars) == FALSE){
+	while(dynamic_array_is_empty(&emitted_vars) == FALSE){
 		//O(1) removal
-		three_addr_var_t* variable = dynamic_array_delete_from_back(emitted_vars);
+		three_addr_var_t* variable = dynamic_array_delete_from_back(&emitted_vars);
 
 		//Free it
 		free(variable);
 	}
 
 	//Finally scrap the array
-	dynamic_array_dealloc(emitted_vars);
+	dynamic_array_dealloc(&emitted_vars);
 }
 
 
@@ -4915,14 +4924,14 @@ void deallocate_all_vars(){
 */
 void deallocate_all_consts(){
 	//Until we're empty
-	while(dynamic_array_is_empty(emitted_consts) == FALSE){
+	while(dynamic_array_is_empty(&emitted_consts) == FALSE){
 		//O(1) removal
-		three_addr_const_t* constant = dynamic_array_delete_from_back(emitted_consts);
+		three_addr_const_t* constant = dynamic_array_delete_from_back(&emitted_consts);
 
 		//Free it
 		free(constant);
 	}
 
 	//Finally scrap the array
-	dynamic_array_dealloc(emitted_consts);
+	dynamic_array_dealloc(&emitted_consts);
 }
