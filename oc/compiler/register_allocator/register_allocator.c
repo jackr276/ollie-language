@@ -55,8 +55,8 @@ static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges,
 		live_range_t* current = dynamic_array_get_at(live_ranges, _);
 
 		//If the variables are equal(ignoring SSA and dereferencing) then we have a match
-		for(u_int16_t i = 0 ; i < current->variables->current_index; i++){
-			if(variables_equal_no_ssa(variable, dynamic_array_get_at(current->variables, i), TRUE) == TRUE){
+		for(u_int16_t i = 0 ; i < current->variables.current_index; i++){
+			if(variables_equal_no_ssa(variable, dynamic_array_get_at(&(current->variables), i), TRUE) == TRUE){
 				return current;
 			}
 		}
@@ -152,10 +152,10 @@ static live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, bas
  */
 static void live_range_dealloc(live_range_t* live_range){
 	//First we'll destroy the array that it has
-	dynamic_array_dealloc(live_range->variables);
+	dynamic_array_dealloc((&live_range->variables));
 
 	//Destroy the neighbors array as well
-	dynamic_array_dealloc(live_range->neighbors);
+	dynamic_array_dealloc((&live_range->neighbors));
 
 	//Then we can destroy the live range itself
 	free(live_range);
@@ -190,14 +190,14 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	}
 
 	//If we have some assigned variables, we will dislay those for debugging
-	if(block->assigned_variables != NULL){
+	if(block->assigned_variables.internal_array != NULL){
 		printf("Assigned: (");
 
-		for(u_int16_t i = 0; i < block->assigned_variables->current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(block->assigned_variables, i));
+		for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
+			print_live_range(stdout, dynamic_array_get_at(&(block->assigned_variables), i));
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->assigned_variables->current_index - 1){
+			if(i != block->assigned_variables.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -205,14 +205,14 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	}
 
 	//If we have some used variables, we will dislay those for debugging
-	if(block->used_variables != NULL){
+	if(block->used_variables.internal_array != NULL){
 		printf("Used: (");
 
-		for(u_int16_t i = 0; i < block->used_variables->current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(block->used_variables, i));
+		for(u_int16_t i = 0; i < block->used_variables.current_index; i++){
+			print_live_range(stdout, dynamic_array_get_at(&(block->used_variables), i));
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->used_variables->current_index - 1){
+			if(i != block->used_variables.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -220,14 +220,14 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	}
 
 	//If we have some assigned variables, we will dislay those for debugging
-	if(block->live_in != NULL){
+	if(block->live_in.internal_array != NULL){
 		printf("LIVE IN: (");
 
-		for(u_int16_t i = 0; i < block->live_in->current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(block->live_in, i));
+		for(u_int16_t i = 0; i < block->live_in.current_index; i++){
+			print_live_range(stdout, dynamic_array_get_at(&(block->live_in), i));
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->live_in->current_index - 1){
+			if(i != block->live_in.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -235,29 +235,29 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	}
 
 	//If we have some assigned variables, we will dislay those for debugging
-	if(block->live_out != NULL){
+	if(block->live_out.internal_array != NULL){
 		printf("LIVE OUT: (");
 
-		for(u_int16_t i = 0; i < block->live_out->current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(block->live_out, i));
+		for(u_int16_t i = 0; i < block->live_out.current_index; i++){
+			print_live_range(stdout, dynamic_array_get_at(&(block->live_out), i));
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->live_out->current_index - 1){
+			if(i != block->live_out.current_index - 1){
 				printf(", ");
 			}
 		}
 		printf(")\n");
 	}
 
-	if(block->predecessors != NULL){
+	if(block->predecessors.internal_array != NULL){
 		printf("Predecessors: (");
-		for(u_int16_t i = 0; i < block->predecessors->current_index; i++){
-			basic_block_t* predecessor = dynamic_array_get_at(block->predecessors, i);
+		for(u_int16_t i = 0; i < block->predecessors.current_index; i++){
+			basic_block_t* predecessor = dynamic_array_get_at(&(block->predecessors), i);
 
 			printf(".L%d", predecessor->block_id);
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->predecessors->current_index - 1){
+			if(i != block->predecessors.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -265,15 +265,15 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		printf(")\n");
 	}
 
-	if(block->successors != NULL){
+	if(block->successors.internal_array != NULL){
 		printf("Successors: (");
-		for(u_int16_t i = 0; i < block->successors->current_index; i++){
-			basic_block_t* successor = dynamic_array_get_at(block->successors, i);
+		for(u_int16_t i = 0; i < block->successors.current_index; i++){
+			basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
 
 			printf(".L%d", successor->block_id);
 
 			//If it isn't the very last one, we need a comma
-			if(i != block->successors->current_index - 1){
+			if(i != block->successors.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -373,9 +373,9 @@ static void print_block_with_registers(basic_block_t* block){
  */
 static void print_blocks_with_registers(cfg_t* cfg){
 	//Run through all of the functions individually
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the given function block
-		basic_block_t* current = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* current = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//So long as this one isn't NULL
 		while(current != NULL){
@@ -387,7 +387,7 @@ static void print_blocks_with_registers(cfg_t* cfg){
 	}
 
 	//Now we'll print all global variables
-	print_all_global_variables(stdout, cfg->global_variables);
+	print_all_global_variables(stdout, &(cfg->global_variables));
 }
 
 
@@ -405,12 +405,12 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		printf("LR%d: {", current->live_range_id);
 
 		//Now we'll run through and print out all of its variables
-		for(u_int16_t j = 0; j < current->variables->current_index; j++){
+		for(u_int16_t j = 0; j < current->variables.current_index; j++){
 			//Print the variable name
-			print_variable(stdout, dynamic_array_get_at(current->variables, j), PRINTING_VAR_BLOCK_HEADER);
+			print_variable(stdout, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
 
 			//Print a comma if appropriate
-			if(j != current->variables->current_index - 1){
+			if(j != current->variables.current_index - 1){
 				printf(", ");
 			}
 		}
@@ -418,12 +418,12 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		printf("} Neighbors: {");
 
 		//Now we'll print out all of it's neighbors
-		for(u_int16_t k = 0; k < current->neighbors->current_index; k++){
-			live_range_t* neighbor = dynamic_array_get_at(current->neighbors, k);
+		for(u_int16_t k = 0; k < current->neighbors.current_index; k++){
+			live_range_t* neighbor = dynamic_array_get_at(&(current->neighbors), k);
 			printf("LR%d", neighbor->live_range_id);
  
 			//Print a comma if appropriate
-			if(k != current->neighbors->current_index - 1){
+			if(k != current->neighbors.current_index - 1){
 				printf(", ");
 			}
 
@@ -474,8 +474,8 @@ static void compute_spill_costs(dynamic_array_t* live_ranges){
 static void add_assigned_live_range(live_range_t* live_range, basic_block_t* block){
 	//Assigning a live range to a variable means that this variable was *assigned* in the block
 	//Do note that it may very well have also been used, but we do not handle that here
-	if(dynamic_array_contains(block->assigned_variables, live_range) == NOT_FOUND){
-		dynamic_array_add(block->assigned_variables, live_range);
+	if(dynamic_array_contains(&(block->assigned_variables), live_range) == NOT_FOUND){
+		dynamic_array_add(&(block->assigned_variables), live_range);
 	}
 
 	//Up the assignment count by adding the estimated execution frequency of the block
@@ -496,8 +496,8 @@ static void add_used_live_range(live_range_t* live_range, basic_block_t* block){
 	} 
 
 	//Assigning a live range to a variable means that this variable was *used* in the block
-	if(dynamic_array_contains(block->used_variables, live_range) == NOT_FOUND){
-		dynamic_array_add(block->used_variables, live_range);
+	if(dynamic_array_contains(&(block->used_variables), live_range) == NOT_FOUND){
+		dynamic_array_add(&(block->used_variables), live_range);
 	}
 
 	//Up the use count by adding the estimated execution frequency of the block
@@ -528,7 +528,7 @@ static void add_live_now_live_range(live_range_t* live_range, dynamic_array_t* L
  */
 static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_t* variable){
 	//If the literal memory address is already in here we leave
-	if(dynamic_array_contains(live_range->variables, variable) != NOT_FOUND){
+	if(dynamic_array_contains(&(live_range->variables), variable) != NOT_FOUND){
 		return;
 	}
 
@@ -541,7 +541,7 @@ static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_
 	variable->associated_live_range = live_range;
 
 	//Otherwise we'll add this in here
-	dynamic_array_add(live_range->variables, variable);
+	dynamic_array_add(&(live_range->variables), variable);
 }
 
 
@@ -602,7 +602,7 @@ static live_range_t* construct_stack_pointer_live_range(three_addr_var_t* stack_
 	stack_pointer_live_range->is_precolored = TRUE;
 
 	//Add the stack pointer to the dynamic array
-	dynamic_array_add(stack_pointer_live_range->variables, stack_pointer);
+	dynamic_array_add(&(stack_pointer_live_range->variables), stack_pointer);
 	
 	//Store this here as well
 	stack_pointer->associated_live_range = stack_pointer_live_range;
@@ -631,7 +631,7 @@ static live_range_t* construct_instruction_pointer_live_range(three_addr_var_t* 
 	instruction_pointer_live_range->is_precolored = TRUE;
 
 	//Add the stack pointer to the dynamic array
-	dynamic_array_add(instruction_pointer_live_range->variables, instruction_pointer);
+	dynamic_array_add(&(instruction_pointer_live_range->variables), instruction_pointer);
 
 	//Save this to the global variable
 	instruction_pointer_lr = instruction_pointer_live_range;
@@ -817,17 +817,12 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
 	assign_live_range_to_source_variable(live_ranges, basic_block, instruction->source_register);
 
 	//Extract for us
-	dynamic_array_t* function_parameters = instruction->parameters;
-
-	//If these are NULL then there's nothing else for us here
-	if(function_parameters == NULL){
-		return;
-	}
+	dynamic_array_t function_parameters = instruction->parameters;
 				
 	//Otherwise we'll run through them all
-	for(u_int16_t i = 0; i < function_parameters->current_index; i++){
+	for(u_int16_t i = 0; i < function_parameters.current_index; i++){
 		//Extract it
-		three_addr_var_t* parameter = dynamic_array_get_at(function_parameters, i);
+		three_addr_var_t* parameter = dynamic_array_get_at(&function_parameters, i);
 
 		/**
 		 * Because we are not explicitly reading in this instruction, we need a special rule that takes care to not
@@ -945,13 +940,13 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
  * 		add the variable to the corresponding live range set
  * 		mark said variable 
  */
-static dynamic_array_t* construct_live_ranges_in_function(basic_block_t* function_entry){
+static dynamic_array_t construct_live_ranges_in_function(basic_block_t* function_entry){
 	//First create the set of live ranges
-	dynamic_array_t* live_ranges = dynamic_array_alloc();
+	dynamic_array_t live_ranges = dynamic_array_alloc();
 
 	//Add these both in immediately
-	dynamic_array_add(live_ranges, stack_pointer_lr);
-	dynamic_array_add(live_ranges, instruction_pointer_lr);
+	dynamic_array_add(&live_ranges, stack_pointer_lr);
+	dynamic_array_add(&live_ranges, instruction_pointer_lr);
 
 	//Grab the entry block
 	basic_block_t* current = function_entry;
@@ -959,7 +954,7 @@ static dynamic_array_t* construct_live_ranges_in_function(basic_block_t* functio
 	//Run through every single block
 	while(current != NULL){
 		//Let the helper do this
-		construct_live_ranges_in_block(live_ranges, current);
+		construct_live_ranges_in_block(&live_ranges, current);
 
 		//Advance to the next
 		current = current->direct_successor;
@@ -983,8 +978,8 @@ static void reset_function_blocks_for_liveness(basic_block_t* function_entry_blo
 		current->visited = FALSE;
 
 		//Also reset the liveness sets
-		reset_dynamic_array(current->live_in);
-		reset_dynamic_array(current->live_out);
+		reset_dynamic_array(&(current->live_in));
+		reset_dynamic_array(&(current->live_out));
 
 		//Push it up
 		current = current->direct_successor;
@@ -1020,8 +1015,8 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 	u_int8_t difference_found;
 
 	//The "Prime" blocks are just ways to hold the old dynamic arrays
-	dynamic_array_t* in_prime;
-	dynamic_array_t* out_prime;
+	dynamic_array_t in_prime;
+	dynamic_array_t out_prime;
 
 	//A cursor for the current block
 	basic_block_t* current;
@@ -1036,9 +1031,9 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 		difference_found = FALSE;
 
 		//Now we can go through the entire RPO set
-		for(u_int16_t _ = 0; _ < function_entry_block->reverse_post_order_reverse_cfg->current_index; _++){
+		for(u_int16_t _ = 0; _ < function_entry_block->reverse_post_order_reverse_cfg.current_index; _++){
 			//The current block is whichever we grab
-			current = dynamic_array_get_at(function_entry_block->reverse_post_order_reverse_cfg, _);
+			current = dynamic_array_get_at(&(function_entry_block->reverse_post_order_reverse_cfg), _);
 
 			//Transfer the pointers over
 			in_prime = current->live_in;
@@ -1048,37 +1043,37 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 			current->live_out = dynamic_array_alloc();
 
 			//Run through all of the successors
-			for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
+			for(u_int16_t k = 0; k < current->successors.current_index; k++){
 				//Grab the successor out
-				basic_block_t* successor = dynamic_array_get_at(current->successors, k);
+				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
 				//Add everything in his live_in set into the live_out set
-				for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
+				for(u_int16_t l = 0; l < successor->live_in.current_index; l++){
 					//Let's check to make sure we haven't already added this
-					live_range_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
+					live_range_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
 
 					//If it doesn't already contain this variable, we'll add it in
-					if(dynamic_array_contains(current->live_out, successor_live_in_var) == NOT_FOUND){
-						dynamic_array_add(current->live_out, successor_live_in_var);
+					if(dynamic_array_contains(&(current->live_out), successor_live_in_var) == NOT_FOUND){
+						dynamic_array_add(&(current->live_out), successor_live_in_var);
 					}
 				}
 			}
 
 			//Since we need all of the used variables, we'll just clone this
 			//dynamic array so that we start off with them all
-			current->live_in = clone_dynamic_array(current->used_variables);
+			current->live_in = clone_dynamic_array(&(current->used_variables));
 
 			//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-			for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
+			for(u_int16_t j = 0; j  < current->live_out.current_index; j++){
 				//Grab a reference for our use
-				live_range_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+				live_range_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
 				//Now we need this block to be not in "assigned" also. If it is in assigned we can't
 				//add it. Additionally, we'll want to make sure we aren't adding duplicate live ranges
-				if(dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND 
-					&& dynamic_array_contains(current->live_in, live_out_var) == NOT_FOUND){
+				if(dynamic_array_contains(&(current->assigned_variables), live_out_var) == NOT_FOUND 
+					&& dynamic_array_contains(&(current->live_in), live_out_var) == NOT_FOUND){
 					//If this is true we can add
-					dynamic_array_add(current->live_in, live_out_var);
+					dynamic_array_add(&(current->live_in), live_out_var);
 				}
 			}
 			
@@ -1091,16 +1086,16 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 			//For efficiency - if there was a difference in one block, it's already done - no use in comparing
 			if(difference_found == FALSE){
 				//So we haven't found a difference so far - let's see if we can find one now
-				if(dynamic_arrays_equal(in_prime, current->live_in) == FALSE
-				  || dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
+				if(dynamic_arrays_equal(&in_prime, &(current->live_in)) == FALSE
+				  || dynamic_arrays_equal(&out_prime, &(current->live_out)) == FALSE){
 					//We have in fact found a difference
 					difference_found = TRUE;
 				}
 			}
 
 			//We made it down here, the prime variables are useless. We'll deallocate them
-			dynamic_array_dealloc(in_prime);
-			dynamic_array_dealloc(out_prime);
+			dynamic_array_dealloc(&in_prime);
+			dynamic_array_dealloc(&out_prime);
 		}
 
 	//So long as there is a difference
@@ -1128,7 +1123,7 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		current->spill_cost = 0;
 
 		//And we'll also reset all of the neighbors
-		reset_dynamic_array(current->neighbors);
+		reset_dynamic_array(&(current->neighbors));
 	}
 }
 
@@ -1171,13 +1166,16 @@ static void add_destination_interference(interference_graph_t* graph, dynamic_ar
  * 			remove LC from LIVEAFTER 
  * 			Add LA an LB to LIVEAFTER 
  */
-static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, instruction_t* instruction){
+static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, instruction_t* instruction){
 	/**
 	 * As you can see in the algorithm, the LIVE_NOW set initially starts
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
 	 * set by a different name for our calculation
 	 */
-	dynamic_array_t* live_after = clone_dynamic_array(block->live_out);
+	dynamic_array_t live_after = clone_dynamic_array(&(block->live_out));
+
+	//For later use
+	dynamic_array_t operation_function_parameters;
 	
 	//We will crawl our way up backwards through the CFG
 	instruction_t* operation = block->exit_statement;
@@ -1216,7 +1214,7 @@ static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, ins
 			if(is_destination_also_operand(operation) == TRUE){
 				//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any
 				//other way
-				add_live_now_live_range(operation->destination_register->associated_live_range, live_after);
+				add_live_now_live_range(operation->destination_register->associated_live_range, &live_after);
 
 			/**
 			 * If the indirection level is more than 0, this means that we're moving into a memory
@@ -1225,7 +1223,7 @@ static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, ins
 			 */
 			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
 				//Add it to live now and we're done
-				add_live_now_live_range(operation->destination_register->associated_live_range, live_after);
+				add_live_now_live_range(operation->destination_register->associated_live_range, &live_after);
 
 			/**
 			 * The final case here is the ideal case in the algorithm, where we have a simple
@@ -1234,7 +1232,7 @@ static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, ins
 			 */
 			} else {
 				//And then scrap it from live_now
-				dynamic_array_delete(live_after, operation->destination_register->associated_live_range);
+				dynamic_array_delete(&live_after, operation->destination_register->associated_live_range);
 			}
 		}
 
@@ -1244,7 +1242,7 @@ static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, ins
 		 */
 		if(operation->destination_register2 != NULL){
 			//And then scrap it from live_now
-			dynamic_array_delete(live_after, operation->destination_register2->associated_live_range);
+			dynamic_array_delete(&live_after, operation->destination_register2->associated_live_range);
 		}
 
 		/**
@@ -1257,19 +1255,19 @@ static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, ins
 		 * These first few are the obvious cases
 		 */
 		if(operation->source_register != NULL){
-			add_live_now_live_range(operation->source_register->associated_live_range, live_after);
+			add_live_now_live_range(operation->source_register->associated_live_range, &live_after);
 		}
 
 		if(operation->source_register2 != NULL){
-			add_live_now_live_range(operation->source_register2->associated_live_range, live_after);
+			add_live_now_live_range(operation->source_register2->associated_live_range, &live_after);
 		}
 
 		if(operation->address_calc_reg1 != NULL){
-			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, live_after);
+			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_after);
 		}
 
 		if(operation->address_calc_reg2 != NULL){
-			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, live_after);
+			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_after);
 		}
 
 		/**
@@ -1280,21 +1278,16 @@ static dynamic_array_t* calculate_live_after_for_block(basic_block_t* block, ins
 		switch(operation->instruction_type){
 			case CALL:
 			case INDIRECT_CALL:
-				//No point here
-				if(operation->parameters == NULL){
-					break;
-				}
-				
 				//Grab it out
-				dynamic_array_t* operation_function_parameters = operation->parameters;
+				operation_function_parameters = operation->parameters;
 
 				//Let's go through all of these and add them to LIVE_NOW
-				for(u_int16_t i = 0; i < operation_function_parameters->current_index; i++){
+				for(u_int16_t i = 0; i < operation_function_parameters.current_index; i++){
 					//Extract the variable
-					three_addr_var_t* variable = dynamic_array_get_at(operation_function_parameters, i);
+					three_addr_var_t* variable = dynamic_array_get_at(&operation_function_parameters, i);
 
 					//Add it to live_now
-					add_live_now_live_range(variable->associated_live_range, live_after);
+					add_live_now_live_range(variable->associated_live_range, &live_after);
 				}
 
 				break;
@@ -1347,7 +1340,10 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
 	 * set by a different name for our calculation
 	 */
-	dynamic_array_t* live_now = clone_dynamic_array(block->live_out);
+	dynamic_array_t live_now = clone_dynamic_array(&(block->live_out));
+
+	//For later user
+	dynamic_array_t operation_function_parameters;
 	
 	//We will crawl our way up backwards through the CFG
 	instruction_t* operation = block->exit_statement;
@@ -1384,10 +1380,10 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 			 */
 			if(is_destination_also_operand(operation) == TRUE){
 				//This counts as interference
-				add_destination_interference(graph, live_now, operation->destination_register->associated_live_range);
+				add_destination_interference(graph, &live_now, operation->destination_register->associated_live_range);
 				//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any
 				//other way
-				add_live_now_live_range(operation->destination_register->associated_live_range, live_now);
+				add_live_now_live_range(operation->destination_register->associated_live_range, &live_now);
 
 			/**
 			 * If the indirection level is more than 0, this means that we're moving into a memory
@@ -1396,7 +1392,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 			 */
 			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
 				//Add it to live now and we're done
-				add_live_now_live_range(operation->destination_register->associated_live_range, live_now);
+				add_live_now_live_range(operation->destination_register->associated_live_range, &live_now);
 
 			/**
 			 * The final case here is the ideal case in the algorithm, where we have a simple
@@ -1405,10 +1401,10 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 			 */
 			} else {
 				//Add the interference
-				add_destination_interference(graph, live_now, operation->destination_register->associated_live_range);
+				add_destination_interference(graph, &live_now, operation->destination_register->associated_live_range);
 
 				//And then scrap it from live_now
-				dynamic_array_delete(live_now, operation->destination_register->associated_live_range);
+				dynamic_array_delete(&live_now, operation->destination_register->associated_live_range);
 			}
 		}
 
@@ -1418,10 +1414,10 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 		 */
 		if(operation->destination_register2 != NULL){
 			//Add the interference
-			add_destination_interference(graph, live_now, operation->destination_register2->associated_live_range);
+			add_destination_interference(graph, &live_now, operation->destination_register2->associated_live_range);
 
 			//And then scrap it from live_now
-			dynamic_array_delete(live_now, operation->destination_register2->associated_live_range);
+			dynamic_array_delete(&live_now, operation->destination_register2->associated_live_range);
 		}
 
 		/**
@@ -1434,19 +1430,19 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 		 * These first few are the obvious cases
 		 */
 		if(operation->source_register != NULL){
-			add_live_now_live_range(operation->source_register->associated_live_range, live_now);
+			add_live_now_live_range(operation->source_register->associated_live_range, &live_now);
 		}
 
 		if(operation->source_register2 != NULL){
-			add_live_now_live_range(operation->source_register2->associated_live_range, live_now);
+			add_live_now_live_range(operation->source_register2->associated_live_range, &live_now);
 		}
 
 		if(operation->address_calc_reg1 != NULL){
-			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, live_now);
+			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now);
 		}
 
 		if(operation->address_calc_reg2 != NULL){
-			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, live_now);
+			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now);
 		}
 
 		/**
@@ -1457,21 +1453,16 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 		switch(operation->instruction_type){
 			case CALL:
 			case INDIRECT_CALL:
-				//No point here
-				if(operation->parameters == NULL){
-					break;
-				}
-				
 				//Grab it out
-				dynamic_array_t* operation_function_parameters = operation->parameters;
+				operation_function_parameters = operation->parameters;
 
 				//Let's go through all of these and add them to LIVE_NOW
-				for(u_int16_t i = 0; i < operation_function_parameters->current_index; i++){
+				for(u_int16_t i = 0; i < operation_function_parameters.current_index; i++){
 					//Extract the variable
-					three_addr_var_t* variable = dynamic_array_get_at(operation_function_parameters, i);
+					three_addr_var_t* variable = dynamic_array_get_at(&operation_function_parameters, i);
 
 					//Add it to live_now
-					add_live_now_live_range(variable->associated_live_range, live_now);
+					add_live_now_live_range(variable->associated_live_range, &live_now);
 				}
 
 				break;
@@ -1531,12 +1522,12 @@ static interference_graph_t* construct_function_level_interference_graph(basic_b
  */
 static live_range_t* does_precoloring_interference_exist(live_range_t* coloree, general_purpose_register_t reg){
 	//Extract for convenience
-	dynamic_array_t* neighbors = coloree->neighbors;
+	dynamic_array_t neighbors = coloree->neighbors;
 
 	//Run through all of the neighbors
-	for(u_int16_t i = 0; i < neighbors->current_index; i++){
+	for(u_int16_t i = 0; i < neighbors.current_index; i++){
 		//Grab the given neighbor out
-		live_range_t* neighbor = dynamic_array_get_at(neighbors, i);
+		live_range_t* neighbor = dynamic_array_get_at(&neighbors, i);
 
 		//This collision means we do have interference
 		if(neighbor->reg == reg){
@@ -1828,24 +1819,22 @@ static u_int8_t precolor_instruction(basic_block_t* function_entry, dynamic_arra
 			 */
 
 			//Grab the parameters out
-			dynamic_array_t* function_params = instruction->parameters;
+			dynamic_array_t function_params = instruction->parameters;
 
-			//If we actually have function parameters
-			if(function_params != NULL){
-				for(u_int16_t i = 0; i < function_params->current_index; i++){
-					//Grab it out
-					three_addr_var_t* param = dynamic_array_get_at(function_params, i);
+			//Run thorugh all of the params and precolor
+			for(u_int16_t i = 0; i < function_params.current_index; i++){
+				//Grab it out
+				three_addr_var_t* param = dynamic_array_get_at(&function_params, i);
 
-					//Now that we have it, we'll grab it's live range
- 					live_range_t* param_live_range = param->associated_live_range;
+				//Now that we have it, we'll grab it's live range
+				live_range_t* param_live_range = param->associated_live_range;
 
-					//And we'll use the function param list to precolor appropriately
-					colorable = precolor_live_range(function_entry, live_ranges, param_live_range, parameter_registers[i]);
+				//And we'll use the function param list to precolor appropriately
+				colorable = precolor_live_range(function_entry, live_ranges, param_live_range, parameter_registers[i]);
 
-					//We had to spill here - jump out
-					if(colorable == FALSE){
-						return FALSE;
-					}
+				//We had to spill here - jump out
+				if(colorable == FALSE){
+					return FALSE;
 				}
 			}
 
@@ -1904,9 +1893,9 @@ static u_int8_t pre_color(basic_block_t* function_entry, dynamic_array_t* live_r
  */
 static u_int8_t does_neighbor_precoloring_interference_exist(live_range_t* target, general_purpose_register_t reg){
 	//Run through all neighbors
-	for(u_int16_t i = 0; i < target->neighbors->current_index; i++){
+	for(u_int16_t i = 0; i < target->neighbors.current_index; i++){
 		//Extract this one out
-		live_range_t* neighbor = dynamic_array_get_at(target->neighbors, i);
+		live_range_t* neighbor = dynamic_array_get_at(&(target->neighbors), i);
 
 		//Counts as interference
 		if(neighbor->reg == reg){
@@ -2018,8 +2007,8 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
  */
 static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 	//Wipe these two values out
-	reset_dynamic_array(block->used_variables);
-	reset_dynamic_array(block->assigned_variables);
+	reset_dynamic_array(&(block->used_variables));
+	reset_dynamic_array(&(block->assigned_variables));
 
 	//Instruction cursor
 	instruction_t* cursor = block->leader_statement;
@@ -2237,9 +2226,9 @@ static u_int8_t allocate_register(live_range_t* live_range){
 	memset(registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
 
 	//Run through every single neighbor
-	for(u_int16_t i = 0; i < live_range->neighbors->current_index; i++){
+	for(u_int16_t i = 0; i < live_range->neighbors.current_index; i++){
 		//Grab the neighbor out
-		live_range_t* neighbor = dynamic_array_get_at(live_range->neighbors, i);
+		live_range_t* neighbor = dynamic_array_get_at(&(live_range->neighbors), i);
 
 		//Get whatever register this neighbor has. If it's not the "no_reg" value, 
 		//we'll store it in the array
@@ -2292,9 +2281,9 @@ static generic_type_t* get_largest_type_in_live_range(live_range_t* target){
 	generic_type_t* largest_type = NULL;
 
 	//Run through all of the variables
-	for(u_int16_t i = 0; i < target->variables->current_index; i++){
+	for(u_int16_t i = 0; i < target->variables.current_index; i++){
 		//Grab the variable out
-		three_addr_var_t* variable = dynamic_array_get_at(target->variables, i);
+		three_addr_var_t* variable = dynamic_array_get_at(&(target->variables), i);
 
 		//If we're bigger, reassign
 		if(variable->type->type_size > largest_type_size){
@@ -2481,14 +2470,14 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 	handle_source_spill(live_ranges, instruction->address_calc_reg2, spill_range, currently_spilled, instruction, spill_region->base_address);
 
 	//Run through all function parameters
-	if(instruction->parameters != NULL && instruction->instruction_type != PHI_FUNCTION){
+	if(instruction->instruction_type != PHI_FUNCTION){
 		//Extract it
-		dynamic_array_t* parameters = instruction->parameters;
+		dynamic_array_t parameters = instruction->parameters;
 
 		//Run through and check them all
-		for(u_int16_t i = 0; i < parameters->current_index; i++){
+		for(u_int16_t i = 0; i < parameters.current_index; i++){
 			//Extract it
-			three_addr_var_t* parameter = dynamic_array_get_at(parameters, i);
+			three_addr_var_t* parameter = dynamic_array_get_at(&parameters, i);
 
 			//Invoke the helper
 			handle_source_spill(live_ranges, parameter, spill_range, currently_spilled, instruction, spill_region->base_address);
@@ -2736,17 +2725,17 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	instruction_t* last_instruction = instruction;
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
-	dynamic_array_t* live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	dynamic_array_t live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
 	//We can remove the destination LR from here, there's no point in keeping it in
-	dynamic_array_delete(live_after, destination_lr);
+	dynamic_array_delete(&live_after, destination_lr);
 
 	/**
 	 * Run through everything that is alive after this function runs(live_after)
 	 * and check if we need to save any registers from that set
 	 */
-	for(u_int16_t i = 0; i < live_after->current_index; i++){
+	for(u_int16_t i = 0; i < live_after.current_index; i++){
 		//Extract it
-		live_range_t* lr = dynamic_array_get_at(live_after, i);
+		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
 		//And remove its register
 		general_purpose_register_t reg = lr->reg;
@@ -2791,7 +2780,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	}
 
 	//Free it up once done
-	dynamic_array_dealloc(live_after);
+	dynamic_array_dealloc(&live_after);
 
 	//Return whatever this ended up being
 	return last_instruction;
@@ -2821,17 +2810,17 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 	instruction_t* last_instruction = instruction;
 
 	//Grab the live_after array for up to but not including the actual call
-	dynamic_array_t* live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	dynamic_array_t live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
 	//Delete the destination LR from here as it will be assigned by the instruction anyway
-	dynamic_array_delete(live_after, destination_lr);
+	dynamic_array_delete(&live_after, destination_lr);
 
 	/**
 	 * Now we will run through every live range in live_after and check if it is caller-saved or not
 	 * We are not able to fine-tune things here like we are in the the direct call unfortunately
 	 */
-	for(u_int16_t i = 0; i < live_after->current_index; i++){
+	for(u_int16_t i = 0; i < live_after.current_index; i++){
 		//Grab it out
-		live_range_t* lr = dynamic_array_get_at(live_after, i);
+		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
 		//Extract its register too
 		general_purpose_register_t reg = lr->reg;
@@ -2868,7 +2857,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 	}
 
 	//Free it up once done
-	dynamic_array_dealloc(live_after);
+	dynamic_array_dealloc(&live_after);
 
 	//Return the last instruction to save time when drilling
 	return last_instruction;
@@ -2995,9 +2984,9 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//as an input value here
 	
 	//For each and every predecessor of the function exit block
-	for(u_int16_t i = 0; i < function_exit->predecessors->current_index; i++){
+	for(u_int16_t i = 0; i < function_exit->predecessors.current_index; i++){
 		//Grab the given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(function_exit->predecessors, i);
+		basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
 
 		//If the area has a larger total size than 0, we'll need to add in the deallocation
 		//before every return statement
@@ -3047,10 +3036,10 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
  */
 static void insert_saving_logic(cfg_t* cfg){
 	//Run through every function entry point in the CFG
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Grab out the function exit and entry blocks
-		basic_block_t* current_function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
-		basic_block_t* current_function_exit = dynamic_array_get_at(cfg->function_exit_blocks, i);
+		basic_block_t* current_function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		basic_block_t* current_function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
 
 		//We'll first insert the callee-saved stack and register logic
 		insert_stack_and_callee_saving_logic(cfg, current_function_entry, current_function_exit);
@@ -3081,7 +3070,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 *
 	 * 	We only need to do this once for the allocation
 	 */
-	dynamic_array_t* live_ranges = construct_live_ranges_in_function(function_entry);
+	dynamic_array_t live_ranges = construct_live_ranges_in_function(function_entry);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
@@ -3098,12 +3087,12 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * counts. Since it is not possible to get an accurate use/assignment count
 	 * until the entire cfg is combed over, we need to do this in a separate step
 	 */
-	compute_spill_costs(live_ranges);
+	compute_spill_costs(&live_ranges);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("=============== After Cost Update ============\n");
-		print_all_live_ranges(live_ranges);
+		print_all_live_ranges(&live_ranges);
 		printf("=============== After Cost Update ============\n");
 	}
 
@@ -3123,7 +3112,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	//Show our IR's here
 	if(print_irs == TRUE){
 		//Show our live ranges once again
-		print_all_live_ranges(live_ranges);
+		print_all_live_ranges(&live_ranges);
 	}
 
 	/**
@@ -3136,7 +3125,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 *
 	 * Again, this is required every single time we need to retry after a spill
 	*/
-	interference_graph_t* graph = construct_function_level_interference_graph(function_entry, live_ranges);
+	interference_graph_t* graph = construct_function_level_interference_graph(function_entry, &live_ranges);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
@@ -3154,7 +3143,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 *
 	 * This has the potential to cause spills
 	 */
-	 colorable = pre_color(function_entry, live_ranges);
+	 colorable = pre_color(function_entry, &live_ranges);
 
 	/**
 	 * If we couldn't precolor, we'll have spilled a live range and as such must go
@@ -3190,26 +3179,26 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 */
 	if(could_coalesce == TRUE){
 		//We need to *reset* all of our live ranges here
-		reset_all_live_ranges(live_ranges);
+		reset_all_live_ranges(&live_ranges);
 
 		//First step - recalculate all of our used & assigned sets
 		recompute_used_and_assigned_sets(function_entry);
 
 		//After we coalesce, we need to recompute all of the
 		//spill costs
-		compute_spill_costs(live_ranges);
+		compute_spill_costs(&live_ranges);
 
 		//Then - recalculate all liveness sets
 		calculate_live_range_liveness_sets(function_entry);
 
 		//Finally, recalculate all of the interference now that all of the
 		//prerequisites have been met
-		graph = construct_function_level_interference_graph(function_entry, live_ranges);
+		graph = construct_function_level_interference_graph(function_entry, &live_ranges);
 	}
 
 	//Show our live ranges once again if requested
 	if(print_irs == TRUE){
-		print_all_live_ranges(live_ranges);
+		print_all_live_ranges(&live_ranges);
 		printf("================= After Coalescing =======================\n");
 		print_function_blocks_with_live_ranges(function_entry);
 		printf("================= After Coalescing =======================\n");
@@ -3222,7 +3211,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * then the allocator will spill the least costly LR and return FALSE, and we will go through
 	 * this whol process again
 	*/
-	colorable = graph_color_and_allocate(function_entry, live_ranges);
+	colorable = graph_color_and_allocate(function_entry, &live_ranges);
 
 	/**
 	 * Our so-called "spill loop" essentially repeats most of the steps
@@ -3245,7 +3234,7 @@ spill_loop:
 		/**
 		 * First reset all of these
 		 */
-		reset_all_live_ranges(live_ranges);
+		reset_all_live_ranges(&live_ranges);
 
 		/**
 		 * Following this, we need to recompute all of our used and assigned
@@ -3258,7 +3247,7 @@ spill_loop:
 		 * sets, we need to go back through and update all of our spill
 		 * costs
 		 */
-		compute_spill_costs(live_ranges);
+		compute_spill_costs(&live_ranges);
 
 		/**
 		 * Following that, we need to go through and calculate
@@ -3270,11 +3259,11 @@ spill_loop:
 		 * Once the liveness sets have been recalculated, we're able
 		 * to go through and compute all of the interference again
 		 */
-		graph = construct_function_level_interference_graph(function_entry, live_ranges);
+		graph = construct_function_level_interference_graph(function_entry, &live_ranges);
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE){
-			print_all_live_ranges(live_ranges);
+			print_all_live_ranges(&live_ranges);
 			printf("================= After Interference =======================\n");
 			print_function_blocks_with_live_ranges(function_entry);
 			printf("================= After Interference =======================\n");
@@ -3286,11 +3275,11 @@ spill_loop:
 		 * again. This loop will keep executing until the
 		 * graph_color_and_allocate returns a successful result
 		 */
-		colorable = graph_color_and_allocate(function_entry, live_ranges);
+		colorable = graph_color_and_allocate(function_entry, &live_ranges);
 	}
 
 	//Destroy this now that we're done
-	dynamic_array_dealloc(live_ranges);
+	dynamic_array_dealloc(&live_ranges);
 }
 
 
@@ -3315,9 +3304,9 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 
 	//Run through every function entry block individually and invoke the allocator on
 	//all of them separately
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the given function entry
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Invoke the function-level allocator
 		allocate_registers_for_function(options, function_entry);
