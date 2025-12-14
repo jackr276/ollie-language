@@ -1545,50 +1545,50 @@ static void calculate_postdominator_sets(cfg_t* cfg){
 static void calculate_dominator_sets(cfg_t* cfg){
 	//Every node in the CFG has a dominator set that is set
 	//to be identical to the list of all nodes
-	for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Grab this out
-		basic_block_t* block = dynamic_array_get_at(cfg->created_blocks, i);
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), i);
 
 		//We will initialize the block's dominator set to be the entire set of nodes
-		block->dominator_set = clone_dynamic_array(cfg->created_blocks);
+		block->dominator_set = clone_dynamic_array(&(cfg->created_blocks));
 	}
 
 	//For each and every function that we have, we will perform this operation separately
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks->current_index; _++){
+	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
 		//Initialize a "worklist" dynamic array for this particular function
-		dynamic_array_t* worklist = dynamic_array_alloc();
+		dynamic_array_t worklist = dynamic_array_alloc();
 
 		//Add this into the worklist as a seed
-		dynamic_array_add(worklist, dynamic_array_get_at(cfg->function_entry_blocks, _));
+		dynamic_array_add(&worklist, dynamic_array_get_at(&(cfg->function_entry_blocks), _));
 		
 		//The new dominance frontier that we have each time
-		dynamic_array_t* new;
+		dynamic_array_t new;
 
 		//So long as the worklist is not empty
-		while(dynamic_array_is_empty(worklist) == FALSE){
+		while(dynamic_array_is_empty(&worklist) == FALSE){
 			//Remove a node Y from the worklist(remove from back - most efficient{O(1)})
-			basic_block_t* Y = dynamic_array_delete_from_back(worklist);
+			basic_block_t* Y = dynamic_array_delete_from_back(&worklist);
 			
 			//Create the new dynamic array that will be used for the next
 			//dominator set
 			new = dynamic_array_alloc();
 
 			//We will add Y into it's own dominator set
-			dynamic_array_add(new, Y);
+			dynamic_array_add(&new, Y);
 
 			//If Y has predecessors, we will find the intersection of
 			//their dominator sets
-			if(Y->predecessors != NULL){
+			if(Y->predecessors.internal_array != NULL){
 				//Grab the very first predecessor's dominator set
-				dynamic_array_t* pred_dom_set = ((basic_block_t*)(Y->predecessors->internal_array[0]))->dominator_set;
+				dynamic_array_t pred_dom_set = ((basic_block_t*)(Y->predecessors.internal_array[0]))->dominator_set;
 
 				//Are we in the intersection of the dominator sets?
 				u_int8_t in_intersection;
 
 				//We will now search every item in this dominator set
-				for(u_int16_t i = 0; i < pred_dom_set->current_index; i++){
+				for(u_int16_t i = 0; i < pred_dom_set.current_index; i++){
 					//Grab the dominator out
-					basic_block_t* dominator = dynamic_array_get_at(pred_dom_set, i);
+					basic_block_t* dominator = dynamic_array_get_at(&pred_dom_set, i);
 
 					//By default we assume that this given dominator is in the set. If it
 					//isn't we'll set it appropriately
@@ -1599,15 +1599,15 @@ static void calculate_dominator_sets(cfg_t* cfg){
 					 * in all of the dominator sets of the predecessors of Y
 					*/
 					//We'll start at 1 here - we've already accounted for 0
-					for(u_int8_t j = 1; j < Y->predecessors->current_index; j++){
+					for(u_int8_t j = 1; j < Y->predecessors.current_index; j++){
 						//Grab our other predecessor
-						basic_block_t* other_predecessor = Y->predecessors->internal_array[j];
+						basic_block_t* other_predecessor = Y->predecessors.internal_array[j];
 
 						//Now we will go over this predecessor's dominator set, and see if "dominator"
 						//is also contained within it
 
 						//Let's check for it in here. If we can't find it, we set the flag to false and bail out
-						if(dynamic_array_contains(other_predecessor->dominator_set, dominator) == NOT_FOUND){
+						if(dynamic_array_contains(&(other_predecessor->dominator_set), dominator) == NOT_FOUND){
 							in_intersection = FALSE;
 							break;
 						}
@@ -1626,34 +1626,37 @@ static void calculate_dominator_sets(cfg_t* cfg){
 					//them
 					if(in_intersection == TRUE){
 						//Add the dominator in
-						dynamic_array_add(new, dominator);
+						dynamic_array_add(&new, dominator);
 					}
 				}
 			}
 
 			//Now we'll check - are these two dominator sets the same? If not, we'll need
 			//to update them
-			if(dynamic_arrays_equal(new, Y->dominator_set) == FALSE){
+			if(dynamic_arrays_equal(&new, &(Y->dominator_set)) == FALSE){
 				//Destroy the old one
-				dynamic_array_dealloc(Y->dominator_set);
+				dynamic_array_dealloc(&(Y->dominator_set));
 
 				//And replace it with the new
 				Y->dominator_set = new;
 
-				//Now for every successor of Y, add it into the worklist
-				for(u_int16_t i = 0; Y->successors != NULL && i < Y->successors->current_index; i++){
-					dynamic_array_add(worklist, Y->successors->internal_array[i]);
+				//If we have any successors
+				if(Y->successors.internal_array != NULL){
+					//Now for every successor of Y, add it into the worklist
+					for(u_int16_t i = 0; i < Y->successors.current_index; i++){
+						dynamic_array_add(&worklist, Y->successors.internal_array[i]);
+					}
 				}
 
 			//Otherwise they are the same
 			} else {
 				//Destroy the dominator set that we just made
-				dynamic_array_dealloc(new);
+				dynamic_array_dealloc(&new);
 			}
 		}
 
 		//Destroy the worklist now that we're done with it
-		dynamic_array_dealloc(worklist);
+		dynamic_array_dealloc(&worklist);
 	}
 }
 
@@ -1786,8 +1789,8 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	u_int8_t difference_found;
 
 	//The "Prime" blocks are just ways to hold the old dynamic arrays
-	dynamic_array_t* in_prime;
-	dynamic_array_t* out_prime;
+	dynamic_array_t in_prime;
+	dynamic_array_t out_prime;
 
 	//A cursor for the current block
 	basic_block_t* current;
@@ -1797,9 +1800,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 	 * are *separate*, we can run the do-while algorithm on each function independently. This
 	 * avoids us needing to recompute the entire CFG every time the disjoint-union-find does not work
 	 */
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract it
-		basic_block_t* function_entry = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Run the algorithm until we have no difference found
 		do{
@@ -1807,9 +1810,9 @@ static void calculate_liveness_sets(cfg_t* cfg){
 			difference_found = FALSE;
 
 			//Now we can go through the entire RPO set
-			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg->current_index; _++){
+			for(u_int16_t _ = 0; _ < function_entry->reverse_post_order_reverse_cfg.current_index; _++){
 				//The current block is whichever we grab
-				current = dynamic_array_get_at(function_entry->reverse_post_order_reverse_cfg, _);
+				current = dynamic_array_get_at(&(function_entry->reverse_post_order_reverse_cfg), _);
 
 				//Transfer the pointers over
 				in_prime = current->live_in;
@@ -1817,19 +1820,25 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 				//Set live out to be a new array
 				current->live_out = dynamic_array_alloc();
+				
+				//If we have any successors
+				if(current->successors.internal_array != NULL){
+					//Run through all of the successors
+					for(u_int16_t k = 0; k < current->successors.current_index; k++){
+						//Grab the successor out
+						basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
-				//Run through all of the successors
-				for(u_int16_t k = 0; current->successors != NULL && k < current->successors->current_index; k++){
-					//Grab the successor out
-					basic_block_t* successor = dynamic_array_get_at(current->successors, k);
+						//If it has a live in set
+						if(successor->live_in.internal_array != NULL){
+							//Add everything in his live_in set into the live_out set
+							for(u_int16_t l = 0; l < successor->live_in.current_index; l++){
+								//Let's check to make sure we haven't already added this
+								three_addr_var_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
 
-					//Add everything in his live_in set into the live_out set
-					for(u_int16_t l = 0; successor->live_in != NULL && l < successor->live_in->current_index; l++){
-						//Let's check to make sure we haven't already added this
-						three_addr_var_t* successor_live_in_var = dynamic_array_get_at(successor->live_in, l);
-
-						//Let the helper method do it for us
-						variable_dynamic_array_add(current->live_out, successor_live_in_var);
+								//Let the helper method do it for us
+								variable_dynamic_array_add(&(current->live_out), successor_live_in_var);
+							}
+						}
 					}
 				}
 
@@ -1839,18 +1848,22 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 				//Since we need all of the used variables, we'll just clone this
 				//dynamic array so that we start off with them all
-				current->live_in = clone_dynamic_array(current->used_variables);
+				current->live_in = clone_dynamic_array(&(current->used_variables));
 
 				//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
-				for(u_int16_t j = 0; current->live_out != NULL && j < current->live_out->current_index; j++){
-					//Grab a reference for our use
-					three_addr_var_t* live_out_var = dynamic_array_get_at(current->live_out, j);
+				//If we have any live out vars
+				if(current->live_out.internal_array != NULL){
+					//Run through them all
+					for(u_int16_t j = 0; j < current->live_out.current_index; j++){
+						//Grab a reference for our use
+						three_addr_var_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
-					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
-					//add it
-					if(variable_dynamic_array_contains(current->assigned_variables, live_out_var) == NOT_FOUND){
-						//If this is true we can add
-						variable_dynamic_array_add(current->live_in, live_out_var);
+						//Now we need this block to be not in "assigned" also. If it is in assigned we can't
+						//add it
+						if(variable_dynamic_array_contains(&(current->assigned_variables), live_out_var) == NOT_FOUND){
+							//If this is true we can add
+							variable_dynamic_array_add(&(current->live_in), live_out_var);
+						}
 					}
 				}
 			
@@ -1860,16 +1873,16 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				//For efficiency - if there was a difference in one block, it's already done - no use in comparing
 				if(difference_found == FALSE){
 					//So we haven't found a difference so far - let's see if we can find one now
-					if(variable_dynamic_arrays_equal(in_prime, current->live_in) == FALSE 
-					  || variable_dynamic_arrays_equal(out_prime, current->live_out) == FALSE){
+					if(variable_dynamic_arrays_equal(&in_prime, &(current->live_in)) == FALSE 
+					  || variable_dynamic_arrays_equal(&out_prime, &(current->live_out)) == FALSE){
 						//We have in fact found a difference
 						difference_found = TRUE;
 					}
 				}
 
 				//We made it down here, the prime variables are useless. We'll deallocate them
-				dynamic_array_dealloc(in_prime);
-				dynamic_array_dealloc(out_prime);
+				dynamic_array_dealloc(&in_prime);
+				dynamic_array_dealloc(&out_prime);
 			}
 		
 		//So long as this holds we repeat
@@ -1889,9 +1902,9 @@ static void build_dominator_trees(cfg_t* cfg){
 	basic_block_t* current;
 
 	//For each block in the CFG
-	for(int16_t _ = cfg->created_blocks->current_index - 1; _ >= 0; _--){
+	for(int16_t _ = cfg->created_blocks.current_index - 1; _ >= 0; _--){
 		//Grab out whatever block we're on
-		current = dynamic_array_get_at(cfg->created_blocks, _);
+		current = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//We will find this block's "immediate dominator". Once we have that,
 		//we will add this block to the "dominator children" set of said immediate
@@ -1946,9 +1959,9 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 	// FIRST STEP: FOR EACH variable we have
 	//------------------------------------------
 	//Run through all of the sheafs
-	for	(u_int16_t i = 0; i < var_symtab->sheafs->current_index; i++){
+	for	(u_int16_t i = 0; i < var_symtab->sheafs.current_index; i++){
 		//Grab the current sheaf
-		sheaf_cursor = dynamic_array_get_at(var_symtab->sheafs, i);
+		sheaf_cursor = dynamic_array_get_at(&(var_symtab->sheafs), i);
 
 		//Now we'll free all non-null records
 		for(u_int16_t j = 0; j < KEYSPACE; j++){
@@ -1964,91 +1977,94 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 				// defines(assigns) said variable
 				//----------------------------------
 				//We'll need a "worklist" here - just a dynamic array 
-				dynamic_array_t* worklist = dynamic_array_alloc();
+				dynamic_array_t worklist = dynamic_array_alloc();
 				//Keep track of those that were ever on the worklist
-				dynamic_array_t* ever_on_worklist;
+				dynamic_array_t ever_on_worklist;
 
 				//We'll also need a dynamic array that contains everything relating
 				//to if we did or did not already put a phi function into this block
-				dynamic_array_t* already_has_phi_func = dynamic_array_alloc();
+				dynamic_array_t already_has_phi_func = dynamic_array_alloc();
 				
 				//Just run through the entire thing
-				for(u_int16_t i = 0; i < cfg->created_blocks->current_index; i++){
+				for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
 					//Grab the block out of here
-					block_cursor = dynamic_array_get_at(cfg->created_blocks, i);
+					block_cursor = dynamic_array_get_at(&(cfg->created_blocks), i);
 
 					//Does this block define(assign) our variable?
 					if(does_block_assign_variable(block_cursor, record) == TRUE){
 						//Then we add this block onto the "worklist"
-						dynamic_array_add(worklist, block_cursor);
+						dynamic_array_add(&worklist, block_cursor);
 					}
 				}
 
 				//Now we can clone the "was ever on worklist" dynamic array
-				ever_on_worklist = clone_dynamic_array(worklist);
+				ever_on_worklist = clone_dynamic_array(&worklist);
 
 				//Now we can actually perform our insertions
 				//So long as the worklist is not empty
-				while(dynamic_array_is_empty(worklist) == FALSE){
+				while(dynamic_array_is_empty(&worklist) == FALSE){
 					//Remove the node from the back - more efficient
-					basic_block_t* node = dynamic_array_delete_from_back(worklist);
-					
-					//Now we will go through each node in this worklist's dominance frontier
-					for(u_int16_t j = 0; node->dominance_frontier != NULL && j < node->dominance_frontier->current_index; j++){
-						//Grab this node out
-						basic_block_t* df_node = dynamic_array_get_at(node->dominance_frontier, j);
+					basic_block_t* node = dynamic_array_delete_from_back(&worklist);
 
-						//If this node already has a phi function, we're not gonna bother with it
-						if(dynamic_array_contains(already_has_phi_func, df_node) != NOT_FOUND){
-							//We DID find it, so we will NOT add anything, it already has one
-							continue;
-						}
+					//If this node has a dominance frontier
+					if(node->dominance_frontier.internal_array != NULL){
+						//Now we will go through each node in this worklist's dominance frontier
+						for(u_int16_t j = 0; j < node->dominance_frontier.current_index; j++){
+							//Grab this node out
+							basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), j);
 
-						//Let's check to see if we really need one here.
-						//----------------------------------------
-						// CRITERION:
-						// If a variable is NOT Live-out at the join node,
-						// that means that it is not LIVE-IN at any of
-						// the successors of that block. If a variable
-						// is not active(used) at the join node either,
-						// that means that the phi function is useless.
-						//
-						// So, we will skip inserting a phi function
-						// if the variable is not used and not LIVE_OUT
-						// at N
-						//----------------------------------------
+							//If this node already has a phi function, we're not gonna bother with it
+							if(dynamic_array_contains(&already_has_phi_func, df_node) != NOT_FOUND){
+								//We DID find it, so we will NOT add anything, it already has one
+								continue;
+							}
 
-						//Let's see if we can find it in one of these. We'll record if we can
-						if(symtab_record_variable_dynamic_array_contains(df_node->used_variables, record) == NOT_FOUND
-							&& symtab_record_variable_dynamic_array_contains(df_node->live_out, record) == NOT_FOUND){
-							continue;
-						}
+							//Let's check to see if we really need one here.
+							//----------------------------------------
+							// CRITERION:
+							// If a variable is NOT Live-out at the join node,
+							// that means that it is not LIVE-IN at any of
+							// the successors of that block. If a variable
+							// is not active(used) at the join node either,
+							// that means that the phi function is useless.
+							//
+							// So, we will skip inserting a phi function
+							// if the variable is not used and not LIVE_OUT
+							// at N
+							//----------------------------------------
 
-						//If we make it here that means that we don't already have one, so we'll add it
-						//This function only emits the skeleton of a phi function
-						instruction_t* phi_stmt = emit_phi_function(record);
+							//Let's see if we can find it in one of these. We'll record if we can
+							if(symtab_record_variable_dynamic_array_contains(&(df_node->used_variables), record) == NOT_FOUND
+								&& symtab_record_variable_dynamic_array_contains(&(df_node->live_out), record) == NOT_FOUND){
+								continue;
+							}
 
-						//Add the phi statement into the block	
-						add_phi_statement(df_node, phi_stmt);
+							//If we make it here that means that we don't already have one, so we'll add it
+							//This function only emits the skeleton of a phi function
+							instruction_t* phi_stmt = emit_phi_function(record);
 
-						//We'll mark that this block already has one for the future
-						dynamic_array_add(already_has_phi_func, df_node); 
+							//Add the phi statement into the block	
+							add_phi_statement(df_node, phi_stmt);
 
-						//If this node has not ever been on the worklist, we'll add it
-						//to keep the search going
-						if(dynamic_array_contains(ever_on_worklist, df_node) == NOT_FOUND){
-							//We did NOT find it, so we WILL add it
-							dynamic_array_add(worklist, df_node);
-							dynamic_array_add(ever_on_worklist, df_node);
+							//We'll mark that this block already has one for the future
+							dynamic_array_add(&already_has_phi_func, df_node); 
+
+							//If this node has not ever been on the worklist, we'll add it
+							//to keep the search going
+							if(dynamic_array_contains(&ever_on_worklist, df_node) == NOT_FOUND){
+								//We did NOT find it, so we WILL add it
+								dynamic_array_add(&worklist, df_node);
+								dynamic_array_add(&ever_on_worklist, df_node);
+							}
 						}
 					}
 				}
 
 				//Now that we're done with these, we'll remove them for
 				//the next round
-				dynamic_array_dealloc(worklist);
-				dynamic_array_dealloc(ever_on_worklist);
-				dynamic_array_dealloc(already_has_phi_func);
+				dynamic_array_dealloc(&worklist);
+				dynamic_array_dealloc(&ever_on_worklist);
+				dynamic_array_dealloc(&already_has_phi_func);
 			
 				//Advance to the next record in the chain
 				record = record->next;
@@ -2193,15 +2209,19 @@ static void rename_block(basic_block_t* entry){
 				
 				//Special case - do we have a function call?
 				//Grab it out
-				dynamic_array_t* func_params = cursor->parameters;
-				//Run through them all
-				for(u_int16_t k = 0; func_params != NULL && k < func_params->current_index; k++){
-					//Grab it out
-					three_addr_var_t* current_param = dynamic_array_get_at(func_params, k);
+				dynamic_array_t func_params = cursor->parameters;
 
-					//If it's not temporary, we rename
-					if(current_param->is_temporary == FALSE){
-						rhs_new_name(current_param);
+				//If we have any
+				if(func_params.internal_array != NULL){
+					//Run through them all
+					for(u_int16_t k = 0; k < func_params.current_index; k++){
+						//Grab it out
+						three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
+
+						//If it's not temporary, we rename
+						if(current_param->is_temporary == FALSE){
+							rhs_new_name(current_param);
+						}
 					}
 				}
 
@@ -2258,40 +2278,46 @@ static void rename_block(basic_block_t* entry){
 		cursor = cursor->next_statement;
 	}
 
-	//Now for each successor of b, we'll need to add the phi-function parameters according
-	for(u_int16_t _ = 0; entry->successors != NULL && _ < entry->successors->current_index; _++){
-		//Grab the successor out
-		basic_block_t* successor = dynamic_array_get_at(entry->successors, _);
+	//If we have any successors
+	if(entry->successors.internal_array != NULL){
+		//Now for each successor of b, we'll need to add the phi-function parameters according
+		for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
+			//Grab the successor out
+			basic_block_t* successor = dynamic_array_get_at(&(entry->successors), _);
 
-		//Now for each phi-function in this successor that uses something in the defined variables
-		//here, we'll want to add that newly renamed defined variable into the phi function parameters
-		
-		//Yet another cursor
-		instruction_t* succ_cursor = successor->leader_statement;
+			//Now for each phi-function in this successor that uses something in the defined variables
+			//here, we'll want to add that newly renamed defined variable into the phi function parameters
+			
+			//Yet another cursor
+			instruction_t* succ_cursor = successor->leader_statement;
 
-		//So long as it isn't null AND it's a phi function
-		while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
-			//We have a phi function, so what are we assigning to it?
-			symtab_variable_record_t* phi_func_var = succ_cursor->assignee->linked_var;
+			//So long as it isn't null AND it's a phi function
+			while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+				//We have a phi function, so what are we assigning to it?
+				symtab_variable_record_t* phi_func_var = succ_cursor->assignee->linked_var;
 
-			//Emit a new variable for this one
-			three_addr_var_t* phi_func_param = emit_var(phi_func_var);
+				//Emit a new variable for this one
+				three_addr_var_t* phi_func_param = emit_var(phi_func_var);
 
-			//Emit the name for this variable
-			rhs_new_name(phi_func_param);
+				//Emit the name for this variable
+				rhs_new_name(phi_func_param);
 
-			//Now add it into the phi function
-			add_phi_parameter(succ_cursor, phi_func_param);
+				//Now add it into the phi function
+				add_phi_parameter(succ_cursor, phi_func_param);
 
-			//Advance this up
-			succ_cursor = succ_cursor->next_statement;
+				//Advance this up
+				succ_cursor = succ_cursor->next_statement;
+			}
 		}
 	}
 
-	//Now that we're done with the renaming, we'll go through each dominator child in this node
-	//and perform the same operation
-	for(u_int16_t _ = 0; entry->dominator_children != NULL && _ < entry->dominator_children->current_index; _++){
-		rename_block(dynamic_array_get_at(entry->dominator_children, _));
+	//If we have any donimator children
+	if(entry->dominator_children.internal_array != NULL){
+		//Now that we're done with the renaming, we'll go through each dominator child in this node
+		//and perform the same operation
+		for(u_int16_t _ = 0; _ < entry->dominator_children.current_index; _++){
+			rename_block(dynamic_array_get_at(&(entry->dominator_children), _));
+		}
 	}
 
 	//Again if this is a function entry block, then we need to unwind the stack
