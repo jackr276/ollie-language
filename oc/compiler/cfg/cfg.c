@@ -331,11 +331,9 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
 	entry->visited = TRUE;
 
 	//For every child(predecessor-it's reverse), we visit it as well
-	if(entry->predecessors.internal_array != NULL){
-		for(u_int16_t _ = 0; _ < entry->predecessors.current_index; _++){
-			//Visit each of the blocks
-			reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(entry->predecessors), _));
-		}
+	for(u_int16_t _ = 0; _ < entry->predecessors.current_index; _++){
+		//Visit each of the blocks
+		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(entry->predecessors), _));
 	}
 
 	//Now we can push entry onto the stack
@@ -388,13 +386,10 @@ static void reverse_post_order_traversal_rec(heap_stack_t* stack, basic_block_t*
 	//Mark it as visited
 	entry->visited = TRUE;
 
-	//If we have successors
-	if(entry->successors.internal_array != NULL){
-		//For every child(successor), we visit it as well
-		for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
-			//Visit each of the blocks
-			reverse_post_order_traversal_rec(stack, dynamic_array_get_at(&(entry->successors), _));
-		}
+	//For every child(successor), we visit it as well
+	for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
+		//Visit each of the blocks
+		reverse_post_order_traversal_rec(stack, dynamic_array_get_at(&(entry->successors), _));
 	}
 
 	//Now we can push entry onto the stack
@@ -462,13 +457,10 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
 	//Otherwise mark that we've visited
 	entry->visited = TRUE;
 
-	//If we have successors
-	if(entry->successors.internal_array != NULL){
-		//Run through every successor
-		for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
-			//Recursive call to every child first
-			post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), _));
-		}
+	//Run through every successor
+	for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
+		//Recursive call to every child first
+		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), _));
 	}
 	
 	//Now we'll finally visit the node
@@ -1107,62 +1099,60 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 	//For each node in B's Dominance Frontier set(we call this node A)
 	//These nodes are our candidates for immediate dominator
 	//If B even has a dominator ser
-	if(B->dominator_set.internal_array != NULL){
-		for(u_int16_t i = 0; i < B->dominator_set.current_index; i++){
-			//By default we assume A is an IDOM
-			A_is_IDOM = TRUE;
+	for(u_int16_t i = 0; i < B->dominator_set.current_index; i++){
+		//By default we assume A is an IDOM
+		A_is_IDOM = TRUE;
 
-			//A is our "candidate" for possibly being an immediate dominator
-			A = dynamic_array_get_at(&(B->dominator_set), i);
+		//A is our "candidate" for possibly being an immediate dominator
+		A = dynamic_array_get_at(&(B->dominator_set), i);
 
-			//If A == B, that means that A does NOT strictly dominate(SDOM)
-			//B, so it's disqualified
-			if(A == B){
+		//If A == B, that means that A does NOT strictly dominate(SDOM)
+		//B, so it's disqualified
+		if(A == B){
+			continue;
+		}
+
+		//If we get here, we know that A SDOM B
+		//Now we must check, is there any "C" in the way.
+		//We can tell if this is the case by checking every other
+		//node in the dominance frontier of B, and seeing if that
+		//node is also dominated by A
+		
+		//For everything in B's dominator set that IS NOT A, we need
+		//to check if this is an intermediary. As in, does C get in-between
+		//A and B in the dominance chain
+		for(u_int16_t j = 0; j < B->dominator_set.current_index; j++){
+			//Skip this case
+			if(i == j){
 				continue;
 			}
 
-			//If we get here, we know that A SDOM B
-			//Now we must check, is there any "C" in the way.
-			//We can tell if this is the case by checking every other
-			//node in the dominance frontier of B, and seeing if that
-			//node is also dominated by A
-			
-			//For everything in B's dominator set that IS NOT A, we need
-			//to check if this is an intermediary. As in, does C get in-between
-			//A and B in the dominance chain
-			for(u_int16_t j = 0; j < B->dominator_set.current_index; j++){
-				//Skip this case
-				if(i == j){
-					continue;
-				}
+			//If it's aleady B or A, we're skipping
+			C = dynamic_array_get_at(&(B->dominator_set), j);
 
-				//If it's aleady B or A, we're skipping
-				C = dynamic_array_get_at(&(B->dominator_set), j);
-
-				//If this is the case, disqualified
-				if(C == B || C == A){
-					continue;
-				}
-
-				//We can now see that C dominates B. The true test now is
-				//if C is dominated by A. If that's the case, then we do NOT
-				//have an immediate dominator in A.
-				//
-				//This would look like A -Doms> C -Doms> B, so A is not an immediate dominator
-				if(dynamic_array_contains(&(C->dominator_set), A) != NOT_FOUND){
-					//A is disqualified, it's not an IDOM
-					A_is_IDOM = FALSE;
-					break;
-				}
+			//If this is the case, disqualified
+			if(C == B || C == A){
+				continue;
 			}
 
-			//If we survived, then we're done here
-			if(A_is_IDOM == TRUE){
-				//Mark this for any future runs...we won't waste any time doing this
-				//calculation over again
-				B->immediate_dominator = A;
-				return A;
+			//We can now see that C dominates B. The true test now is
+			//if C is dominated by A. If that's the case, then we do NOT
+			//have an immediate dominator in A.
+			//
+			//This would look like A -Doms> C -Doms> B, so A is not an immediate dominator
+			if(dynamic_array_contains(&(C->dominator_set), A) != NOT_FOUND){
+				//A is disqualified, it's not an IDOM
+				A_is_IDOM = FALSE;
+				break;
 			}
+		}
+
+		//If we survived, then we're done here
+		if(A_is_IDOM == TRUE){
+			//Mark this for any future runs...we won't waste any time doing this
+			//calculation over again
+			B->immediate_dominator = A;
+			return A;
 		}
 	}
 
@@ -1214,15 +1204,13 @@ static basic_block_t* immediate_postdominator(basic_block_t* B){
 		//Add to the visited set
 		dynamic_array_add(&visited, current);
 
-		//If we have any successor
-		if(current->successors.internal_array != NULL){
-			for(u_int16_t j = 0; j < current->successors.current_index; j++){
-				//Add the successor into the queue, if it has not yet been visited
-				basic_block_t* successor = current->successors.internal_array[j];
+		//Run through all successors
+		for(u_int16_t j = 0; j < current->successors.current_index; j++){
+			//Add the successor into the queue, if it has not yet been visited
+			basic_block_t* successor = current->successors.internal_array[j];
 
-				if(dynamic_array_contains(&visited, successor) == NOT_FOUND){
-					enqueue(&queue, successor);
-				}
+			if(dynamic_array_contains(&visited, successor) == NOT_FOUND){
+				enqueue(&queue, successor);
 			}
 		}
 	}
@@ -1640,12 +1628,9 @@ static void calculate_dominator_sets(cfg_t* cfg){
 				//And replace it with the new
 				Y->dominator_set = new;
 
-				//If we have any successors
-				if(Y->successors.internal_array != NULL){
-					//Now for every successor of Y, add it into the worklist
-					for(u_int16_t i = 0; i < Y->successors.current_index; i++){
-						dynamic_array_add(&worklist, Y->successors.internal_array[i]);
-					}
+				//Now for every successor of Y, add it into the worklist
+				for(u_int16_t i = 0; i < Y->successors.current_index; i++){
+					dynamic_array_add(&worklist, Y->successors.internal_array[i]);
 				}
 
 			//Otherwise they are the same
@@ -1822,22 +1807,20 @@ static void calculate_liveness_sets(cfg_t* cfg){
 				current->live_out = dynamic_array_alloc();
 				
 				//If we have any successors
-				if(current->successors.internal_array != NULL){
-					//Run through all of the successors
-					for(u_int16_t k = 0; k < current->successors.current_index; k++){
-						//Grab the successor out
-						basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
+				//Run through all of the successors
+				for(u_int16_t k = 0; k < current->successors.current_index; k++){
+					//Grab the successor out
+					basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
-						//If it has a live in set
-						if(successor->live_in.internal_array != NULL){
-							//Add everything in his live_in set into the live_out set
-							for(u_int16_t l = 0; l < successor->live_in.current_index; l++){
-								//Let's check to make sure we haven't already added this
-								three_addr_var_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
+					//If it has a live in set
+					if(successor->live_in.internal_array != NULL){
+						//Add everything in his live_in set into the live_out set
+						for(u_int16_t l = 0; l < successor->live_in.current_index; l++){
+							//Let's check to make sure we haven't already added this
+							three_addr_var_t* successor_live_in_var = dynamic_array_get_at(&(successor->live_in), l);
 
-								//Let the helper method do it for us
-								variable_dynamic_array_add(&(current->live_out), successor_live_in_var);
-							}
+							//Let the helper method do it for us
+							variable_dynamic_array_add(&(current->live_out), successor_live_in_var);
 						}
 					}
 				}
@@ -1852,18 +1835,16 @@ static void calculate_liveness_sets(cfg_t* cfg){
 
 				//Now we need to add every variable that is in LIVE_OUT but NOT in assigned
 				//If we have any live out vars
-				if(current->live_out.internal_array != NULL){
-					//Run through them all
-					for(u_int16_t j = 0; j < current->live_out.current_index; j++){
-						//Grab a reference for our use
-						three_addr_var_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
+				//Run through them all
+				for(u_int16_t j = 0; j < current->live_out.current_index; j++){
+					//Grab a reference for our use
+					three_addr_var_t* live_out_var = dynamic_array_get_at(&(current->live_out), j);
 
-						//Now we need this block to be not in "assigned" also. If it is in assigned we can't
-						//add it
-						if(variable_dynamic_array_contains(&(current->assigned_variables), live_out_var) == NOT_FOUND){
-							//If this is true we can add
-							variable_dynamic_array_add(&(current->live_in), live_out_var);
-						}
+					//Now we need this block to be not in "assigned" also. If it is in assigned we can't
+					//add it
+					if(variable_dynamic_array_contains(&(current->assigned_variables), live_out_var) == NOT_FOUND){
+						//If this is true we can add
+						variable_dynamic_array_add(&(current->live_in), live_out_var);
 					}
 				}
 			
@@ -2006,56 +1987,53 @@ static void insert_phi_functions(cfg_t* cfg, variable_symtab_t* var_symtab){
 					//Remove the node from the back - more efficient
 					basic_block_t* node = dynamic_array_delete_from_back(&worklist);
 
-					//If this node has a dominance frontier
-					if(node->dominance_frontier.internal_array != NULL){
-						//Now we will go through each node in this worklist's dominance frontier
-						for(u_int16_t j = 0; j < node->dominance_frontier.current_index; j++){
-							//Grab this node out
-							basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), j);
+					//Now we will go through each node in this worklist's dominance frontier
+					for(u_int16_t j = 0; j < node->dominance_frontier.current_index; j++){
+						//Grab this node out
+						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), j);
 
-							//If this node already has a phi function, we're not gonna bother with it
-							if(dynamic_array_contains(&already_has_phi_func, df_node) != NOT_FOUND){
-								//We DID find it, so we will NOT add anything, it already has one
-								continue;
-							}
+						//If this node already has a phi function, we're not gonna bother with it
+						if(dynamic_array_contains(&already_has_phi_func, df_node) != NOT_FOUND){
+							//We DID find it, so we will NOT add anything, it already has one
+							continue;
+						}
 
-							//Let's check to see if we really need one here.
-							//----------------------------------------
-							// CRITERION:
-							// If a variable is NOT Live-out at the join node,
-							// that means that it is not LIVE-IN at any of
-							// the successors of that block. If a variable
-							// is not active(used) at the join node either,
-							// that means that the phi function is useless.
-							//
-							// So, we will skip inserting a phi function
-							// if the variable is not used and not LIVE_OUT
-							// at N
-							//----------------------------------------
+						//Let's check to see if we really need one here.
+						//----------------------------------------
+						// CRITERION:
+						// If a variable is NOT Live-out at the join node,
+						// that means that it is not LIVE-IN at any of
+						// the successors of that block. If a variable
+						// is not active(used) at the join node either,
+						// that means that the phi function is useless.
+						//
+						// So, we will skip inserting a phi function
+						// if the variable is not used and not LIVE_OUT
+						// at N
+						//----------------------------------------
 
-							//Let's see if we can find it in one of these. We'll record if we can
-							if(symtab_record_variable_dynamic_array_contains(&(df_node->used_variables), record) == NOT_FOUND
-								&& symtab_record_variable_dynamic_array_contains(&(df_node->live_out), record) == NOT_FOUND){
-								continue;
-							}
+						//Let's see if we can find it in one of these. We'll record if we can
+						if(symtab_record_variable_dynamic_array_contains(&(df_node->used_variables), record) == NOT_FOUND
+							&& symtab_record_variable_dynamic_array_contains(&(df_node->live_out), record) == NOT_FOUND){
+							continue;
+						}
 
-							//If we make it here that means that we don't already have one, so we'll add it
-							//This function only emits the skeleton of a phi function
-							instruction_t* phi_stmt = emit_phi_function(record);
+						//If we make it here that means that we don't already have one, so we'll add it
+						//This function only emits the skeleton of a phi function
+						instruction_t* phi_stmt = emit_phi_function(record);
 
-							//Add the phi statement into the block	
-							add_phi_statement(df_node, phi_stmt);
+						//Add the phi statement into the block	
+						add_phi_statement(df_node, phi_stmt);
 
-							//We'll mark that this block already has one for the future
-							dynamic_array_add(&already_has_phi_func, df_node); 
+						//We'll mark that this block already has one for the future
+						dynamic_array_add(&already_has_phi_func, df_node); 
 
-							//If this node has not ever been on the worklist, we'll add it
-							//to keep the search going
-							if(dynamic_array_contains(&ever_on_worklist, df_node) == NOT_FOUND){
-								//We did NOT find it, so we WILL add it
-								dynamic_array_add(&worklist, df_node);
-								dynamic_array_add(&ever_on_worklist, df_node);
-							}
+						//If this node has not ever been on the worklist, we'll add it
+						//to keep the search going
+						if(dynamic_array_contains(&ever_on_worklist, df_node) == NOT_FOUND){
+							//We did NOT find it, so we WILL add it
+							dynamic_array_add(&worklist, df_node);
+							dynamic_array_add(&ever_on_worklist, df_node);
 						}
 					}
 				}
@@ -2212,16 +2190,14 @@ static void rename_block(basic_block_t* entry){
 				dynamic_array_t func_params = cursor->parameters;
 
 				//If we have any
-				if(func_params.internal_array != NULL){
-					//Run through them all
-					for(u_int16_t k = 0; k < func_params.current_index; k++){
-						//Grab it out
-						three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
+				//Run through them all
+				for(u_int16_t k = 0; k < func_params.current_index; k++){
+					//Grab it out
+					three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
 
-						//If it's not temporary, we rename
-						if(current_param->is_temporary == FALSE){
-							rhs_new_name(current_param);
-						}
+					//If it's not temporary, we rename
+					if(current_param->is_temporary == FALSE){
+						rhs_new_name(current_param);
 					}
 				}
 
@@ -2278,46 +2254,40 @@ static void rename_block(basic_block_t* entry){
 		cursor = cursor->next_statement;
 	}
 
-	//If we have any successors
-	if(entry->successors.internal_array != NULL){
-		//Now for each successor of b, we'll need to add the phi-function parameters according
-		for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
-			//Grab the successor out
-			basic_block_t* successor = dynamic_array_get_at(&(entry->successors), _);
+	//Now for each successor of b, we'll need to add the phi-function parameters according
+	for(u_int16_t _ = 0; _ < entry->successors.current_index; _++){
+		//Grab the successor out
+		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), _);
 
-			//Now for each phi-function in this successor that uses something in the defined variables
-			//here, we'll want to add that newly renamed defined variable into the phi function parameters
-			
-			//Yet another cursor
-			instruction_t* succ_cursor = successor->leader_statement;
+		//Now for each phi-function in this successor that uses something in the defined variables
+		//here, we'll want to add that newly renamed defined variable into the phi function parameters
+		
+		//Yet another cursor
+		instruction_t* succ_cursor = successor->leader_statement;
 
-			//So long as it isn't null AND it's a phi function
-			while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
-				//We have a phi function, so what are we assigning to it?
-				symtab_variable_record_t* phi_func_var = succ_cursor->assignee->linked_var;
+		//So long as it isn't null AND it's a phi function
+		while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+			//We have a phi function, so what are we assigning to it?
+			symtab_variable_record_t* phi_func_var = succ_cursor->assignee->linked_var;
 
-				//Emit a new variable for this one
-				three_addr_var_t* phi_func_param = emit_var(phi_func_var);
+			//Emit a new variable for this one
+			three_addr_var_t* phi_func_param = emit_var(phi_func_var);
 
-				//Emit the name for this variable
-				rhs_new_name(phi_func_param);
+			//Emit the name for this variable
+			rhs_new_name(phi_func_param);
 
-				//Now add it into the phi function
-				add_phi_parameter(succ_cursor, phi_func_param);
+			//Now add it into the phi function
+			add_phi_parameter(succ_cursor, phi_func_param);
 
-				//Advance this up
-				succ_cursor = succ_cursor->next_statement;
-			}
+			//Advance this up
+			succ_cursor = succ_cursor->next_statement;
 		}
 	}
 
-	//If we have any donimator children
-	if(entry->dominator_children.internal_array != NULL){
-		//Now that we're done with the renaming, we'll go through each dominator child in this node
-		//and perform the same operation
-		for(u_int16_t _ = 0; _ < entry->dominator_children.current_index; _++){
-			rename_block(dynamic_array_get_at(&(entry->dominator_children), _));
-		}
+	//Now that we're done with the renaming, we'll go through each dominator child in this node
+	//and perform the same operation
+	for(u_int16_t _ = 0; _ < entry->dominator_children.current_index; _++){
+		rename_block(dynamic_array_get_at(&(entry->dominator_children), _));
 	}
 
 	//Again if this is a function entry block, then we need to unwind the stack
@@ -5317,16 +5287,13 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			//Now we'll mark this as visited
 			block->visited = TRUE;
 
-			//If we have any successorss
-			if(block->successors.internal_array != NULL){
-				//And finally we'll add all of these onto the queue
-				for(u_int16_t j = 0; j < block->successors.current_index; j++){
-					//Add the successor into the queue, if it has not yet been visited
-					basic_block_t* successor = block->successors.internal_array[j];
+			//And finally we'll add all of these onto the queue
+			for(u_int16_t j = 0; j < block->successors.current_index; j++){
+				//Add the successor into the queue, if it has not yet been visited
+				basic_block_t* successor = block->successors.internal_array[j];
 
-					if(successor->visited == FALSE){
-						enqueue(&queue, successor);
-					}
+				if(successor->visited == FALSE){
+					enqueue(&queue, successor);
 				}
 			}
 		}
@@ -5646,37 +5613,32 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
 	//Let's merge predecessors first if we have any
-	if(b->predecessors.internal_array != NULL){
-		//Add them all
-		for(u_int16_t i = 0; i < b->predecessors.current_index; i++){
-			//Add b's predecessor as one to a
-			add_predecessor_only(a, b->predecessors.internal_array[i]);
-		}
+	for(u_int16_t i = 0; i < b->predecessors.current_index; i++){
+		//Add b's predecessor as one to a
+		add_predecessor_only(a, b->predecessors.internal_array[i]);
 	}
 
 	//Now merge successors if we have any
-	if(b->successors.internal_array != NULL){
-		for(u_int16_t i = 0; i < b->successors.current_index; i++){
-			//Add b's successors to be a's successors
-			add_successor_only(a, b->successors.internal_array[i]);
-		}
+	for(u_int16_t i = 0; i < b->successors.current_index; i++){
+		//Add b's successors to be a's successors
+		add_successor_only(a, b->successors.internal_array[i]);
+	}
 
-		//FOR EACH Successor of B, it will have a reference to B as a predecessor.
-		//This is now wrong though. So, for each successor of B, it will need
-		//to have A as predecessor
-		for(u_int16_t i = 0; i < b->successors.current_index; i++){
-			//Grab the block first
-			basic_block_t* successor_block = b->successors.internal_array[i];
+	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
+	//This is now wrong though. So, for each successor of B, it will need
+	//to have A as predecessor
+	for(u_int16_t i = 0; i < b->successors.current_index; i++){
+		//Grab the block first
+		basic_block_t* successor_block = b->successors.internal_array[i];
 
-			//If the successor block has predecessors
-			if(successor_block->predecessors.internal_array != NULL){
-				//Now for each of the predecessors that equals b, it needs to now point to A
-				for(u_int8_t i = 0; i < successor_block->predecessors.current_index; i++){
-					//If it's pointing to b, it needs to be updated
-					if(successor_block->predecessors.internal_array[i] == b){
-						//Update it to now be correct
-						successor_block->predecessors.internal_array[i] = a;
-					}
+		//If the successor block has predecessors
+		if(successor_block->predecessors.internal_array != NULL){
+			//Now for each of the predecessors that equals b, it needs to now point to A
+			for(u_int8_t i = 0; i < successor_block->predecessors.current_index; i++){
+				//If it's pointing to b, it needs to be updated
+				if(successor_block->predecessors.internal_array[i] == b){
+					//Update it to now be correct
+					successor_block->predecessors.internal_array[i] = a;
 				}
 			}
 		}
@@ -5707,22 +5669,16 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	b->leader_statement = NULL;
 	b->exit_statement = NULL;
 
-	//If b has used variables
-	if(b->used_variables.internal_array != NULL){
-		//We'll now need to ensure that all of the used variables in B are also in A
-		for(u_int16_t i = 0; i < b->used_variables.current_index; i++){
-			//Add these in one by one to A
-			add_used_variable(a, b->used_variables.internal_array[i]);
-		}
+	//We'll now need to ensure that all of the used variables in B are also in A
+	for(u_int16_t i = 0; i < b->used_variables.current_index; i++){
+		//Add these in one by one to A
+		add_used_variable(a, b->used_variables.internal_array[i]);
 	}
 
-	//If b has assigned variables
-	if(b->assigned_variables.internal_array != NULL){
-		//Copy over all of the assigned variables too
-		for(u_int16_t i = 0; i < b->assigned_variables.current_index; i++){
-			//Add these in one by one
-			add_assigned_variable(a, b->assigned_variables.internal_array[i]);
-		}
+	//Copy over all of the assigned variables too
+	for(u_int16_t i = 0; i < b->assigned_variables.current_index; i++){
+		//Add these in one by one
+		add_assigned_variable(a, b->assigned_variables.internal_array[i]);
 	}
 
 	//Update the instruction counts

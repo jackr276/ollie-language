@@ -39,25 +39,19 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 	//In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
 	//As such, we won't even bother looking at the predecessors
 
-	//If we have any successors
-	if(b->successors.internal_array != NULL){
-		//Now merge successors
-		for(u_int16_t i = 0; i < b->successors.current_index; i++){
-			basic_block_t* successor = dynamic_array_get_at(&(b->successors), i);
+	//Now merge successors
+	for(u_int16_t i = 0; i < b->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(b->successors), i);
 
-			//Add b's successors to be a's successors
-			add_successor_only(a, successor);
+		//Add b's successors to be a's successors
+		add_successor_only(a, successor);
 
-			//If this given successor has any predecessors
-			if(successor->predecessors.internal_array != NULL){
-				//Now for each of the predecessors that equals b, it needs to now point to A
-				for(u_int16_t j = 0; j < successor->predecessors.current_index; j++){
-					//If it's pointing to b, it needs to be updated
-					if(successor->predecessors.internal_array[j] == b){
-						//Update it to now be correct
-						successor->predecessors.internal_array[j] = a;
-					}
-				}
+		//Now for each of the predecessors that equals b, it needs to now point to A
+		for(u_int16_t j = 0; j < successor->predecessors.current_index; j++){
+			//If it's pointing to b, it needs to be updated
+			if(successor->predecessors.internal_array[j] == b){
+				//Update it to now be correct
+				successor->predecessors.internal_array[j] = a;
 			}
 		}
 	}
@@ -428,16 +422,13 @@ static void mark(cfg_t* cfg){
 			case THREE_ADDR_CODE_PHI_FUNC:
 				params = stmt->parameters;
 
-				//If we have any
-				if(params.internal_array != NULL){
-					//Add this in here
-					for(u_int16_t i = 0; i < params.current_index; i++){
-						//Grab the param out
-						three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
+				//Add this in here
+				for(u_int16_t i = 0; i < params.current_index; i++){
+					//Grab the param out
+					three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
 
-						//Add the definitions in
-						mark_and_add_definition(cfg, phi_func_param, stmt->function, &worklist);
-					}
+					//Add the definitions in
+					mark_and_add_definition(cfg, phi_func_param, stmt->function, &worklist);
 				}
 
 				break;
@@ -448,12 +439,9 @@ static void mark(cfg_t* cfg){
 				//Grab the parameters out
 				params = stmt->parameters;
 
-				//If we have any
-				if(params.internal_array != NULL){
-					//Run through them all and mark them
-					for(u_int16_t i = 0; i < params.current_index; i++){
-						mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
-					}
+				//Run through them all and mark them
+				for(u_int16_t i = 0; i < params.current_index; i++){
+					mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
 				}
 
 				break;
@@ -470,12 +458,9 @@ static void mark(cfg_t* cfg){
 				//Grab the parameters out
 				params = stmt->parameters;
 
-				//If we have any
-				if(params.internal_array != NULL){
-					//Run through them all and mark them
-					for(u_int16_t i = 0; i < params.current_index; i++){
-						mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
-					}
+				//Run through them all and mark them
+				for(u_int16_t i = 0; i < params.current_index; i++){
+					mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
 				}
 
 				break;
@@ -709,18 +694,14 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
 			break;
 		}
 
-		//Otherwise, we didn't find anything, so we'll keep going
-		//If we have any successors
-		if(candidate->successors.internal_array != NULL){
-			//Enqueue all of the successors
-			for(u_int16_t i = 0; i < candidate->successors.current_index; i++){
-				//Grab the successor out
-				basic_block_t* successor = dynamic_array_get_at(&(candidate->successors), i);
+		//Enqueue all of the successors
+		for(u_int16_t i = 0; i < candidate->successors.current_index; i++){
+			//Grab the successor out
+			basic_block_t* successor = dynamic_array_get_at(&(candidate->successors), i);
 
-				//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
-				if(successor->visited == FALSE){
-					enqueue(&queue, successor);
-				}
+			//If it's already been visited, we won't bother with it. If it hasn't been visited, we'll add it in
+			if(successor->visited == FALSE){
+				enqueue(&queue, successor);
 			}
 		}
 	}

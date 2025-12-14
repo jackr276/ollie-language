@@ -42,18 +42,18 @@ static instruction_t* combine_blocks(cfg_t* cfg, basic_block_t* a, basic_block_t
 	//As such, we won't even bother looking at the predecessors
 
 	//Now merge successors
-	for(u_int16_t i = 0; b->successors != NULL && i < b->successors->current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(b->successors, i);
+	for(u_int16_t i = 0; b->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(b->successors), i);
 
 		//Add b's successors to be a's successors
 		add_successor_only(a, successor);
 
 		//Now for each of the predecessors that equals b, it needs to now point to A
-		for(u_int16_t j = 0; successor->predecessors != NULL && j < successor->predecessors->current_index; j++){
+		for(u_int16_t j = 0; j < successor->predecessors.current_index; j++){
 			//If it's pointing to b, it needs to be updated
-			if(successor->predecessors->internal_array[j] == b){
+			if(successor->predecessors.internal_array[j] == b){
 				//Update it to now be correct
-				successor->predecessors->internal_array[j] = a;
+				successor->predecessors.internal_array[j] = a;
 			}
 		}
 	}
@@ -80,7 +80,7 @@ static instruction_t* combine_blocks(cfg_t* cfg, basic_block_t* a, basic_block_t
 	}
 
 	//Block b no longer exists
-	dynamic_array_delete(cfg->created_blocks, b);
+	dynamic_array_delete(&(cfg->created_blocks), b);
 
 	//Always return b's leader
 	return b->leader_statement;
@@ -144,12 +144,12 @@ static void remove_useless_moves(basic_block_t* function_entry_block){
  */
 static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
 	//Use a clone since we are mutating
-	dynamic_array_t* clone = clone_dynamic_array(empty_block->predecessors);
+	dynamic_array_t clone = clone_dynamic_array(&(empty_block->predecessors));
 
 	//For everything in the predecessor set of the empty block
-	for(u_int16_t _ = 0; _ < clone->current_index; _++){
+	for(u_int16_t _ = 0; _ < clone.current_index; _++){
 		//Grab a given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(clone, _);
+		basic_block_t* predecessor = dynamic_array_get_at(&clone, _);
 
 		//The empty block is no longer a successor of this predecessor
 		delete_successor(predecessor, empty_block);
@@ -160,9 +160,9 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 		if(predecessor->jump_table != NULL){
 			for(u_int16_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
 				//If this equals the other node, we'll need to replace it
-				if(dynamic_array_get_at(predecessor->jump_table->nodes, idx) == empty_block){
+				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), idx) == empty_block){
 					//This now points to the replacement
-					dynamic_array_set_at(predecessor->jump_table->nodes, replacement, idx);
+					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, idx);
 
 					//The replacement is now a successor of this predecessor
 					add_successor(predecessor, replacement);
@@ -218,7 +218,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 	delete_successor(empty_block, replacement);
 
 	//Destroy the clone array
-	dynamic_array_dealloc(clone);
+	dynamic_array_dealloc(&clone);
 }
 
 
@@ -343,7 +343,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 				replace_all_branch_targets(current, jumping_to_block);
 
 				//Current is no longer in the picture
-				dynamic_array_delete(cfg->created_blocks, current);
+				dynamic_array_delete(&(cfg->created_blocks), current);
 
 				//Counts as a change
 				changed = TRUE;
@@ -356,7 +356,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			 * If j only has one predecessor then
 			 * 	merge i and j
 			 */
-			if(jumping_to_block->predecessors->current_index == 1){
+			if(jumping_to_block->predecessors.current_index == 1){
 				//Delete the jump statement because it's now useless
 				delete_statement(current->exit_statement);
 
@@ -397,7 +397,7 @@ static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
 	u_int8_t changed;
 
 	//The postorder traversal array
-	dynamic_array_t* postorder;
+	dynamic_array_t postorder;
 
 	//Now we'll do the actual clean algorithm
 	do {
@@ -405,10 +405,10 @@ static void condense(cfg_t* cfg, basic_block_t* function_entry_block){
 		postorder = compute_post_order_traversal(function_entry_block);
 
 		//Call onepass() for the reduction
-		changed = branch_reduce_postprocess(cfg, postorder);
+		changed = branch_reduce_postprocess(cfg, &postorder);
 
 		//We can free up the old postorder now
-		dynamic_array_dealloc(postorder);
+		dynamic_array_dealloc(&postorder);
 		
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
@@ -481,12 +481,12 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 		}
 
 		//Now we'll go through each of the successors in this node
-		for(u_int16_t idx = 0; current->successors != NULL && idx < current->successors->current_index; idx++){
+		for(u_int16_t idx = 0; idx < current->successors.current_index; idx++){
 			//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
 			//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
 
 			//Grab the successor
-			basic_block_t* successor = dynamic_array_get_at(current->successors, idx);
+			basic_block_t* successor = dynamic_array_get_at(&(current->successors), idx);
 
 			//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
 			if(successor == direct_end_jump){
@@ -521,9 +521,9 @@ static void reorder_blocks(basic_block_t* function_entry_block){
  */
 void postprocess(cfg_t* cfg){
 	//Run through every function block here separately
-	for(u_int16_t i = 0 ; i < cfg->function_entry_blocks->current_index; i++){
+	for(u_int16_t i = 0 ; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the given function block
-		basic_block_t* function_entry_block = dynamic_array_get_at(cfg->function_entry_blocks, i);
+		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		/**
 		 * PASS 1: remove any/all useless move operations from the CFG
