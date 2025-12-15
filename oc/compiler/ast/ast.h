@@ -200,6 +200,13 @@ void multiply_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_nod
 void divide_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 
 /**
+ * Emit the modulo of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 % constant2
+ */
+void mod_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
  * Emit the sum of two given constants. The result will overwrite the first constant given
  *
  * The result will be: constant1 = constant1 + constant2
