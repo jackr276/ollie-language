@@ -5,7 +5,6 @@
 
 //Link to AST
 #include "ast.h"
-#include <memory>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,6 +46,10 @@ void coerce_constant(generic_ast_node_t* constant_node){
 		//expansion
 		case INT_CONST_FORCE_U:
 			switch(inferred_type->basic_type_token){
+				//It's already a U32 - so it's fine
+				case U32:
+					break;
+
 				case I32:
 					constant_node->constant_type = INT_CONST;
 					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_int_value;
@@ -68,24 +71,109 @@ void coerce_constant(generic_ast_node_t* constant_node){
 			}
 
 			break;
+
 		case INT_CONST:
-			constant_node->constant_value.signed_int_value = !(constant_node->constant_value.signed_int_value);
+			switch(inferred_type->basic_type_token){
+				//It's already a U32 - so it's fine
+				case I32:
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				default:
+					printf("Fatal internal compiler error: Impossible constant coercion discovered.\n");
+					exit(1);
+			}
+
 			break;
+
 		case LONG_CONST_FORCE_U:
-			constant_node->constant_value.unsigned_long_value = !(constant_node->constant_value.unsigned_long_value);
+			switch(inferred_type->basic_type_token){
+				//It's already a U64, so it's fine
+				case U64:
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				default:
+					printf("Fatal internal compiler error: Impossible constant coercion discovered.\n");
+					exit(1);
+			}
+
 			break;
+
 		case LONG_CONST:
-			constant_node->constant_value.signed_long_value = !(constant_node->constant_value.signed_long_value);
+			switch(inferred_type->basic_type_token){
+				//It's already an I64, so it's fine
+				case I64:
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				default:
+					printf("Fatal internal compiler error: Impossible constant coercion discovered.\n");
+					exit(1);
+			}
+
 			break;
+
 		case CHAR_CONST:
-			constant_node->constant_value.char_value = !(constant_node->constant_value.char_value);
+			switch(inferred_type->basic_type_token){
+				//It's already a char, so it's fine
+				case CHAR:
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.char_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.char_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.char_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.char_value;
+					break;
+
+				default:
+					printf("Fatal internal compiler error: Impossible constant coercion discovered.\n");
+					exit(1);
+			}
+
 			break;
+
 		//This should never happen
 		default:
-			return;
+			printf("Fatal internal compiler error: Unsupported constant type found in coercer.\n");
+			exit(1);
 	}
-
-
 }
 
 
