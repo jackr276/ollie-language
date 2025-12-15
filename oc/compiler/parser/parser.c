@@ -2920,6 +2920,10 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 	generic_type_t* return_type;
 	//In case we need it for the pointer math
 	symtab_variable_record_t* variable = NULL;
+	//Is the temp holder a constant node?
+	u_int8_t temp_holder_is_constant = FALSE;
+	//Is the right child a constant node?
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid multiplicative expression
 	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl, side);
@@ -2942,6 +2946,9 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
+		//Cache the comparison here - we'll need it later
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+
 		//Let's see if this actually works
 		u_int8_t left_type_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 		
@@ -2960,6 +2967,9 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
+
+		//Cache the result - we'll need it for later
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this actually works
 		u_int8_t right_type_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
@@ -3002,11 +3012,26 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 		}
 
 		/**
+		 * For constant types, we need to perform type/storage
+		 * rememediation on the internal constant values based on 
+		 * what the return type is. We will do this now. Remember
+		 * that the inferred types of the constant nodes have already
+		 * been manipulated by the type coercer above
+		 */
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		/**
 		 * If we discover that the user is just trying to add/subtract two constants together, then we can do a preemptive
 		 * optimization by adding them together right now and just giving back a constant node. The node that we give back
 		 * will always
 		 */
-		if(temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT && right_child->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
 			//Go based on the token
 			switch(op.tok){
 				//Add the two constants
