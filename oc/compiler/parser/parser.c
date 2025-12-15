@@ -2781,15 +2781,6 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
-
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
-
 		//Now we have no choice but to see a valid cast expression again
 		right_child = cast_expression(fl, side);
 
@@ -2797,6 +2788,16 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
+		}
+
+		//We are able to detect here if the user is trying to divide or
+		//mod by 0. If they are, then we fail out here
+		if((op.tok == F_SLASH || op.tok == MOD)
+			&& right_child->ast_node_type == AST_NODE_TYPE_CONSTANT
+			&& right_child->constant_value.signed_long_value == 0){
+
+			//Hard fail, we leave if this happens
+			return print_and_return_error("Attempt to divide by 0", parser_line_num);
 		}
 
 		//Let's see if this is a valid type or not
@@ -2817,7 +2818,14 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//TODO - divide by zero check when we're dealing with constants - needs to be tested too
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
