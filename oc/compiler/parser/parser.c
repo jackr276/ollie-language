@@ -2790,14 +2790,22 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return right_child;
 		}
 
-		//We are able to detect here if the user is trying to divide or
-		//mod by 0. If they are, then we fail out here
-		if((op.tok == F_SLASH || op.tok == MOD)
-			&& right_child->ast_node_type == AST_NODE_TYPE_CONSTANT
+		//If we have a 0 in the right hand child, and we're trying
+		//to divide or mod, that would cause errors so we will catch it now
+		if(right_child->ast_node_type == AST_NODE_TYPE_CONSTANT
 			&& right_child->constant_value.signed_long_value == 0){
-
-			//Hard fail, we leave if this happens
-			return print_and_return_error("Attempt to divide by 0", parser_line_num);
+			//Go based on the operator
+			switch(op.tok){
+				//Hard fail case, can't divide by 0
+				case F_SLASH:
+					return print_and_return_error("Attempt to divide by 0", parser_line_num);
+				//Hard fail case, can't mod by 0
+				case MOD:
+					return print_and_return_error("Attempt to modulo by 0", parser_line_num);
+				//Anything else(the * operation) is just fine
+				default:
+					break;
+			}
 		}
 
 		//Let's see if this is a valid type or not
