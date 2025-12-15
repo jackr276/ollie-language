@@ -2826,16 +2826,56 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		/**
+		 * If we discover that the user is just trying to add/subtract two constants together, then we can do a preemptive
+		 * optimization by adding them together right now and just giving back a constant node. The node that we give back
+		 * will always
+		 */
+		if(temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT && right_child->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//Go based on the token
+			switch(op.tok){
+				case STAR:
+					//Multiply, result is in temp holder
+					multiply_constant_nodes(temp_holder, right_child);
+					break;
+
+				case F_SLASH:
+					//Divide, result is in temp holder
+					divide_constant_nodes(temp_holder, right_child);
+					break;
+
+				case MOD:
+					//Modulo, result is in temp holder
+					mod_constant_nodes(temp_holder, right_child);
+					break;
+
+				//Unreachable
+				default:
+					break;
+			}
+
+			//The right child is now useless, so we can scrap it. The temp holder is the sub-tree-root
+			sub_tree_root = temp_holder;
+
+			//The root's type is now the inferred type
+			sub_tree_root->inferred_type = return_type;
+
+			//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+			//"sub-tree root". We'll now refresh the token to keep looking
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			
+			//Skip forward
+			continue;
+		}
+
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		//Add these both in in order
 		add_child_node(sub_tree_root, temp_holder);
-
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
 		//Assign the node type
@@ -2987,6 +3027,9 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 
 			//The right child is now useless, so we can scrap it. The temp holder is the sub-tree-root
 			sub_tree_root = temp_holder;
+
+			//Update the type appropriately
+			sub_tree_root->inferred_type = return_type;
 
 			//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 			//"sub-tree root". We'll now refresh the token to keep looking
