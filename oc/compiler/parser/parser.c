@@ -2817,6 +2817,8 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//TODO - divide by zero check when we're dealing with constants - needs to be tested too
+
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 
