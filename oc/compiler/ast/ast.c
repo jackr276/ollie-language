@@ -5,7 +5,9 @@
 
 //Link to AST
 #include "ast.h"
+#include <memory>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -19,6 +21,71 @@ static dynamic_array_t created_nodes;
  */
 void initialize_ast_system(){
 	created_nodes = dynamic_array_alloc();
+}
+
+/**
+ * Coerce a constant node's value to fit the value of it's "inferred type". This should be used after
+ * we've done some constant operations inside of the parser that may require us to update the internal
+ * constant type
+ *
+ * It is assumed that the caller has already set the "inferred type" to be what we're coercing to
+ */
+void coerce_constant(generic_ast_node_t* constant_node){
+	//We have an inferred type here
+	generic_type_t* inferred_type = dealias_type(constant_node->inferred_type);
+
+	//If it's not a basic type then something went very wrong
+	if(inferred_type->type_class != TYPE_CLASS_BASIC){
+		printf("Fatal internal compiler error. Constant with a non-basic raw type discovered\n");
+		exit(1);
+	}
+
+	//Go based on the original type
+	switch(constant_node->constant_type){
+		//Now in here, we'll go based on the basic type of what our inferred
+		//type is and perform a move operation(just reassignment) to have the appropriate
+		//expansion
+		case INT_CONST_FORCE_U:
+			switch(inferred_type->basic_type_token){
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				default:
+					printf("Fatal internal compiler error: Impossible constant coercion discovered.\n");
+					exit(1);
+			}
+
+			break;
+		case INT_CONST:
+			constant_node->constant_value.signed_int_value = !(constant_node->constant_value.signed_int_value);
+			break;
+		case LONG_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_long_value = !(constant_node->constant_value.unsigned_long_value);
+			break;
+		case LONG_CONST:
+			constant_node->constant_value.signed_long_value = !(constant_node->constant_value.signed_long_value);
+			break;
+		case CHAR_CONST:
+			constant_node->constant_value.char_value = !(constant_node->constant_value.char_value);
+			break;
+		//This should never happen
+		default:
+			return;
+	}
+
+
 }
 
 

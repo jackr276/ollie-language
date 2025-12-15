@@ -221,6 +221,13 @@ void add_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* 
 void subtract_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 
 /**
+ * Coerce a constant node's value to fit the value of it's "inferred type". This should be used after
+ * we've done some constant operations inside of the parser that may require us to update the internal
+ * constant type
+ */
+void coerce_constant(generic_ast_node_t* constant_node);
+
+/**
  * A utility function for node duplication
  */
 generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side);
