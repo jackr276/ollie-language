@@ -458,6 +458,23 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 		return print_and_return_error("Void pointers cannot be added or subtracted to", parser_line_num);
 	}
 
+	//An efficiency enhancement here - if the operand itself is a constant, we can just generate
+	//the constant directly and skip all of the extra allocation that we're working with
+	//below
+	if(operand->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		//The type is always an i64
+		operand->inferred_type = immut_i64;
+		
+		//Coerce the operand
+		coerce_constant(operand);
+
+		//Multiply it by the size
+		operand->constant_value.signed_long_value *= pointer_type->internal_types.points_to->type_size;
+
+		//And we're done, just give back the value
+		return operand;
+	}
+
 	//Write out our constant multplicand
 	generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 	//Mark the type too

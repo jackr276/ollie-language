@@ -35,7 +35,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 	//If it's not a basic type then something went very wrong
 	if(inferred_type->type_class != TYPE_CLASS_BASIC){
-		printf("Fatal internal compiler error. Constant with a non-basic raw type discovered\n");
+		printf("Fatal internal compiler error. Constant with a non-basic raw type of %s discovered\n", inferred_type->type_name.string);
 		exit(1);
 	}
 
