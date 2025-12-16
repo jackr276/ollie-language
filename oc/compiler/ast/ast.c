@@ -153,6 +153,43 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 
 /**
+ * Is the value of an ast_constant_node 0? Returns true if yes and false
+ * if not
+ */
+u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node){
+	//Switch based on the value here
+	switch(constant_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+			return constant_node->constant_value.unsigned_int_value == 0 ? TRUE : FALSE;
+			
+		case INT_CONST:
+			return constant_node->constant_value.signed_int_value == 0 ? TRUE : FALSE;
+
+		case LONG_CONST_FORCE_U:
+			return constant_node->constant_value.unsigned_long_value == 0 ? TRUE : FALSE;
+
+		case LONG_CONST:
+			return constant_node->constant_value.signed_long_value == 0 ? TRUE : FALSE;
+
+		case FLOAT_CONST:
+			return constant_node->constant_value.float_value == 0 ? TRUE : FALSE;
+
+		case DOUBLE_CONST:
+			return constant_node->constant_value.double_value == 0 ? TRUE : FALSE;
+
+		case CHAR_CONST:
+			return constant_node->constant_value.char_value == 0 ? TRUE : FALSE;
+
+		//In normal operation we should never end up here
+		default:
+			printf("Fatal internal compiler error: Attempt to determine whether a non-nullable constant is 0\n");
+			exit(1);
+	}
+}
+
+
+/**
  * This helper function negates a constant node's value
  */
 void negate_constant_value(generic_ast_node_t* constant_node){
