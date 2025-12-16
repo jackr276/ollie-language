@@ -3721,6 +3721,9 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Store whether or not the right child is a constant
+		is_right_child_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+
 		//Apply the compatibility and coercion layer
 		generic_type_t* final_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), CARROT);
 
@@ -3741,8 +3744,19 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 			coerce_constant(right_child);
 		}
 
-		//TODO we need an actual helper method for bitwise or, we can't just use the hack trick like
-		//we did for logical and/or
+		//If these are both constants, we can take a shortcut and do the bitwise or
+		//right here
+		if(is_temp_holder_constant == TRUE && is_right_child_constant == TRUE){
+			//Invoke the helper to do this, the result is stored in the temp_holder
+			bitwise_or_constant_nodes(temp_holder, right_child);
+
+			//This is the root now
+			sub_tree_root = temp_holder;
+
+			//And push ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
 
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
