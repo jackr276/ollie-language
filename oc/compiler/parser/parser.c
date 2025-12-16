@@ -3957,14 +3957,9 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 		}
 
 		/**
-		 * Logical or expressions are a unqiue case. We are actually able to get a result
-		 * if only one of them is a constant
-		 * Recall that:
-		 * 	anything || <non-zero> = 1
-		 *
-		 * So, if we have just 1 constant and it's *not* 0, we can make the whole thing 1
-		 * Additionally, if we have 2 constants, we can just logical or them and be done
-		 *
+		 * We will not do any simplification here immediately because the user may still
+		 * want part of their logical or expression to execute. We will only do simplification
+		 * here if both areas are constants
 		 */
 		//If we have 2 constants we should just do this right now. The result will be in the temp holder,
 		//and the right child will not be used
@@ -3982,19 +3977,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			//And push ahead
 			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 			continue;
-
-		/**
-		 * Another case here - if the temp holder is not constant but the right child
-		 * is - we still have an opportunity to simplify
-		 */
-		} else if(temp_holder_is_constant == FALSE && right_child_is_constant == TRUE){
-
-		/**
-		 * Final case before we just do it the standard way - if the temp holder is constant and
-		 * the right child isn't, we can still simplify
-		 */
-		} else if(temp_holder_is_constant == TRUE && right_child_is_constant == FALSE){
-
 		}
 
 		//We now need to make an operator node
