@@ -369,13 +369,19 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 	//Switch based on the type
 	switch(constant->const_type){
 		case INT_CONST:
+			constant->constant_value.signed_integer_constant = log2_of_known_power_of_2(constant->constant_value.signed_integer_constant);
+			break;
+
 		case INT_CONST_FORCE_U:
-			constant->constant_value.integer_constant = log2_of_known_power_of_2(constant->constant_value.integer_constant);
+			constant->constant_value.unsigned_integer_constant = log2_of_known_power_of_2(constant->constant_value.unsigned_integer_constant);
 			break;
 
 		case LONG_CONST:
+			constant->constant_value.signed_long_constant = log2_of_known_power_of_2(constant->constant_value.signed_long_constant);
+			break;
+
 		case LONG_CONST_FORCE_U:
-			constant->constant_value.long_constant = log2_of_known_power_of_2(constant->constant_value.long_constant);
+			constant->constant_value.unsigned_long_constant = log2_of_known_power_of_2(constant->constant_value.unsigned_long_constant);
 			break;
 
 		case CHAR_CONST:
@@ -1122,7 +1128,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			three_addr_const_t* constant = window->instruction1->op1_const;
 
 			//We can just use the long version here
-			address_offset *= constant->constant_value.long_constant;
+			address_offset *= constant->constant_value.signed_long_constant;
 
 			//Once we've done this, the address offset is now properly multiplied. We'll reuse
 			//the constant from operation one, and convert the lea statement into a BIN_OP_WITH_CONST
@@ -1132,7 +1138,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			constant->const_type = LONG_CONST;
 
 			//Set this to be the address offset
-			constant->constant_value.long_constant = address_offset;
+			constant->constant_value.signed_long_constant = address_offset;
 
 			//Add it into instruction 2
 			window->instruction2->op1_const = constant;
@@ -1374,7 +1380,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			}
 
 			//Set the constant's value to 1
-			current_instruction->op1_const->constant_value.long_constant = 1;
+			current_instruction->op1_const->constant_value.signed_long_constant = 1;
 		}
 
 		//We changed something
@@ -1567,7 +1573,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 						//We can modify op1 const to just be 0 now. This is lazy but it
 						//works, we'll just 0 out all 64 bits
-						current_instruction->op1_const->constant_value.long_constant = 0;
+						current_instruction->op1_const->constant_value.signed_long_constant = 0;
 
 						//We changed something
 						changed = TRUE;
@@ -4553,7 +4559,7 @@ static void handle_two_instruction_multiply_load_with_variable_offset(instructio
 	load_instruction->address_calc_reg2 = address_calc_reg2;
 
 	//The multiplicator comes from the constant multiplication
-	load_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
+	load_instruction->lea_multiplicator = multiply->op1_const->constant_value.signed_long_constant;
 
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
@@ -4593,7 +4599,7 @@ static void handle_two_instruction_multiply_store_with_variable_offset(instructi
 	store_instruction->address_calc_reg2 = address_calc_reg2;
 
 	//The multiplicator comes from the constant multiplication
-	store_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
+	store_instruction->lea_multiplicator = multiply->op1_const->constant_value.signed_long_constant;
 	
 	//Invoke the helper here
 	handle_store_instruction_sources_and_instruction_type(store_instruction);
@@ -5000,7 +5006,7 @@ static void handle_three_instruction_load_with_address_calculation_operation(ins
 	//The op2 comes from the lea statement
 	load_with_variable_offset->address_calc_reg2 = address_calc_reg2;
 	//The multiplicator comes from the constant(we know it's a power of 2 by the time we get here)
-	load_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.long_constant;
+	load_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.signed_long_constant;
 
 	//The offset on the outside comes from the constant assignment
 	load_with_variable_offset->offset = addition->op1_const;
@@ -5052,7 +5058,7 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
 	//The op2 comes from the lea statement
 	store_with_variable_offset->address_calc_reg2 = address_calc_reg2;
 	//The multiplicator comes from the multiplication
-	store_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.long_constant;
+	store_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.signed_long_constant;
 
 	//This comes from the addition
 	store_with_variable_offset->offset = addition->op1_const;

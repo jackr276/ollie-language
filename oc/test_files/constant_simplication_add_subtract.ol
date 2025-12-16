@@ -14,6 +14,10 @@ pub fn add_type_size() -> i64{
 	ret 2 + typesize(custom_struct);
 }
 
+pub fn expanding_constant_size() -> i64{
+	ret 3 + 3;
+}
+
 //Subtracting with typesize, should be just one number
 pub fn sub_type_size() -> i32 {
 	//Should be a negative
