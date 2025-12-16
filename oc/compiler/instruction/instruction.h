@@ -174,10 +174,12 @@ struct three_addr_const_t{
 	//Store the constant value in a union
 	union {
 		symtab_function_record_t* function_name;
-		int64_t long_constant;
+		int64_t signed_long_constant;
+		u_int64_t unsigned_long_constant;
 		double double_constant;
 		float float_constant;
-		int32_t integer_constant;
+		int32_t signed_integer_constant;
+		u_int32_t unsigned_integer_constant;
 		char char_constant;
 	} constant_value;
 	//What kind of constant is it

@@ -74,7 +74,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 		case INT_CONST:
 			switch(inferred_type->basic_type_token){
-				//It's already a U32 - so it's fine
+				//It's already an I32 - so it's fine
 				case I32:
 					break;
 
@@ -89,6 +89,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					break;
 
 				case U64:
+					printf("HERE\n");
 					constant_node->constant_type = LONG_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_int_value;
 					break;

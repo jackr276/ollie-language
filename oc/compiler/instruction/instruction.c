@@ -487,14 +487,14 @@ u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
-			if(constant->constant_value.integer_constant == 0){
+			if(constant->constant_value.unsigned_integer_constant == 0){
 				return TRUE;
 			}
 			return FALSE;
 
 		case LONG_CONST:
 		case LONG_CONST_FORCE_U:
-			if(constant->constant_value.long_constant == 0){
+			if(constant->constant_value.unsigned_long_constant == 0){
 				return TRUE;
 			}
 			return FALSE;
@@ -519,14 +519,14 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
-			if(constant->constant_value.integer_constant == 1){
+			if(constant->constant_value.unsigned_integer_constant == 1){
 				return TRUE;
 			}
 			return FALSE;
 
 		case LONG_CONST:
 		case LONG_CONST_FORCE_U:
-			if(constant->constant_value.long_constant == 1){
+			if(constant->constant_value.unsigned_long_constant == 1){
 				return TRUE;
 			}
 			return FALSE;
@@ -549,16 +549,16 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant){
 u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			return is_signed_power_of_2(constant->constant_value.integer_constant);
+			return is_signed_power_of_2(constant->constant_value.signed_integer_constant);
 
 		case INT_CONST_FORCE_U:
-			return is_unsigned_power_of_2(constant->constant_value.integer_constant);
+			return is_unsigned_power_of_2(constant->constant_value.unsigned_integer_constant);
 
 		case LONG_CONST:
-			return is_signed_power_of_2(constant->constant_value.long_constant);
+			return is_signed_power_of_2(constant->constant_value.signed_long_constant);
 
 		case LONG_CONST_FORCE_U:
-			return is_unsigned_power_of_2(constant->constant_value.long_constant);
+			return is_unsigned_power_of_2(constant->constant_value.unsigned_long_constant);
 
 		//Chars are always unsigned
 		case CHAR_CONST:
@@ -1340,7 +1340,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 				
 			//For a constant, we print the value out as a .long
 			case GLOBAL_VAR_INITIALIZER_CONSTANT:
-				fprintf(fl, "\t.long %ld\n", variable->initializer_value.constant_value->constant_value.long_constant);
+				fprintf(fl, "\t.long %ld\n", variable->initializer_value.constant_value->constant_value.signed_long_constant);
 				break;
 
 			//For an array, we loop through and print them all as constants in order
@@ -1354,7 +1354,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 					three_addr_const_t* constant_value = dynamic_array_get_at(&array_initializer_values, i);
 
 					//Emit the constant value here
-					fprintf(fl, "\t.long %ld\n", constant_value->constant_value.long_constant);
+					fprintf(fl, "\t.long %ld\n", constant_value->constant_value.signed_long_constant);
 				}
 
 				break;
@@ -1381,10 +1381,16 @@ void print_live_range(FILE* fl, live_range_t* live_range){
 static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			fprintf(fl, "%d", constant->constant_value.integer_constant);
+			fprintf(fl, "%d", constant->constant_value.signed_integer_constant);
+			break;
+		case INT_CONST_FORCE_U:
+			fprintf(fl, "%d", constant->constant_value.unsigned_integer_constant);
 			break;
 		case LONG_CONST:
-			fprintf(fl, "%ld", constant->constant_value.long_constant);
+			fprintf(fl, "%ld", constant->constant_value.signed_long_constant);
+			break;
+		case LONG_CONST_FORCE_U:
+			fprintf(fl, "%ld", constant->constant_value.unsigned_long_constant);
 			break;
 		case CHAR_CONST:
 			//Special case here to for display reasons
@@ -1959,10 +1965,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			fprintf(fl, "$%d", constant->constant_value.integer_constant);
+			fprintf(fl, "$%d", constant->constant_value.signed_integer_constant);
+			break;
+		case INT_CONST_FORCE_U:
+			fprintf(fl, "$%d", constant->constant_value.unsigned_integer_constant);
 			break;
 		case LONG_CONST:
-			fprintf(fl, "$%ld", constant->constant_value.long_constant);
+			fprintf(fl, "$%ld", constant->constant_value.signed_long_constant);
+			break;
+		case LONG_CONST_FORCE_U:
+			fprintf(fl, "$%ld", constant->constant_value.unsigned_long_constant);
 			break;
 		case CHAR_CONST:
 			fprintf(fl, "$%d", constant->constant_value.char_constant);
@@ -1994,13 +2006,23 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			if(constant->constant_value.integer_constant != 0){
-				fprintf(fl, "%d", constant->constant_value.integer_constant);
+			if(constant->constant_value.signed_integer_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.signed_integer_constant);
+			}
+			break;
+		case INT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_integer_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.unsigned_integer_constant);
 			}
 			break;
 		case LONG_CONST:
-			if(constant->constant_value.long_constant != 0){
-				fprintf(fl, "%ld", constant->constant_value.long_constant);
+			if(constant->constant_value.signed_long_constant != 0){
+				fprintf(fl, "%ld", constant->constant_value.signed_long_constant);
+			}
+			break;
+		case LONG_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_long_constant != 0){
+				fprintf(fl, "%ld", constant->constant_value.unsigned_long_constant);
 			}
 			break;
 		case CHAR_CONST:
@@ -3638,10 +3660,10 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 			constant->constant_value.char_constant = const_node->constant_value.char_value;
 			break;
 		case INT_CONST:
-			constant->constant_value.integer_constant = const_node->constant_value.signed_int_value;
+			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
 			break;
 		case INT_CONST_FORCE_U:
-			constant->constant_value.integer_constant = const_node->constant_value.unsigned_int_value;
+			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
 			break;
 		case FLOAT_CONST:
 			constant->constant_value.float_constant = const_node->constant_value.float_value;
@@ -3653,10 +3675,10 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 			fprintf(stderr, "String constants may not be emitted directly\n");
 			exit(0);
 		case LONG_CONST:
-			constant->constant_value.long_constant = const_node->constant_value.signed_long_value;
+			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
 			break;
 		case LONG_CONST_FORCE_U:
-			constant->constant_value.long_constant = const_node->constant_value.unsigned_long_value;
+			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
 			break;
 
 			
@@ -4210,18 +4232,24 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 	
 	switch(basic_type_token){
 		case I64:
-		case U64:
 			constant->const_type = LONG_CONST;
-			constant->constant_value.long_constant = value;
+			constant->constant_value.signed_long_constant = value;
+			break;
+		case U64:
+			constant->const_type = LONG_CONST_FORCE_U;
+			constant->constant_value.unsigned_long_constant = value;
 			break;
 		case I32:
-		case U32:
 		case I16:
-		case U16:
 		case I8:
-		case U8:
 			constant->const_type = INT_CONST;
-			constant->constant_value.integer_constant = value;
+			constant->constant_value.signed_integer_constant = value;
+			break;
+		case U32:
+		case U16:
+		case U8:
+			constant->const_type = INT_CONST_FORCE_U;
+			constant->constant_value.unsigned_integer_constant = value;
 			break;
 		case CHAR:
 			constant->const_type = CHAR_CONST;

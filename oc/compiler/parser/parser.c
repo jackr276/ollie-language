@@ -481,8 +481,8 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
 	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->internal_types.points_to->type_size;
-	//This one's type is always an immutable u64
-	constant_multiplicand->inferred_type = immut_u64; 
+	//This one's type is always an immutable i64
+	constant_multiplicand->inferred_type = immut_i64; 
 
 	//Allocate an adjustment node
 	generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
@@ -510,7 +510,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 
 	//These will all have the exact same types
 	return_node->variable = pointer->variable;
-	return_node->inferred_type = pointer->inferred_type;
+	return_node->inferred_type = immut_i64;
 
 	//Give back the final node
 	return return_node;
