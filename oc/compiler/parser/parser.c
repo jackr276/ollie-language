@@ -3847,6 +3847,29 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 			coerce_constant(right_child);
 		}
 
+		/**
+		 * We will not do any simplification here immediately because the user may still
+		 * want part of their logical and expression to execute. We will only do simplification
+		 * here if both areas are constants
+		 */
+		//If we have 2 constants we should just do this right now. The result will be in the temp holder,
+		//and the right child will not be used
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Get these values out now
+			u_int8_t temp_holder_0 = is_constant_node_value_0(temp_holder);
+			u_int8_t right_child_0 = is_constant_node_value_0(right_child);
+
+			//All that we need to do is this
+			temp_holder->constant_value.unsigned_long_value = !temp_holder_0 && !right_child_0;
+
+			//The new root is just the temp holder
+			sub_tree_root = temp_holder;
+			
+			//And push ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
+
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
