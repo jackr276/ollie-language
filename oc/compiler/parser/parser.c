@@ -2821,8 +2821,8 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 
 		//If we have a 0 in the right hand child, and we're trying
 		//to divide or mod, that would cause errors so we will catch it now
-		if(right_child_is_constant == TRUE
-			&& right_child->constant_value.signed_long_value == 0){
+		if(right_child_is_constant == TRUE 
+			&& is_constant_node_value_0(right_child) == TRUE){
 			//Go based on the operator
 			switch(op.tok){
 				//Hard fail case, can't divide by 0
@@ -3966,7 +3966,36 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 		 * Additionally, if we have 2 constants, we can just logical or them and be done
 		 *
 		 */
+		//If we have 2 constants we should just do this right now. The result will be in the temp holder,
+		//and the right child will not be used
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Get these values out now
+			u_int8_t temp_holder_0 = is_constant_node_value_0(temp_holder);
+			u_int8_t right_child_0 = is_constant_node_value_0(right_child);
 
+			//All that we need to do is this
+			temp_holder->constant_value.unsigned_long_value = !temp_holder_0 || !right_child_0;
+
+			//The new root is just the temp holder
+			sub_tree_root = temp_holder;
+			
+			//And push ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+
+		/**
+		 * Another case here - if the temp holder is not constant but the right child
+		 * is - we still have an opportunity to simplify
+		 */
+		} else if(temp_holder_is_constant == FALSE && right_child_is_constant == TRUE){
+
+		/**
+		 * Final case before we just do it the standard way - if the temp holder is constant and
+		 * the right child isn't, we can still simplify
+		 */
+		} else if(temp_holder_is_constant == TRUE && right_child_is_constant == FALSE){
+
+		}
 
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);

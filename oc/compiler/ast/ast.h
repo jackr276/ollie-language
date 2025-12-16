@@ -151,6 +151,12 @@ struct generic_ast_node_t{
 void initialize_ast_system();
 
 /**
+ * Is the value of an ast_constant_node 0? Returns true if yes and false
+ * if not
+ */
+u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node);
+
+/**
  * This helper function negates a constant node's value
  */
 void negate_constant_value(generic_ast_node_t* constant_node);
