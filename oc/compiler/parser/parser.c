@@ -3867,6 +3867,9 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
  * Otherwise, we return a type of whatever the first rule was. Logical or does not work on constructs, enums,
  * arrays and floats and void
  *
+ * This function will also attempt to do some preemptive optimization. For example, if the user does something
+ * like x || 3 , the result should be 1(true) off of the bat here
+ *
  * BNF Rule: <logical-or-expression> ::= <logical-and-expression>{||<logical-and-expression>}*
  */
 static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
@@ -3876,6 +3879,11 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Store these flags - we will populate them as we
+	//go through to see if we have constants. If we do,
+	//then some peemptive optimizations can happen
+	u_int8_t temp_holder_is_constant = FALSE;
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a logical and expression
 	generic_ast_node_t* sub_tree_root = logical_and_expression(fl, side);
@@ -3896,10 +3904,8 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+		//Store whether it is a constant or not
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this type is valid
 		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, DOUBLE_OR, SIDE_TYPE_LEFT);
@@ -3910,10 +3916,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
-
 		//Now we have no choice but to see a valid logical and expression again
 		right_child = logical_and_expression(fl, side);
 
@@ -3922,6 +3924,9 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			//It's already an error node, so allow it to propogate
 			return right_child;
 		}
+
+		//Store whether or not the right child is a constant
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this type is valid
 		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, DOUBLE_AND, SIDE_TYPE_RIGHT);
@@ -3932,9 +3937,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
-
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
 		generic_type_t* return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), DOUBLE_OR);
 
@@ -3943,6 +3945,37 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "||");
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Perform any needed constant coercion
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		/**
+		 * Logical or expressions are a unqiue case. We are actually able to get a result
+		 * if only one of them is a constant
+		 * Recall that:
+		 * 	anything || <non-zero> = 1
+		 *
+		 * So, if we have just 1 constant and it's *not* 0, we can make the whole thing 1
+		 * Additionally, if we have 2 constants, we can just logical or them and be done
+		 *
+		 */
+
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Add the children in order
+		add_child_node(sub_tree_root, temp_holder);
+		add_child_node(sub_tree_root, right_child);
 
 		//We now know that the subtree root has a type of u_int8(boolean)
 		sub_tree_root->inferred_type = return_type;
