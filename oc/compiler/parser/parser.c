@@ -2766,6 +2766,10 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 	generic_ast_node_t* right_child;
 	//Holding the return type
 	generic_type_t* return_type;
+	//Is the temp holder a constant node?
+	u_int8_t temp_holder_is_constant = FALSE;
+	//Is the right child a constant node?
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid cast expression expression
 	generic_ast_node_t* sub_tree_root = cast_expression(fl, side);
@@ -2789,6 +2793,9 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
+		//Store whether or not the temp holder is a constant for later processing
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE; 
+
 		//Let's see if this is a valid type or not
 		u_int8_t temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 
@@ -2807,9 +2814,14 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return right_child;
 		}
 
+		//Store whether or not the right child is a constant for later
+		//processing
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+
+
 		//If we have a 0 in the right hand child, and we're trying
 		//to divide or mod, that would cause errors so we will catch it now
-		if(right_child->ast_node_type == AST_NODE_TYPE_CONSTANT
+		if(right_child_is_constant == TRUE
 			&& right_child->constant_value.signed_long_value == 0){
 			//Go based on the operator
 			switch(op.tok){
@@ -2843,12 +2855,23 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//Now that we have the return type, we will perform type coercion based on whether or not each
+		//leaf node is a constant
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
 		/**
 		 * If we discover that the user is just trying to add/subtract two constants together, then we can do a preemptive
 		 * optimization by adding them together right now and just giving back a constant node. The node that we give back
 		 * will always
 		 */
-		if(temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT && right_child->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
 			//Go based on the token
 			switch(op.tok){
 				case STAR:
