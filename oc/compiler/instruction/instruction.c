@@ -4591,19 +4591,142 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
  * NOTE: The result is always stored in the first one
  */
 void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
-	//Handle our multiplications
-	if(constant1->const_type == INT_CONST){
-		if(constant2->const_type == INT_CONST){
-			constant1->constant_value.integer_constant += constant2->constant_value.integer_constant;
-		} else {
-			constant1->constant_value.integer_constant += constant2->constant_value.long_constant;
-		}
-	} else if(constant1->const_type == LONG_CONST){
-		if(constant2->const_type == INT_CONST){
-			constant1->constant_value.long_constant += constant2->constant_value.integer_constant;
-		} else {
-			constant1->constant_value.long_constant += constant2->constant_value.long_constant;
-		}
+	//Go based on the first one's type
+	switch(constant1->const_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_integer_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_integer_constant += constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant += constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_long_constant += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_long_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_long_constant += constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.char_constant += constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.char_constant += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.char_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.char_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.char_constant += constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant addtiion operation\n");
+			exit(1);
 	}
 }
 
@@ -4643,15 +4766,15 @@ void logical_or_constants(three_addr_const_t* constant1, three_addr_const_t* con
 	if(const_1_0 == TRUE){
 		/* 0 || (non-zero) = 1 */
 		if(const_2_0 == FALSE){
-			constant1->constant_value.long_constant = 1;
+			constant1->constant_value.unsigned_long_constant = 1;
 		/* 0 || 0 = 0 */
 		} else {
-			constant1->constant_value.long_constant = 0;
+			constant1->constant_value.unsigned_long_constant = 0;
 		}
 
 	//This is non-zero, the other one is irrelevant
 	} else {
-		constant1->constant_value.long_constant = 1;
+		constant1->constant_value.unsigned_long_constant = 1;
 	}
 }
 
@@ -4666,16 +4789,16 @@ void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* co
 
 	//If this one is 0, the other one's result is irrelevant
 	if(const_1_0 == TRUE){
-		constant1->constant_value.long_constant = 0;
+		constant1->constant_value.unsigned_long_constant = 0;
 
 	//Nonzero
 	} else {
 		/* (non-zero) && (non-zero) = 1 */
 		if(const_2_0 == FALSE){
-			constant1->constant_value.long_constant = 1;
+			constant1->constant_value.unsigned_long_constant = 1;
 		/* (non-zero) && 0 = 0 */
 		} else {
-			constant1->constant_value.long_constant = 0;
+			constant1->constant_value.unsigned_long_constant = 0;
 		}
 	}
 }
