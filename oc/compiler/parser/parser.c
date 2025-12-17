@@ -3642,6 +3642,8 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 			coerce_constant(right_child);
 		}
 
+		//TODO EXCLUSIVE OR RULE
+
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
