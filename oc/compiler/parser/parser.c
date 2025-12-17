@@ -8480,7 +8480,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
 			if(target_type->type_class != TYPE_CLASS_ARRAY){
-				sprintf(info, "Type %s is not an array and therefore may not be initialized with the [] syntax", target_type->type_name.string);
+				sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", target_type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				//Null signifies failure
 				return NULL;
