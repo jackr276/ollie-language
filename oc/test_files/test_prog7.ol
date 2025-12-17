@@ -14,10 +14,8 @@ fn saturating_add(x:i32, y:i32) -> i32{
 	//Find the regular sum
 	let sum:mut i32 = x + y;
 
-	let num_bits:mut i32 = typesize(i32);
-	
 	//For utility, get an int where we have 1000...000
-	let one_as_msb:mut i32 = 1 << (num_bits - 1);
+	let one_as_msb:mut i32 = 1 << (sizeof(x) - 1);
 
 	//If x y have the same sign, XORing will cause the MSB to be 0
 	//and inverting it will make it 1 if they do
@@ -28,9 +26,9 @@ fn saturating_add(x:i32, y:i32) -> i32{
 
 	let x_sum_different_sign:mut i32 = x ^ sum;
 
-	let was_overflow:i32 = (x_y_same_sign & x_sum_different_sign) >> (num_bits - 1);
+	let was_overflow:i32 = (x_y_same_sign & x_sum_different_sign) >> (sizeof(x) - 1);
 
-	let maxint_or_minint:i32 = one_as_msb ^ (sum >> (num_bits -1));
+	let maxint_or_minint:i32 = one_as_msb ^ (sum >> (sizeof(x) -1));
 
 	ret (~was_overflow & sum) + (was_overflow & maxint_or_minint);
 }
