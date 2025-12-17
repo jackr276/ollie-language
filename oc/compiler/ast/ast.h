@@ -234,6 +234,13 @@ void subtract_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_nod
 void bitwise_or_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 
 /**
+ * Emit the bitwise and of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 & constant2
+ */
+void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
  * Coerce a constant node's value to fit the value of it's "inferred type". This should be used after
  * we've done some constant operations inside of the parser that may require us to update the internal
  * constant type
