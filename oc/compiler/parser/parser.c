@@ -3642,7 +3642,19 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 			coerce_constant(right_child);
 		}
 
-		//TODO EXCLUSIVE OR RULE
+		//If they are both constants, then we should invoke the helper to do this on the spot
+		//and avoid the allocation of any new node altogether
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Bitwise xor them - the result is in the constant node itself
+			bitwise_exclusive_or_constant_nodes(temp_holder, right_child);
+
+			//This is the root now
+			sub_tree_root = temp_holder;
+
+			//And push ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
 
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
