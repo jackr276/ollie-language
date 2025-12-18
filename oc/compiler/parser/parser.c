@@ -3445,7 +3445,29 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			coerce_constant(right_child);
 		}
 
-		//TODO NEED A SIMPLIFIER RULE
+		//If these are both constants, then we can invoke the appropriate simplifier
+		//rule to deal with them
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Perform the operation appropriately
+			switch(op.tok){
+				case NOT_EQUALS:
+					not_equals_constants_nodes(temp_holder, right_child);
+					break;
+				case EQUALS:
+					equals_constants_nodes(temp_holder, right_child);
+					break;
+				//Should be completely unreachable
+				default:
+					break;
+			}
+
+			//The temp holder is now the subtree-root
+			sub_tree_root = temp_holder;
+
+			//Refresh the lookahead and skip ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
 
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
