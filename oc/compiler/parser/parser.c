@@ -3541,7 +3541,19 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 			coerce_constant(right_child);
 		}
 
-		//TODO ADD ALL HANDLING FOR THE SIMPLIFIER
+		//If these are both constants, we can invoke the simplifier here
+		//to turn them into one node, and skip all of the extra allocation
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Invoke the helper. The result will be stored in the temp holder
+			bitwise_and_constant_nodes(temp_holder, right_child);
+
+			//This now is the subtree root going forward. The right child is irrelevant
+			sub_tree_root = temp_holder;
+
+			//Refresh the lookahead and continue
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
 
 		//We now need to make an operator node
 		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
