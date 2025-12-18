@@ -3451,10 +3451,10 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			//Perform the operation appropriately
 			switch(op.tok){
 				case NOT_EQUALS:
-					not_equals_constants_nodes(temp_holder, right_child);
+					not_equals_constant_nodes(temp_holder, right_child);
 					break;
 				case DOUBLE_EQUALS:
-					equals_constants_nodes(temp_holder, right_child);
+					equals_constant_nodes(temp_holder, right_child);
 					break;
 				//Should be completely unreachable
 				default:

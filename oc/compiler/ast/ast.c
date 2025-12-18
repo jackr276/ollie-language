@@ -1533,7 +1533,7 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
  *
  * NOTE: Whenever casting has to happen here, remember that unsigned always wins in the signedness department
  */
-void not_equals_constants_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+void not_equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
 	//Go based on the first one's type
 	switch(constant_node1->constant_type){
 		case INT_CONST_FORCE_U:
@@ -1681,7 +1681,7 @@ void not_equals_constants_nodes(generic_ast_node_t* constant_node1, generic_ast_
  *
  * NOTE: when we have unsigned compared with signed, remember that the unsigned one always wins out in the type converter
  */
-void equals_constants_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+void equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
 	//Go based on the first one's type
 	switch(constant_node1->constant_type){
 		case INT_CONST_FORCE_U:
