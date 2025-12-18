@@ -2820,6 +2820,11 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 /**
  * Handle a cmp operation. This is used whenever we have
  * relational operation
+ *
+ *
+ * TODO This NEEDS to handle cases like x == y && y == z by emitting
+ * the actual results when needed. Currently it does not and this is causing
+ * segfaults
  */
 static void handle_cmp_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat

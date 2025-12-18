@@ -291,6 +291,13 @@ void equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_
  */
 void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 
+/**
+ * Emit the >= of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 >= constant1 > constant2
+ */
+void greater_than_or_equal_to_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
 // ================================= End in-flight constant simplification subystem ========================================
 
 /**
