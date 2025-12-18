@@ -3365,6 +3365,11 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Holder for the return type
+	generic_type_t* return_type;
+	//Flags for whether or not both of these is constant
+	u_int8_t temp_holder_is_constant = FALSE;
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid relational expression
 	generic_ast_node_t* sub_tree_root = relational_expression(fl, side);
@@ -3388,10 +3393,8 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+		//Store the flag now
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's check to see if this is valid
 		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
@@ -3402,10 +3405,6 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
-
 		//Now we have no choice but to see a valid relational expression again
 		right_child = relational_expression(fl, side);
 
@@ -3414,6 +3413,9 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
+
+		//Set the flag now
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's check to see if this is valid
 		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
@@ -3424,17 +3426,39 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
-
-		//The return type is always a u8
-		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		//Get the return type and perform any needed coercions
+		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//If either of these are constants, we will invoke the constant coercer here
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		//TODO NEED A SIMPLIFIER RULE
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Add both child nodes in order only now that we know everything is valid
+		add_child_node(sub_tree_root, temp_holder);
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		//Store the return type
+		sub_tree_root->inferred_type = return_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
