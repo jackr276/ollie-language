@@ -3453,7 +3453,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 				case NOT_EQUALS:
 					not_equals_constants_nodes(temp_holder, right_child);
 					break;
-				case EQUALS:
+				case DOUBLE_EQUALS:
 					equals_constants_nodes(temp_holder, right_child);
 					break;
 				//Should be completely unreachable
