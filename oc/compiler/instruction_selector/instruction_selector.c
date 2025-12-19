@@ -2815,7 +2815,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
  * Handle a cmp operation. This is used whenever we have
  * relational operation
  */
-static void handle_cmp_instruction(instruction_t* instruction){
+static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(instruction->op1->type);
 
@@ -5079,6 +5079,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
+		//This is where the issue is, we need to handle relational operations in a different way
+
 		//Set the comparison and assignment instructions
 		instruction_t* comparison = window->instruction1;
 		instruction_t* assignment = window->instruction2;
@@ -5696,7 +5698,35 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
-			handle_binary_operation_instruction(instruction);
+			/**
+			 * Some comparison instructions need us to set the
+			 * value of them after the fact, while others don't
+			 * (think ones that are relied on by branches). So, we will
+			 * invoke a special rule for relational and equality operators
+			 * to handle these special cases
+			 */
+			switch(instruction->op){
+				case DOUBLE_EQUALS:
+				case NOT_EQUALS:
+				case G_THAN:
+				case G_THAN_OR_EQ:
+				case L_THAN:
+				case L_THAN_OR_EQ:
+					//This helper does all of the heavy lifting
+					instruction = handle_cmp_instruction(instruction);
+
+					//Rebuild the window based on this
+					reconstruct_window(window, instruction);
+
+					break;
+
+				//All other cases - just handle the instruction
+				//normally
+				default:
+					handle_binary_operation_instruction(instruction);
+					break;
+			}
+
 			break;
 		//For a phi function, we perform an exact 1:1 mapping
 		case THREE_ADDR_CODE_PHI_FUNC:
