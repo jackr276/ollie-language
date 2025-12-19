@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -3866,11 +3867,47 @@ static void handle_logical_or_instruction(instruction_window_t* window){
  * in this case
  */
 static void handle_logical_and_instruction(instruction_window_t* window){
+	//These operands - did they already come from a setX instruction
+	//or not? An example would be if we're doing something like x > y && y < z.
+	//Both of these operations res
+	u_int8_t op1_came_from_setX = FALSE;
+	u_int8_t op2_came_from_setX = FALSE;
+
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
 	//Preserve this for ourselves
 	instruction_t* after_logical_and = logical_and->next_statement;
+
+	//Grab a cursor to see where the operands came from
+	instruction_t* cursor = logical_and->previous_statement;
+
+	//Crawl back through the block to try and see if we can tell
+	//where these all came from
+	while(cursor != NULL){
+		//Did we find where op1 got assigned?
+		if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
+			if(is_operator_relational_operator(cursor->op) == TRUE){
+				op1_came_from_setX = TRUE;
+			}
+
+		} else if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
+			if(is_operator_relational_operator(cursor->op) == TRUE){
+				op2_came_from_setX = TRUE;
+			}
+		}
+
+		//Push it back
+		cursor = cursor->previous_statement;
+	}
+
+	if(op1_came_from_setX == TRUE){
+		printf("CAME FROM SETX\n");
+	}
+
+	if(op2_came_from_setX == TRUE){
+		printf("CAME FROM SETX\n");
+	}
 
 	//Let's first emit our test instruction
 	instruction_t* first_test = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
