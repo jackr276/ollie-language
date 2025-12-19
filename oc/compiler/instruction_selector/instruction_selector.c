@@ -2813,7 +2813,13 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 
 /**
  * Handle a cmp operation. This is used whenever we have
- * relational operation
+ * relational operation.
+ *
+ * All comparison instructions have a symbolic assignee created. The question
+ * of whether or not to use the assignee needs to be determined here, since
+ * the actual cmpX instruction does not naturally produce and output, it just
+ * sets flags. We have custom logic in this block do determine whether or not 
+ * that flag setting is needed
  */
 static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	//Determine what our size is off the bat
@@ -2852,6 +2858,42 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 		//Otherwise we use an immediate value
 		instruction->source_immediate = instruction->op1_const;
 	}
+
+		//This is where the issue is, we need to handle relational operations in a different way
+
+		//Set the comparison and assignment instructions
+		instruction_t* comparison = window->instruction1;
+		instruction_t* assignment = window->instruction2;
+
+		//Handle the comparison operation here
+		handle_cmp_instruction(comparison);
+
+		//We will determine the type signedness *based* on how the op1 is. We don't want to use the assignee, because the assignee for a comparison will nearly
+		//always be unsigned
+		u_int8_t type_signed = is_type_signed(assignment->op1->type);
+
+		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction
+		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(u8), comparison->op1, type_signed);
+
+		//We now also need to modify the move instruction. We can do this without creating any new memory
+		variable_size_t destination_size = get_type_size(assignment->assignee->type);
+		variable_size_t source_size = get_type_size(set_instruction->destination_register->type);
+		u_int8_t destination_signed = is_type_signed(assignment->assignee->type);
+
+		assignment->instruction_type = select_move_instruction(destination_size, source_size, destination_signed);
+		//Assignee and destination are the same
+		assignment->destination_register = assignment->assignee;
+		//The source is now this set instruction's destination
+		assignment->source_register = set_instruction->destination_register;
+
+		//Now once we have the set instruction, we need to insert it between 1 and 2
+		insert_instruction_before_given(set_instruction, assignment);
+
+		//Reconstruct the window here, starting at the end
+		reconstruct_window(window, assignment);
+
+
+
 }
 
 
@@ -5069,51 +5111,6 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
 static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
-	/**
-	 * If we have an assignment that follows a relational operator, we need to do appropriate
-	 * setting logic. We'll do this by inserting a setX statement inbetween the relational operator
-	 * and the assignment
-	 */
-	if(is_instruction_binary_operation(window->instruction1) == TRUE
-		&& is_operator_relational_operator(window->instruction1->op) == TRUE
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-
-		//This is where the issue is, we need to handle relational operations in a different way
-
-		//Set the comparison and assignment instructions
-		instruction_t* comparison = window->instruction1;
-		instruction_t* assignment = window->instruction2;
-
-		//Handle the comparison operation here
-		handle_cmp_instruction(comparison);
-
-		//We will determine the type signedness *based* on how the op1 is. We don't want to use the assignee, because the assignee for a comparison will nearly
-		//always be unsigned
-		u_int8_t type_signed = is_type_signed(assignment->op1->type);
-
-		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction
-		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(u8), comparison->op1, type_signed);
-
-		//We now also need to modify the move instruction. We can do this without creating any new memory
-		variable_size_t destination_size = get_type_size(assignment->assignee->type);
-		variable_size_t source_size = get_type_size(set_instruction->destination_register->type);
-		u_int8_t destination_signed = is_type_signed(assignment->assignee->type);
-
-		assignment->instruction_type = select_move_instruction(destination_size, source_size, destination_signed);
-		//Assignee and destination are the same
-		assignment->destination_register = assignment->assignee;
-		//The source is now this set instruction's destination
-		assignment->source_register = set_instruction->destination_register;
-
-		//Now once we have the set instruction, we need to insert it between 1 and 2
-		insert_instruction_before_given(set_instruction, assignment);
-
-		//Reconstruct the window here, starting at the end
-		reconstruct_window(window, assignment);
-		return;
-	}
-
 	//============================= Address Calculation Optimization  ==============================
 	//These are patterns that span multiple instructions. Often we're able to
 	//condense these multiple instructions into one singular x86 instruction
@@ -5712,7 +5709,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 				case G_THAN_OR_EQ:
 				case L_THAN:
 				case L_THAN_OR_EQ:
-					//This helper does all of the heavy lifting
+					//This helper does all of the heavy lifting. It will
+					//return the last instruction that it created/touched
 					instruction = handle_cmp_instruction(instruction);
 
 					//Rebuild the window based on this
