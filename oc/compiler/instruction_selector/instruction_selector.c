@@ -2822,6 +2822,38 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
  * that flag setting is needed
  */
 static instruction_t* handle_cmp_instruction(instruction_t* instruction){
+	/**
+	 * First step - determine if this cmp instruction is *exclusively* used
+	 * by a branch statement or if we are going to need to expand it out
+	 * more. By default, we assume that we're going to have to expand it out
+	 */
+	u_int8_t used_by_branch = FALSE;
+
+	//Grab a cursor to the next statement
+	instruction_t* cursor = instruction->next_statement;
+
+	//So long as the cursor is not NULL, keep
+	//crawling
+	while(cursor != NULL){
+		//If we find out that this is a branch statement
+		if(cursor->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+			//This is the case that we're after. If we find that the branch relies
+			//on this, then we can just get out
+			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
+				used_by_branch = TRUE;
+				break;
+			}
+		}
+
+		//If we get to the end and it's not used by a branch, that is fine. The only
+		//thing that we care about in this crawl is whether or not the above statement
+		//was used by a branch instruction. If it was, then all of the extra setX
+		//is unnecessary. If it wasn't then we need to be adding those extra steps
+
+		//Advance the cursor up
+		cursor = cursor->next_statement;
+	}
+
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(instruction->op1->type);
 
@@ -2859,21 +2891,24 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 		instruction->source_immediate = instruction->op1_const;
 	}
 
-		//This is where the issue is, we need to handle relational operations in a different way
 
-		//Set the comparison and assignment instructions
-		instruction_t* comparison = window->instruction1;
-		instruction_t* assignment = window->instruction2;
+	//We expect that this is the likely case. Usually
+	//a programmer is putting in comparisons to determine a branch
+	//in some way
+	if(used_by_branch == TRUE){
+		//Just give back the instruction we modified
+		return instruction;
 
-		//Handle the comparison operation here
-		handle_cmp_instruction(comparison);
-
-		//We will determine the type signedness *based* on how the op1 is. We don't want to use the assignee, because the assignee for a comparison will nearly
-		//always be unsigned
-		u_int8_t type_signed = is_type_signed(assignment->op1->type);
+	//We've already handled the comparison instruction by this point. Now,
+	//we'll add logic that does the setX instruction and the final assignment
+	} else {
+		//Get the signedness based on the assignee of the cmp instruction
+		u_int8_t type_signed = is_type_signed(instruction->assignee->type);
 
 		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction
-		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(u8), comparison->op1, type_signed);
+		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), comparison->op1, type_signed);
+	}
+
 
 		//We now also need to modify the move instruction. We can do this without creating any new memory
 		variable_size_t destination_size = get_type_size(assignment->assignee->type);
@@ -2888,12 +2923,6 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 
 		//Now once we have the set instruction, we need to insert it between 1 and 2
 		insert_instruction_before_given(set_instruction, assignment);
-
-		//Reconstruct the window here, starting at the end
-		reconstruct_window(window, assignment);
-
-
-
 }
 
 
