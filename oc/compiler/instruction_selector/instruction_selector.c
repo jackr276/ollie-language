@@ -3923,6 +3923,9 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		//Now we'll need a setne(not zero) instruction that will the op1 result
 		instruction_t* set_instruction = emit_setne_instruction(op1_result);
 
+		//IMPORTANT - flag that this depends on the source register
+		set_instruction->op1 = test_instruction->source_register;
+
 		//Insert these in order. The test comes first, then the set(relies on the flags from test)
 		insert_instruction_before_given(test_instruction, after_logical_and);
 		insert_instruction_before_given(set_instruction, after_logical_and);
@@ -3937,8 +3940,14 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		//Test the 2 together
 		instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
 
+		//Emit a var to hold the result of op2
+		op2_result = emit_temp_var(u8);
+
 		//Set if it's not zero
-		instruction_t* set_instruction = emit_setne_instruction(emit_temp_var(u8));
+		instruction_t* set_instruction = emit_setne_instruction(op2_result);
+
+		//IMPORTANT - flag that this depends on the source register
+		set_instruction->op1 = test_instruction->source_register;
 
 		//Insert these in order. The test comes first, then the set(relies on the flags from test)
 		insert_instruction_before_given(test_instruction, after_logical_and);
@@ -3947,11 +3956,8 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 
 	}
 
-
-	
-
 	//Now we'll need to ANDx these two values together to see if they're both 1
-	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
+	instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
 
 	//The final thing that we need is a movzx
 	instruction_t* move_instruction = emit_move_instruction(logical_and->assignee, and_inst->destination_register);
