@@ -2905,24 +2905,21 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 		//Get the signedness based on the assignee of the cmp instruction
 		u_int8_t type_signed = is_type_signed(instruction->assignee->type);
 
-		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction
-		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), comparison->op1, type_signed);
+		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
+		//is required to use a byte sized register so we can't just set the assignee and move on
+		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, type_signed);
+
+		//The set instruction goes right after the cmp instruction
+		insert_instruction_after_given(set_instruction, instruction);
+
+		//Move from the set instruction's assignee to this instruction's assignee
+		instruction_t* final_move = emit_move_instruction(instruction->assignee, set_instruction->destination_register);
+
+		//This final move goes right after the set instruction
+		insert_instruction_after_given(final_move, set_instruction);
+
+		return final_move;
 	}
-
-
-		//We now also need to modify the move instruction. We can do this without creating any new memory
-		variable_size_t destination_size = get_type_size(assignment->assignee->type);
-		variable_size_t source_size = get_type_size(set_instruction->destination_register->type);
-		u_int8_t destination_signed = is_type_signed(assignment->assignee->type);
-
-		assignment->instruction_type = select_move_instruction(destination_size, source_size, destination_signed);
-		//Assignee and destination are the same
-		assignment->destination_register = assignment->assignee;
-		//The source is now this set instruction's destination
-		assignment->source_register = set_instruction->destination_register;
-
-		//Now once we have the set instruction, we need to insert it between 1 and 2
-		insert_instruction_before_given(set_instruction, assignment);
 }
 
 
