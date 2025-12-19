@@ -3823,6 +3823,9 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	//Now we need the setne instruction
 	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8));
 
+	//Flag that thsi relies on the above or instruction
+	setne_instruction->op1 = logical_or->op1;
+
 	//Following that we'll need the final movzx instruction
 	instruction_t* move_instruction = emit_move_instruction(logical_or->assignee, setne_instruction->destination_register);
 
