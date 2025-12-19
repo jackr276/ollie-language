@@ -3261,6 +3261,8 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
+	//Op token for readability
+	lexitem_t op;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
@@ -3285,76 +3287,99 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//TODO MAKE A SWITCH
+	//Switch is faster since we have an enum so it can use a jump table
+	switch(lookahead.tok){
+		//Handle all relational operations
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN:
+		case L_THAN_OR_EQ:
+			//Store this for readability
+			op = lookahead;
 
+			//Hold the reference to the prior root
+			temp_holder = sub_tree_root;
 
-	//If we have relational operators here
-	if(lookahead.tok == G_THAN 
-		|| lookahead.tok == L_THAN 
-		|| lookahead.tok == G_THAN_OR_EQ
-	   	|| lookahead.tok == L_THAN_OR_EQ){
+			//Flag whether it's a constant
+			temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
-		//For readability
-		lexitem_t op = lookahead;
+			//Let's check to see if this type is valid for our operation
+			u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 
-		//Hold the reference to the prior root
-		temp_holder = sub_tree_root;
+			//This is our fail case
+			if(is_temp_holder_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok)); 
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//Flag whether it's a constant
-		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+			//Now we have no choice but to see a valid shift again
+			right_child = shift_expression(fl, side);
 
-		//Let's check to see if this type is valid for our operation
-		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
+			//If it's an error, just fail out
+			if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				//If this is an error we can just propogate it up
+				return right_child;
+			}
 
-		//This is our fail case
-		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok)); 
-			return print_and_return_error(info, parser_line_num);
-		}
+			//Is this a constant? Figure out and store
+			right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
-		//Now we have no choice but to see a valid shift again
-		right_child = shift_expression(fl, side);
+			//Let's check to see if this type is valid for our operation
+			u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
 
-		//If it's an error, just fail out
-		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			//If this is an error we can just propogate it up
-			return right_child;
-		}
+			//This is our fail case
+			if(is_right_child_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_to_string(op.tok)); 
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//Let's check to see if this type is valid for our operation
-		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
+			//The return type is always the left child's type
+			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-		//This is our fail case
-		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_to_string(op.tok)); 
-			return print_and_return_error(info, parser_line_num);
-		}
+			//If this fails, that means that we have an invalid operation
+			if(return_type == NULL){
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//The return type is always the left child's type
-		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+			//Now that we know we've done valid type coercion, perform any constant coercion
+			//that is needed here
+			if(temp_holder_is_constant == TRUE){
+				coerce_constant(temp_holder);
+			}
 
-		//If this fails, that means that we have an invalid operation
-		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
-			return print_and_return_error(info, parser_line_num);
-		}
+			//And same for the right child
+			if(right_child_is_constant == TRUE){
+				coerce_constant(right_child);
+			}
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+			//
+			//
+			//
+			//TODO ADD CONSTANT RULES
+			//
+			//
+			//
 
-		//Set the return type as well
-		sub_tree_root->inferred_type = return_type;
+			//Only now do we allocate the operator node, since we know that we've
+			//passed all validations
+			sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+			//We'll now assign the binary expression it's operator
+			sub_tree_root->binary_operator = lookahead.tok;
 
-		//Add these 2 in order now that we're sure it's valid
-		add_child_node(sub_tree_root, temp_holder);
-		add_child_node(sub_tree_root, right_child);
+			//Set the return type as well
+			sub_tree_root->inferred_type = return_type;
 
-	//Otherwise we're done
-	} else {
-		//Otherwise just push the token back
-		push_back_token(lookahead);
+			//Add these 2 in order now that we're sure it's valid
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+
+			break;
+
+		//By default, all we do is scrap this and get out
+		default:
+			push_back_token(lookahead);
+			break;
 	}
 
 	//Once we make it here, the subtree root is either just the shift expression or it is the
