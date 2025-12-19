@@ -3901,7 +3901,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 			}
 
 		//Give op2 the exact same treatment
-		} else if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
+		} else if(variables_equal(logical_and->op2, cursor->assignee, FALSE)){
 			if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 				op2_came_from_setX = TRUE;
 			}
@@ -3931,7 +3931,12 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_before_given(set_instruction, after_logical_and);
 
 	} else {
-
+		//If we make it here, we know that op1 already came from a setX instruction. So, we can just
+		//assign here and be done
+		op1_result = emit_var_copy(logical_and->op1);
+		//We will emit a type-coerced version of our value
+		op1_result->type = u8;
+		op1_result->variable_size = get_type_size(u8);
 	}
 
 	//We expect that it *not* being from
@@ -3953,7 +3958,12 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		insert_instruction_before_given(test_instruction, after_logical_and);
 		insert_instruction_before_given(set_instruction, after_logical_and);
 	} else {
-
+		//If we make it here, we know that op2 already came from a setX instruction. So, we can just
+		//assign here and be done
+		op2_result = emit_var_copy(logical_and->op2);
+		//We will emit a type-coerced version of our value
+		op2_result->type = u8;
+		op2_result->variable_size = get_type_size(u8);
 	}
 
 	//Now we'll need to ANDx these two values together to see if they're both 1
