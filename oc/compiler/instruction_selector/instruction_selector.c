@@ -11,7 +11,6 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -3873,6 +3872,8 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	u_int8_t op1_came_from_setX = FALSE;
 	u_int8_t op2_came_from_setX = FALSE;
 
+	//The eventual 2 things that will be anded together
+
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
@@ -3883,22 +3884,31 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	instruction_t* cursor = logical_and->previous_statement;
 
 	//Crawl back through the block to try and see if we can tell
-	//where these all came from
+	//where these all came from. Worst case we need to crawl the whole
+	//block, which isn't bad because these blocks aren't enormous 99.9% of
+	//the time
 	while(cursor != NULL){
-		//Did we find where op1 got assigned?
+		//Did we find where op1 got assigned?. If so, check to see
+		//if the operation that made it generated a truthful byte value(0 or 1)
+		//or not
 		if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
-			if(is_operator_relational_operator(cursor->op) == TRUE){
+			if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 				op1_came_from_setX = TRUE;
 			}
 
+		//Give op2 the exact same treatment
 		} else if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
-			if(is_operator_relational_operator(cursor->op) == TRUE){
+			if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
 				op2_came_from_setX = TRUE;
 			}
 		}
 
 		//Push it back
 		cursor = cursor->previous_statement;
+	}
+
+	if(op1_came_from_setX == FALSE){
+
 	}
 
 	if(op1_came_from_setX == TRUE){
