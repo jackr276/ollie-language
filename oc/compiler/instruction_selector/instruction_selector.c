@@ -3872,6 +3872,10 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	u_int8_t op1_came_from_setX = FALSE;
 	u_int8_t op2_came_from_setX = FALSE;
 
+	//Store the result variable for both of our test paths
+	three_addr_var_t* op1_result;
+	three_addr_var_t* op2_result;
+
 	//The eventual 2 things that will be anded together
 
 	//Grab it out for convenience
@@ -3907,29 +3911,44 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		cursor = cursor->previous_statement;
 	}
 
+	//We expect that it *not* being from
+	//setX is the most likely case
 	if(op1_came_from_setX == FALSE){
+		//Let's first emit our test instruction
+		instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
+
+		//Emit a var to hold the result of op1
+		op1_result = emit_temp_var(u8);
+
+		//Now we'll need a setne(not zero) instruction that will the op1 result
+		instruction_t* set_instruction = emit_setne_instruction(op1_result);
+
+		//Insert these in order. The test comes first, then the set(relies on the flags from test)
+		insert_instruction_before_given(test_instruction, after_logical_and);
+		insert_instruction_before_given(set_instruction, after_logical_and);
+
+	} else {
 
 	}
 
-	if(op1_came_from_setX == TRUE){
-		printf("CAME FROM SETX\n");
+	//We expect that it *not* being from
+	//setX is the most likely case
+	if(op2_came_from_setX == FALSE){
+		//Test the 2 together
+		instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
+
+		//Set if it's not zero
+		instruction_t* set_instruction = emit_setne_instruction(emit_temp_var(u8));
+
+		//Insert these in order. The test comes first, then the set(relies on the flags from test)
+		insert_instruction_before_given(test_instruction, after_logical_and);
+		insert_instruction_before_given(set_instruction, after_logical_and);
+	} else {
+
 	}
 
-	if(op2_came_from_setX == TRUE){
-		printf("CAME FROM SETX\n");
-	}
 
-	//Let's first emit our test instruction
-	instruction_t* first_test = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
-
-	//Now we'll need a setne instruction that will set a new temp
-	instruction_t* first_set = emit_setne_instruction(emit_temp_var(u8));
 	
-	//Now we'll need the second test
-	instruction_t* second_test = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
-
-	//Now the second setne
-	instruction_t* second_set = emit_setne_instruction(emit_temp_var(u8));
 
 	//Now we'll need to ANDx these two values together to see if they're both 1
 	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
@@ -3943,11 +3962,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	//We no longer need the logical and statement
 	delete_statement(logical_and);
 
-	//Now we'll insert everything in order
-	insert_instruction_before_given(first_test, after_logical_and);
-	insert_instruction_before_given(first_set, after_logical_and);
-	insert_instruction_before_given(second_test, after_logical_and);
-	insert_instruction_before_given(second_set, after_logical_and);
+	//Now insert these in order. First comes the and instruction, then the final move
 	insert_instruction_before_given(and_inst, after_logical_and);
 	insert_instruction_before_given(move_instruction, after_logical_and);
 	
