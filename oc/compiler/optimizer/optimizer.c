@@ -184,10 +184,20 @@ static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
 
 
 /**
+ * A special mark and add definition rule exists for stack variables or any memory region.
+ * This is because we need to do extra tracking for stack variables and the store statements 
+ * that are used to populate them
+ */
+static void mark_and_add_stack_variable_definitions(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+
+}
+
+
+/**
  * Mark definitions(assignment) of a three address variable within
  * the current function. If a definition is not marked, it must be added to the worklist
  */
-static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//If this is NULL, just leave
 	if(variable == NULL || current_function == NULL){
 		return;
@@ -262,6 +272,15 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 			}
 		}
 	}
+}
+
+
+/**
+ * The mark and add definition rule will call one of 2 overloads, based
+ * on what the variable that we're marking actually is
+ */
+static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+
 }
 
 
