@@ -2267,14 +2267,20 @@ static instruction_t* emit_sete_instruction(three_addr_var_t* destination){
 /**
  * Emit a setne instruction
  *
- * The setne instruction is used on a byte
+ * The setne instruction is used on a byte. We have a "relies_on" field to tell the instruction
+ * scheduler what this setne relies on in the future, but this op1 is never actually displayed/printed,
+ * it is just for tracking
  */
-static instruction_t* emit_setne_instruction(three_addr_var_t* destination){
+static instruction_t* emit_setne_instruction(three_addr_var_t* destination, three_addr_var_t* relies_on){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//And we'll set the class
 	instruction->instruction_type = SETNE;
+
+	//We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
+	//but it is completely ignored at the selector level
+	instruction->op1 = relies_on;
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -3827,7 +3833,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
 
 	//Now we need the setne instruction
-	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8));
+	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8), logical_or->op1);
 
 	//Flag that thsi relies on the above or instruction
 	setne_instruction->op1 = logical_or->op1;
@@ -3930,7 +3936,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		op1_result = emit_temp_var(u8);
 
 		//Now we'll need a setne(not zero) instruction that will the op1 result
-		instruction_t* set_instruction = emit_setne_instruction(op1_result);
+		instruction_t* set_instruction = emit_setne_instruction(op1_result, logical_and->op1);
 
 		//IMPORTANT - flag that this depends on the source register
 		set_instruction->op1 = test_instruction->source_register;
@@ -3958,7 +3964,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		op2_result = emit_temp_var(u8);
 
 		//Set if it's not zero
-		instruction_t* set_instruction = emit_setne_instruction(op2_result);
+		instruction_t* set_instruction = emit_setne_instruction(op2_result, logical_and->op1);
 
 		//IMPORTANT - flag that this depends on the source register
 		set_instruction->op1 = test_instruction->source_register;
