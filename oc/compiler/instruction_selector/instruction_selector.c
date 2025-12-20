@@ -696,7 +696,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 	//If we see a constant assingment first and then we see a an assignment
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
 		&& window->instruction1->assignee->use_count <= 1
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
@@ -739,7 +739,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE
+		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 			//Validate that the use count is less than 1
 			&& window->instruction1->assignee->use_count <= 1
 			&& is_operation_valid_for_constant_folding(window->instruction2, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
@@ -775,7 +775,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction3 != NULL && window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE
+		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 			//Validate that this is not being used more than once
 			&& window->instruction1->assignee->use_count <= 1
 			&& is_operation_valid_for_constant_folding(window->instruction3, window->instruction1->op1_const) == TRUE //And it's valid for constant folding
@@ -820,7 +820,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction2->op) == TRUE
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction2->op1, window->instruction1->assignee, FALSE) == TRUE){
 
 		//Go based on the op. We already know that we can do this by the time 
@@ -883,7 +883,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction3 != NULL
 		&& window->instruction3->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& binary_operator_valid_for_inplace_constant_match(window->instruction3->op) == TRUE
-		&& window->instruction2->assignee->is_temporary == TRUE
+		&& window->instruction2->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction3->op1, window->instruction2->assignee, FALSE) == TRUE){
 
 		//Go based on the op. We already know that we can do this by the time 
@@ -952,7 +952,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		instruction_t* second = window->instruction2;
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(first->assignee->is_temporary == TRUE && variables_equal(first->assignee, second->op1, TRUE) == TRUE
+		if(first->assignee->variable_type == VARIABLE_TYPE_TEMP && variables_equal(first->assignee, second->op1, TRUE) == TRUE
 			//And the assignee of the first statement is only ever used once
 			&& first->assignee->use_count <= 1){
 
@@ -991,7 +991,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		instruction_t* move = window->instruction2;
 		
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
-		if(load->assignee->is_temporary == TRUE && variables_equal(load->assignee, move->op1, TRUE) == TRUE
+		if(load->assignee->variable_type == VARIABLE_TYPE_TEMP && variables_equal(load->assignee, move->op1, TRUE) == TRUE
 			//And the load's assignee is only ever used once
 			&& load->assignee->use_count <= 1){
 
@@ -1036,10 +1036,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& is_operation_valid_for_op1_assignment_folding(window->instruction2->op) == TRUE){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction1? Let's check.
-		if(window->instruction1->assignee->is_temporary == TRUE 
+		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
 			//Make sure that this is the only use
 			&& window->instruction1->assignee->use_count <= 1
-			&& window->instruction1->op1->is_temporary == FALSE
+			&& window->instruction1->op1->variable_type != VARIABLE_TYPE_TEMP
 			&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
 			//Set these two to be equal
@@ -1086,11 +1086,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 		//We still need further checks to see if this is indeed the pattern above. If
 		//we survive all of these checks, we know that we're set to optimize
-		if(first->assignee->is_temporary == TRUE && third->assignee->is_temporary == FALSE &&
-			first->assignee->use_count <= 2 &&
-			variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE &&
-	 		variables_equal(first->assignee, second->op1, FALSE) == TRUE &&
-	 		variables_equal(second->assignee, third->op1, FALSE) == TRUE){
+		if(first->assignee->variable_type == VARIABLE_TYPE_TEMP 
+			&& third->assignee->variable_type != VARIABLE_TYPE_TEMP
+			&& first->assignee->use_count <= 2 
+			&& variables_equal_no_ssa(first->op1, third->assignee, FALSE) == TRUE
+	 		&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
+	 		&& variables_equal(second->assignee, third->op1, FALSE) == TRUE){
 
 			//Manage our use state here
 			replace_variable(second->op1, first->op1);
@@ -1129,7 +1130,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
-		if(window->instruction1->assignee->is_temporary == TRUE &&
+		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP &&
 	 		variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 
 			//What we can do is rewrite the LEA statement all together as a simple addition statement. We'll
@@ -1196,7 +1197,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 		//If we have a temporary start variable, a non temp end variable, and the variables
 		//match in the corresponding spots, we have our opportunity
-		if(first->assignee->is_temporary == TRUE && second->assignee->is_temporary == FALSE
+		if(first->assignee->variable_type == VARIABLE_TYPE_TEMP && second->assignee->variable_type != VARIABLE_TYPE_TEMP 
 			&& variables_equal(first->assignee, second->op1, FALSE) == TRUE
 			//Special no-ssa comparison, we expect that the ssa would be different due to assignment levels
 			&& variables_equal_no_ssa(second->assignee, first->op1, FALSE) == TRUE){
@@ -1226,7 +1227,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		 * NOTE: This does not work for logical or, due to the way we handle logical OR
 		 */
 		} else if(first->op == DOUBLE_AND
-				&& first->assignee->is_temporary == TRUE 
+				&& first->assignee->variable_type == VARIABLE_TYPE_TEMP 
 				&& variables_equal(first->assignee, second->op1, FALSE) == TRUE){
 
 			//Set these to be equal
@@ -1526,7 +1527,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				 	*/
 					case PLUS:
 						//If it's temporary, we jump out
-						if(current_instruction->assignee->is_temporary == TRUE){
+						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
 							break;
 						}
 
@@ -1542,7 +1543,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 					case MINUS:
 						//If it's temporary, we jump out
-						if(current_instruction->assignee->is_temporary == TRUE){
+						if(current_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP){
 							break;
 						}
 
@@ -1678,7 +1679,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		//If we get here, we have a temp assignment who is completely useless, so we delete
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == TRUE){
 
 		//Delete it
@@ -1704,7 +1705,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 */
 	if(window->instruction1 != NULL && window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		//If we get here, we have a temp assignment who is completely useless, so we delete
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		//Ensure that it's not being used at all
 		&& window->instruction1->assignee->use_count == 0){
 
@@ -1755,7 +1756,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * load t5 <- t4[4]
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
@@ -1792,7 +1793,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * store t5[4] <- t4
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
@@ -5310,7 +5311,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1 //Be sure that we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
@@ -5338,7 +5339,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
@@ -5366,7 +5367,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
@@ -5394,7 +5395,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, TRUE) == TRUE){
@@ -5423,7 +5424,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
@@ -5452,7 +5453,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
@@ -5537,7 +5538,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * mov(w/l/q) x(%rip), t7
 	 */
 	if(window->instruction1->instruction_type == LEAQ 
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
@@ -5566,7 +5567,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * mov(w/l/q) x(%rip), t7
 	 */
 	if(window->instruction1->instruction_type == LEAQ 
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT 
 		&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, TRUE) == TRUE){
@@ -5597,7 +5598,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * mov(w/l/q) 4(t7, arg_0, 4), t11
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& window->instruction3 != NULL
@@ -5630,7 +5631,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * mov(w/l/q) t11, 4(t7, arg_0, 4)
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
 		&& window->instruction3 != NULL
@@ -5666,7 +5667,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == PLUS
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE
@@ -5703,7 +5704,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
-		&& window->instruction1->assignee->is_temporary == TRUE
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == PLUS
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE

@@ -298,7 +298,7 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
  */
 static three_addr_var_t* handle_conditional_identifier_copy_if_needed(basic_block_t* block, three_addr_var_t* variable, u_int8_t is_branch_ending){
 	//Nothing more to see here
-	if(variable->is_temporary == TRUE){
+	if(variable->variable_type == VARIABLE_TYPE_TEMP){
 		return variable;
 	}
 
@@ -527,7 +527,7 @@ void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	var->use_count++;
 
 	//If this is a temporary var, then we're done here, we'll simply bail out
-	if(var->is_temporary == TRUE){
+	if(var->variable_type == VARIABLE_TYPE_TEMP){
 		return;
 	}
 
@@ -556,7 +556,7 @@ void add_used_variable(basic_block_t* basic_block, three_addr_var_t* var){
  */
 void add_assigned_variable(basic_block_t* basic_block, three_addr_var_t* var){
 	//If it's temp just don't add it
-	if(var->is_temporary == TRUE){
+	if(var->variable_type == VARIABLE_TYPE_TEMP){
 		return;
 	}
 
@@ -2176,12 +2176,12 @@ static void rename_block(basic_block_t* entry){
 			case THREE_ADDR_CODE_FUNC_CALL:
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//If we have a non-temp variable, rename it
-				if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
+				if(cursor->op1 != NULL && cursor->op1->variable_type != VARIABLE_TYPE_TEMP){
 					rhs_new_name(cursor->op1);
 				}
 
 				//Same goes for the assignee, except this one is the LHS
-				if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
 					lhs_new_name(cursor->assignee);
 				}
 				
@@ -2196,7 +2196,7 @@ static void rename_block(basic_block_t* entry){
 					three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
 
 					//If it's not temporary, we rename
-					if(current_param->is_temporary == FALSE){
+					if(current_param->variable_type != VARIABLE_TYPE_TEMP){
 						rhs_new_name(current_param);
 					}
 				}
@@ -2212,17 +2212,17 @@ static void rename_block(basic_block_t* entry){
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				//If we have a non-temp variable, rename it
-				if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
+				if(cursor->op1 != NULL && cursor->op1->variable_type != VARIABLE_TYPE_TEMP){
 					rhs_new_name(cursor->op1);
 				}
 
 				//If we have a non-temp variable, rename it
-				if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE){
+				if(cursor->op2 != NULL && cursor->op2->variable_type != VARIABLE_TYPE_TEMP){
 					rhs_new_name(cursor->op2);
 				}
 
 				//UNIQUE CASE - rhs also gets a new name here
-				if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
 					rhs_new_name(cursor->assignee);
 				}
 
@@ -2233,17 +2233,17 @@ static void rename_block(basic_block_t* entry){
 			//We'll exclude direct jump statements, these we don't care about
 			default:
 				//If we have a non-temp variable, rename it
-				if(cursor->op1 != NULL && cursor->op1->is_temporary == FALSE){
+				if(cursor->op1 != NULL && cursor->op1->variable_type != VARIABLE_TYPE_TEMP){
 					rhs_new_name(cursor->op1);
 				}
 
 				//If we have a non-temp variable, rename it
-				if(cursor->op2 != NULL && cursor->op2->is_temporary == FALSE){
+				if(cursor->op2 != NULL && cursor->op2->variable_type != VARIABLE_TYPE_TEMP){
 					rhs_new_name(cursor->op2);
 				}
 
 				//Same goes for the assignee, except this one is the LHS
-				if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
 					lhs_new_name(cursor->assignee);
 				}
 
@@ -2322,7 +2322,7 @@ static void rename_block(basic_block_t* entry){
 			//Otherwise this does count
 			default:
 				//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-				if(cursor->assignee != NULL && cursor->assignee->is_temporary == FALSE){
+				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
 					//Pop it off
 					lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
 				}
@@ -2449,7 +2449,7 @@ static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_bl
 	three_addr_const_t* type_size = emit_direct_integer_or_char_constant(member_type->type_size, u64);
 
 	//We'll need a temp assignment if this isn't temporary
-	if(offset->is_temporary == FALSE){
+	if(offset->variable_type != VARIABLE_TYPE_TEMP){
 		//Create the statement
 		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(offset->type), offset);
 
@@ -3895,7 +3895,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				case TYPE_CLASS_BASIC:
 					//If we have a temporary variable, then we need to perform
 					//a reassignment here for analysis purposes
-					if(unary_package.assignee->is_temporary == TRUE){
+					if(unary_package.assignee->variable_type == VARIABLE_TYPE_TEMP){
 						//Emit the assignment
 						instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 						temp_assignment->is_branch_ending = is_branch_ending;
@@ -4557,7 +4557,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	}
 
 	//If this is temporary *or* a type conversion is needed, we'll do some reassigning here
-	if(left_side.assignee->is_temporary == FALSE){
+	if(left_side.assignee->variable_type != VARIABLE_TYPE_TEMP){
 		//emit the temp assignment
 		instruction_t* left_side_temp_assignment = emit_assignment_instruction(emit_temp_var(left_hand_type), left_side.assignee);
 
@@ -4590,7 +4590,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 		case DOUBLE_OR:
 		case DOUBLE_AND:
 			//If this is not temporary, emit the temp assignment
-			if(op2->is_temporary == FALSE){
+			if(op2->variable_type != VARIABLE_TYPE_TEMP){
 				instruction_t* right_side_assignment = emit_assignment_instruction(emit_temp_var(op2->type), op2);
 
 				//Add to the block

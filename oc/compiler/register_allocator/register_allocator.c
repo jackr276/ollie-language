@@ -771,7 +771,7 @@ static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basi
  */
 static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//If this is not temporary, we can handle it like any other statement
-	if(instruction->destination_register->is_temporary == FALSE){
+	if(instruction->destination_register->variable_type != VARIABLE_TYPE_TEMP){
 		//Handle the destination variable
 		assign_live_range_to_destination_variable(live_ranges, basic_block, instruction);
 
