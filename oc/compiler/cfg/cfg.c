@@ -8122,7 +8122,29 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		 * 	allocator will simply knock out the top assignment as if it was never there
 		 */
 		} else {
+			//Create the aliased variable
+			symtab_variable_record_t* alias = create_parameter_alias_variable(parameter->type_defined_as, variable_symtab, increment_and_get_temp_id());
 
+			//Very important that we emit this first for the below reason
+			three_addr_var_t* parameter_var = emit_var(parameter);
+
+			//Emit the alias that we're assigning to
+			three_addr_var_t* alias_var = emit_var(alias);
+
+			//Flag that the parameter does have this alias. Note that once we do this, any time
+			//emit_var() is called on the parameter, the alias will be used instead so the order
+			//here is very important. Once this is done - there is no going back
+			parameter->alias = alias;
+
+			//Emit the assignment here
+			instruction_t* alias_assignment = emit_assignment_instruction(alias_var, parameter_var);
+
+			//Counts as a use for the parameter
+			add_used_variable(function_starting_block, parameter_var);
+			add_assigned_variable(function_starting_block, alias_var);
+
+			//Now add the statement in
+			add_statement(function_starting_block, alias_assignment);
 		}
 	}
 
