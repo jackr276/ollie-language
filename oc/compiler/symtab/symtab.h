@@ -343,7 +343,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 /**
  * Create a parameter alias variable record
  */
-symtab_variable_record_t* create_parameter_alias_variable(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed

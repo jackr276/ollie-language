@@ -396,7 +396,7 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
  * symtab record, and as such will be picked up by the phi function
  * inserted. It will also not be declared as temp
  */
-symtab_variable_record_t* create_parameter_alias_variable(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id){
 	//And here is the special part - we'll need to make a symtab record
 	//for this variable and add it in
 	char variable_name[100];
@@ -412,7 +412,11 @@ symtab_variable_record_t* create_parameter_alias_variable(generic_type_t* type, 
 	//Now create and add the symtab record for this variable
 	symtab_variable_record_t* record = create_variable_record(string);
 	//Store the type here
-	record->type_defined_as = type;
+	record->type_defined_as = aliases->type_defined_as;
+
+	//Copy over the stack info as well - this is important for references
+	record->stack_region = aliases->stack_region;
+	record->stack_variable = aliases->stack_variable;
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);

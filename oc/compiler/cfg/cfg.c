@@ -8123,7 +8123,7 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		 */
 		} else {
 			//Create the aliased variable
-			symtab_variable_record_t* alias = create_parameter_alias_variable(parameter->type_defined_as, variable_symtab, increment_and_get_temp_id());
+			symtab_variable_record_t* alias = create_parameter_alias_variable(parameter, variable_symtab, increment_and_get_temp_id());
 
 			//Very important that we emit this first for the below reason
 			three_addr_var_t* parameter_var = emit_var(parameter);
