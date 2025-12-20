@@ -2819,9 +2819,47 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 
 /**
  * Handle a cmp operation. This is used whenever we have
- * relational operation
+ * relational operation.
+ *
+ * All comparison instructions have a symbolic assignee created. The question
+ * of whether or not to use the assignee needs to be determined here, since
+ * the actual cmpX instruction does not naturally produce and output, it just
+ * sets flags. We have custom logic in this block do determine whether or not 
+ * that flag setting is needed
  */
-static void handle_cmp_instruction(instruction_t* instruction){
+static instruction_t* handle_cmp_instruction(instruction_t* instruction){
+	/**
+	 * First step - determine if this cmp instruction is *exclusively* used
+	 * by a branch statement or if we are going to need to expand it out
+	 * more. By default, we assume that we're going to have to expand it out
+	 */
+	u_int8_t used_by_branch = FALSE;
+
+	//Grab a cursor to the next statement
+	instruction_t* cursor = instruction->next_statement;
+
+	//So long as the cursor is not NULL, keep
+	//crawling
+	while(cursor != NULL){
+		//If we find out that this is a branch statement
+		if(cursor->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+			//This is the case that we're after. If we find that the branch relies
+			//on this, then we can just get out
+			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
+				used_by_branch = TRUE;
+				break;
+			}
+		}
+
+		//If we get to the end and it's not used by a branch, that is fine. The only
+		//thing that we care about in this crawl is whether or not the above statement
+		//was used by a branch instruction. If it was, then all of the extra setX
+		//is unnecessary. If it wasn't then we need to be adding those extra steps
+
+		//Advance the cursor up
+		cursor = cursor->next_statement;
+	}
+
 	//Determine what our size is off the bat
 	variable_size_t size = get_type_size(instruction->op1->type);
 
@@ -2857,6 +2895,36 @@ static void handle_cmp_instruction(instruction_t* instruction){
 	} else {
 		//Otherwise we use an immediate value
 		instruction->source_immediate = instruction->op1_const;
+	}
+
+
+	//We expect that this is the likely case. Usually
+	//a programmer is putting in comparisons to determine a branch
+	//in some way
+	if(used_by_branch == TRUE){
+		//Just give back the instruction we modified
+		return instruction;
+
+	//We've already handled the comparison instruction by this point. Now,
+	//we'll add logic that does the setX instruction and the final assignment
+	} else {
+		//Get the signedness based on the assignee of the cmp instruction
+		u_int8_t type_signed = is_type_signed(instruction->assignee->type);
+
+		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
+		//is required to use a byte sized register so we can't just set the assignee and move on
+		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, type_signed);
+
+		//The set instruction goes right after the cmp instruction
+		insert_instruction_after_given(set_instruction, instruction);
+
+		//Move from the set instruction's assignee to this instruction's assignee
+		instruction_t* final_move = emit_move_instruction(instruction->assignee, set_instruction->destination_register);
+
+		//This final move goes right after the set instruction
+		insert_instruction_after_given(final_move, set_instruction);
+
+		return final_move;
 	}
 }
 
@@ -3761,6 +3829,9 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	//Now we need the setne instruction
 	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8));
 
+	//Flag that thsi relies on the above or instruction
+	setne_instruction->op1 = logical_or->op1;
+
 	//Following that we'll need the final movzx instruction
 	instruction_t* move_instruction = emit_move_instruction(logical_or->assignee, setne_instruction->destination_register);
 
@@ -3804,26 +3875,108 @@ static void handle_logical_or_instruction(instruction_window_t* window){
  * in this case
  */
 static void handle_logical_and_instruction(instruction_window_t* window){
+	//These operands - did they already come from a setX instruction
+	//or not? An example would be if we're doing something like x > y && y < z.
+	//Both of these operations res
+	u_int8_t op1_came_from_setX = FALSE;
+	u_int8_t op2_came_from_setX = FALSE;
+
+	//Store the result variable for both of our test paths
+	three_addr_var_t* op1_result;
+	three_addr_var_t* op2_result;
+
+	//The eventual 2 things that will be anded together
+
 	//Grab it out for convenience
 	instruction_t* logical_and = window->instruction1;
 
 	//Preserve this for ourselves
 	instruction_t* after_logical_and = logical_and->next_statement;
 
-	//Let's first emit our test instruction
-	instruction_t* first_test = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
+	//Grab a cursor to see where the operands came from
+	instruction_t* cursor = logical_and->previous_statement;
 
-	//Now we'll need a setne instruction that will set a new temp
-	instruction_t* first_set = emit_setne_instruction(emit_temp_var(u8));
-	
-	//Now we'll need the second test
-	instruction_t* second_test = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
+	//Crawl back through the block to try and see if we can tell
+	//where these all came from. Worst case we need to crawl the whole
+	//block, which isn't bad because these blocks aren't enormous 99.9% of
+	//the time
+	while(cursor != NULL){
+		//Did we find where op1 got assigned?. If so, check to see
+		//if the operation that made it generated a truthful byte value(0 or 1)
+		//or not
+		if(variables_equal(logical_and->op1, cursor->assignee, FALSE)){
+			if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
+				op1_came_from_setX = TRUE;
+			}
 
-	//Now the second setne
-	instruction_t* second_set = emit_setne_instruction(emit_temp_var(u8));
+		//Give op2 the exact same treatment
+		} else if(variables_equal(logical_and->op2, cursor->assignee, FALSE)){
+			if(does_operator_generate_truthful_byte_value(cursor->op) == TRUE){
+				op2_came_from_setX = TRUE;
+			}
+		}
+
+		//Push it back
+		cursor = cursor->previous_statement;
+	}
+
+	//We expect that it *not* being from
+	//setX is the most likely case
+	if(op1_came_from_setX == FALSE){
+		//Let's first emit our test instruction
+		instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op1, logical_and->op1);
+
+		//Emit a var to hold the result of op1
+		op1_result = emit_temp_var(u8);
+
+		//Now we'll need a setne(not zero) instruction that will the op1 result
+		instruction_t* set_instruction = emit_setne_instruction(op1_result);
+
+		//IMPORTANT - flag that this depends on the source register
+		set_instruction->op1 = test_instruction->source_register;
+
+		//Insert these in order. The test comes first, then the set(relies on the flags from test)
+		insert_instruction_before_given(test_instruction, after_logical_and);
+		insert_instruction_before_given(set_instruction, after_logical_and);
+
+	} else {
+		//If we make it here, we know that op1 already came from a setX instruction. So, we can just
+		//assign here and be done
+		op1_result = emit_var_copy(logical_and->op1);
+		//We will emit a type-coerced version of our value
+		op1_result->type = u8;
+		op1_result->variable_size = get_type_size(u8);
+	}
+
+	//We expect that it *not* being from
+	//setX is the most likely case
+	if(op2_came_from_setX == FALSE){
+		//Test the 2 together
+		instruction_t* test_instruction = emit_direct_test_instruction(logical_and->op2, logical_and->op2);
+
+		//Emit a var to hold the result of op2
+		op2_result = emit_temp_var(u8);
+
+		//Set if it's not zero
+		instruction_t* set_instruction = emit_setne_instruction(op2_result);
+
+		//IMPORTANT - flag that this depends on the source register
+		set_instruction->op1 = test_instruction->source_register;
+
+		//Insert these in order. The test comes first, then the set(relies on the flags from test)
+		insert_instruction_before_given(test_instruction, after_logical_and);
+		insert_instruction_before_given(set_instruction, after_logical_and);
+	} else {
+		//If we make it here, we know that op2 already came from a setX instruction. So, we can just
+		//assign here and be done
+		op2_result = emit_var_copy(logical_and->op2);
+		//We will emit a type-coerced version of our value
+		op2_result->type = u8;
+		op2_result->variable_size = get_type_size(u8);
+	}
 
 	//Now we'll need to ANDx these two values together to see if they're both 1
-	instruction_t* and_inst = emit_and_instruction(first_set->destination_register, second_set->destination_register);
+	instruction_t* and_inst = emit_and_instruction(op1_result, op2_result);
 
 	//The final thing that we need is a movzx
 	instruction_t* move_instruction = emit_move_instruction(logical_and->assignee, and_inst->destination_register);
@@ -3834,11 +3987,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 	//We no longer need the logical and statement
 	delete_statement(logical_and);
 
-	//Now we'll insert everything in order
-	insert_instruction_before_given(first_test, after_logical_and);
-	insert_instruction_before_given(first_set, after_logical_and);
-	insert_instruction_before_given(second_test, after_logical_and);
-	insert_instruction_before_given(second_set, after_logical_and);
+	//Now insert these in order. First comes the and instruction, then the final move
 	insert_instruction_before_given(and_inst, after_logical_and);
 	insert_instruction_before_given(move_instruction, after_logical_and);
 	
@@ -5075,49 +5224,6 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
 static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
-	/**
-	 * If we have an assignment that follows a relational operator, we need to do appropriate
-	 * setting logic. We'll do this by inserting a setX statement inbetween the relational operator
-	 * and the assignment
-	 */
-	if(is_instruction_binary_operation(window->instruction1) == TRUE
-		&& is_operator_relational_operator(window->instruction1->op) == TRUE
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-
-		//Set the comparison and assignment instructions
-		instruction_t* comparison = window->instruction1;
-		instruction_t* assignment = window->instruction2;
-
-		//Handle the comparison operation here
-		handle_cmp_instruction(comparison);
-
-		//We will determine the type signedness *based* on how the op1 is. We don't want to use the assignee, because the assignee for a comparison will nearly
-		//always be unsigned
-		u_int8_t type_signed = is_type_signed(assignment->op1->type);
-
-		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction
-		instruction_t* set_instruction = emit_setX_instruction(comparison->op, emit_temp_var(u8), comparison->op1, type_signed);
-
-		//We now also need to modify the move instruction. We can do this without creating any new memory
-		variable_size_t destination_size = get_type_size(assignment->assignee->type);
-		variable_size_t source_size = get_type_size(set_instruction->destination_register->type);
-		u_int8_t destination_signed = is_type_signed(assignment->assignee->type);
-
-		assignment->instruction_type = select_move_instruction(destination_size, source_size, destination_signed);
-		//Assignee and destination are the same
-		assignment->destination_register = assignment->assignee;
-		//The source is now this set instruction's destination
-		assignment->source_register = set_instruction->destination_register;
-
-		//Now once we have the set instruction, we need to insert it between 1 and 2
-		insert_instruction_before_given(set_instruction, assignment);
-
-		//Reconstruct the window here, starting at the end
-		reconstruct_window(window, assignment);
-		return;
-	}
-
 	//============================= Address Calculation Optimization  ==============================
 	//These are patterns that span multiple instructions. Often we're able to
 	//condense these multiple instructions into one singular x86 instruction
@@ -5702,7 +5808,36 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
-			handle_binary_operation_instruction(instruction);
+			/**
+			 * Some comparison instructions need us to set the
+			 * value of them after the fact, while others don't
+			 * (think ones that are relied on by branches). So, we will
+			 * invoke a special rule for relational and equality operators
+			 * to handle these special cases
+			 */
+			switch(instruction->op){
+				case DOUBLE_EQUALS:
+				case NOT_EQUALS:
+				case G_THAN:
+				case G_THAN_OR_EQ:
+				case L_THAN:
+				case L_THAN_OR_EQ:
+					//This helper does all of the heavy lifting. It will
+					//return the last instruction that it created/touched
+					instruction = handle_cmp_instruction(instruction);
+
+					//Rebuild the window based on this
+					reconstruct_window(window, instruction);
+
+					break;
+
+				//All other cases - just handle the instruction
+				//normally
+				default:
+					handle_binary_operation_instruction(instruction);
+					break;
+			}
+
 			break;
 		//For a phi function, we perform an exact 1:1 mapping
 		case THREE_ADDR_CODE_PHI_FUNC:

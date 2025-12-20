@@ -225,6 +225,29 @@ u_int8_t is_operator_relational_operator(ollie_token_t op){
 
 
 /**
+ * Does operation generate truthful byte value
+ *
+ * This encompasses: >, >=, <, <=, !=, ==, ||, && because
+ * they generate either a 0 or a 1
+ */
+u_int8_t does_operator_generate_truthful_byte_value(ollie_token_t op){
+	switch(op){
+		case G_THAN:
+		case L_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+		case DOUBLE_AND:
+		case DOUBLE_OR:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Helper function to determine if we have a store operation
  */
 u_int8_t is_store_operation(instruction_t* statement){
