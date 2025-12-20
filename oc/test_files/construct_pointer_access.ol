@@ -50,5 +50,5 @@ fn not_main(arg:i32, argv:char**) -> i64 {
 
 pub fn main(arg:i32, argv:char**) -> i32{
 	@not_main(arg, argv);
-	ret arg;
+	ret 0;
 }
