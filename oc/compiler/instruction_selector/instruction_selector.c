@@ -594,6 +594,18 @@ static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* inst
 
 	//Our most common case - global variables for obvious reasons do not have a stack address
 	if(var->membership != GLOBAL_VARIABLE){
+		//There are certain unique cases(think reference function parameter), where
+		//the value is it's own address. In this case, the stack region would be NULL
+		//and we can just make this into a simply assignment statement. This avoids what would
+		//otherwise be a segfault/unexpected behavior below
+		if(var->stack_region == NULL){
+			//Turn this into an assignment statement
+			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+			//And we're done - this is all that we should need to do
+			return;
+		}
+
 		//Extract the stack offset for our use
 		u_int32_t stack_offset = var->stack_region->base_address;
 

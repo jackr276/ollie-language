@@ -131,6 +131,9 @@ struct symtab_variable_record_t{
 	generic_type_t* type_defined_as;
 	//The next hashtable record
 	symtab_variable_record_t* next;
+	//We are able to alias variables as other variables. This is
+	//typically only used for function parameters in the presaving step
+	symtab_variable_record_t* alias;
 	//What is the enum member value
 	u_int64_t enum_member_value;
 	//The associate region that this variable is stored in
@@ -336,6 +339,11 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name);
  * Create a ternary variable record
  */
 symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+
+/**
+ * Create a parameter alias variable record
+ */
+symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed

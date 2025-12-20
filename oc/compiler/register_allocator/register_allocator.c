@@ -3177,7 +3177,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 *
 	 * short of this, we will see strange an inaccurate results such as excessive interference
 	 */
-	if(could_coalesce == TRUE){
+	while(could_coalesce == TRUE){
 		//We need to *reset* all of our live ranges here
 		reset_all_live_ranges(&live_ranges);
 
@@ -3194,6 +3194,10 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 		//Finally, recalculate all of the interference now that all of the
 		//prerequisites have been met
 		graph = construct_function_level_interference_graph(function_entry, &live_ranges);
+
+		//Now let's try again - we want to keep at this until we're sure we cannot coalesce
+		//anymore to guarantee the smallest final number of instructions possible
+		could_coalesce = perform_live_range_coalescence(function_entry, graph, debug_printing);
 	}
 
 	//Show our live ranges once again if requested

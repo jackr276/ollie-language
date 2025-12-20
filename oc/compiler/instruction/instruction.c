@@ -694,6 +694,13 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//Add into here for memory management
 	dynamic_array_add(&emitted_vars, emitted_var);
 
+	//If we have an aliased variable(almost exclusively function
+	//parameters), we will instead emit the alias of that variable instead
+	//of the variable itself
+	if(var->alias != NULL){
+		var = var->alias;
+	}
+
 	//This is not temporary
 	emitted_var->is_temporary = FALSE;
 	//We always store the type as the type with which this variable was defined in the CFG

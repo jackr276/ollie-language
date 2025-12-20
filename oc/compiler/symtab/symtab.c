@@ -360,8 +360,10 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 	//And here is the special part - we'll need to make a symtab record
 	//for this variable and add it in
 	char variable_name[100];
-	//Grab a new temp ar number from here
-	sprintf(variable_name, "t%d", temp_id);
+	//Grab a new temp var number from here. We use the
+	//^ because it is illegal for variables typed in by the
+	//user to have that, so we will not have collisions
+	sprintf(variable_name, "^t%d", temp_id);
 
 	//Create and set the name here
 	dynamic_string_t string = dynamic_string_alloc();
@@ -371,6 +373,53 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 	symtab_variable_record_t* record = create_variable_record(string);
 	//Store the type here
 	record->type_defined_as = type;
+
+	//Insert this into the variable symtab
+	insert_variable(variable_symtab, record);
+
+	//The current generation is always 1 at first
+	record->current_generation = 1;
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	//And give it back
+	return record;
+}
+
+
+/**
+ * Create and return a function parameter alis variable. A parameter alias variable is halfway
+ * between a temp and a full fledged non-temp variable. It will have a 
+ * symtab record, and as such will be picked up by the phi function
+ * inserted. It will also not be declared as temp
+ */
+symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+	//And here is the special part - we'll need to make a symtab record
+	//for this variable and add it in
+	char variable_name[100];
+	//Grab a new temp var number from here. We use the
+	//^ because it is illegal for variables typed in by the
+	//user to have that, so we will not have collisions
+	sprintf(variable_name, "^t%d", temp_id);
+
+	//Create and set the name here
+	dynamic_string_t string = dynamic_string_alloc();
+	dynamic_string_set(&string, variable_name);
+
+	//Now create and add the symtab record for this variable
+	symtab_variable_record_t* record = create_variable_record(string);
+	//Store the type here
+	record->type_defined_as = aliases->type_defined_as;
+
+	//Copy over the stack info as well - this is important for references
+	record->stack_region = aliases->stack_region;
+	record->stack_variable = aliases->stack_variable;
+
+	//This is still a function parameter at hear
+	record->membership = FUNCTION_PARAMETER;
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);

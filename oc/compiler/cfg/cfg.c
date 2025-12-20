@@ -8070,39 +8070,82 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 		//Extract the parameter
 		symtab_variable_record_t* parameter = func_record->func_params[i];
 
-		//If it's not a stack variable we don't care *or* it's a reference
-		//type, we do not need to pre-load this into the stack. It's fine as 
-		//it is
-		if(parameter->stack_variable == FALSE 
-			|| parameter->type_defined_as->type_class == TYPE_CLASS_REFERENCE){
-			continue;
+		//If we have a stack variable that is *not* a reference type, we will
+		//go through here and pre-load it onto the stack
+		if(parameter->stack_variable == TRUE 
+			&& parameter->type_defined_as->type_class != TYPE_CLASS_REFERENCE){
+
+			//However if it is a stack variable, we need to add it to the stack and emit an initial store of it
+			if(parameter->stack_region == NULL){
+				//Add this variable onto the stack now, since we know it is not already on it
+				parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
+			}
+
+			//Following this, we'll need to get an actual load into the stack for this variable
+			instruction_t* memory_address_assignment = emit_memory_address_assignment(emit_temp_var(u64), emit_var(parameter));
+
+			//Add this into the block
+			add_statement(function_starting_block, memory_address_assignment);
+
+			//Copy the type over here
+			three_addr_var_t* type_adjusted_address = emit_var_copy(memory_address_assignment->assignee);
+			type_adjusted_address->type = parameter->type_defined_as;
+
+			//Now we'll need to do our initial load
+			instruction_t* store_code = emit_store_ir_code(type_adjusted_address, emit_var(parameter));
+
+			//Bookkeeping here
+			add_used_variable(function_starting_block, store_code->op1);
+			add_used_variable(function_starting_block, store_code->assignee);
+
+			//Add it into the starting block
+			add_statement(function_starting_block, store_code);
+
+		/**
+		 * Parameter aliasing:
+		 *
+		 * To avoid any issues with precoloring interference way down the line
+		 * in the register allocator, we will do a temp assignment/aliasing
+		 * of all non-stack function parameters. This works something like this
+		 *
+		 * Parameter x:
+		 *
+		 * <function_start>
+		 * 		x_alias <- x;
+		 *
+		 * 	<use of x>
+		 * 		y <- x(replaced with x_alias) + 3;
+		 *
+		 *
+		 * 	This allows us to avoid the need to spill function parameter variables. If this
+		 * 	turns out to not be needed, then the coalescing subsystem inside of the register
+		 * 	allocator will simply knock out the top assignment as if it was never there
+		 */
+		} else {
+			//Create the aliased variable
+			symtab_variable_record_t* alias = create_parameter_alias_variable(parameter, variable_symtab, increment_and_get_temp_id());
+
+			//Very important that we emit this first for the below reason
+			three_addr_var_t* parameter_var = emit_var(parameter);
+
+			//Emit the alias that we're assigning to
+			three_addr_var_t* alias_var = emit_var(alias);
+
+			//Flag that the parameter does have this alias. Note that once we do this, any time
+			//emit_var() is called on the parameter, the alias will be used instead so the order
+			//here is very important. Once this is done - there is no going back
+			parameter->alias = alias;
+
+			//Emit the assignment here
+			instruction_t* alias_assignment = emit_assignment_instruction(alias_var, parameter_var);
+
+			//Counts as a use for the parameter
+			add_used_variable(function_starting_block, parameter_var);
+			add_assigned_variable(function_starting_block, alias_var);
+
+			//Now add the statement in
+			add_statement(function_starting_block, alias_assignment);
 		}
-
-		//However if it is a stack variable, we need to add it to the stack and emit an initial store of it
-		if(parameter->stack_region == NULL){
-			//Add this variable onto the stack now, since we know it is not already on it
-			parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
-		}
-
-		//Following this, we'll need to get an actual load into the stack for this variable
-		instruction_t* memory_address_assignment = emit_memory_address_assignment(emit_temp_var(u64), emit_var(parameter));
-
-		//Add this into the block
-		add_statement(function_starting_block, memory_address_assignment);
-
-		//Copy the type over here
-		three_addr_var_t* type_adjusted_address = emit_var_copy(memory_address_assignment->assignee);
-		type_adjusted_address->type = parameter->type_defined_as;
-
-		//Now we'll need to do our initial load
-		instruction_t* store_code = emit_store_ir_code(type_adjusted_address, emit_var(parameter));
-
-		//Bookkeeping here
-		add_used_variable(function_starting_block, store_code->op1);
-		add_used_variable(function_starting_block, store_code->assignee);
-
-		//Add it into the starting block
-		add_statement(function_starting_block, store_code);
 	}
 
 	//We don't care about anything until we reach the compound statement
