@@ -743,8 +743,9 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 		var = var->alias;
 	}
 
-	//This is not temporary
-	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+	//This is a memory address variable. We will flag this for special
+	//printing
+	emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
 
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = var->type_defined_as;
@@ -1322,42 +1323,59 @@ static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg)
  * and nothing more. This function is also designed to take into account the indirection aspected as well
  */
 void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode_t mode){
-	//If we're printing live ranges, we'll use the LR number
-	if(mode == PRINTING_LIVE_RANGES){
-		fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
-	} else if(mode == PRINTING_REGISTERS){
-		if(variable->associated_live_range->reg == NO_REG){
+	//Go based on what printing mode we're after
+	switch(mode){
+		case PRINTING_LIVE_RANGES:
 			fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
-		} else
+			break;
 
-		//Switch based on the variable's size to print out the register
-		switch(variable->variable_size){
-			case QUAD_WORD:
-				print_64_bit_register_name(fl, variable->associated_live_range->reg);
+		case PRINTING_REGISTERS:
+			//Special edge case
+			if(variable->associated_live_range->reg == NO_REG){
+				fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
 				break;
-			case DOUBLE_WORD:
-				print_32_bit_register_name(fl, variable->associated_live_range->reg);
-				break;
-			case WORD:
-				print_16_bit_register_name(fl, variable->associated_live_range->reg);
-				break;
-			case BYTE:
-				print_8_bit_register_name(fl, variable->associated_live_range->reg);
-				break;
-			default:
-				print_64_bit_register_name(fl, variable->associated_live_range->reg);
-				printf("DEFAULTED\n");
-				break;
-		}
+			}
+			
+			//Switch based on the variable's size to print out the register
+			switch(variable->variable_size){
+				case QUAD_WORD:
+					print_64_bit_register_name(fl, variable->associated_live_range->reg);
+					break;
+				case DOUBLE_WORD:
+					print_32_bit_register_name(fl, variable->associated_live_range->reg);
+					break;
+				case WORD:
+					print_16_bit_register_name(fl, variable->associated_live_range->reg);
+					break;
+				case BYTE:
+					print_8_bit_register_name(fl, variable->associated_live_range->reg);
+					break;
+				default:
+					print_64_bit_register_name(fl, variable->associated_live_range->reg);
+					printf("DEFAULTED\n");
+					break;
+			}
 
-	//Otherwise if it's a temp
-	} else if(variable->variable_type == VARIABLE_TYPE_TEMP){
-		//Print out it's temp var number
-		fprintf(fl, "t%d", variable->temp_var_number);
+			break;
 
-	} else {
-		//Otherwise, print out the SSA generation along with the variable
-		fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
+		default:
+			//Go based on our type of var here
+			switch(variable->variable_type){
+				case VARIABLE_TYPE_TEMP:
+					//Print out it's temp var number
+					fprintf(fl, "t%d", variable->temp_var_number);
+					break;
+				case VARIABLE_TYPE_NON_TEMP:
+					//Print out the SSA generation along with the variable
+					fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
+					break;
+				case VARIABLE_TYPE_MEMORY_ADDRESS:
+					//Print out the normal version, plus the MEM<> wrapper
+					fprintf(fl, "MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
+					break;
+			}
+
+			break;
 	}
 }
 
