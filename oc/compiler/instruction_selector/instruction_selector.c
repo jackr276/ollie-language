@@ -369,13 +369,19 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 	//Switch based on the type
 	switch(constant->const_type){
 		case INT_CONST:
+			constant->constant_value.signed_integer_constant = log2_of_known_power_of_2(constant->constant_value.signed_integer_constant);
+			break;
+
 		case INT_CONST_FORCE_U:
-			constant->constant_value.integer_constant = log2_of_known_power_of_2(constant->constant_value.integer_constant);
+			constant->constant_value.unsigned_integer_constant = log2_of_known_power_of_2(constant->constant_value.unsigned_integer_constant);
 			break;
 
 		case LONG_CONST:
+			constant->constant_value.signed_long_constant = log2_of_known_power_of_2(constant->constant_value.signed_long_constant);
+			break;
+
 		case LONG_CONST_FORCE_U:
-			constant->constant_value.long_constant = log2_of_known_power_of_2(constant->constant_value.long_constant);
+			constant->constant_value.unsigned_long_constant = log2_of_known_power_of_2(constant->constant_value.unsigned_long_constant);
 			break;
 
 		case CHAR_CONST:
@@ -1122,7 +1128,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			three_addr_const_t* constant = window->instruction1->op1_const;
 
 			//We can just use the long version here
-			address_offset *= constant->constant_value.long_constant;
+			address_offset *= constant->constant_value.signed_long_constant;
 
 			//Once we've done this, the address offset is now properly multiplied. We'll reuse
 			//the constant from operation one, and convert the lea statement into a BIN_OP_WITH_CONST
@@ -1132,7 +1138,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			constant->const_type = LONG_CONST;
 
 			//Set this to be the address offset
-			constant->constant_value.long_constant = address_offset;
+			constant->constant_value.signed_long_constant = address_offset;
 
 			//Add it into instruction 2
 			window->instruction2->op1_const = constant;
@@ -1374,7 +1380,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			}
 
 			//Set the constant's value to 1
-			current_instruction->op1_const->constant_value.long_constant = 1;
+			current_instruction->op1_const->constant_value.signed_long_constant = 1;
 		}
 
 		//We changed something
@@ -1567,7 +1573,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 						//We can modify op1 const to just be 0 now. This is lazy but it
 						//works, we'll just 0 out all 64 bits
-						current_instruction->op1_const->constant_value.long_constant = 0;
+						current_instruction->op1_const->constant_value.signed_long_constant = 0;
 
 						//We changed something
 						changed = TRUE;
@@ -2261,14 +2267,20 @@ static instruction_t* emit_sete_instruction(three_addr_var_t* destination){
 /**
  * Emit a setne instruction
  *
- * The setne instruction is used on a byte
+ * The setne instruction is used on a byte. We have a "relies_on" field to tell the instruction
+ * scheduler what this setne relies on in the future, but this op1 is never actually displayed/printed,
+ * it is just for tracking
  */
-static instruction_t* emit_setne_instruction(three_addr_var_t* destination){
+static instruction_t* emit_setne_instruction(three_addr_var_t* destination, three_addr_var_t* relies_on){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//And we'll set the class
 	instruction->instruction_type = SETNE;
+
+	//We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
+	//but it is completely ignored at the selector level
+	instruction->op1 = relies_on;
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -3821,7 +3833,7 @@ static void handle_logical_or_instruction(instruction_window_t* window){
 	instruction_t* or_instruction = emit_or_instruction(logical_or->op1, logical_or->op2);
 
 	//Now we need the setne instruction
-	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8));
+	instruction_t* setne_instruction = emit_setne_instruction(emit_temp_var(u8), logical_or->op1);
 
 	//Flag that thsi relies on the above or instruction
 	setne_instruction->op1 = logical_or->op1;
@@ -3924,7 +3936,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		op1_result = emit_temp_var(u8);
 
 		//Now we'll need a setne(not zero) instruction that will the op1 result
-		instruction_t* set_instruction = emit_setne_instruction(op1_result);
+		instruction_t* set_instruction = emit_setne_instruction(op1_result, logical_and->op1);
 
 		//IMPORTANT - flag that this depends on the source register
 		set_instruction->op1 = test_instruction->source_register;
@@ -3952,7 +3964,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 		op2_result = emit_temp_var(u8);
 
 		//Set if it's not zero
-		instruction_t* set_instruction = emit_setne_instruction(op2_result);
+		instruction_t* set_instruction = emit_setne_instruction(op2_result, logical_and->op1);
 
 		//IMPORTANT - flag that this depends on the source register
 		set_instruction->op1 = test_instruction->source_register;
@@ -4702,7 +4714,7 @@ static void handle_two_instruction_multiply_load_with_variable_offset(instructio
 	load_instruction->address_calc_reg2 = address_calc_reg2;
 
 	//The multiplicator comes from the constant multiplication
-	load_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
+	load_instruction->lea_multiplicator = multiply->op1_const->constant_value.signed_long_constant;
 
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
@@ -4742,7 +4754,7 @@ static void handle_two_instruction_multiply_store_with_variable_offset(instructi
 	store_instruction->address_calc_reg2 = address_calc_reg2;
 
 	//The multiplicator comes from the constant multiplication
-	store_instruction->lea_multiplicator = multiply->op1_const->constant_value.long_constant;
+	store_instruction->lea_multiplicator = multiply->op1_const->constant_value.signed_long_constant;
 	
 	//Invoke the helper here
 	handle_store_instruction_sources_and_instruction_type(store_instruction);
@@ -5149,7 +5161,7 @@ static void handle_three_instruction_load_with_address_calculation_operation(ins
 	//The op2 comes from the lea statement
 	load_with_variable_offset->address_calc_reg2 = address_calc_reg2;
 	//The multiplicator comes from the constant(we know it's a power of 2 by the time we get here)
-	load_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.long_constant;
+	load_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.signed_long_constant;
 
 	//The offset on the outside comes from the constant assignment
 	load_with_variable_offset->offset = addition->op1_const;
@@ -5201,7 +5213,7 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
 	//The op2 comes from the lea statement
 	store_with_variable_offset->address_calc_reg2 = address_calc_reg2;
 	//The multiplicator comes from the multiplication
-	store_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.long_constant;
+	store_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.signed_long_constant;
 
 	//This comes from the addition
 	store_with_variable_offset->offset = addition->op1_const;

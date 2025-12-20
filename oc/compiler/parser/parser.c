@@ -458,14 +458,31 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 		return print_and_return_error("Void pointers cannot be added or subtracted to", parser_line_num);
 	}
 
+	//An efficiency enhancement here - if the operand itself is a constant, we can just generate
+	//the constant directly and skip all of the extra allocation that we're working with
+	//below
+	if(operand->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		//The type is always an i64
+		operand->inferred_type = immut_i64;
+		
+		//Coerce the operand
+		coerce_constant(operand);
+
+		//Multiply it by the size
+		operand->constant_value.signed_long_value *= pointer_type->internal_types.points_to->type_size;
+
+		//And we're done, just give back the value
+		return operand;
+	}
+
 	//Write out our constant multplicand
 	generic_ast_node_t* constant_multiplicand = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 	//Mark the type too
 	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
 	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->internal_types.points_to->type_size;
-	//This one's type is always an immutable u64
-	constant_multiplicand->inferred_type = immut_u64; 
+	//This one's type is always an immutable i64
+	constant_multiplicand->inferred_type = immut_i64; 
 
 	//Allocate an adjustment node
 	generic_ast_node_t* adjustment = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
@@ -493,7 +510,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 
 	//These will all have the exact same types
 	return_node->variable = pointer->variable;
-	return_node->inferred_type = pointer->inferred_type;
+	return_node->inferred_type = immut_i64;
 
 	//Give back the final node
 	return return_node;
@@ -2749,6 +2766,10 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 	generic_ast_node_t* right_child;
 	//Holding the return type
 	generic_type_t* return_type;
+	//Is the temp holder a constant node?
+	u_int8_t temp_holder_is_constant = FALSE;
+	//Is the right child a constant node?
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid cast expression expression
 	generic_ast_node_t* sub_tree_root = cast_expression(fl, side);
@@ -2772,6 +2793,9 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
+		//Store whether or not the temp holder is a constant for later processing
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE; 
+
 		//Let's see if this is a valid type or not
 		u_int8_t temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 
@@ -2781,15 +2805,6 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
-
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
-
 		//Now we have no choice but to see a valid cast expression again
 		right_child = cast_expression(fl, side);
 
@@ -2797,6 +2812,29 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//If this is an error we can just propogate it up
 			return right_child;
+		}
+
+		//Store whether or not the right child is a constant for later
+		//processing
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+
+
+		//If we have a 0 in the right hand child, and we're trying
+		//to divide or mod, that would cause errors so we will catch it now
+		if(right_child_is_constant == TRUE 
+			&& is_constant_node_value_0(right_child) == TRUE){
+			//Go based on the operator
+			switch(op.tok){
+				//Hard fail case, can't divide by 0
+				case F_SLASH:
+					return print_and_return_error("Attempt to divide by 0", parser_line_num);
+				//Hard fail case, can't mod by 0
+				case MOD:
+					return print_and_return_error("Attempt to modulo by 0", parser_line_num);
+				//Anything else(the * operation) is just fine
+				default:
+					break;
+			}
 		}
 
 		//Let's see if this is a valid type or not
@@ -2817,7 +2855,67 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		//Now that we have the return type, we will perform type coercion based on whether or not each
+		//leaf node is a constant
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		/**
+		 * If we discover that the user is just trying to add/subtract two constants together, then we can do a preemptive
+		 * optimization by adding them together right now and just giving back a constant node. The node that we give back
+		 * will always
+		 */
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Go based on the token
+			switch(op.tok){
+				case STAR:
+					//Multiply, result is in temp holder
+					multiply_constant_nodes(temp_holder, right_child);
+					break;
+
+				case F_SLASH:
+					//Divide, result is in temp holder
+					divide_constant_nodes(temp_holder, right_child);
+					break;
+
+				case MOD:
+					//Modulo, result is in temp holder
+					mod_constant_nodes(temp_holder, right_child);
+					break;
+
+				//Unreachable
+				default:
+					break;
+			}
+
+			//The right child is now useless, so we can scrap it. The temp holder is the sub-tree-root
+			sub_tree_root = temp_holder;
+
+			//The root's type is now the inferred type
+			sub_tree_root->inferred_type = return_type;
+
+			//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+			//"sub-tree root". We'll now refresh the token to keep looking
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			
+			//Skip forward
+			continue;
+		}
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Add these both in in order
+		add_child_node(sub_tree_root, temp_holder);
 		add_child_node(sub_tree_root, right_child);
 
 		//Assign the node type
@@ -2860,6 +2958,12 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* right_child;
 	//Hold the return type for us here
 	generic_type_t* return_type;
+	//In case we need it for the pointer math
+	symtab_variable_record_t* variable = NULL;
+	//Is the temp holder a constant node?
+	u_int8_t temp_holder_is_constant = FALSE;
+	//Is the right child a constant node?
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid multiplicative expression
 	generic_ast_node_t* sub_tree_root = multiplicative_expression(fl, side);
@@ -2882,6 +2986,9 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
+		//Cache the comparison here - we'll need it later
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+
 		//Let's see if this actually works
 		u_int8_t left_type_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 		
@@ -2891,14 +2998,6 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
-
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid multiplicative expression again
 		right_child = multiplicative_expression(fl, side);
@@ -2908,6 +3007,9 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
+
+		//Cache the result - we'll need it for later
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this actually works
 		u_int8_t right_type_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
@@ -2943,19 +3045,83 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child, side);
 
 			//Copy the variable over here for later use
-			if(temp_holder->variable != NULL){
-				sub_tree_root->variable = temp_holder->variable;
-			}
+			variable = temp_holder->variable;
 
 			//Once we're done here, the right child is the pointer arithmetic
 			right_child = pointer_arithmetic;
 		}
+
+		/**
+		 * For constant types, we need to perform type/storage
+		 * rememediation on the internal constant values based on 
+		 * what the return type is. We will do this now. Remember
+		 * that the inferred types of the constant nodes have already
+		 * been manipulated by the type coercer above
+		 */
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		/**
+		 * If we discover that the user is just trying to add/subtract two constants together, then we can do a preemptive
+		 * optimization by adding them together right now and just giving back a constant node. The node that we give back
+		 * will always
+		 */
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Go based on the token
+			switch(op.tok){
+				//Add the two constants
+				case PLUS:
+					//Add them, result is in temp-holder
+					add_constant_nodes(temp_holder, right_child);
+					break;
+
+				case MINUS:
+					//Subtract them, result is in temp-holder
+					subtract_constant_nodes(temp_holder, right_child);
+					break;
+
+				//Unreachable
+				default:
+					break;
+			}
+
+			//The right child is now useless, so we can scrap it. The temp holder is the sub-tree-root
+			sub_tree_root = temp_holder;
+
+			//Update the type appropriately
+			sub_tree_root->inferred_type = return_type;
+
+			//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+			//"sub-tree root". We'll now refresh the token to keep looking
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			
+			//Skip forward
+			continue;
+		}
+
+		//Now that everything above is good, we can make the operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = op.tok;
+
+		//We actually already know this guy's first child--it's the previous root currently
+		//being held in temp_holder. We'll add the temp holder in as the subtree root
+		add_child_node(sub_tree_root, temp_holder);
 
 		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
 		add_child_node(sub_tree_root, right_child);
 		
 		//Now we can finally assign the sub tree type
 		sub_tree_root->inferred_type = return_type;
+
+		//Copy over the variable. It will either be NULL(common case) or it will carry
+		//the value of the pointer that we manipulated
+		sub_tree_root->variable = variable;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -2987,10 +3153,18 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
+	//Op token for clarity
+	lexitem_t op;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Hold the return type
+	generic_type_t* return_type;
+	//Flag whether the temp holder is a constant
+	u_int8_t temp_holder_is_constant = FALSE;
+	//Flag whether the right child is a constant
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid additive expression
 	generic_ast_node_t* sub_tree_root = additive_expression(fl, side);
@@ -3005,66 +3179,110 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 	//this node in as the child and move along. But if we do see shift operator symbols,
 	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//We can optionally see some shift operators here
-	if(lookahead.tok == L_SHIFT || lookahead.tok == R_SHIFT){
-		//Save the lexer item here
-		lexitem_t op = lookahead;
 
-		//Hold the reference to the prior root
-		temp_holder = sub_tree_root;
+	//Go based on which token we have
+	switch(lookahead.tok){
+		case L_SHIFT:
+		case R_SHIFT:
+			//Save the lexer item here
+			op = lookahead;
 
-		//Let's see if this actually works
-		u_int8_t is_left_type_shiftable = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
-		
-		//Fail out here
-		if(is_left_type_shiftable == FALSE){
-			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
-			return print_and_return_error(info, parser_line_num);
-		}
+			//Hold the reference to the prior root
+			temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+			//Flag whether this is constant or not
+			temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
+			//Let's see if this actually works
+			u_int8_t is_left_type_shiftable = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
+			
+			//Fail out here
+			if(is_left_type_shiftable == FALSE){
+				sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//Now we have no choice but to see a valid additive expression again
-		right_child = additive_expression(fl, side);
+			//Now we have no choice but to see a valid additive expression again
+			right_child = additive_expression(fl, side);
 
-		//If it's an error, just fail out
-		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			//If this is an error we can just propogate it up
-			return right_child;
-		}
+			//If it's an error, just fail out
+			if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				//If this is an error we can just propogate it up
+				return right_child;
+			}
 
-		//Let's see if this actually works
-		u_int8_t is_right_type_shiftable = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
-		
-		//Fail out here
-		if(is_right_type_shiftable == FALSE){
-			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
-			return print_and_return_error(info, parser_line_num);
-		}
+			//Flag whether or not the right child is a constant
+			right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+			//Let's see if this actually works
+			u_int8_t is_right_type_shiftable = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
+			
+			//Fail out here
+			if(is_right_type_shiftable == FALSE){
+				sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//The return type is always the left child's type
-		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+			//The return type is always the left child's type
+			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-		//If this fails, that means that we have an invalid operation
-		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
-			return print_and_return_error(info, parser_line_num);
-		}
+			//If this fails, that means that we have an invalid operation
+			if(return_type == NULL){
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
+				return print_and_return_error(info, parser_line_num);
+			}
 
-	} else {
-		//Otherwise just push the token back
-		push_back_token(lookahead);
+			//If the temp holder is a constant, perform any needed coercions here
+			if(temp_holder_is_constant == TRUE){
+				coerce_constant(temp_holder);
+			}
+
+			//Same for the right child
+			if(right_child_is_constant == TRUE){
+				coerce_constant(right_child);
+			}
+
+			//If they are both constants, we will skip any extra allocations and just do
+			//the constant math right inside of here
+			if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+				//Go based on the operator and invoke the appropriate rule
+				//here
+				switch(op.tok){
+					case R_SHIFT:
+						right_shift_constant_nodes(temp_holder, right_child);
+						break;
+					case L_SHIFT:
+						left_shift_constant_nodes(temp_holder, right_child);
+						break;
+					default:
+						break;
+				}
+
+				//The temp holder now has our entire answer
+				sub_tree_root = temp_holder;
+
+				//And get out - we'll skip the below allocations
+				break;
+			}
+
+			//Only now are we good to allocate
+			sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+			//We'll now assign the binary expression it's operator
+			sub_tree_root->binary_operator = lookahead.tok;
+
+			//Store the return type
+			sub_tree_root->inferred_type = return_type;
+
+			//Put both children in order
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+
+			break;
+
+		default:
+			//Otherwise just push the token back
+			push_back_token(lookahead);
+			break;
 	}
 
 	//Once we make it here, the subtree root is either just the shift expression or it is the
@@ -3095,10 +3313,17 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
+	//Op token for readability
+	lexitem_t op;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//The return type
+	generic_type_t* return_type;
+	//Track whether temp and right child collapsed to constants
+	u_int8_t temp_holder_is_constant = FALSE;
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid shift expression
 	generic_ast_node_t* sub_tree_root = shift_expression(fl, side);
@@ -3114,66 +3339,121 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 
-	//If we have relational operators here
-	if(lookahead.tok == G_THAN || lookahead.tok == L_THAN || lookahead.tok == G_THAN_OR_EQ
-	   || lookahead.tok == L_THAN_OR_EQ){
-		lexitem_t op = lookahead;
+	//Switch is faster since we have an enum so it can use a jump table
+	switch(lookahead.tok){
+		//Handle all relational operations
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN:
+		case L_THAN_OR_EQ:
+			//Store this for readability
+			op = lookahead;
 
-		//Hold the reference to the prior root
-		temp_holder = sub_tree_root;
+			//Hold the reference to the prior root
+			temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+			//Flag whether it's a constant
+			temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
-		//Let's check to see if this type is valid for our operation
-		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
+			//Let's check to see if this type is valid for our operation
+			u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
 
-		//This is our fail case
-		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok)); 
-			return print_and_return_error(info, parser_line_num);
-		}
+			//This is our fail case
+			if(is_temp_holder_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_to_string(op.tok)); 
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
+			//Now we have no choice but to see a valid shift again
+			right_child = shift_expression(fl, side);
 
-		//Now we have no choice but to see a valid shift again
-		right_child = shift_expression(fl, side);
+			//If it's an error, just fail out
+			if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				//If this is an error we can just propogate it up
+				return right_child;
+			}
 
-		//If it's an error, just fail out
-		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			//If this is an error we can just propogate it up
-			return right_child;
-		}
+			//Is this a constant? Figure out and store
+			right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
-		//Let's check to see if this type is valid for our operation
-		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
+			//Let's check to see if this type is valid for our operation
+			u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
 
-		//This is our fail case
-		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_to_string(op.tok)); 
-			return print_and_return_error(info, parser_line_num);
-		}
+			//This is our fail case
+			if(is_right_child_valid == FALSE){
+				sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_to_string(op.tok)); 
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//The return type is always the left child's type
-		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+			//The return type is always the left child's type
+			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-		//If this fails, that means that we have an invalid operation
-		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
-			return print_and_return_error(info, parser_line_num);
-		}
+			//If this fails, that means that we have an invalid operation
+			if(return_type == NULL){
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+			//Now that we know we've done valid type coercion, perform any constant coercion
+			//that is needed here
+			if(temp_holder_is_constant == TRUE){
+				coerce_constant(temp_holder);
+			}
 
-	//Otherwise we're done
-	} else {
-		//Otherwise just push the token back
-		push_back_token(lookahead);
+			//And same for the right child
+			if(right_child_is_constant == TRUE){
+				coerce_constant(right_child);
+			}
+
+			//If these are both constants, we can skip the entire allocation
+			//below and just invoke the simplifier straight out
+			if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+				//Invoke the specific rule that corresponds to our operator. The result
+				//will always come back to us in the temp holder
+				switch(op.tok){
+					case G_THAN:
+						greater_than_constant_nodes(temp_holder, right_child);
+						break;
+					case L_THAN:
+						less_than_constant_nodes(temp_holder, right_child);
+						break;
+					case G_THAN_OR_EQ:
+						greater_than_or_equal_to_constant_nodes(temp_holder, right_child);
+						break;
+					case L_THAN_OR_EQ:
+						less_than_or_equal_to_constant_nodes(temp_holder, right_child);
+						break;
+					//Unreachable
+					default:
+						break;
+				}
+
+				//The sub tree root is the temp holder
+				sub_tree_root = temp_holder;
+
+				//Get out
+				break;
+			}
+
+			//Only now do we allocate the operator node, since we know that we've
+			//passed all validations
+			sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+			//We'll now assign the binary expression it's operator
+			sub_tree_root->binary_operator = lookahead.tok;
+
+			//Set the return type as well
+			sub_tree_root->inferred_type = return_type;
+
+			//Add these 2 in order now that we're sure it's valid
+			add_child_node(sub_tree_root, temp_holder);
+			add_child_node(sub_tree_root, right_child);
+
+			break;
+
+		//By default, all we do is scrap this and get out
+		default:
+			push_back_token(lookahead);
+			break;
 	}
 
 	//Once we make it here, the subtree root is either just the shift expression or it is the
@@ -3199,6 +3479,11 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Holder for the return type
+	generic_type_t* return_type;
+	//Flags for whether or not both of these is constant
+	u_int8_t temp_holder_is_constant = FALSE;
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid relational expression
 	generic_ast_node_t* sub_tree_root = relational_expression(fl, side);
@@ -3222,10 +3507,8 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+		//Store the flag now
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's check to see if this is valid
 		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
@@ -3236,10 +3519,6 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
-
 		//Now we have no choice but to see a valid relational expression again
 		right_child = relational_expression(fl, side);
 
@@ -3248,6 +3527,9 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			//If this is an error we can just propogate it up
 			return right_child;
 		}
+
+		//Set the flag now
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's check to see if this is valid
 		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
@@ -3258,17 +3540,61 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
-
-		//The return type is always a u8
-		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		//Get the return type and perform any needed coercions
+		return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//If either of these are constants, we will invoke the constant coercer here
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		//If these are both constants, then we can invoke the appropriate simplifier
+		//rule to deal with them
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Perform the operation appropriately
+			switch(op.tok){
+				case NOT_EQUALS:
+					not_equals_constant_nodes(temp_holder, right_child);
+					break;
+				case DOUBLE_EQUALS:
+					equals_constant_nodes(temp_holder, right_child);
+					break;
+				//Should be completely unreachable
+				default:
+					break;
+			}
+
+			//The temp holder is now the subtree-root
+			sub_tree_root = temp_holder;
+
+			//Refresh the lookahead and skip ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Add both child nodes in order only now that we know everything is valid
+		add_child_node(sub_tree_root, temp_holder);
+		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+		add_child_node(sub_tree_root, right_child);
+
+		//Store the return type
+		sub_tree_root->inferred_type = return_type;
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
@@ -3300,6 +3626,9 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Store whether both of these are constants or not
+	u_int8_t temp_holder_is_constant = FALSE;
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid equality expression
 	generic_ast_node_t* sub_tree_root = equality_expression(fl, side);
@@ -3320,10 +3649,8 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+		//If we have a constant here then flag it
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this type is valid
 		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, SINGLE_AND, SIDE_TYPE_LEFT);
@@ -3333,10 +3660,6 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Type %s is not valid for the & operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid equality expression again
 		right_child = equality_expression(fl, side);
@@ -3356,8 +3679,8 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+		//Flag whether or not our right child is a constant
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Apply the compatibility and coercion layer
 		generic_type_t* final_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), SINGLE_AND);
@@ -3367,6 +3690,38 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "&");
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//If the temp holder is a constant, perform coercion
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		//If these are both constants, we can invoke the simplifier here
+		//to turn them into one node, and skip all of the extra allocation
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Invoke the helper. The result will be stored in the temp holder
+			bitwise_and_constant_nodes(temp_holder, right_child);
+
+			//This now is the subtree root going forward. The right child is irrelevant
+			sub_tree_root = temp_holder;
+
+			//Refresh the lookahead and continue
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Add the child nodes in the proper order here
+		add_child_node(sub_tree_root, temp_holder);
+		add_child_node(sub_tree_root, right_child);
 
 		//We now know that the subtree root has a type of u_int8(boolean)
 		sub_tree_root->inferred_type = final_type;
@@ -3401,6 +3756,9 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Flags for whether or not our right child and holder are constants
+	u_int8_t temp_holder_is_constant = FALSE;
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid and expression
 	generic_ast_node_t* sub_tree_root = and_expression(fl, side);
@@ -3421,10 +3779,8 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+		//Flag whether we have a constant
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this type is valid
 		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, CARROT, SIDE_TYPE_LEFT);
@@ -3434,10 +3790,6 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Type %s is not valid for the ^ operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid and expression again
 		right_child = and_expression(fl, side);
@@ -3456,9 +3808,9 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
-		
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+
+		//Flag whether or not the right child is contant
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Apply the compatibility and coercion layer
 		generic_type_t* final_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), CARROT);
@@ -3469,6 +3821,39 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		//If it's constant, invoke the constant coercer
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		//If they are both constants, then we should invoke the helper to do this on the spot
+		//and avoid the allocation of any new node altogether
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Bitwise xor them - the result is in the constant node itself
+			bitwise_exclusive_or_constant_nodes(temp_holder, right_child);
+
+			//This is the root now
+			sub_tree_root = temp_holder;
+
+			//And push ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Add both children in order now that everything is valid
+		add_child_node(sub_tree_root, temp_holder);
+		add_child_node(sub_tree_root, right_child);
+
 		//Store the final type
 		sub_tree_root->inferred_type = final_type;
 
@@ -3477,7 +3862,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
+	//If we get here, it means that we did not see the "SINGLE_AND" token, so we are done. We'll put
 	//the token back and return our subtree
 	push_back_token(lookahead);
 	//Store the line number
@@ -3501,6 +3886,10 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Are either of these constants? We'll have flags to avoid repeated
+	//comparison
+	u_int8_t is_temp_holder_constant = FALSE;
+	u_int8_t is_right_child_constant = FALSE;
 
 	//No matter what, we do need to first see a valid exclusive or expression
 	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl, side);
@@ -3521,10 +3910,8 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+		//Store the constant status now
+		is_temp_holder_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this type is valid
 		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, SINGLE_OR, SIDE_TYPE_LEFT);
@@ -3534,10 +3921,6 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Type %s is not valid for the | operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid exclusive or expression again
 		right_child = exclusive_or_expression(fl, side);
@@ -3557,8 +3940,8 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+		//Store whether or not the right child is a constant
+		is_right_child_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Apply the compatibility and coercion layer
 		generic_type_t* final_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), CARROT);
@@ -3568,6 +3951,40 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "^");
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Once we have gone through type coercion - if we have constants here we will coerce them
+		//now
+		if(is_temp_holder_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(is_right_child_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		//If these are both constants, we can take a shortcut and do the bitwise or
+		//right here
+		if(is_temp_holder_constant == TRUE && is_right_child_constant == TRUE){
+			//Invoke the helper to do this, the result is stored in the temp_holder
+			bitwise_or_constant_nodes(temp_holder, right_child);
+
+			//This is the root now
+			sub_tree_root = temp_holder;
+
+			//And push ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Now we add the 2 children in order
+		add_child_node(sub_tree_root, temp_holder);
+		add_child_node(sub_tree_root, right_child);
 
 		//Store the final type
 		sub_tree_root->inferred_type = final_type;
@@ -3604,6 +4021,11 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Store these flags - we will populate them as we
+	//go through to see if we have constants. If we do,
+	//then some peemptive optimizations can happen
+	u_int8_t temp_holder_is_constant = FALSE;
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid inclusive or expression
 	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl, side);
@@ -3624,10 +4046,8 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+		//Get this out now
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this type is valid
 		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, DOUBLE_AND, SIDE_TYPE_LEFT);
@@ -3637,10 +4057,6 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Type %s is not valid for the && operator", temp_holder->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
 
 		//Now we have no choice but to see a valid inclusive or expression again
 		right_child = inclusive_or_expression(fl, side);
@@ -3660,8 +4076,8 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+		//Now that we know it's valid, store whether or not it's a constant
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
 		generic_type_t* return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), DOUBLE_AND);
@@ -3671,6 +4087,48 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "&&");
 			return print_and_return_error(info, parser_line_num);
 		}
+		
+		//Perform the coercions now if they're constants
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		/**
+		 * We will not do any simplification here immediately because the user may still
+		 * want part of their logical and expression to execute. We will only do simplification
+		 * here if both areas are constants
+		 */
+		//If we have 2 constants we should just do this right now. The result will be in the temp holder,
+		//and the right child will not be used
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Get these values out now
+			u_int8_t temp_holder_0 = is_constant_node_value_0(temp_holder);
+			u_int8_t right_child_0 = is_constant_node_value_0(right_child);
+
+			//All that we need to do is this
+			temp_holder->constant_value.unsigned_long_value = !temp_holder_0 && !right_child_0;
+
+			//The new root is just the temp holder
+			sub_tree_root = temp_holder;
+			
+			//And push ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Add the 2 children in order - now that they're both known to be valid
+		add_child_node(sub_tree_root, temp_holder);
+		add_child_node(sub_tree_root, right_child);
 
 		//Give this to the root
 		sub_tree_root->inferred_type = return_type;
@@ -3701,6 +4159,9 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
  * Otherwise, we return a type of whatever the first rule was. Logical or does not work on constructs, enums,
  * arrays and floats and void
  *
+ * This function will also attempt to do some preemptive optimization. For example, if the user does something
+ * like x || 3 , the result should be 1(true) off of the bat here
+ *
  * BNF Rule: <logical-or-expression> ::= <logical-and-expression>{||<logical-and-expression>}*
  */
 static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
@@ -3710,6 +4171,11 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Store these flags - we will populate them as we
+	//go through to see if we have constants. If we do,
+	//then some peemptive optimizations can happen
+	u_int8_t temp_holder_is_constant = FALSE;
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a logical and expression
 	generic_ast_node_t* sub_tree_root = logical_and_expression(fl, side);
@@ -3730,10 +4196,8 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 		//Hold the reference to the prior root
 		temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+		//Store whether it is a constant or not
+		temp_holder_is_constant = temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this type is valid
 		u_int8_t is_temp_holder_valid = is_binary_operation_valid_for_type(temp_holder->inferred_type, DOUBLE_OR, SIDE_TYPE_LEFT);
@@ -3744,10 +4208,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
-
 		//Now we have no choice but to see a valid logical and expression again
 		right_child = logical_and_expression(fl, side);
 
@@ -3756,6 +4216,9 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			//It's already an error node, so allow it to propogate
 			return right_child;
 		}
+
+		//Store whether or not the right child is a constant
+		right_child_is_constant = right_child->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
 
 		//Let's see if this type is valid
 		u_int8_t is_right_child_valid = is_binary_operation_valid_for_type(right_child->inferred_type, DOUBLE_AND, SIDE_TYPE_RIGHT);
@@ -3766,9 +4229,6 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
-
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
 		generic_type_t* return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), DOUBLE_OR);
 
@@ -3777,6 +4237,48 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "||");
 			return print_and_return_error(info, parser_line_num);
 		}
+
+		//Perform any needed constant coercion
+		if(temp_holder_is_constant == TRUE){
+			coerce_constant(temp_holder);
+		}
+
+		//Same for the right child
+		if(right_child_is_constant == TRUE){
+			coerce_constant(right_child);
+		}
+
+		/**
+		 * We will not do any simplification here immediately because the user may still
+		 * want part of their logical or expression to execute. We will only do simplification
+		 * here if both areas are constants
+		 */
+		//If we have 2 constants we should just do this right now. The result will be in the temp holder,
+		//and the right child will not be used
+		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+			//Get these values out now
+			u_int8_t temp_holder_0 = is_constant_node_value_0(temp_holder);
+			u_int8_t right_child_0 = is_constant_node_value_0(right_child);
+
+			//All that we need to do is this
+			temp_holder->constant_value.unsigned_long_value = !temp_holder_0 || !right_child_0;
+
+			//The new root is just the temp holder
+			sub_tree_root = temp_holder;
+			
+			//And push ahead
+			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			continue;
+		}
+
+		//We now need to make an operator node
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+		//We'll now assign the binary expression it's operator
+		sub_tree_root->binary_operator = lookahead.tok;
+
+		//Add the children in order
+		add_child_node(sub_tree_root, temp_holder);
+		add_child_node(sub_tree_root, right_child);
 
 		//We now know that the subtree root has a type of u_int8(boolean)
 		sub_tree_root->inferred_type = return_type;

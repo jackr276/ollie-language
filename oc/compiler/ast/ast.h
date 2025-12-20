@@ -151,6 +151,45 @@ struct generic_ast_node_t{
 void initialize_ast_system();
 
 /**
+ * Global node allocation function
+ */
+generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side);
+
+/**
+ * Perform a deep copy on a subtree
+ */
+generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side);
+
+/**
+ * A utility function for node duplication
+ */
+generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side);
+
+/**
+ * A helper function that will appropriately add a child node into the parent
+ */
+void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child);
+
+/**
+ * Global tree deallocation function
+ */
+void ast_dealloc();
+
+/**
+ * Is the value of an ast_constant_node 0? Returns true if yes and false
+ * if not
+ */
+u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node);
+
+// ================================= Begin in-flight constant simplification subystem ========================================
+/**
+ * Remarks - the in flight constant simplification subystem is used by the parser to perform constant simplification before we
+ * even get to the CFG. This allows us to save on memory allocation overhead and AST crawling once we get to the CFG constructor.
+ * This subsystem on its face looks to be enormous - 1000s of lines - but really it is mostly just a bunch of switch statements
+ * that exist to account for the implicit type conversions when operations happen on different types of constants(think signed int > unsigned int)
+ */
+
+/**
  * This helper function negates a constant node's value
  */
 void negate_constant_value(generic_ast_node_t* constant_node);
@@ -176,29 +215,123 @@ void bitwise_not_constant_value(generic_ast_node_t* constant_node);
 void logical_not_constant_value(generic_ast_node_t* constant_node);
 
 /**
- * Global node allocation function
+ * Emit the product of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 * constant2
  */
-generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side);
+void multiply_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 
 /**
- * Perform a deep copy on a subtree
+ * Emit the quotient of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 / constant2
  */
-generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side);
+void divide_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 
 /**
- * A utility function for node duplication
+ * Emit the modulo of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 % constant2
  */
-generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side);
+void mod_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 
 /**
- * A helper function that will appropriately add a child node into the parent
+ * Emit the sum of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 + constant2
  */
-void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child);
-
+void add_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 
 /**
- * Global tree deallocation function
+ * Emit the right shift of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 >> constant2
  */
-void ast_dealloc();
+void right_shift_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the left shift of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 << constant2
+ */
+void left_shift_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the difference of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 - constant2
+ */
+void subtract_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the bitwise or of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 | constant2
+ */
+void bitwise_or_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the bitwise and of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 & constant2
+ */
+void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the exclusive or of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 ^ constant2
+ */
+void bitwise_exclusive_or_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the != of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 != constant2
+ */
+void not_equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the == of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 == constant2
+ */
+void equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the > of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 > constant2
+ */
+void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the >= of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 >= constant1 > constant2
+ */
+void greater_than_or_equal_to_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the < of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 < constant2
+ */
+void less_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
+ * Emit the <= of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 <= constant2
+ */
+void less_than_or_equal_to_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+// ================================= End in-flight constant simplification subystem ========================================
+
+/**
+ * Coerce a constant node's value to fit the value of it's "inferred type". This should be used after
+ * we've done some constant operations inside of the parser that may require us to update the internal
+ * constant type
+ */
+void coerce_constant(generic_ast_node_t* constant_node);
 
 #endif /* AST_T */

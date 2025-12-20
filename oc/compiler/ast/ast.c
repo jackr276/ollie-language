@@ -6,6 +6,7 @@
 //Link to AST
 #include "ast.h"
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -19,6 +20,172 @@ static dynamic_array_t created_nodes;
  */
 void initialize_ast_system(){
 	created_nodes = dynamic_array_alloc();
+}
+
+/**
+ * Coerce a constant node's value to fit the value of it's "inferred type". This should be used after
+ * we've done some constant operations inside of the parser that may require us to update the internal
+ * constant type. 
+ *
+ * It is assumed that the caller has already set the "inferred type" to be what we're coercing to
+ */
+void coerce_constant(generic_ast_node_t* constant_node){
+	//We have an inferred type here
+	generic_type_t* inferred_type = dealias_type(constant_node->inferred_type);
+
+	//If it's not a basic type then something went very wrong
+	if(inferred_type->type_class != TYPE_CLASS_BASIC){
+		printf("Fatal internal compiler error. Constant with a non-basic raw type of %s discovered\n", inferred_type->type_name.string);
+		exit(1);
+	}
+
+	//Go based on the original type
+	switch(constant_node->constant_type){
+		//Now in here, we'll go based on the basic type of what our inferred
+		//type is and perform a move operation(just reassignment) to have the appropriate
+		//expansion
+		case INT_CONST_FORCE_U:
+			switch(inferred_type->basic_type_token){
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case INT_CONST:
+			switch(inferred_type->basic_type_token){
+				case U32:
+					constant_node->constant_type = INT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			switch(inferred_type->basic_type_token){
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case LONG_CONST:
+			switch(inferred_type->basic_type_token){
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case CHAR_CONST:
+			switch(inferred_type->basic_type_token){
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.char_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.char_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.char_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.char_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant type found in coercer.\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Is the value of an ast_constant_node 0? Returns true if yes and false
+ * if not
+ */
+u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node){
+	//Switch based on the value here
+	switch(constant_node->constant_type){
+		//Negate these accordingly
+		case INT_CONST_FORCE_U:
+			return constant_node->constant_value.unsigned_int_value == 0 ? TRUE : FALSE;
+			
+		case INT_CONST:
+			return constant_node->constant_value.signed_int_value == 0 ? TRUE : FALSE;
+
+		case LONG_CONST_FORCE_U:
+			return constant_node->constant_value.unsigned_long_value == 0 ? TRUE : FALSE;
+
+		case LONG_CONST:
+			return constant_node->constant_value.signed_long_value == 0 ? TRUE : FALSE;
+
+		case FLOAT_CONST:
+			return constant_node->constant_value.float_value == 0 ? TRUE : FALSE;
+
+		case DOUBLE_CONST:
+			return constant_node->constant_value.double_value == 0 ? TRUE : FALSE;
+
+		case CHAR_CONST:
+			return constant_node->constant_value.char_value == 0 ? TRUE : FALSE;
+
+		//In normal operation we should never end up here
+		default:
+			printf("Fatal internal compiler error: Attempt to determine whether a non-nullable constant is 0\n");
+			exit(1);
+	}
 }
 
 
@@ -183,6 +350,2353 @@ void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 			return;
 	}
 }
+
+
+/**
+ * Emit the product of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 * constant2
+ */
+void multiply_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value *= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value *= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value *= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value *= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value *= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value *= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value *= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value *= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value *= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value *= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value *= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value *= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value *= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value *= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value *= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value *= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value *= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value *= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value *= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value *= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value *= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value *= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value *= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value *= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value *= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the quotient of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 / constant2
+ *
+ * NOTE: We guarantee that the value of constant_node2 will *not* be 0 when we get here, so we will
+ * *not* do any div by zero checks here. That is the responsibility of the caller
+ */
+void divide_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value /= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value /= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value /= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value /= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value /= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant division operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value /= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value /= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value /= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value /= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value /= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant division operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value /= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value /= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value /= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value /= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value /= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant division operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value /= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value /= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value /= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value /= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value /= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant division operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value /= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value /= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value /= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value /= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value /= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant division operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant division operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the modulo of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 % constant2
+ *
+ * NOTE: We guarantee that the value of constant_node2 will *not* be 0 when we get here, so we will
+ * *not* do any mod by zero checks here. That is the responsibility of the caller
+ */
+void mod_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value %= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value %= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value %= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value %= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value %= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant modulo operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value %= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value %= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value %= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value %= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value %= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant modulo operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value %= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value %= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value %= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value %= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value %= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant modulo operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value %= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value %= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value %= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value %= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value %= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant modulo operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value %= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value %= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value %= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value %= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value %= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant modulo operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant modulo operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the sum of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 + constant2
+ */
+void add_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value += constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the difference of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 - constant2
+ */
+void subtract_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value -= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value -= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value -= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value -= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value -= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value -= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value -= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value -= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value -= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value -= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value -= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value -= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value -= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value -= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value -= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value -= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value -= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value -= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value -= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value -= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value -= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value -= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value -= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value -= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value -= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the right shift of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 >> constant2
+ */
+void right_shift_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value >>= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value >>= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value >>= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value >>= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value >>= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >> operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value >>= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value >>= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value >>= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value >>= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value >>= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >> operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value >>= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value >>= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value >>= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value >>= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value >>= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >> operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value >>= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value >>= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value >>= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value >>= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value >>= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >> operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value >>= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value >>= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value >>= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value >>= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value >>= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >> operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant >> operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the left shift of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 << constant2
+ */
+void left_shift_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value <<= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value <<= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value <<= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value <<= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value <<= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant << operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value <<= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value <<= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value <<= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value <<= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value <<= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant << operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value <<= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value <<= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value <<= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value <<= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value <<= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant << operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value <<= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value <<= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value <<= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value <<= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value <<= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant << operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value <<= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value <<= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value <<= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value <<= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value <<= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant << operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant << operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the bitwise or of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 | constant2
+ */
+void bitwise_or_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value |= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value |= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value |= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value |= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value |= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise or operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value |= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value |= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value |= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value |= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value |= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise or operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value |= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value |= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value |= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value |= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value |= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise or operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value |= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value |= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value |= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value |= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value |= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise or operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value |= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value |= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value |= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value |= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value |= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise or operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant bitwise or operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the bitwise exclusive or of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 ^ constant2
+ */
+void bitwise_exclusive_or_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value ^= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value ^= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value ^= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value ^= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value ^= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise xor operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value ^= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value ^= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value ^= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value ^= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value ^= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise xor operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value ^= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value ^= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value ^= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value ^= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value ^= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise xor operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value ^= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value ^= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value ^= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value ^= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value ^= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise xor operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value ^= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value ^= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value ^= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value ^= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value ^= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise xor operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant bitwise xor operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the bitwise and of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 & constant2
+ */
+void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value &= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value &= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value &= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value &= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value &= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value &= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value &= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value &= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value &= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value &= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value &= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the != comparison of two given constant nodes. The result will be stored in the first argument
+ *
+ * The result will be: constant1 = constant1 != constant2
+ *
+ * NOTE: Whenever casting has to happen here, remember that unsigned always wins in the signedness department
+ */
+void not_equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					 constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					 constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant != operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value = (u_int32_t)(constant_node1->constant_value.signed_int_value) != constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value =  constant_node1->constant_value.signed_int_value != constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant != operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant != operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) != constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) != constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant != operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) != constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value != constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) != constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value != constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value != constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant != operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant != operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the == comparison of two given constant nodes. The result will be stored in the first argument
+ *
+ * The result will be: constant1 = constant1 == constant2
+ *
+ * NOTE: when we have unsigned compared with signed, remember that the unsigned one always wins out in the type converter
+ */
+void equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					 constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value == (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					 constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value == constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value == (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value == (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value == (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value = (u_int32_t)(constant_node1->constant_value.signed_int_value) == constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value =  constant_node1->constant_value.signed_int_value == constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value == constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value == (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value == constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value == (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value == (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) == constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value == constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) == constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value == constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value == constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) == constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value == constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) == constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value == constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value == constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant == operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant == operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the > of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 > constant2
+ */
+void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					 constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					 constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value > constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value > (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value > (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant > operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value = (u_int32_t)(constant_node1->constant_value.signed_int_value) > constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value =  constant_node1->constant_value.signed_int_value > constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value > constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant > operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant > operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) > constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value > constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) > constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value > constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value > constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant > operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) > constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value > constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) > constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value > constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value > constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant > operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant > operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the >= of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 >= constant1 > constant2
+ */
+void greater_than_or_equal_to_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value >= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					 constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value >= (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					 constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value >= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value >= (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value >= (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >= operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value >= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value >= (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value = (u_int32_t)(constant_node1->constant_value.signed_int_value) >= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value =  constant_node1->constant_value.signed_int_value >= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value >= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >= operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value >= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value >= (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value >= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value >= (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value >= (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >= operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) >= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value >= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) >= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value >= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value >= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >= operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) >= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value >= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) >= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value >= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value >= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant >= operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant >= operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the < of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 < constant2
+ */
+void less_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value < constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					 constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value < (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					 constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value < constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value < (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value < (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant < operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value < constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value < (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value = (u_int32_t)(constant_node1->constant_value.signed_int_value) < constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value =  constant_node1->constant_value.signed_int_value < constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value < constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant < operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value < constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value < (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value < constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value < (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value < (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant < operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) < constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value < constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) < constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value < constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value < constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant < operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) < constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value < constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) < constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value < constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value < constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant < operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant < operation\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Emit the <= of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 < constant2
+ */
+void less_than_or_equal_to_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
+	//Go based on the first one's type
+	switch(constant_node1->constant_type){
+		case INT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value <= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					 constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value <= (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					 constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value <= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value <= (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value <= (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant <= operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case INT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value <= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value <= (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value = (u_int32_t)(constant_node1->constant_value.signed_int_value) <= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_int_value =  constant_node1->constant_value.signed_int_value <= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value <= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant <= operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value <= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value <= (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value <= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value <= (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value <= (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant <= operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case LONG_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) <= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value <= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) <= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value <= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value <= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant <= operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case CHAR_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) <= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value <= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) <= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value <= constant_node2->constant_value.signed_int_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value <= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant <= operation\n");
+					exit(1);
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant <= operation\n");
+			exit(1);
+	}
+}
+
 
 /**
  * We will completely duplicate a deferred statement here. Since all deferred statements
