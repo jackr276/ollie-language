@@ -250,6 +250,13 @@ void add_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* 
 void right_shift_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
 
 /**
+ * Emit the left shift of two given constants. The result will overwrite the first constant given
+ *
+ * The result will be: constant1 = constant1 << constant2
+ */
+void left_shift_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2);
+
+/**
  * Emit the difference of two given constants. The result will overwrite the first constant given
  *
  * The result will be: constant1 = constant1 - constant2
