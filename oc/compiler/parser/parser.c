@@ -3353,13 +3353,35 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 				coerce_constant(right_child);
 			}
 
-			//
-			//
-			//
-			//TODO ADD CONSTANT RULES
-			//
-			//
-			//
+			//If these are both constants, we can skip the entire allocation
+			//below and just invoke the simplifier straight out
+			if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+				//Invoke the specific rule that corresponds to our operator. The result
+				//will always come back to us in the temp holder
+				switch(op.tok){
+					case G_THAN:
+						greater_than_constant_nodes(temp_holder, right_child);
+						break;
+					case L_THAN:
+						less_than_constant_nodes(temp_holder, right_child);
+						break;
+					case G_THAN_OR_EQ:
+						greater_than_or_equal_to_constant_nodes(temp_holder, right_child);
+						break;
+					case L_THAN_OR_EQ:
+						less_than_or_equal_to_constant_nodes(temp_holder, right_child);
+						break;
+					//Unreachable
+					default:
+						break;
+				}
+
+				//The sub tree root is the temp holder
+				sub_tree_root = temp_holder;
+
+				//Get out
+				break;
+			}
 
 			//Only now do we allocate the operator node, since we know that we've
 			//passed all validations
