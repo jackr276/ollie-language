@@ -297,6 +297,14 @@ void set_new_function(symtab_function_record_t* func);
 u_int8_t is_operator_relational_operator(ollie_token_t op);
 
 /**
+ * Does operation generate truthful byte value
+ *
+ * This encompasses: >, >=, <, <=, !=, ==, ||, && because
+ * they generate either a 0 or a 1
+ */
+u_int8_t does_operator_generate_truthful_byte_value(ollie_token_t op);
+
+/**
  * Helper function to determine if we have a store operation
  */
 u_int8_t is_store_operation(instruction_t* statement);
