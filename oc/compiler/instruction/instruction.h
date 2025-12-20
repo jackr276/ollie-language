@@ -47,6 +47,18 @@ typedef enum {
 
 
 /**
+ * What type of variable is this? Variables
+ * can be temporary, stack variables, or normal
+ * vars
+ */
+typedef enum {
+	VARIABLE_TYPE_TEMP,
+	VARIABLE_TYPE_NON_TEMP,
+	VARIABLE_TYPE_MEMORY_ADDRESS
+} variable_type_t;
+
+
+/**
  * A global variable stores the variable itself
  * and it stores the value, if it has one
  */
@@ -147,8 +159,6 @@ struct three_addr_var_t{
 	//Is this variable dereferenced in some way
 	//(either loaded from or stored to)
 	u_int8_t is_dereferenced;
-	//Is this a temp variable?
-	u_int8_t is_temporary;
 	//Is this a stack pointer?
 	u_int8_t is_stack_pointer;
 	//What is the parameter number of this var? Used for parameter passing. If
@@ -160,6 +170,8 @@ struct three_addr_var_t{
 	general_purpose_register_t variable_register;
 	//What membership do we have if any
 	variable_membership_t membership;
+	//What type of variable is this
+	variable_type_t variable_type;
 };
 
 
@@ -396,6 +408,12 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
  * we are assigning to a variable, that will create a new generation of variable.
 */
 three_addr_var_t* emit_var(symtab_variable_record_t* var);
+
+/**
+ * Create and return a three address var from an existing variable. These special
+ * "memory address vars" will represent the memory address of the variable in question
+*/
+three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var);
 
 /**
  * Emit a variable for an identifier node. This rule is designed to account for the fact that

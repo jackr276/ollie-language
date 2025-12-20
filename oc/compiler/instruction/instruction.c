@@ -666,7 +666,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	dynamic_array_add(&emitted_vars, var);
 
 	//Mark this as temporary
-	var->is_temporary = TRUE;
+	var->variable_type = VARIABLE_TYPE_TEMP;
 	//Store the type info
 	var->type = type;
 	//Store the temp var number
@@ -702,7 +702,50 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	}
 
 	//This is not temporary
-	emitted_var->is_temporary = FALSE;
+	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+	//We always store the type as the type with which this variable was defined in the CFG
+	emitted_var->type = var->type_defined_as;
+	//And store the symtab record
+	emitted_var->linked_var = var;
+
+	//Store the associate stack region(this is usually null)
+	emitted_var->stack_region = var->stack_region;
+
+	//The membership is also copied
+	emitted_var->membership = var->membership;
+
+	//Copy these over
+	emitted_var->parameter_number = var->function_parameter_order;
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
+ * Create and return a three address var from an existing variable. These special
+ * "memory address vars" will represent the memory address of the variable in question
+*/
+three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_vars, emitted_var);
+
+	//If we have an aliased variable(almost exclusively function
+	//parameters), we will instead emit the alias of that variable instead
+	//of the variable itself
+	if(var->alias != NULL){
+		var = var->alias;
+	}
+
+	//This is not temporary
+	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = var->type_defined_as;
 	//And store the symtab record
@@ -738,7 +781,8 @@ three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generi
 	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//This is not temporary
-	emitted_var->is_temporary = FALSE;
+	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+
 	//This variable's type will be what the identifier node deemed it as
 	emitted_var->type = inferred_type;
 	//And store the symtab record
@@ -763,8 +807,8 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range){
 	//Add into here for memory management
 	dynamic_array_add(&emitted_vars, emitted_var);
 
-	//This is temporary
-	emitted_var->is_temporary = TRUE;
+	//This is a temp var
+	emitted_var->variable_type = VARIABLE_TYPE_TEMP;
 
 	//Link this in with our live range
 	emitted_var->associated_live_range = range;
@@ -792,7 +836,7 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	memcpy(emitted_var, var, sizeof(three_addr_var_t));
 	
 	//Transfer this status over
-	emitted_var->is_temporary = var->is_temporary;
+	emitted_var->variable_type = var->variable_type;
 
 	//Is this a stack pointer?
 	emitted_var->is_stack_pointer = var->is_stack_pointer;
@@ -1307,7 +1351,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 		}
 
 	//Otherwise if it's a temp
-	} else if(variable->is_temporary == TRUE){
+	} else if(variable->variable_type == VARIABLE_TYPE_TEMP){
 		//Print out it's temp var number
 		fprintf(fl, "t%d", variable->temp_var_number);
 
@@ -3555,7 +3599,7 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 
 	//If this is not a temporary variable, then we'll
 	//emit an exact copy and let the SSA system handle it
-	if(decrementee->is_temporary == FALSE){
+	if(decrementee->variable_type != VARIABLE_TYPE_TEMP){
 		dec_stmt->assignee = emit_var_copy(decrementee);
 
 	//Otherwise, we'll need to spawn a new temporary variable
@@ -3653,7 +3697,7 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 
 	//If this is not a temporary variable, then we'll
 	//emit an exact copy and let the SSA system handle it
-	if(incrementee->is_temporary == FALSE){
+	if(incrementee->variable_type != VARIABLE_TYPE_TEMP){
 		inc_stmt->assignee = emit_var_copy(incrementee);
 
 	//Otherwise, we'll need to spawn a new temporary variable
@@ -5223,12 +5267,12 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 	}
 
 	//Another easy way to tell
-	if(a->is_temporary != b->is_temporary){
+	if(a->variable_type != b->variable_type){
 		return FALSE;
 	}
 
 	//For temporary variables, the comparison is very easy
-	if(a->is_temporary){
+	if(a->variable_type == VARIABLE_TYPE_TEMP){
 		if(a->temp_var_number == b->temp_var_number){
 			return TRUE;
 		} else {
@@ -5267,12 +5311,12 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8
 	}
 
 	//Another easy way to tell
-	if(a->is_temporary != b->is_temporary){
+	if(a->variable_type != b->variable_type){
 		return FALSE;
 	}
 
 	//For temporary variables, the comparison is very easy
-	if(a->is_temporary){
+	if(a->variable_type == VARIABLE_TYPE_TEMP){
 		if(a->temp_var_number == b->temp_var_number){
 			return TRUE;
 		} else {
