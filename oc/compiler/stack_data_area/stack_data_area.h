@@ -29,6 +29,12 @@ void stack_data_area_alloc(stack_data_area_t* area);
 stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_type_t* type);
 
 /**
+ * Mark a stack region as important. This will handle any/all variable marking as important
+ * as well if applicable
+ */
+void mark_stack_region(stack_region_t* region);
+
+/**
  * Remove a given region from the stack
  */
 void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region);

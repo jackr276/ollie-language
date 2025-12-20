@@ -83,6 +83,19 @@ static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t siz
 
 
 /**
+ * Mark a stack region as important. This will handle any/all variable marking as important
+ * as well if applicable
+ */
+void mark_stack_region(stack_region_t* region){
+	//Flag that this is marked
+	region->mark = TRUE;
+
+	//TODO - potentially need to think about how we do variable marking here if that is even needed.
+	//It may be complete overkill/unnecessary, so I will not implement it for now
+}
+
+
+/**
  * Create a stack region for the type provided. This will handle alignment and addition
  * of this stack region
  */
