@@ -3245,7 +3245,24 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 			//If they are both constants, we will skip any extra allocations and just do
 			//the constant math right inside of here
 			if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
-				//TODO
+				//Go based on the operator and invoke the appropriate rule
+				//here
+				switch(op.tok){
+					case R_SHIFT:
+						right_shift_constant_nodes(temp_holder, right_child);
+						break;
+					case L_SHIFT:
+						left_shift_constant_nodes(temp_holder, right_child);
+						break;
+					default:
+						break;
+				}
+
+				//The temp holder now has our entire answer
+				sub_tree_root = temp_holder;
+
+				//And get out - we'll skip the below allocations
+				break;
 			}
 
 			//Only now are we good to allocate
