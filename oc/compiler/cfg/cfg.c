@@ -2867,20 +2867,9 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 * realize this and instead of just emitting the var itself, will emit a "memory address of" statement.
 	 */
 	if(is_memory_region(ident_node->variable->type_defined_as) == TRUE && ident_node->variable->membership != FUNCTION_PARAMETER){
-		//Emit this
-		instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(ident_node->variable->type_defined_as), emit_var(ident_node->variable));
-
-		//These will have the same memory regions
-		memory_address_of_stmt->assignee->stack_region = ident_node->variable->stack_region;
-
-		//This counts as a use
-		add_used_variable(basic_block, memory_address_of_stmt->op1);
-
-		//Add it to the block
-		add_statement(basic_block, memory_address_of_stmt);
-
-		//Give back the assignee
-		return memory_address_of_stmt->assignee;
+		//Emit a special variable that denotes that we are seeking the memory address of this variable,
+		//not anything else with it
+		return emit_memory_address_var(ident_node->variable);
 	}
 
 	/**
@@ -2907,17 +2896,9 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//we know that it already is a memory address, so we can just adjust the base address and
 		//not load a memory address at all
 		if(type->type_class != TYPE_CLASS_REFERENCE || ident_node->variable->membership != FUNCTION_PARAMETER){
-			//First we emit the memory address of the variable
-			instruction_t* memory_address_assignment = emit_memory_address_assignment(emit_temp_var(u64), emit_var(ident_node->variable));
-			//Counts as a use
-			add_used_variable(basic_block, memory_address_assignment->op1);
-
-			//Now emit the type adjusted address using the "true type"
-			type_adjusted_memory_address = emit_var_copy(memory_address_assignment->assignee);
+			//Emit the memory address variable
+			type_adjusted_memory_address = emit_memory_address_var(ident_node->variable);
 			type_adjusted_memory_address->type = true_type;
-
-			//Get it in the block
-			add_statement(basic_block, memory_address_assignment);
 
 		//Otherwise this is our special case with a reference function parameter - so all we'll do
 		//is rememdiate the type
@@ -3804,18 +3785,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
 	//store to get the variable back to where it needs to be
 	} else if (postfix_node->variable->stack_variable == TRUE){
-		//Grab the memory address
-		instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(u64), emit_var(postfix_node->variable));
-
-		//These will have the same memory regions
-		memory_address_of_stmt->assignee->stack_region = postfix_node->variable->stack_region;
-
-		//This counts as a use
-		add_used_variable(current_block, memory_address_of_stmt->op1);
-
-		//Add it to the block
-		add_statement(current_block, memory_address_of_stmt);
-
 		//Get the "true type". If we have a reference, this goes through an implicit dereference
 		generic_type_t* true_type = postfix_node->variable->type_defined_as; 
 
@@ -3826,7 +3795,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 		//Get the version that represents our memory indirection. Be sure to use the "true type" here
 		//just in case we were dealing with a reference
-		three_addr_var_t* indirect_version = emit_var_copy(memory_address_of_stmt->assignee);
+		three_addr_var_t* indirect_version = emit_memory_address_var(postfix_node->variable);
 		indirect_version->type = true_type;
 
 		//Now we need to add the final store
@@ -4004,18 +3973,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
 			//store to get the variable back to where it needs to be
 			} else if (unary_expression_child->variable->stack_variable == TRUE){
-				//Grab the memory address
-				instruction_t* memory_address_of_stmt = emit_memory_address_assignment(emit_temp_var(u64), emit_var(unary_expression_child->variable));
-
-				//These will have the same memory regions
-				memory_address_of_stmt->assignee->stack_region = unary_expression_child->variable->stack_region;
-
-				//This counts as a use
-				add_used_variable(current_block, memory_address_of_stmt->op1);
-
-				//Add it to the block
-				add_statement(current_block, memory_address_of_stmt);
-
 				//Get the "true type". If we have a reference, this goes through an implicit dereference
 				generic_type_t* true_type = unary_expression_child->variable->type_defined_as; 
 
@@ -4026,7 +3983,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//Get the version that represents our memory indirection. Be sure to use the "true type" here
 				//just in case we were dealing with a reference
-				three_addr_var_t* indirect_version = emit_var_copy(memory_address_of_stmt->assignee);
+				three_addr_var_t* indirect_version = emit_memory_address_var(unary_expression_child->variable);
 				indirect_version->type = true_type;
 
 				//Now we need to add the final store
@@ -4218,18 +4175,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 					//If it's *not* an array type, we can proceed doing this as we normally do
 					if(unary_expression_child->variable->type_defined_as->type_class != TYPE_CLASS_ARRAY){
-						//Add the memory address statement in
-						instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(unary_expression_child->variable));
-						memory_address_statement->is_branch_ending = is_branch_ending;
-
-						//This counts add as a use
-						add_used_variable(current_block, memory_address_statement->op1);
-
-						//Now add the statement in
-						add_statement(current_block, memory_address_statement);
-
 						//And package the value up as what we want here
-						unary_package.assignee = memory_address_statement->assignee;
+						unary_package.assignee = emit_memory_address_var(unary_expression_child->variable);
 
 					/**
 					 * For an array type, we'll need to create a pointer to this in memory before we are able to load
@@ -4257,15 +4204,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							//We need a stack offset
 							three_addr_const_t* offset = emit_direct_integer_or_char_constant(region->base_address, u64);
 
-							//We first need the memory address of the existing array in memory
-							instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(unary_expression_parent->inferred_type), emit_var(unary_expression_child->variable));
-							memory_address_statement->is_branch_ending = is_branch_ending;
-
-							//Throw this into the block
-							add_statement(current_block, memory_address_statement);
+							//Emit the purpose made memory address var
+							three_addr_var_t* memory_address = emit_memory_address_var(unary_expression_child->variable);
 
 							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
-							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, memory_address_statement->assignee);
+							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, memory_address);
 							store->is_branch_ending = is_branch_ending;
 
 							//This comes afterwards
@@ -4799,17 +4742,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//If we actually have a stack region to deal with. Things like references as params will have no such thing. We will check to make
 		//sure we are *not* a reference function param. If we aren't then this is just fine for the memory address assignment
 		if(left_hand_var->membership != FUNCTION_PARAMETER || left_hand_var->linked_var->type_defined_as->type_class != TYPE_CLASS_REFERENCE){
-			//Otherwise, we need to first get the memory address of this variable
-			instruction_t* memory_address_instruction = emit_memory_address_assignment(emit_temp_var(u64), left_hand_var);
-
-			//Counts as a use
-			add_used_variable(current_block, left_hand_var);
-
-			//Put it in the block
-			add_statement(current_block, memory_address_instruction);
-
 			//This is the memory address
-			memory_address = memory_address_instruction->assignee;
+			memory_address = emit_memory_address_var(left_hand_var->linked_var);
 
 		//Otherwise, it's just the variable itself. This usually happens when we have function parameters
 		//that are references
@@ -5009,17 +4943,8 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//Otherwise we have the unique case of a reference parameter. We need to bypass the
 		//entire identifier system and simply get the memory address of said identifier here
 		} else {
-			//Emit it
-			instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(u64), emit_var(param_cursor->variable));
-
-			//Counts as a use
-			add_used_variable(current, memory_address_statement->op1);
-
-			//Get it in the block
-			add_statement(current, memory_address_statement);
-
 			//The assignee is just this one's assignee
-			param_assignee = memory_address_statement->assignee;
+			param_assignee = emit_memory_address_var(param_cursor->variable);
 		}
 
 		//Add this final result into our parameter results list
@@ -5168,17 +5093,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//Otherwise we have the unique case of a reference parameter. We need to bypass the
 		//entire identifier system and simply get the memory address of said identifier here
 		} else {
-			//Emit it
-			instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(u64), emit_var(param_cursor->variable));
-
-			//Counts as a use
-			add_used_variable(current, memory_address_statement->op1);
-
-			//Get it in the block
-			add_statement(current, memory_address_statement);
-
 			//The assignee is just this one's assignee
-			param_assignee = memory_address_statement->assignee;
+			param_assignee = emit_memory_address_var(param_cursor->variable);
 		}
 
 		//Add this final result into our parameter results list
@@ -8081,14 +7997,8 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 				parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
 			}
 
-			//Following this, we'll need to get an actual load into the stack for this variable
-			instruction_t* memory_address_assignment = emit_memory_address_assignment(emit_temp_var(u64), emit_var(parameter));
-
-			//Add this into the block
-			add_statement(function_starting_block, memory_address_assignment);
-
 			//Copy the type over here
-			three_addr_var_t* type_adjusted_address = emit_var_copy(memory_address_assignment->assignee);
+			three_addr_var_t* type_adjusted_address = emit_memory_address_var(parameter);
 			type_adjusted_address->type = parameter->type_defined_as;
 
 			//Now we'll need to do our initial load
@@ -8676,18 +8586,8 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			true_stored_type = dereference_type(true_stored_type);
 		}
 
-		//First we get our memory address statement
-		instruction_t* memory_address_statement = emit_memory_address_assignment(emit_temp_var(u64), let_variable);
-		memory_address_statement->is_branch_ending = is_branch_ending;
-
-		//Counts as a use
-		add_used_variable(current_block, let_variable);
-
-		//Add the statement in
-		add_statement(current_block, memory_address_statement);
-
 		//NOTE: We use the type of our let variable here for the address assignment
-		three_addr_var_t* true_base_address = emit_var_copy(memory_address_statement->assignee);
+		three_addr_var_t* true_base_address = emit_memory_address_var(let_variable->linked_var);
 		true_base_address->type = true_stored_type;
 		
 		//Emit the store code
@@ -8754,20 +8654,8 @@ static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8
 			//Create a stack region for this variable and store it in the associated region
 			node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), node->inferred_type);
 
-			//Emit the variable. This will act as our base address
-			assignee = emit_var(node->variable);
-
-			//Emit the statement here to get the base address
-			instruction_t* mem_addr = emit_memory_address_assignment(emit_temp_var(u64), assignee);
-
-			//For later reference, this is what we should be using
-			assignee = mem_addr->assignee;
-			
-			//Add it into the block
-			add_statement(current_block, mem_addr);
-
 			//The left hand var is our assigned var
-			let_results.assignee = assignee;
+			let_results.assignee = emit_memory_address_var(node->variable);
 
 			//We know that this will be the lead block
 			let_results.starting_block = current_block;

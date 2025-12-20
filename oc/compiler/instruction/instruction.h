@@ -573,11 +573,6 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee);
 instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
 
 /**
- * Emit a memory address assignment statement
- */
-instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1);
-
-/**
  * Emit a decrement instruction
  */
 instruction_t* emit_dec_instruction(three_addr_var_t* decrementee);

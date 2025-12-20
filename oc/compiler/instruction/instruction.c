@@ -1652,20 +1652,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
-		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
-			//This one comes first
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-
-			//Then the arrow
-			fprintf(fl, " <- Memory address of ");
-
-			//Now we'll do op1, token, op2
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-
-			//We need a newline here
-			fprintf(fl, "\n");
-			break;
-
 		case THREE_ADDR_CODE_ASSN_STMT:
 			//We'll print out the left and right ones here
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
@@ -3584,24 +3570,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "Not yet selected. Statement code is: %d\n", instruction->statement_type);
 			break;
 	}
-}
-
-
-/**
- * Emit a memory address assignment statement
- */
-instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Let's now populate it with values
-	stmt->statement_type = THREE_ADDR_CODE_MEM_ADDRESS_STMT; 
-	stmt->assignee = assignee;
-	stmt->op1 = op1;
-	//What function are we in
-	stmt->function = current_function;
-	//And that's it, we'll just leave our now
-	return stmt;
 }
 
 
