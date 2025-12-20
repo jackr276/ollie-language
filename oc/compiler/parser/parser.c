@@ -3242,6 +3242,12 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 				coerce_constant(right_child);
 			}
 
+			//If they are both constants, we will skip any extra allocations and just do
+			//the constant math right inside of here
+			if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
+				//TODO
+			}
+
 			//Only now are we good to allocate
 			sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 			//We'll now assign the binary expression it's operator
