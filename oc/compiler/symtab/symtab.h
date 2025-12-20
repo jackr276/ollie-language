@@ -341,6 +341,11 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name);
 symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
+ * Create a parameter alias variable record
+ */
+symtab_variable_record_t* create_parameter_alias_variable(generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+
+/**
  * Add a parameter to a function and perform all internal bookkeeping needed
  */
 u_int8_t add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);

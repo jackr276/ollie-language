@@ -8100,6 +8100,29 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 			//Add it into the starting block
 			add_statement(function_starting_block, store_code);
+
+		/**
+		 * Parameter aliasing:
+		 *
+		 * To avoid any issues with precoloring interference way down the line
+		 * in the register allocator, we will do a temp assignment/aliasing
+		 * of all non-stack function parameters. This works something like this
+		 *
+		 * Parameter x:
+		 *
+		 * <function_start>
+		 * 		x_alias <- x;
+		 *
+		 * 	<use of x>
+		 * 		y <- x(replaced with x_alias) + 3;
+		 *
+		 *
+		 * 	This allows us to avoid the need to spill function parameter variables. If this
+		 * 	turns out to not be needed, then the coalescing subsystem inside of the register
+		 * 	allocator will simply knock out the top assignment as if it was never there
+		 */
+		} else {
+
 		}
 	}
 
