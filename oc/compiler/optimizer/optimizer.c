@@ -197,7 +197,7 @@ static void mark_and_add_stack_variable_definitions(cfg_t* cfg, three_addr_var_t
  * Mark definitions(assignment) of a three address variable within
  * the current function. If a definition is not marked, it must be added to the worklist
  */
-static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//If this is NULL, just leave
 	if(variable == NULL || current_function == NULL){
 		return;
@@ -278,10 +278,37 @@ static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var
 /**
  * The mark and add definition rule will call one of 2 overloads, based
  * on what the variable that we're marking actually is
- */
+ *
+ *
+ *
+ *
+ * TODO WIP until we fix the memory address of 
 static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+	//What kind of variable do we have? Is this a temporary variable or is it
+	//referencing a real variable/address in the code
+	if(variable->is_temporary == TRUE){
+		//Off the bat - temp vars exist for register instructions, so we can pass control to the
+		//register helper and then leave
+		mark_and_add_register_variable_definition(cfg, variable, current_function, worklist);
+		return;
+	}
 
+	//Otherwise, we have a non-temporary variable. If our non-temporary variable exists
+	//on the stack or it's some kind of memory address, we need to mark that as important
+	
+	//We expect this to be false most of the time for local vars,
+	//parameters, etc
+	if(is_memory_region(variable->type) == FALSE){
+		//Treat this like any other register variable
+		mark_and_add_register_variable_definition(cfg, variable, current_function, worklist);
+
+	//Otherwise, we likely have something like:
+	// load t3 <- 
+	} else {
+
+	}
 }
+ */
 
 
 /**
