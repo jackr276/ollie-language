@@ -3153,10 +3153,16 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
+	//Op token for clarity
+	lexitem_t op;
 	//Temp holder for our use
 	generic_ast_node_t* temp_holder;
 	//For holding the right child
 	generic_ast_node_t* right_child;
+	//Flag whether the temp holder is a constant
+	u_int8_t temp_holder_is_constant = FALSE;
+	//Flag whether the right child is a constant
+	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid additive expression
 	generic_ast_node_t* sub_tree_root = additive_expression(fl, side);
@@ -3171,66 +3177,71 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 	//this node in as the child and move along. But if we do see shift operator symbols,
 	//we will on the fly construct a subtree here
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
-	
-	//We can optionally see some shift operators here
-	if(lookahead.tok == L_SHIFT || lookahead.tok == R_SHIFT){
-		//Save the lexer item here
-		lexitem_t op = lookahead;
 
-		//Hold the reference to the prior root
-		temp_holder = sub_tree_root;
+	//Go based on which token we have
+	switch(lookahead.tok){
+		case L_SHIFT:
+		case R_SHIFT:
+			//Save the lexer item here
+			op = lookahead;
 
-		//Let's see if this actually works
-		u_int8_t is_left_type_shiftable = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
-		
-		//Fail out here
-		if(is_left_type_shiftable == FALSE){
-			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
-			return print_and_return_error(info, parser_line_num);
-		}
+			//Hold the reference to the prior root
+			temp_holder = sub_tree_root;
 
-		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
-		//We'll now assign the binary expression it's operator
-		sub_tree_root->binary_operator = lookahead.tok;
+			//Let's see if this actually works
+			u_int8_t is_left_type_shiftable = is_binary_operation_valid_for_type(temp_holder->inferred_type, op.tok, SIDE_TYPE_LEFT);
+			
+			//Fail out here
+			if(is_left_type_shiftable == FALSE){
+				sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//We actually already know this guy's first child--it's the previous root currently
-		//being held in temp_holder. We'll add the temp holder in as the subtree root
-		add_child_node(sub_tree_root, temp_holder);
+			//We now need to make an operator node
+			sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
+			//We'll now assign the binary expression it's operator
+			sub_tree_root->binary_operator = lookahead.tok;
 
-		//Now we have no choice but to see a valid additive expression again
-		right_child = additive_expression(fl, side);
+			//We actually already know this guy's first child--it's the previous root currently
+			//being held in temp_holder. We'll add the temp holder in as the subtree root
+			add_child_node(sub_tree_root, temp_holder);
 
-		//If it's an error, just fail out
-		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			//If this is an error we can just propogate it up
-			return right_child;
-		}
+			//Now we have no choice but to see a valid additive expression again
+			right_child = additive_expression(fl, side);
 
-		//Let's see if this actually works
-		u_int8_t is_right_type_shiftable = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
-		
-		//Fail out here
-		if(is_right_type_shiftable == FALSE){
-			sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
-			return print_and_return_error(info, parser_line_num);
-		}
+			//If it's an error, just fail out
+			if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				//If this is an error we can just propogate it up
+				return right_child;
+			}
 
-		//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
-		add_child_node(sub_tree_root, right_child);
+			//Let's see if this actually works
+			u_int8_t is_right_type_shiftable = is_binary_operation_valid_for_type(right_child->inferred_type, op.tok, SIDE_TYPE_RIGHT);
+			
+			//Fail out here
+			if(is_right_type_shiftable == FALSE){
+				sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
+				return print_and_return_error(info, parser_line_num);
+			}
 
-		//The return type is always the left child's type
-		sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+			//Otherwise, he is the right child of the sub_tree_root, so we'll add it in
+			add_child_node(sub_tree_root, right_child);
 
-		//If this fails, that means that we have an invalid operation
-		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
-			return print_and_return_error(info, parser_line_num);
-		}
+			//The return type is always the left child's type
+			sub_tree_root->inferred_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-	} else {
-		//Otherwise just push the token back
-		push_back_token(lookahead);
+			//If this fails, that means that we have an invalid operation
+			if(sub_tree_root->inferred_type == NULL){
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			break;
+
+		default:
+			//Otherwise just push the token back
+			push_back_token(lookahead);
+			break;
 	}
 
 	//Once we make it here, the subtree root is either just the shift expression or it is the
