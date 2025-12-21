@@ -53,6 +53,8 @@ int main(int argc, char** argv){
 
 	//Total number of errors we have
 	int total_errors = 0;
+	//The number of files in error
+	char** files_in_error = calloc(1, sizeof(char[300]));
 
 	//So long as we can keep reading from the directory
 	while((directory_entry = readdir(directory)) != NULL){
@@ -67,11 +69,18 @@ int main(int argc, char** argv){
 
 		//Get the error count out
 		printf("TEST FILE: %s -> %d ERRORS\n", directory_entry->d_name, error_count);
+
+		//Increment the overall number
+		total_errors += error_count;
 	}
-	
+
 	//Close the directory
 	closedir(directory);
 
+	printf("================================ Ollie Memory Check Summary =================================== \n");
+	printf("TOTAL ERRORS: %d\n", total_errors);
+	printf("================================ Ollie Memory Check Summary =================================== \n");
+	
 	//All went well
-	return 0;
+	return total_errors;
 }
