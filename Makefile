@@ -430,6 +430,9 @@ performance_test: oc
 		./oc/out/oc -ts -f $$input -o $$output; \
 	done
 
+# A memory check run will use valgrind and run a C test that checks each file individually for memory errors
+# This can be slow but it runs as part of CI
+
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
 
