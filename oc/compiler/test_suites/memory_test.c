@@ -5,10 +5,18 @@
 * memory errors that we have, if any at all
 */
 
+#include <linux/limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <dirent.h>
+#include <string.h>
+#include <sys/types.h>
 
+//Generic amount of test files
+#define TEST_FILES 500
+
+//Maximum size of a given file in linux
+#define MAX_FILE_SIZE 300
 
 /**
 * Hook in and run via the main function. We will be relying
@@ -32,9 +40,6 @@ int main(int argc, char** argv){
 		exit(1);
 	}
 
-	//Here is the executable(should be something like ./oc/out/ocd)
-	char* executable_path = argv[1];
-
 	//Extract it and open it
 	char* directory_path = argv[2];
 	DIR* directory = opendir(directory_path);
@@ -53,25 +58,51 @@ int main(int argc, char** argv){
 
 	//Total number of errors we have
 	int total_errors = 0;
+
+	//Number of files in error
+	int number_of_error_files = 0;
+
 	//The number of files in error
-	char** files_in_error = calloc(1, sizeof(char[300]));
+	char files_in_error[TEST_FILES][MAX_FILE_SIZE];
 
 	//So long as we can keep reading from the directory
 	while((directory_entry = readdir(directory)) != NULL){
 		printf("=========== Checking %s =================\n", directory_entry->d_name);
 
 		//Our command. We use 2>&1 to write all errors to stdout so that we can grep it
-		sprintf(command, "valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/'", directory_entry->d_name);
-		printf("Running test command: %s\n", command);
+		sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", directory_entry->d_name);
+		printf("Running test command: %s\n\n", command);
 
-		//Run the command and get the error count back
-		int error_count = system(command);
+		//Get the return code
+		int return_code = system(command);
+
+		//Number of errors
+		int num_errors = 0;
+
+		//If we exited, get the exit code
+		if(WIFEXITED(return_code)){
+			//Get the actual exit code(this will be the error number)
+			num_errors = WEXITSTATUS(return_code);
+			
+		//If we got a bad signal, get out
+		} else if (WIFSIGNALED((return_code))){
+			printf("ERROR: command terminated with signal %d\n", WTERMSIG(return_code));
+			exit(1);
+		}
 
 		//Get the error count out
-		printf("TEST FILE: %s -> %d ERRORS\n", directory_entry->d_name, error_count);
+		printf("\nTEST FILE: %s -> %d ERRORS\n", directory_entry->d_name, num_errors);
+
+		//Bookkeeping for final printing
+		if(num_errors > 0){
+			//Get this into the list
+			strncpy(files_in_error[number_of_error_files], directory_entry->d_name, 300);
+			number_of_error_files++;
+		}
+
 
 		//Increment the overall number
-		total_errors += error_count;
+		total_errors += num_errors;
 	}
 
 	//Close the directory
@@ -79,6 +110,18 @@ int main(int argc, char** argv){
 
 	printf("================================ Ollie Memory Check Summary =================================== \n");
 	printf("TOTAL ERRORS: %d\n", total_errors);
+	printf("FILES IN ERROR:\n");
+
+	//Print out all of them
+	for(int32_t i = 0; i < number_of_error_files; i++){
+		printf("%d) %s\n", i, files_in_error[i]);
+	}
+
+	//Generic error here
+	if(total_errors > 0){
+		printf("MEMORY CHECK FAILURE: DEVELOPER ATTENTION IS REQUIRED\n");
+	}
+
 	printf("================================ Ollie Memory Check Summary =================================== \n");
 	
 	//All went well
