@@ -102,7 +102,7 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side);
-static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, u_int32_t current_case_value);
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, u_int32_t* current_case_value);
 static generic_ast_node_t* default_statement(FILE* fl);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* defer_statement(FILE* fl);
@@ -7299,7 +7299,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Handle our statement here
 	generic_ast_node_t* stmt;
 
-	//What is the current case statement value that we're on?
+	//What is the current case statement value that we're on?. This is 
+	//used in the values[] above
 	u_int32_t current_case_value = 0;
 
 	//So long as we don't see a right curly
@@ -7310,10 +7311,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 			case CASE:
 				//Handle a case statement here. We'll need to pass
 				//the node in because of the type checking that we do
-				stmt = case_statement(fl, switch_stmt_node, values, current_case_value);
-
-				//Bump the current case value up now
-				current_case_value++;
+				stmt = case_statement(fl, switch_stmt_node, values, &current_case_value);
 
 				//Go based on what our class here
 				switch(stmt->ast_node_type){
@@ -8339,7 +8337,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, u_int32_t current_case_value){
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, u_int32_t* current_case_value){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -8476,8 +8474,10 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		return print_and_return_error(info, current_line);
 	}
 
-	//Run through and check for duplicates
-	for(u_int32_t i = 0; i < current_case_value; i++){
+	//Run through and check for duplicates. All of our case values are stored in 
+	//this one giant list of int32_t values for this exact reason. If we have duplicates,
+	//then the jump table simply won't work
+	for(u_int32_t i = 0; i < *current_case_value; i++){
 		//If we have a duplicate, this is bad
 		if(values[i] == case_stmt->constant_value.signed_int_value){
 			sprintf(info, "Value %d is duplicated in the switch statement", case_stmt->constant_value.signed_int_value);
@@ -8485,8 +8485,11 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		}
 	}
 
-	//Store our value inside of our big list of values
-	values[current_case_value]= case_stmt->constant_value.signed_int_value;
+	//Store our value inside of our big list of values for the next run
+	values[*current_case_value]= case_stmt->constant_value.signed_int_value;
+
+	//Now bump this value up for the next run
+	(*current_case_value)++;
 
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
