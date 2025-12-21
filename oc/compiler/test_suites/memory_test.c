@@ -45,6 +45,30 @@ int main(int argc, char** argv){
 		exit(1);
 	}
 
+	//Run through everything in the given directory
+	struct dirent* directory_entry;
+
+	//For creating our commands
+	char command[3000];
+
+	//Total number of errors we have
+	int total_errors = 0;
+
+	//So long as we can keep reading from the directory
+	while((directory_entry = readdir(directory)) != NULL){
+		printf("=========== Checking %s =================\n", directory_entry->d_name);
+
+		//Our command. We use 2>&1 to write all errors to stdout so that we can grep it
+		sprintf(command, "valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/'", directory_entry->d_name);
+		printf("Running test command: %s\n", command);
+
+		//Run the command and get the error count back
+		int error_count = system(command);
+
+		//Get the error count out
+		printf("TEST FILE: %s -> %d ERRORS\n", directory_entry->d_name, error_count);
+	}
+	
 	//Close the directory
 	closedir(directory);
 
