@@ -110,16 +110,18 @@ int main(int argc, char** argv){
 
 	printf("================================ Ollie Memory Check Summary =================================== \n");
 	printf("TOTAL ERRORS: %d\n", total_errors);
-	printf("FILES IN ERROR:\n");
 
-	//Print out all of them
-	for(int32_t i = 0; i < number_of_error_files; i++){
-		printf("%d) %s\n", i, files_in_error[i]);
-	}
-
-	//Generic error here
+	//Only print out if we need to
 	if(total_errors > 0){
-		printf("MEMORY CHECK FAILURE: DEVELOPER ATTENTION IS REQUIRED\n");
+		printf("FILES IN ERROR:\n");
+
+		//Print out all of them
+		for(int32_t i = 0; i < number_of_error_files; i++){
+			printf("%d) %s\n", i, files_in_error[i]);
+		}
+
+		//One final error for emphasis
+		printf("\n\nMEMORY CHECK FAILURE: DEVELOPER ATTENTION IS REQUIRED\n\n");
 	}
 
 	printf("================================ Ollie Memory Check Summary =================================== \n");

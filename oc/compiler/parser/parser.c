@@ -102,7 +102,7 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side);
-static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, u_int32_t* values);
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, u_int32_t current_case_value);
 static generic_ast_node_t* default_statement(FILE* fl);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* defer_statement(FILE* fl);
@@ -7283,10 +7283,10 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//of all the values that we do have. Since we can only have 1024 values, this array need only be 1024
 	//long. Every time we see a value in a case statement, we'll need to cross reference it with the
 	//values in here
-	u_int32_t values[MAX_SWITCH_RANGE];
+	int32_t values[MAX_SWITCH_RANGE];
 
 	//Wipe the entire thing so they're all 0's(FALSE)
-	memset(values, 0, MAX_SWITCH_RANGE * sizeof(u_int32_t));
+	memset(values, 0, MAX_SWITCH_RANGE * sizeof(int32_t));
 
 	//Now we can see as many expressions as we'd like. We'll keep looking for expressions so long as
 	//our lookahead token is not an R_CURLY. We'll use a do-while for this, because Ollie language requires
@@ -7299,6 +7299,9 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Handle our statement here
 	generic_ast_node_t* stmt;
 
+	//What is the current case statement value that we're on?
+	u_int32_t current_case_value = 0;
+
 	//So long as we don't see a right curly
 	while(lookahead.tok != R_CURLY){
 		//Switch by the lookahead
@@ -7307,7 +7310,10 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 			case CASE:
 				//Handle a case statement here. We'll need to pass
 				//the node in because of the type checking that we do
-				stmt = case_statement(fl, switch_stmt_node, values);
+				stmt = case_statement(fl, switch_stmt_node, values, current_case_value);
+
+				//Bump the current case value up now
+				current_case_value++;
 
 				//Go based on what our class here
 				switch(stmt->ast_node_type){
@@ -8333,7 +8339,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, u_int32_t* values){
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, u_int32_t current_case_value){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -8470,14 +8476,17 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		return print_and_return_error(info, current_line);
 	}
 
-	//Now let's see if we have any duplicates. If there are, we error out
-	if(values[case_stmt->constant_value.signed_int_value % MAX_SWITCH_RANGE] == TRUE){
-		sprintf(info, "Value %d is duplicated in the switch statement", case_stmt->constant_value.signed_int_value);
-		return print_and_return_error(info, parser_line_num);
+	//Run through and check for duplicates
+	for(u_int32_t i = 0; i < current_case_value; i++){
+		//If we have a duplicate, this is bad
+		if(values[i] == case_stmt->constant_value.signed_int_value){
+			sprintf(info, "Value %d is duplicated in the switch statement", case_stmt->constant_value.signed_int_value);
+			return print_and_return_error(info, parser_line_num);
+		}
 	}
 
-	//Let's now store it for the future
-	values[case_stmt->constant_value.signed_int_value % MAX_SWITCH_RANGE] = TRUE;
+	//Store our value inside of our big list of values
+	values[current_case_value]= case_stmt->constant_value.signed_int_value;
 
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
