@@ -4175,8 +4175,18 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 					//If it's *not* an array type, we can proceed doing this as we normally do
 					if(unary_expression_child->variable->type_defined_as->type_class != TYPE_CLASS_ARRAY){
+						//The memory address itself
+						three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
+
+						//Emit a custom assignment instruction for this
+						instruction_t* address_assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address_var);
+						address_assignment->is_branch_ending = is_branch_ending;
+
+						//Add this into the block
+						add_statement(current_block, address_assignment);
+
 						//And package the value up as what we want here
-						unary_package.assignee = emit_memory_address_var(unary_expression_child->variable);
+						unary_package.assignee = address_assignment->assignee;
 
 					/**
 					 * For an array type, we'll need to create a pointer to this in memory before we are able to load
@@ -4207,8 +4217,15 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							//Emit the purpose made memory address var
 							three_addr_var_t* memory_address = emit_memory_address_var(unary_expression_child->variable);
 
+							//Emit a custom assignment instruction for this
+							instruction_t* address_assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address);
+							address_assignment->is_branch_ending = is_branch_ending;
+
+							//Add this into the block
+							add_statement(current_block, address_assignment);
+
 							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
-							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, memory_address);
+							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, address_assignment->assignee);
 							store->is_branch_ending = is_branch_ending;
 
 							//This comes afterwards

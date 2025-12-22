@@ -1238,56 +1238,101 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  variable right before it, we should eliminate that unnecessary assingment by folding that constant
 	 *  into the lea statement.
 	 *
-	 *  We can also go one further by performing the said multiplication to get out the value that we want
+	 *  CASES HANDLED:
 	 *
-	 * NOTE: This will actually produce invalid binary operation instructions in the short run. However, 
-	 * when the instruction selector gets to them, we will turn them into memory move operations
+	 *  Case 1 -> two registers plus multiplicator:
+	 *  	t4 <- 4
+	 *  	t5 <- t2 + t4 * 4
+	 *
+	 *  	Turns into:
+	 *  		t5 <- t2 + 16(still a lea)
+	 *
+	 *  Case 2 -> two register, multiplicator and constant
+	 *	   	t4 <- 5
+	 *	   	t5 <- t2 + 500 + t4 * 4
+	 *	   	
+	 *	   	Turns into:
+	 *	   		t5 <- t2 + 520(still a lea)
+	 *
+	 *  Case 3 -> two registers with no multiplicator
+	 *  	t4 <- 4
+	 *  	t5 <- t2 + t4
+	 *
+	 * 		Turns into:
+	 * 			t5 <- t2 + 4(still a lea)
+	 *
+	 * 	Case 4 -> two registers and a constant
+	 *  	t4 <- 4
+	 *  	t5 <- t2 + 500 + t4
+	 *
+	 * 		Turns into:
+	 * 			t5 <- t2 + 504(still a lea)
 	 */
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction2->has_multiplicator == TRUE //it has to have a multiplicator for this to work
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
-		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP &&
-	 		variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+	 	&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 
-			//What we can do is rewrite the LEA statement all together as a simple addition statement. We'll
-			//evaluate the multiplication of the constant and lea multiplicator at comptime
-			u_int64_t address_offset = window->instruction2->lea_multiplicator;
+		//Grab this for clarity
+		instruction_t* lea_instruction = window->instruction1;
 
-			//Let's now grab what the constant is
-			three_addr_const_t* constant = window->instruction1->op1_const;
+		//
+		//
+		//
+		//TODO ENTIRELY INCOMPLETE
+		//
+		//
+		//
+		//
 
-			//We can just use the long version here
-			address_offset *= constant->constant_value.signed_long_constant;
+		//Step 1 to think about - do we even have a multiplicator? If
+		//yes, there are some additional things to be thinking about
+		if(lea_instruction->has_multiplicator == TRUE){
+			//Grab it out
+			int64_t multiplier = lea_instruction->lea_multiplicator;
 
-			//Once we've done this, the address offset is now properly multiplied. We'll reuse
-			//the constant from operation one, and convert the lea statement into a BIN_OP_WITH_CONST
-			//statement. This saves a lot of loading and arithmetic operations
-		
-			//This is now a long const
-			constant->const_type = LONG_CONST;
+		//If we get here, we have no multiplier
+		} else {
 
-			//Set this to be the address offset
-			constant->constant_value.signed_long_constant = address_offset;
-
-			//Add it into instruction 2
-			window->instruction2->op1_const = constant;
-
-			//We'll now transfrom instruction 2 into a bin op with const
-			window->instruction2->op2 = NULL;
-			window->instruction2->op = PLUS;
-			window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-			//We can now scrap the first instruction entirely
-			delete_statement(window->instruction1);
-
-			//Reconstruct the window. Instruction 2 is the new start
-			reconstruct_window(window, window->instruction2);
-
-			//This counts as a change 
-			changed = TRUE;
 		}
+
+		//What we can do is rewrite the LEA statement all together as a simple addition statement. We'll
+		//evaluate the multiplication of the constant and lea multiplicator at comptime
+		u_int64_t address_offset = window->instruction2->lea_multiplicator;
+
+		//Let's now grab what the constant is
+		three_addr_const_t* constant = window->instruction1->op1_const;
+
+		//We can just use the long version here
+		address_offset *= constant->constant_value.signed_long_constant;
+
+		//Once we've done this, the address offset is now properly multiplied. We'll reuse
+		//the constant from operation one, and convert the lea statement into a BIN_OP_WITH_CONST
+		//statement. This saves a lot of loading and arithmetic operations
+	
+		//This is now a long const
+		constant->const_type = LONG_CONST;
+
+		//Set this to be the address offset
+		constant->constant_value.signed_long_constant = address_offset;
+
+		//Add it into instruction 2
+		window->instruction2->op1_const = constant;
+
+		//We'll now transfrom instruction 2 into a bin op with const
+		window->instruction2->op2 = NULL;
+		window->instruction2->op = PLUS;
+		window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+		//We can now scrap the first instruction entirely
+		delete_statement(window->instruction1);
+
+		//Reconstruct the window. Instruction 2 is the new start
+		reconstruct_window(window, window->instruction2);
+
+		//This counts as a change 
+		changed = TRUE;
 	}
 
 
