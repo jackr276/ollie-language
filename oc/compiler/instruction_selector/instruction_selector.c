@@ -626,10 +626,57 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 
 				break;
 
+			//For a statement like this, we will merge the existing
+			//constant in. We know that the only two possible operands
+			//with a memory address are Plus/minus, so we only need to 
+			//account for 2 cases here
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				//Make it a lea
+				if(stack_offset != 0){
+					//Emit the constant
+					three_addr_const_t* lea_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+
+					//Simplify based on what we have
+					switch(instruction->op){
+						case PLUS:
+							add_constants(lea_constant, instruction->op1_const);
+							break;
+
+						case MINUS:
+							subtract_constants(lea_constant, instruction->op1_const);
+							break;
+
+						//This should be impossible, if we get here it's a hard out
+						default:
+							printf("Fatal internal compiler error. Attempt to do a binary operation that is not +/- with a memory address\n");
+							exit(1);
+					}
+
+					//Wipe out the operator
+					instruction->op = BLANK;
+
+					//Op1 becomes that stack pointer
+					instruction->op1 = stack_pointer_variable;
+
+					//Op1 const is the lea constant
+					instruction->op1_const = lea_constant;
+
+					//Change the instruction type to a lea
+					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+				//Otherwise, we'll just swap the var out with the stack pointer since
+				//they're one in the same
+				} else {
+					instruction->op1 = stack_pointer_variable;
+				}
+
 				break;
 
+			//Final and trickiest case. We need to have a memory calculation *and* a regular
+			//calculation stuffed into here, but we only have 2 operands to work with
 			case THREE_ADDR_CODE_BIN_OP_STMT:
+
+
 				break;
 
 			//This should never happen
@@ -640,17 +687,9 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 	
 	//Otherwise it is a global variable, and we will treat it as such
 	} else {
-		//These will always be lea's
-		instruction->instruction_type = LEAQ;
-
-		//Signify that we have a global variable
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
-
-		//The first address calc register is the instruction pointer
-		instruction->address_calc_reg1 = cfg->instruction_pointer;
-
-		//We'll use the at this point ignored op2 slot to hold the value of the offset
-		instruction->op2 = instruction->op1;
+		//TODO
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(2);
 	}
 }
 
