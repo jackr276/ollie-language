@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -4434,7 +4435,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 
 
 /**
- * Handle a store instruction. This will be reorganized into a memory accessing move
+ * Handle a store instruction. This will be reorganized into a memory accessing move.
  */
 static void handle_store_instruction(instruction_t* instruction){
 	//Store is to memory
@@ -4442,22 +4443,35 @@ static void handle_store_instruction(instruction_t* instruction){
 
 	//If we have a memory address var here(very common)
 	if(instruction->assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		//Let's get the offset from this memory address
-		three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->base_address, u64);
+		//Get the stack offset
+		int64_t stack_offset = instruction->assignee->linked_var->stack_region->base_address;
 
-		//The first address calc register will be the stack pointer
-		instruction->address_calc_reg1 = stack_pointer_variable;
+		//If it's not 0, we need to do some arithmetic
+		if(stack_offset != 0){
+			//Let's get the offset from this memory address
+			three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->base_address, u64);
 
-		//And we need to store the offset
-		instruction->offset = offset;
+			//The first address calc register will be the stack pointer
+			instruction->address_calc_reg1 = stack_pointer_variable;
 
-		//This counts for our destination only
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+			//And we need to store the offset
+			instruction->offset = offset;
+
+			//This counts for our destination only
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+		//If it is 0, we only need to deref the stack pointer
+		} else {
+			//This is the stack pointer, no offset is needed
+			instruction->destination_register = stack_pointer_variable;
+
+			//Just dereference the destination here, nothing more
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+		}
 
 		//TODO HANDLE GLOBALS
-		//
-		//TODO HANDLE 0
 
+	//Otherwise this is something like a pointer dereference, just a pure store
 	} else {
 		//Otherwise this is just the destination register
 		instruction->destination_register = instruction->assignee;
