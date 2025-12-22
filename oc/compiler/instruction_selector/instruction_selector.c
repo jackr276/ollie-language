@@ -25,6 +25,8 @@ static generic_type_t* u8;
 
 //A holder for the stack pointer
 three_addr_var_t* stack_pointer_variable;
+//A holder for the instruction pointer
+three_addr_var_t* instruction_pointer_variable;
 
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
@@ -697,7 +699,7 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 					//Finally declare that this is a lea statement
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
-					print_three_addr_code_stmt(stdout, instruction);
+					//TODO HANDLE SUBTRACTION(RARE) CASE AND ADD COVERAGE
 					
 				//Then again all we need to do here is set the op1
 				//to be our stack pointer
@@ -3724,41 +3726,53 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 	}
 
-	//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-	//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-	//must adhere to this one's type
-	if(is_expanding_move_required(address_calc_reg1->type, address_calc_reg2->type)){
-		address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, address_calc_reg2, address_calc_reg1->type);
-	}
-
-	//Does this lea statement have a multiplier?
-	if(instruction->has_multiplicator == TRUE){
-		//This is a fully stacked LEA
-		if(instruction->op1_const != NULL){
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
-
-			//Add this over too
-			instruction->offset = instruction->op1_const;
-
-		//Otherwise it just has registers and scale
-		} else {
-			//We already know what mode we'll need to use here
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+	//If we have an address calc reg 2(we usually do), we'll come here
+	if(address_calc_reg2 != NULL){
+		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+		//must adhere to this one's type
+		if(is_expanding_move_required(address_calc_reg1->type, address_calc_reg2->type)){
+			address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, address_calc_reg2, address_calc_reg1->type);
 		}
-	
-	//Otherwise, we've got no multiplier here
+
+		//Does this lea statement have a multiplier?
+		if(instruction->has_multiplicator == TRUE){
+			//This is a fully stacked LEA
+			if(instruction->op1_const != NULL){
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+				//Add this over too
+				instruction->offset = instruction->op1_const;
+
+			//Otherwise it just has registers and scale
+			} else {
+				//We already know what mode we'll need to use here
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+			}
+		
+		//Otherwise, we've got no multiplier here
+		} else {
+			//We have an offset and 2 registers
+			if(instruction->op1_const != NULL){
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+				//Add this over too
+				instruction->offset = instruction->op1_const;
+
+			//Otherwise we just have 2 registers that we're adding
+			} else {
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			}
+		}
+
+	//There are a subset of lea instructions that do not have
+	//an address calc reg2 at all. We will handle those here first
 	} else {
-		//We have an offset and 2 registers
-		if(instruction->op1_const != NULL){
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+		//This is a pure offset LEA statement
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-			//Add this over too
-			instruction->offset = instruction->op1_const;
-
-		//Otherwise we just have 2 registers that we're adding
-		} else {
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-		}
+		//And we'll copy over the offset
+		instruction->offset = instruction->op1_const;
 	}
 
 	//Now we can set the values
@@ -4456,22 +4470,35 @@ static void handle_load_instruction(instruction_t* instruction){
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
 	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		//Let's get the offset from this memory address
-		three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->op1->linked_var->stack_region->base_address, u64);
+		//If this is *not* a global variable
+		if(instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+			//This is our stack offset, it will be needed going forward
+			int64_t stack_offset = instruction->op1->linked_var->stack_region->base_address;
 
-		//We now will have something like <offset>(%rsp)
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			//Let's get the offset from this memory address
+			three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->op1->linked_var->stack_region->base_address, u64);
 
-		//This will be the stack pointer
-		instruction->address_calc_reg1 = stack_pointer_variable;
+			//We now will have something like <offset>(%rsp)
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-		//Store the offset too
-		instruction->offset = offset;
+			//This will be the stack pointer
+			instruction->address_calc_reg1 = stack_pointer_variable;
 
-		//TODO NEED TO HANDLE GLOBALS
-		//
-		//TODO HANDLE WHEN ITS 0
+			//Store the offset too
+			instruction->offset = offset;
 
+		//Otherwise, we are loading a global variable
+		} else {
+			//This is going to be a global variable movement
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+			//The address calc reg1 is the instruction pointer
+			instruction->address_calc_reg1 = instruction_pointer_variable;
+
+			//Remember that op2 will always hold the global var's name, so we'll just
+			//rearrange here
+			instruction->op2 = instruction->op1;
+		}
 
 	} else {
 		//This will always be a SOURCE_ONLY
@@ -5695,8 +5722,9 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	u32 = lookup_type_name_only(cfg->type_symtab, "u32", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
-	//Stash the stack pointer
+	//Stash the stack pointer & instruction pointer
 	stack_pointer_variable = cfg->stack_pointer;
+	instruction_pointer_variable = cfg->instruction_pointer;
 
 	//Our very first step in the instruction selector is to order all of the blocks in one 
 	//straight line. This step is also able to recognize and exploit some early optimizations,
