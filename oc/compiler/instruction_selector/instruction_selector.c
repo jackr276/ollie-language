@@ -586,54 +586,56 @@ static u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t o
 
 
 /**
- * Remediate a memory address instruction. Note that this will not convert a statement to
- * assembly, it will simply take the memory address instruction and put it into the
- * a different OIR form
- *
- * This needs to handle both stack variables and global variables
+ * Remediate a memory address that is *not* in a memory access(load or store) context. This will primarily
+ * be hit when we're taking memory addresses or doing pointer arithmetic with arrays
  */
-static void remediate_standard_memory_address(cfg_t* cfg, instruction_t* instruction){
+static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instruction_t* instruction){
 	//Grab this out
 	symtab_variable_record_t* var = instruction->op1->linked_var;
 
-	//Our most common case - global variables for obvious reasons do not have a stack address
+	/**
+	 * Handle a standard case - we have a variable that is going to be an address
+	 * on a stack
+	 */
 	if(var->membership != GLOBAL_VARIABLE){
-		//There are certain unique cases(think reference function parameter), where
-		//the value is it's own address. In this case, the stack region would be NULL
-		//and we can just make this into a simply assignment statement. This avoids what would
-		//otherwise be a segfault/unexpected behavior below
-		if(var->stack_region == NULL){
-			//Turn this into an assignment statement
-			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+		//Extract the stack offset for our use. This will determine how 
+		//we process things down below
+		int64_t stack_offset = var->stack_region->base_address;
 
-			//And we're done - this is all that we should need to do
-			return;
-		}
+		//Go based on what kind of statement that we've got here
+		switch(instruction->statement_type){
+			//If we have an assignment statement, we
+			//can turn this into a lea with an offset or a
+			//straight assignment depending on the offset
+			case THREE_ADDR_CODE_ASSN_STMT:
+				//Make it a lea
+				if(stack_offset != 0){
+					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
-		//Extract the stack offset for our use
-		u_int32_t stack_offset = var->stack_region->base_address;
+					//Op1 becomes that stack pointer
+					instruction->op1 = stack_pointer_variable;
 
-		//If this offset is not 0, then we have an operation in the form of
-		//"stack_pointer" + stack offset
-		if(stack_offset != 0){
-			instruction->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+					//And op1_const is our offset
+					instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
 
-			//Addition statement
-			instruction->op = PLUS;
+				//Otherwise, we'll just swap the var out with the stack pointer since
+				//they're one in the same
+				} else {
+					instruction->op1 = stack_pointer_variable;
+				}
 
-			//Emit the offset value
-			instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
+				break;
 
-			//And we're offsetting from the stack pointer
-			instruction->op1 = cfg->stack_pointer;
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				break;
 
-		//Otherwise if this is 0, then all we're doing is assigning the stack pointer
-		} else {
-			//This is an assign statement
-			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+				break;
 
-			//And the op1 is the stack pointer
-			instruction->op1 = cfg->stack_pointer;
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
+				exit(1);
 		}
 	
 	//Otherwise it is a global variable, and we will treat it as such
@@ -688,7 +690,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			//If it is a memory address, then we'll do this
 			if(first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-				remediate_standard_memory_address(cfg, first);
+				remediate_memory_address_in_non_access_context(cfg, first);
 			}
 			
 			break;
@@ -705,7 +707,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			//If it is a memory address, then we'll do this
 			if(second->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-				remediate_standard_memory_address(cfg, second);
+				remediate_memory_address_in_non_access_context(cfg, second);
 			}
 			
 			break;
