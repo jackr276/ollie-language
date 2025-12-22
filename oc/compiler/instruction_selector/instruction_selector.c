@@ -672,31 +672,47 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	/**
 	 * Memory address rememediation - if we have non store/load
 	 * instructions and we want to remediate their memory addresses,
-	 * we can come through here and do so now. They will turn into lea's
+	 * we can come through here and do so now. These may be situations
+	 * where we are not doing any kind of storing or loading, but instead
+	 * pointer arithmetic or grabbing memory addresses. We know for a fact
+	 * that the "op1" is always going to be the memory address
 	 */
 	instruction_t* first = window->instruction1;
 	instruction_t* second = window->instruction2; 
 	instruction_t* third = window->instruction3; 
-	
-	//Check & rememediate the first if necessary
-	if(first->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		remediate_standard_memory_address(cfg, first);
+
+	//Check if we have any such cases for the first in the window
+	switch(first->statement_type){
+		case THREE_ADDR_CODE_ASSN_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			//If it is a memory address, then we'll do this
+			if(first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+				remediate_standard_memory_address(cfg, first);
+			}
+			
+			break;
+
+		//By default do nothing
+		default:
+			break;
 	}
 
+	//Check if we have any such cases for the second in the window
+	switch(second->statement_type){
+		case THREE_ADDR_CODE_ASSN_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			//If it is a memory address, then we'll do this
+			if(second->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+				remediate_standard_memory_address(cfg, second);
+			}
+			
+			break;
 
-	//Check & rememediate the second if necessary
-	if(second->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& second->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		remediate_standard_memory_address(cfg, second);
-	}
-
-
-	//Check & rememediate the third if necessary
-	if(third != NULL
-		&& third->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& third->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		remediate_standard_memory_address(cfg, third);
+		//By default do nothing
+		default:
+			break;
 	}
 
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
@@ -4471,7 +4487,8 @@ static void handle_store_instruction(instruction_t* instruction){
 
 		//TODO HANDLE GLOBALS
 
-	//Otherwise this is something like a pointer dereference, just a pure store
+	//Otherwise this is something like a pointer dereference, just a pure store so we'll
+	//be using the assignee as the destination
 	} else {
 		//Otherwise this is just the destination register
 		instruction->destination_register = instruction->assignee;
