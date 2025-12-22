@@ -4344,7 +4344,12 @@ static void handle_load_instruction(instruction_t* instruction){
 		//This will be the stack pointer
 		instruction->address_calc_reg1 = stack_pointer_variable;
 
+		//Store the offset too
+		instruction->offset = offset;
+
 		//TODO NEED TO HANDLE GLOBALS
+		//
+		//TODO HANDLE WHEN ITS 0
 
 
 	} else {
@@ -4432,14 +4437,34 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
  * Handle a store instruction. This will be reorganized into a memory accessing move
  */
 static void handle_store_instruction(instruction_t* instruction){
-	//This counts for our destination only
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
-
 	//Store is to memory
 	instruction->memory_access_type = WRITE_TO_MEMORY;
 
-	//This is our destination register
-	instruction->destination_register = instruction->assignee;
+	//If we have a memory address var here(very common)
+	if(instruction->assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		//Let's get the offset from this memory address
+		three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->base_address, u64);
+
+		//The first address calc register will be the stack pointer
+		instruction->address_calc_reg1 = stack_pointer_variable;
+
+		//And we need to store the offset
+		instruction->offset = offset;
+
+		//This counts for our destination only
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+
+		//TODO HANDLE GLOBALS
+		//
+		//TODO HANDLE 0
+
+	} else {
+		//Otherwise this is just the destination register
+		instruction->destination_register = instruction->assignee;
+
+		//This counts for our destination only
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_DEST;
+	}
 
 	//Invoke the helper to determine the type and instruction type
 	handle_store_instruction_sources_and_instruction_type(instruction);
