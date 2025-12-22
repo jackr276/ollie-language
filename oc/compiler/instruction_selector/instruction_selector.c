@@ -1272,6 +1272,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->assignee->use_count <= 1 //We don't want to be wiping this away if it's used more throughout the program
 	 	&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 
 		//Grab this for clarity

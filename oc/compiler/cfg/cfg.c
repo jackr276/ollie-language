@@ -2413,6 +2413,9 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, o
 /**
  * Emit a statement that fits the definition of a lea statement. This usually takes the
  * form of address computations
+ *
+ *
+ * TODO FIX THIS NAME - be more specific about what it is
  */
 static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* current_offset, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
@@ -2440,6 +2443,9 @@ static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* 
 
 /**
  * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
+ *
+ *
+ * TODO WE CAN STILL HAVE THE FINAL THING BE LEA
  */
 static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
 	//We assume this is the true base address

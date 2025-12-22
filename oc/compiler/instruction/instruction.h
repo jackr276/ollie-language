@@ -261,14 +261,14 @@ struct instruction_t{
 	u_int8_t is_branch_ending;
 	//Cannot be coalesced
 	u_int8_t cannot_be_combined;
-	//Does this have a multiplicator
-	u_int8_t has_multiplicator;
 	//Is this a regular or inverse branch
 	u_int8_t inverse_branch;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?
 	address_calculation_mode_t calculation_mode;
+	//What is the lea type(only used during the IR phase)
+	oir_lea_type_t lea_statement_type;
 	//Do we have a read, write, or no attempt to access memory(default)
 	memory_access_type_t memory_access_type;
 	//The register that we're popping or pushing
@@ -470,14 +470,14 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee);
 instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg);
 
 /**
- * Emit a lea statement with no type size multiplier on it
+ * Emit a lea statement that has no multiplier, only operands
  */
-instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
+instruction_t* emit_lea_instruction_operands_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
 
 /**
- * Emit a statement that is in LEA form
+ * Emit a lea statement that has a multiplier and operands
  */
-instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_lea_instruction_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form

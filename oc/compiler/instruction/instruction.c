@@ -929,8 +929,10 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
 
 /**
  * Emit a lea statement with no type size multiplier on it
+ *
+ * This is designed to emit things like lea (t2, t3), t5
  */
-instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
+instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -942,6 +944,9 @@ instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, th
 	//What function are we in
 	stmt->function = current_function;
 
+	//This only has registers
+	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_ONLY;
+
 	//And now we give it back
 	return stmt;
 }
@@ -950,7 +955,7 @@ instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, th
 /**
  * Emit a statement that is in LEA form
  */
-instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
+instruction_t* emit_lea_instruction_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -963,8 +968,8 @@ instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t
 	//What function are we in
 	stmt->function = current_function;
 
-	//This has a multiplicator, so indicate that
-	stmt->has_multiplicator = TRUE;
+	//This has registers and a multiplier
+	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
 
 	//And now we give it back
 	return stmt;
@@ -1953,6 +1958,23 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "nop\n");
 			break;
 
+		//
+		//
+		//
+		//
+		//
+		//
+		//
+		//
+		//TODO COMPLETE REWRITE NEEDED
+		//
+		//
+		//
+		//
+		//
+		//
+		//
+		//
 		case THREE_ADDR_CODE_LEA_STMT:
 			//Var name comes first
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
