@@ -682,15 +682,16 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 
 	//Check & rememediate the second if necessary
-	if(first->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(second->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& second->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		remediate_standard_memory_address(cfg, second);
 	}
 
 
 	//Check & rememediate the third if necessary
-	if(first->statement_type == THREE_ADDR_CODE_ASSN_STMT
-		&& first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(third != NULL
+		&& third->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& third->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		remediate_standard_memory_address(cfg, third);
 	}
 
