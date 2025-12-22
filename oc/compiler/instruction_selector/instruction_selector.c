@@ -22,6 +22,9 @@ static generic_type_t* u32;
 static generic_type_t* i32;
 static generic_type_t* u8;
 
+//A holder for the stack pointer
+three_addr_var_t* stack_pointer_variable;
+
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 
@@ -673,7 +676,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	instruction_t* first = window->instruction1;
 	instruction_t* second = window->instruction2; 
 	instruction_t* third = window->instruction3; 
-
+	
 	//Check & rememediate the first if necessary
 	if(first->statement_type == THREE_ADDR_CODE_ASSN_STMT
 		&& first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
@@ -4329,14 +4332,31 @@ static void handle_load_instruction(instruction_t* instruction){
 	//Let the helper select for us
 	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
-	//This will always be a SOURCE_ONLY
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+	//If we have a memory address variable(super common), we'll need to
+	//handle this now
+	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		//Let's get the offset from this memory address
+		three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->op1->linked_var->stack_region->base_address, u64);
+
+		//We now will have something like <offset>(%rsp)
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+		//This will be the stack pointer
+		instruction->address_calc_reg1 = stack_pointer_variable;
+
+		//TODO NEED TO HANDLE GLOBALS
+
+
+	} else {
+		//This will always be a SOURCE_ONLY
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+
+		//And the op1 is our source
+		instruction->source_register = instruction->op1;
+	}
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
-
-	//And the op1 is our source
-	instruction->source_register = instruction->op1;
 
 	//Invoke the helper to handle the assignee and any edge cases
 	handle_load_instruction_destination_assignment(instruction, instruction->source_register->type);
@@ -5303,7 +5323,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 *
 	 * Can become:
 	 * mov(w/l/q) 'a', 386(stack_pointer_0)
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -5322,6 +5341,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		
 		return;
 	}
+	 */
 
 	/**
 	 * Handle a situation like this:
@@ -5331,7 +5351,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 *
 	 * Can become:
 	 * mov(w/l/q) 386(stack_pointer_0), t19
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -5350,6 +5369,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		
 		return;
 	}
+	 */
 
 	/**
 	 * Handle a situation like this:
@@ -5359,7 +5379,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 *
 	 * Can become:
 	 * mov(w/l/q) 2, 12(t19, t20)
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -5378,6 +5397,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		
 		return;
 	}
+	 */
 
 	/**
 	 * Handle a situation like this:
@@ -5387,7 +5407,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 *
 	 * Can become:
 	 * mov(w/l/q) 12(t19, t20), t23
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -5406,6 +5425,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		
 		return;
 	}
+	 */
 
 	/**
 	 * Handle a situation like:
@@ -5415,7 +5435,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 *
 	 * We can turn this into:
 	 * mov(w/l/q) (t18, x_0, 4), i_0
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
@@ -5435,6 +5454,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 
 		return;
 	}
+	 */
 
 	/**
 	 * Handle a situation like:
@@ -5444,7 +5464,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 *
 	 * We can turn this into:
 	 * mov(w/l/q) t20, (t18, x_0, 4)
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
@@ -5464,6 +5483,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 
 		return;
 	}
+	 */
 
 	/**
 	 * Handle to memory movement with 2 operands
@@ -5473,7 +5493,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * store t4 <- t3
 	 * 
 	 * Will become mov(w/l/q) t3, 8(stack_pointer_0)
-	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
@@ -5492,6 +5511,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Done here
 		return;
 	}
+	 */
 
 
 	/**
@@ -5502,7 +5522,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * load t3 <- t4
 	 * 
 	 * Will become mov(w/l/q) 8(stack_pointer_0), t3
-	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& window->instruction1->op == PLUS
 		&& window->instruction1->assignee->use_count <= 1 //Be sure we aren't using this more than once
@@ -5521,6 +5540,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Done here
 		return;
 	}
+	 */
 
 	/**
 	 * Handle from memory with lea statement
@@ -5531,7 +5551,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 *
 	 * Can become:
 	 * mov(w/l/q) x(%rip), t7
-	 */
 	if(window->instruction1->instruction_type == LEAQ 
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1
@@ -5550,6 +5569,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Done here
 		return;
 	}
+	 */
 
 	/**
 	 * Handle to memory with lea statement
@@ -5560,7 +5580,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 *
 	 * Can become:
 	 * mov(w/l/q) x(%rip), t7
-	 */
 	if(window->instruction1->instruction_type == LEAQ 
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1
@@ -5579,6 +5598,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Done here
 		return;
 	}
+	 */
 
 
 	/**
@@ -5591,7 +5611,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * Which can become
 	 *
 	 * mov(w/l/q) 4(t7, arg_0, 4), t11
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -5613,6 +5632,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Done here
 		return;
 	}
+	 */
 
 	/**
 	 * Handle a three-instruction spanning store like this:
@@ -5624,7 +5644,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * Which can become
 	 *
 	 * mov(w/l/q) t11, 4(t7, arg_0, 4)
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -5646,6 +5665,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Done here
 		return;
 	}
+	 */
 
 	/** 
 	 * Handle a three instruction spanning load with a sort
@@ -5658,7 +5678,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * Becomes:
 	 * 
 	 * mov(w/l/q) 4(t11, arg_0, 8)
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
@@ -5683,6 +5702,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Done here
 		return;
 	}
+	 */
 
 	/** 
 	 * Handle a three instruction spanning store with a sort
@@ -5695,7 +5715,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 	 * Becomes:
 	 * 
 	 * mov(w/l/q) t15, 4(t11, arg_0, 8)
-	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
 		&& window->instruction1->op == STAR
 		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE
@@ -5720,6 +5739,7 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Done here
 		return;
 	}
+	 */
 
 	//We could see logical and/logical or
 	if(is_instruction_binary_operation(window->instruction1) == TRUE){
@@ -5941,6 +5961,9 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(cfg->type_symtab, "u32", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
+
+	//Stash the stack pointer
+	stack_pointer_variable = cfg->stack_pointer;
 
 	//Our very first step in the instruction selector is to order all of the blocks in one 
 	//straight line. This step is also able to recognize and exploit some early optimizations,
