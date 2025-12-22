@@ -588,7 +588,7 @@ static u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t o
  *
  * This needs to handle both stack variables and global variables
  */
-static void remediate_memory_address_instruction(cfg_t* cfg, instruction_t* instruction){
+static void remediate_standard_memory_address(cfg_t* cfg, instruction_t* instruction){
 	//Grab this out
 	symtab_variable_record_t* var = instruction->op1->linked_var;
 
@@ -665,15 +665,33 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		return changed;
 	}
 
-	//Right off the bat, if we see any memory address instructions, now is our time to
-	//convert out of them
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
-		remediate_memory_address_instruction(cfg, window->instruction1);
+	/**
+	 * Memory address rememediation - if we have non store/load
+	 * instructions and we want to remediate their memory addresses,
+	 * we can come through here and do so now. They will turn into lea's
+	 */
+	instruction_t* first = window->instruction1;
+	instruction_t* second = window->instruction2; 
+	instruction_t* third = window->instruction3; 
+
+	//Check & rememediate the first if necessary
+	if(first->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		remediate_standard_memory_address(cfg, first);
 	}
 
-	//Same for instruction 2 if we see it
-	if(window->instruction2->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT){
-		remediate_memory_address_instruction(cfg, window->instruction2);
+
+	//Check & rememediate the second if necessary
+	if(first->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		remediate_standard_memory_address(cfg, second);
+	}
+
+
+	//Check & rememediate the third if necessary
+	if(first->statement_type == THREE_ADDR_CODE_ASSN_STMT
+		&& first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		remediate_standard_memory_address(cfg, third);
 	}
 
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
@@ -1714,30 +1732,6 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 		//Rebuild now based on instruction2
 		reconstruct_window(window, window->instruction2);
-
-		//Counts as a change
-		changed = TRUE;
-	}
-
-
-	/**
-	 * If we have a memory address statement where the stack address is 0, we can
-	 * simply make this into an assignment instruction. We don't need the normal lea
-	 * that others have
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEM_ADDRESS_STMT
-		// Ignore global vars, they don't have stack addresses
-		&& window->instruction1->op1->linked_var->membership != GLOBAL_VARIABLE){
-		//We can reorgnaize this into an assignment instruction
-		if(window->instruction1->op1->stack_region->base_address == 0){
-			//Reset the type
-			window->instruction1->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-			//The op1 is now the stack pointer
-			window->instruction1->op1 = cfg->stack_pointer;
-		}
-
-		//Slide the window after we do this, we don't need to look at statement 1 anymore
-		slide_window(window);
 
 		//Counts as a change
 		changed = TRUE;
@@ -5893,9 +5887,6 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 			break;
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 			handle_store_with_variable_offset_instruction(instruction);
-			break;
-		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
-			handle_memory_address_instruction(cfg, cfg->stack_pointer, instruction);
 			break;
 		default:
 			break;
