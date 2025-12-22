@@ -673,9 +673,37 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 				break;
 
 			//Final and trickiest case. We need to have a memory calculation *and* a regular
-			//calculation stuffed into here, but we only have 2 operands to work with
+			//calculation stuffed into here, but we only have 2 operands to work with. We will
+			//need to use our special version of a lea for this in most cases
 			case THREE_ADDR_CODE_BIN_OP_STMT:
+				//Make it a lea, we'll need to use op2
+				//for the second variable
+				if(stack_offset != 0){
+					//Create the offset constant
+					three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
 
+					//This is now our op1_const
+					instruction->op1_const = stack_offset_constant;
+
+					//Op1 becomes the stack pointer
+					instruction->op1 = stack_pointer_variable;
+
+					//Wipe out the op
+					instruction->op = BLANK;
+
+					//This has no lea multiplier
+					instruction->has_multiplicator = FALSE;
+
+					//Finally declare that this is a lea statement
+					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+					print_three_addr_code_stmt(stdout, instruction);
+					
+				//Then again all we need to do here is set the op1
+				//to be our stack pointer
+				} else {
+					instruction->op1 = stack_pointer_variable;
+				}
 
 				break;
 
@@ -816,9 +844,10 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * NOTE: This does not work for division or modulus instructions
 	 */
 	//Check first with 1 and 2
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+	if(window->instruction2 != NULL 
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//Is the variable in instruction 1 temporary *and* the same one that we're using in instrution2? Let's check.
+		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
 		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 			//Validate that the use count is less than 1
 			&& window->instruction1->assignee->use_count <= 1
@@ -843,8 +872,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			//We can now delete the very first statement
 			delete_statement(window->instruction1);
 
-			//Reconstruct the window with instruction2's prior instruction as the start
-			reconstruct_window(window, window->instruction2->previous_statement);
+			//Reconstruct using the previous instruction or instruction
+			//2, if we're blanked out
+			if(window->instruction2->previous_statement != NULL){
+				reconstruct_window(window, window->instruction2->previous_statement);
+			} else {
+				reconstruct_window(window, window->instruction2);
+			}
 
 			//This does count as a change
 			changed = TRUE;

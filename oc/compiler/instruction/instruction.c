@@ -1962,15 +1962,21 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Now print out the rest in order
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-			//Then we have a plus
-			fprintf(fl, " + ");
 
 			//If we have a constant, we'll print that. Otherwise, print op2
 			if(stmt->op1_const != NULL){
+				//Then we have a plus
+				fprintf(fl, " + ");
+
 				//Print the constant out
 				print_three_addr_constant(fl, stmt->op1_const);
-				fprintf(fl, "\n");
-			} else {
+			}
+
+			//If we have an op2, we must print that as well
+			if(stmt->op2 != NULL){
+				//Then we have a plus
+				fprintf(fl, " + ");
+
 				//Then we have the third one, times some multiplier
 				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 
@@ -1979,9 +1985,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					//And the finishing sequence
 					fprintf(fl, " * %ld", stmt->lea_multiplicator);
 				}
-
-				fprintf(fl, "\n");
 			}
+
+			fprintf(fl, "\n");
 			break;
 
 		case THREE_ADDR_CODE_PHI_FUNC:
