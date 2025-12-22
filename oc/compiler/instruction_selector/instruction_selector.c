@@ -1241,7 +1241,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 * NOTE: This will actually produce invalid binary operation instructions in the short run. However, 
 	 * when the instruction selector gets to them, we will turn them into memory move operations
 	 */
-	if(window->instruction2 != NULL && window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
+	if(window->instruction2 != NULL 
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction2->has_multiplicator == TRUE //it has to have a multiplicator for this to work
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		//If the first instruction's assignee is temporary and it matches the lea statement, then we have a match
 		if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP &&
@@ -3729,8 +3731,35 @@ static void handle_lea_statement(instruction_t* instruction){
 		address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, address_calc_reg2, address_calc_reg1->type);
 	}
 
-	//We already know what mode we'll need to use here
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+	//Does this lea statement have a multiplier?
+	if(instruction->has_multiplicator == TRUE){
+		//This is a fully stacked LEA
+		if(instruction->op1_const != NULL){
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+			//Add this over too
+			instruction->offset = instruction->op1_const;
+
+		//Otherwise it just has registers and scale
+		} else {
+			//We already know what mode we'll need to use here
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+		}
+	
+	//Otherwise, we've got no multiplier here
+	} else {
+		//We have an offset and 2 registers
+		if(instruction->op1_const != NULL){
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+			//Add this over too
+			instruction->offset = instruction->op1_const;
+
+		//Otherwise we just have 2 registers that we're adding
+		} else {
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+		}
+	}
 
 	//Now we can set the values
 	instruction->destination_register = instruction->assignee;
