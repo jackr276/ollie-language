@@ -3795,6 +3795,7 @@ static void handle_lea_statement(instruction_t* instruction){
 	//Select the size of our variable
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
+	//Select the appropriate instruction first
 	switch(size){
 		case QUAD_WORD:
 			instruction->instruction_type = LEAQ;
@@ -3808,6 +3809,40 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 		default:
 			break;
+	}
+
+	//This is always the same
+	instruction->destination_register = instruction->assignee;
+
+	switch(instruction->lea_statement_type){
+		case OIR_LEA_TYPE_OFFSET_ONLY:
+			//TODO
+			break;
+
+		case OIR_LEA_TYPE_REGISTERS_ONLY:
+			//TODO
+			break;
+
+		case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
+			//TODO
+			break;
+
+		case OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION:
+			//TODO
+			break;
+
+		case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+			//TODO
+			break;
+
+		case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+			//TODO
+			break;
+
+		//This is unreachable and should never happen. Hard error if it does
+		default:
+			printf("Fatal internal compiler error: Unreachable path detected in lea statement translator\n");
+			exit(1);
 	}
 
 	//If we have an address calc reg 2(we usually do), we'll come here

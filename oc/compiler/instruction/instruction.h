@@ -234,7 +234,12 @@ struct instruction_t{
 	//Certain instructions like conversions, and divisions, have more
 	//than one destination register
 	three_addr_var_t* destination_register2;
-	three_addr_const_t* offset;
+	//Lea statements can have an offset or a global
+	//variable name as the offset, so we accomodate both
+	union {
+		three_addr_const_t* offset_constant;
+		three_addr_var_t* global_variable;
+	} offset;
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
