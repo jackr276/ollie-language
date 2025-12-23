@@ -3814,29 +3814,81 @@ static void handle_lea_statement(instruction_t* instruction){
 	//This is always the same
 	instruction->destination_register = instruction->assignee;
 
+	//Go based on whatever the type is
 	switch(instruction->lea_statement_type){
+		//This converts to an addressing mode with
+		//an offset only
 		case OIR_LEA_TYPE_OFFSET_ONLY:
-			//TODO
+			//Set the mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			
+			//The op1 is now our address calc register
+			instruction->address_calc_reg1 = instruction->op1;
+
 			break;
 
+		//Converts to an addresing mode with address calc registers
+		//only
 		case OIR_LEA_TYPE_REGISTERS_ONLY:
-			//TODO
+			//Set the mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			
+			//Copy over the address calc registers
+			instruction->address_calc_reg1 = instruction->op1;
+			instruction->address_calc_reg1 = instruction->op2;
+
 			break;
 
+		//Converts to an addressing mode with the trifecta
 		case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
-			//TODO
+			//Set the mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+			//Copy over the address calc registers
+			instruction->address_calc_reg1 = instruction->op1;
+			instruction->address_calc_reg1 = instruction->op2;
+
+			//Set the appropriate value here
+			instruction->offset.offset_constant = instruction->op1_const;
+
 			break;
 
+		//Special kind to support global vars
 		case OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION:
-			//TODO
+			//Set the mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+			//Copy over the address calc register
+			instruction->address_calc_reg1 = instruction->op1;
+
+			//Op2 holds the global var, which then gets moved over
+			instruction->offset.global_variable = instruction->op2;
+
 			break;
 
+		//Translates to the address calc mode of the same name
 		case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
-			//TODO
+			//Set the mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+			//Copy over the address calc registers
+			instruction->address_calc_reg1 = instruction->op1;
+			instruction->address_calc_reg1 = instruction->op2;
+
+			//Set the appropriate value here
+			instruction->offset.offset_constant = instruction->op1_const;
+
 			break;
 
+		//Translates to the address calc mode of the same name
 		case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
-			//TODO
+			//Set the mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+
+			//Copy over the address calc registers
+			instruction->address_calc_reg1 = instruction->op1;
+			instruction->address_calc_reg1 = instruction->op2;
+
 			break;
 
 		//This is unreachable and should never happen. Hard error if it does
@@ -3844,64 +3896,6 @@ static void handle_lea_statement(instruction_t* instruction){
 			printf("Fatal internal compiler error: Unreachable path detected in lea statement translator\n");
 			exit(1);
 	}
-
-	//If we have an address calc reg 2(we usually do), we'll come here
-	if(address_calc_reg2 != NULL){
-		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
-		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
-		//must adhere to this one's type
-		if(is_expanding_move_required(address_calc_reg1->type, address_calc_reg2->type)){
-			address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, address_calc_reg2, address_calc_reg1->type);
-		}
-
-		//Does this lea statement have a multiplier?
-		if(instruction->has_multiplicator == TRUE){
-			//This is a fully stacked LEA
-			if(instruction->op1_const != NULL){
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
-
-				//Add this over too
-				instruction->offset = instruction->op1_const;
-
-			//Otherwise it just has registers and scale
-			} else {
-				//We already know what mode we'll need to use here
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
-			}
-		
-		//Otherwise, we've got no multiplier here
-		} else {
-			//We have an offset and 2 registers
-			if(instruction->op1_const != NULL){
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
-
-				//Add this over too
-				instruction->offset = instruction->op1_const;
-
-			//Otherwise we just have 2 registers that we're adding
-			} else {
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-			}
-		}
-
-	//There are a subset of lea instructions that do not have
-	//an address calc reg2 at all. We will handle those here first
-	} else {
-		//This is a pure offset LEA statement
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-
-		//And we'll copy over the offset
-		instruction->offset = instruction->op1_const;
-	}
-
-	//Now we can set the values
-	instruction->destination_register = instruction->assignee;
-
-	//Add op1 and op2
-	instruction->address_calc_reg1 = address_calc_reg1;
-	instruction->address_calc_reg2 = address_calc_reg2;
-
-	//And the lea multiplicator is already in place..
 }
 
 
