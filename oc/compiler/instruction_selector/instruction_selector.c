@@ -1316,10 +1316,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			|| variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE)){
 
 		//Grab this for clarity
-		instruction_t* move_instruction = window->instruction2;
+		instruction_t* move_instruction = window->instruction1;
 		instruction_t* lea_instruction = window->instruction2;
 
-		//For holding our multipliers
+		//For holding our multipliers/constants
+		three_addr_const_t* lea_constant;
 		int64_t lea_multiplier;
 
 		//Go based on what kind of lea we've got here
@@ -1336,10 +1337,28 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				lea_multiplier = lea_instruction->lea_multiplier;
 
 				//This will become the lea's constant
-				three_addr_const_t* lea_constant = move_instruction->op1_const;
+				lea_constant = move_instruction->op1_const;
 
 				//Now let's multiply the 2 together, the result will be in the lea constant
+				lea_constant = multiply_constant_by_raw_int64_value(lea_constant, i64, lea_multiplier);
+				
+				//Finally, we can reconstruct the entire thing
+				lea_instruction->op1_const = lea_constant;
 
+				//This no longer exists
+				lea_instruction->op2 = NULL;
+
+				//The calculation type is now offset only
+				lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+				//Delete the move now
+				delete_statement(move_instruction);
+				
+				//Reconstruct around the lea
+				reconstruct_window(window, lea_instruction);
+
+				//Counts as a change
+				changed = TRUE;
 
 				break;
 				
@@ -1351,6 +1370,34 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
  			 *		t5 <- 520(t2)
  			 **/
 			case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
+				//Let's extract the constants that we're after here
+				lea_multiplier = lea_instruction->lea_multiplier;
+
+				//This will become the lea's constant
+				lea_constant = move_instruction->op1_const;
+
+				//First step, multiply the constant by the lea multiplier
+				lea_constant = multiply_constant_by_raw_int64_value(lea_constant, i64, lea_multiplier);
+
+				//Following that, we will add it to the existing offset. The result will
+				//be in the offset constant itself
+				add_constants(lea_instruction->op1_const, lea_constant);
+
+				//This no longer exists
+				lea_instruction->op2 = NULL;
+
+				//The calculation type is now offset only
+				lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+				//Delete the move now
+				delete_statement(move_instruction);
+				
+				//Reconstruct around the lea
+				reconstruct_window(window, lea_instruction);
+
+				//Counts as a change
+				changed = TRUE;
+
 				break;
 
 
@@ -2048,7 +2095,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET 
 		&& is_constant_value_zero(window->instruction1->offset.offset_constant) == TRUE){
 		//First NULL out the constant
-		window->instruction1->offset = NULL;
+		window->instruction1->offset.offset_constant = NULL;
 
 		//Slight adjustment as well, the op1's in complex stores are not the source but in regular
 		//stores they are, so we'll copy that over
