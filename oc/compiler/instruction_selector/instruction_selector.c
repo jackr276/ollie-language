@@ -1331,7 +1331,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//yes, there are some additional things to be thinking about
 		if(lea_instruction->has_multiplicator == TRUE){
 			//Grab it out
-			int64_t multiplier = lea_instruction->lea_multiplicator;
+			int64_t multiplier = lea_instruction->lea_multiplier;
 
 		//If we get here, we have no multiplier
 		} else {
@@ -1340,7 +1340,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 		//What we can do is rewrite the LEA statement all together as a simple addition statement. We'll
 		//evaluate the multiplication of the constant and lea multiplicator at comptime
-		u_int64_t address_offset = window->instruction2->lea_multiplicator;
+		u_int64_t address_offset = window->instruction2->lea_multiplier;
 
 		//Let's now grab what the constant is
 		three_addr_const_t* constant = window->instruction1->op1_const;
@@ -1948,7 +1948,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		window->instruction2->op2 = NULL;
 
 		//Copy their constants over
-		window->instruction2->offset = window->instruction1->op1_const;
+		window->instruction2->offset.offset_constant = window->instruction1->op1_const;
 
 		//We can delete the entire assignment statement
 		delete_statement(window->instruction1);
@@ -1985,7 +1985,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		window->instruction2->op1 = NULL;
 
 		//Copy their constants over
-		window->instruction2->offset = window->instruction1->op1_const;
+		window->instruction2->offset.offset_constant = window->instruction1->op1_const;
 
 		//We can delete the entire assignment statement
 		delete_statement(window->instruction1);
@@ -2008,9 +2008,9 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  load t4 <- t3
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET
-		&& is_constant_value_zero(window->instruction1->offset) == TRUE){
+		&& is_constant_value_zero(window->instruction1->offset.offset_constant) == TRUE){
 		//First NULL out the constant
-		window->instruction1->offset = NULL;
+		window->instruction1->offset.offset_constant = NULL;
 
 		//Then just make this a normal load
 		window->instruction1->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
@@ -2030,7 +2030,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  store t4 <- t3
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET 
-		&& is_constant_value_zero(window->instruction1->offset) == TRUE){
+		&& is_constant_value_zero(window->instruction1->offset.offset_constant) == TRUE){
 		//First NULL out the constant
 		window->instruction1->offset = NULL;
 
@@ -3244,7 +3244,7 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 		//We'll just have an offset here
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 		//This is definitely not 0 if we're here
-		instruction->offset = instruction->op1_const;
+		instruction->offset.offset_constant = instruction->op1_const;
 	}
 }
 
@@ -4598,7 +4598,7 @@ static void handle_load_instruction(instruction_t* instruction){
 			instruction->address_calc_reg1 = stack_pointer_variable;
 
 			//Store the offset too
-			instruction->offset = offset;
+			instruction->offset.offset_constant = offset;
 
 		//Otherwise, we are loading a global variable
 		} else {
@@ -4717,7 +4717,7 @@ static void handle_store_instruction(instruction_t* instruction){
 				instruction->address_calc_reg1 = stack_pointer_variable;
 
 				//And we need to store the offset
-				instruction->offset = offset;
+				instruction->offset.offset_constant = offset;
 
 				//This counts for our destination only
 				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -4811,54 +4811,6 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 
 /**
- * Translate the memory address instruction into stack form
- *
- * There are two options here - a stack address and a global variable. We will 
- * handle both cases
- */
-static void handle_memory_address_instruction(cfg_t* cfg, three_addr_var_t* stack_pointer, instruction_t* instruction){
-	//These will always be LEA's
-	instruction->instruction_type = LEAQ;
-
-	//Destination is always the assignee
-	instruction->destination_register = instruction->assignee;
-
-	//Extract for convenience
-	three_addr_var_t* address_variable = instruction->op1;
-	symtab_variable_record_t* variable = address_variable->linked_var;
-
-	//Is this a stack variable(most common case)
-	if(variable->membership != GLOBAL_VARIABLE){
-		//We need to grab this variable's stack offset
-		u_int32_t stack_offset = variable->stack_region->base_address;
-
-		//Once we have that, we can emit our offset constant
-		three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-		//The offset is the offset constant
-		instruction->offset = offset_constant;
-
-		//Stack pointer is the calc reg 1
-		instruction->address_calc_reg1 = stack_pointer;
-
-		//We've only got the offset here
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-
-	//Otherwise we know that we have a global variable
-	} else {
-		//Signify that we have a global variable
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
-
-		//The first address calc register is the instruction pointer
-		instruction->address_calc_reg1 = cfg->instruction_pointer;
-
-		//We'll use the at this point ignored op2 slot to hold the value of the offset
-		instruction->op2 = address_variable;
-	}
-}
-
-
-/**
  * Handle an address calculation and store with constant offset operation
  *
  * t18 <- stack_pointer_0 + 384
@@ -4880,7 +4832,7 @@ static void handle_two_instruction_constant_offset_store_operation(instruction_t
 	store_instruction->address_calc_reg1 = addition_instruction->op1;
 
 	//Combine these 2 constants together. The result will go into the store instruction's offset
-	add_constants(store_instruction->offset, addition_instruction->op1_const);
+	add_constants(store_instruction->offset.offset_constant, addition_instruction->op1_const);
 
 	//Invoke the helper here
 	handle_store_instruction_sources_and_instruction_type(store_instruction);
@@ -4919,7 +4871,7 @@ static void handle_two_instruction_constant_offset_load_operation(instruction_t*
 	load_instruction->address_calc_reg1 = addition_instruction->op1;
 
 	//Combine these 2 constants together. The result will go into the store instruction's offset
-	add_constants(load_instruction->offset, addition_instruction->op1_const);
+	add_constants(load_instruction->offset.offset_constant, addition_instruction->op1_const);
 
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
@@ -4957,7 +4909,7 @@ static void handle_two_instruction_variable_offset_store_operation(instruction_t
 	store_instruction->address_calc_reg2 = address_calc_reg2;
 
 	//The offset comes from the addition instruction
-	store_instruction->offset = addition_instruction->op1_const;
+	store_instruction->offset.offset_constant = addition_instruction->op1_const;
 
 	//Let the helper deal with the rest
 	handle_store_instruction_sources_and_instruction_type(store_instruction);
@@ -5005,7 +4957,7 @@ static void handle_two_instruction_variable_offset_load_operation(instruction_t*
 	load_instruction->address_calc_reg2 = address_calc_reg2;
 
 	//The offset comes from the addition instruction
-	load_instruction->offset = addition_instruction->op1_const;
+	load_instruction->offset.offset_constant = addition_instruction->op1_const;
 
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
@@ -5055,7 +5007,7 @@ static void handle_two_instruction_multiply_load_with_variable_offset(instructio
 	load_instruction->address_calc_reg2 = address_calc_reg2;
 
 	//The multiplicator comes from the constant multiplication
-	load_instruction->lea_multiplicator = multiply->op1_const->constant_value.signed_long_constant;
+	load_instruction->lea_multiplier = multiply->op1_const->constant_value.signed_long_constant;
 
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
@@ -5095,7 +5047,7 @@ static void handle_two_instruction_multiply_store_with_variable_offset(instructi
 	store_instruction->address_calc_reg2 = address_calc_reg2;
 
 	//The multiplicator comes from the constant multiplication
-	store_instruction->lea_multiplicator = multiply->op1_const->constant_value.signed_long_constant;
+	store_instruction->lea_multiplier = multiply->op1_const->constant_value.signed_long_constant;
 	
 	//Invoke the helper here
 	handle_store_instruction_sources_and_instruction_type(store_instruction);
@@ -5135,7 +5087,7 @@ static void handle_two_instruction_address_calc_and_store(instruction_t* address
 			store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 			//The store instruction has the offset of the address calc's op1
-			store_instruction->offset = address_calculation->op1_const;
+			store_instruction->offset.offset_constant = address_calculation->op1_const;
 
 			//The address calc reg 1 will be the op1 of the first instruction
 			store_instruction->address_calc_reg1 = address_calculation->op1;
@@ -5217,7 +5169,7 @@ static void handle_two_instruction_address_calc_and_load(instruction_t* address_
 			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 			//The load's offset will be the op1_const
-			load_instruction->offset = address_calculation->op1_const;
+			load_instruction->offset.offset_constant = address_calculation->op1_const;
 
 			//The address calc reg1 is just our op1
 			load_instruction->address_calc_reg1 = address_calculation->op1;
@@ -5292,10 +5244,10 @@ static void handle_two_instruction_lea_and_load_global_var(instruction_t* lea_st
 	load_instruction->op2 = lea_statement->op2;
 	
 	//Copy the offset too
-	load_instruction->offset = lea_statement->offset;
+	load_instruction->offset.offset_constant = lea_statement->offset.offset_constant;
 
 	//The multiplicator as well
-	load_instruction->lea_multiplicator = lea_statement->lea_multiplicator;
+	load_instruction->lea_multiplier = lea_statement->lea_multiplier;
 
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(load_instruction, load_instruction->address_calc_reg1->type);
@@ -5331,10 +5283,10 @@ static void handle_two_instruction_lea_and_store_global_var(instruction_t* lea_s
 	store_instruction->op2 = lea_statement->op2;
 	
 	//Copy the offset too
-	store_instruction->offset = lea_statement->offset;
+	store_instruction->offset.offset_constant = lea_statement->offset.offset_constant;
 
 	//The multiplicator as well
-	store_instruction->lea_multiplicator = lea_statement->lea_multiplicator;
+	store_instruction->lea_multiplier = lea_statement->lea_multiplier;
 
 	//Invoke the helper here
 	handle_store_instruction_sources_and_instruction_type(store_instruction);
@@ -5389,10 +5341,10 @@ static void handle_three_instruction_load_with_lea_operation(instruction_window_
 	//The op2 comes from the lea statement
 	load_with_variable_offset->address_calc_reg2 = address_calc_reg2;
 	//The multiplicator also comes form here
-	load_with_variable_offset->lea_multiplicator = lea_statement->lea_multiplicator;
+	load_with_variable_offset->lea_multiplier = lea_statement->lea_multiplier;
 
 	//The offset on the outside comes from the constant assignment
-	load_with_variable_offset->offset = constant_assignment->op1_const;
+	load_with_variable_offset->offset.offset_constant = constant_assignment->op1_const;
 	
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(load_with_variable_offset, load_with_variable_offset->address_calc_reg1->type);
@@ -5439,10 +5391,10 @@ static void handle_three_instruction_store_with_lea_operation(instruction_window
 	//The op2 comes from the lea statement
 	store_with_variable_offset->address_calc_reg2 = address_calc_reg2;
 	//The multiplicator also comes form here
-	store_with_variable_offset->lea_multiplicator = lea_statement->lea_multiplicator;
+	store_with_variable_offset->lea_multiplier = lea_statement->lea_multiplier;
 
 	//The offset on the outside comes from the constant assignment
-	store_with_variable_offset->offset = constant_assignment->op1_const;
+	store_with_variable_offset->offset.offset_constant = constant_assignment->op1_const;
 
 	//Invoke the helper here
 	handle_store_instruction_sources_and_instruction_type(store_with_variable_offset);
@@ -5502,10 +5454,10 @@ static void handle_three_instruction_load_with_address_calculation_operation(ins
 	//The op2 comes from the lea statement
 	load_with_variable_offset->address_calc_reg2 = address_calc_reg2;
 	//The multiplicator comes from the constant(we know it's a power of 2 by the time we get here)
-	load_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.signed_long_constant;
+	load_with_variable_offset->lea_multiplier = multiplication->op1_const->constant_value.signed_long_constant;
 
 	//The offset on the outside comes from the constant assignment
-	load_with_variable_offset->offset = addition->op1_const;
+	load_with_variable_offset->offset.offset_constant = addition->op1_const;
 	
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(load_with_variable_offset, load_with_variable_offset->address_calc_reg1->type);
@@ -5554,10 +5506,10 @@ static void handle_three_instruction_store_with_address_calculation_operation(in
 	//The op2 comes from the lea statement
 	store_with_variable_offset->address_calc_reg2 = address_calc_reg2;
 	//The multiplicator comes from the multiplication
-	store_with_variable_offset->lea_multiplicator = multiplication->op1_const->constant_value.signed_long_constant;
+	store_with_variable_offset->lea_multiplier = multiplication->op1_const->constant_value.signed_long_constant;
 
 	//This comes from the addition
-	store_with_variable_offset->offset = addition->op1_const;
+	store_with_variable_offset->offset.offset_constant = addition->op1_const;
 
 	//Invoke the helper here
 	handle_store_instruction_sources_and_instruction_type(store_with_variable_offset);
@@ -5616,8 +5568,8 @@ static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window
 		//Store the jumping to block where the jump table is
 		window->instruction2->if_block = window->instruction1->if_block;
 
-		//We also have an "S" multiplicator factor that will always be a power of 2 stored in the lea_multiplicator
-		window->instruction2->lea_multiplicator = window->instruction1->lea_multiplicator;
+		//We also have an "S" multiplicator factor that will always be a power of 2 stored in the lea_multiplier
+		window->instruction2->lea_multiplier = window->instruction1->lea_multiplier;
 
 		//We're now able to delete instruction 1
 		delete_statement(window->instruction1);
