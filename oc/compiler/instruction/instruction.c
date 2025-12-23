@@ -928,6 +928,32 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
 
 
 /**
+ * Emit a lea statement that has one operand and an offset
+ *
+ * This would look something like lea 3(t5), t7
+ */
+instruction_t* emit_lea_instruction_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op1_const = op1_const;
+
+	//What function are we in
+	stmt->function = current_function;
+
+	//This only has registers
+	stmt->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+	//And now we give it back
+	return stmt;
+}
+
+
+/**
  * Emit a lea statement with no type size multiplier on it
  *
  * This is designed to emit things like lea (t2, t3), t5

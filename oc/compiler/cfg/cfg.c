@@ -2486,6 +2486,8 @@ static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_bl
 	//Now we leverage the helper to emit this
 	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, current_offset, PLUS, offset);
 
+	instruction_t* stmt = emit_lea
+
 	//The true base address was used here
 	add_used_variable(basic_block, current_offset);
 
@@ -3167,14 +3169,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		 *
 		 * This can be done using a lea instruction, so we will emit that directly
 		 */
-		three_addr_var_t* address;
-
-		//Remember, we can only use lea if we have a power of 2 
-		if(is_power_of_2(member_type->type_size) == TRUE){
-			address = emit_lea(current_block, *current_offset, array_offset, member_type, is_branch_ending);
-		} else {
-			address = emit_address_offset_calculation(current_block, *current_offset, array_offset, member_type, is_branch_ending);
-		}
+		three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type, is_branch_ending);
 
 		//And finally - our current offset is no longer the actual offset
 		*current_offset = address;

@@ -470,6 +470,11 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee);
 instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg);
 
 /**
+ * Emit a lea statement that has one operand and an offset
+ */
+instruction_t* emit_lea_instruction_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const);
+
+/**
  * Emit a lea statement that has no multiplier, only operands
  */
 instruction_t* emit_lea_instruction_operands_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
