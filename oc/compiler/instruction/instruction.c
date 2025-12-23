@@ -5,6 +5,7 @@
 */
 
 #include "instruction.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -4589,6 +4590,72 @@ instruction_t* copy_instruction(instruction_t* copied){
 
 	//Give back the copied one
 	return copied;
+}
+
+
+/**
+ * Multiply a constant by a raw int64_t value
+ * 
+ * NOTE: The result is always stored in the first one, and the first one will become 
+ * a long constant. This is specifically designed for lea simplification
+ */
+three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant){
+	//Go based on the first one's type
+	switch(constant->const_type){
+		case INT_CONST_FORCE_U:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_integer_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		case INT_CONST:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_integer_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_long_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		case LONG_CONST:
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		case CHAR_CONST:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.char_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+			exit(1);
+	}
+
+	//This will always be forced to be an i64
+	constant->type = i64_type;
+	constant->const_type = LONG_CONST;
+
+	//Give it back for clarity
+	return constant;
 }
 
 

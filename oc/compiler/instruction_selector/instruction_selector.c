@@ -1316,7 +1316,11 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			|| variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE)){
 
 		//Grab this for clarity
-		instruction_t* lea_instruction = window->instruction1;
+		instruction_t* move_instruction = window->instruction2;
+		instruction_t* lea_instruction = window->instruction2;
+
+		//For holding our multipliers
+		int64_t lea_multiplier;
 
 		//Go based on what kind of lea we've got here
 		switch(lea_instruction->lea_statement_type){
@@ -1328,6 +1332,15 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			 * 		t5 <- 16(t2)
 			 */
 			case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+				//Let's extract the constants that we're after here
+				lea_multiplier = lea_instruction->lea_multiplier;
+
+				//This will become the lea's constant
+				three_addr_const_t* lea_constant = move_instruction->op1_const;
+
+				//Now let's multiply the 2 together, the result will be in the lea constant
+
+
 				break;
 				
 			/**
