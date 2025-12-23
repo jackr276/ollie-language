@@ -964,7 +964,7 @@ instruction_t* emit_lea_instruction_multiplier_and_operands(three_addr_var_t* as
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	stmt->op2 = op2;
-	stmt->lea_multiplicator = type_size;
+	stmt->lea_multiplier = type_size;
 	//What function are we in
 	stmt->function = current_function;
 
@@ -989,7 +989,7 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
 	//We store the jumping to block as our operand. It's really a jump table
 	stmt->if_block = op1;
 	stmt->op2 = op2;
-	stmt->lea_multiplicator = type_size;
+	stmt->lea_multiplier= type_size;
 
 	//Mark the current function
 	stmt->function = current_function;
@@ -2011,7 +2011,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 
 					//Now print the multiplier
-					fprintf(fl, ", %ld)", stmt->lea_multiplicator);
+					fprintf(fl, ", %ld)", stmt->lea_multiplier);
 
 					break;
 
@@ -2026,7 +2026,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 
 					//Now print the multiplier
-					fprintf(fl, ", %ld)", stmt->lea_multiplicator);
+					fprintf(fl, ", %ld)", stmt->lea_multiplier);
 
 					break;
 
@@ -2073,7 +2073,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 
 			//Finally the multiplicator
-			fprintf(fl, " * %ld\n", stmt->lea_multiplicator);
+			fprintf(fl, " * %ld\n", stmt->lea_multiplier);
 			break;
 
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
@@ -2232,7 +2232,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->address_calc_reg2, mode);
 			fprintf(fl, ", ");
-			fprintf(fl, "%ld", instruction->lea_multiplicator);
+			fprintf(fl, "%ld", instruction->lea_multiplier);
 			fprintf(fl, ")");
 			break;
 
@@ -2269,7 +2269,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->address_calc_reg2, mode);
-			fprintf(fl, ", %ld)", instruction->lea_multiplicator);
+			fprintf(fl, ", %ld)", instruction->lea_multiplier);
 			
 		//Do nothing
 		default:
@@ -3589,7 +3589,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_variable(fl, instruction->source_register, mode);
 
 			//And then a comma and the multplicator
-			fprintf(fl, ",%ld)\n", instruction->lea_multiplicator);
+			fprintf(fl, ",%ld)\n", instruction->lea_multiplier);
 
 			break;
 

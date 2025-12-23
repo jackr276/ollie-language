@@ -2411,81 +2411,68 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, o
 
 
 /**
- * Emit a statement that fits the definition of a lea statement. This usually takes the
- * form of address computations
- *
- *
- * TODO FIX THIS NAME - be more specific about what it is
+ * Emit the appropriate address calculation for a given array member, based on what is given in the parameters. This will
+ * result in either a lea or a binary operation and then a lea
  */
-static three_addr_var_t* emit_lea(basic_block_t* basic_block, three_addr_var_t* current_offset, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(current_offset->type);
+	three_addr_var_t* assignee = emit_temp_var(offset->type);
 
-	//If the base addr is not temporary, this counts as a read
-	add_used_variable(basic_block, current_offset);
+	//Is this a power of 2? Remember that Lea statements can only multiply
+	//by powers of 2 as the scale
+	if(is_power_of_2(member_type->type_size) == TRUE){
+		//Let the helper emit the lea
+		instruction_t* address_calculation = emit_lea_instruction_multiplier_and_operands(assignee, base_addr, offset, member_type->type_size);
+		address_calculation->is_branch_ending = is_branch_ending;
 
-	//If the offset is not temporary, it also counts as used
-	add_used_variable(basic_block, offset);
-
-	//Now we leverage the helper to emit this
-	instruction_t* stmt = emit_lea_instruction(assignee, current_offset, offset, member_type->type_size);
-
-	//Mark this with whatever was passed through
-	stmt->is_branch_ending = is_branch_ending;
-
-	//Now add the statement into the block
-	add_statement(basic_block, stmt);
-
-	//And give back the assignee
-	return assignee;
-}
-
-
-/**
- * Emit an address calculation that would not work if we used a lea because the base_type is not a power of 2
- *
- *
- * TODO WE CAN STILL HAVE THE FINAL THING BE LEA
- */
-static three_addr_var_t* emit_address_offset_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
-	//We assume this is the true base address
-	three_addr_var_t* true_base_address = base_addr;
-
-	//We'll need the size to multiply by
-	three_addr_const_t* type_size = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-
-	//We'll need a temp assignment if this isn't temporary
-	if(offset->variable_type != VARIABLE_TYPE_TEMP){
-		//Create the statement
-		instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(offset->type), offset);
-
-		//This counts as a used variable
+		//Do our used variable tracking as needed
+		add_used_variable(basic_block, base_addr);
 		add_used_variable(basic_block, offset);
 
-		//Add it to the block
-		add_statement(basic_block, temp_assignment);
+		//Get this into the block
+		add_statement(basic_block, address_calculation);
 
-		//Reassign this
-		offset = temp_assignment->assignee;
+	//Otherwise, we can't fully do a lea here so we'll need to instead
+	//use a binary operation to multiply followed by a different kind of lea
+	} else {
+		//We'll need the size to multiply by
+		three_addr_const_t* type_size = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+
+		//We'll need a temp assignment if this isn't temporary due to the way the binary operation works
+		if(offset->variable_type != VARIABLE_TYPE_TEMP){
+			//Create the statement
+			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(offset->type), offset);
+
+			//This counts as a used variable
+			add_used_variable(basic_block, offset);
+
+			//Add it to the block
+			add_statement(basic_block, temp_assignment);
+
+			//Reassign this
+			offset = temp_assignment->assignee;
+		}
+
+		//Let the helper emit the entire thing
+		three_addr_var_t* final_offset = emit_binary_operation_with_constant(basic_block, offset, offset, STAR, type_size, is_branch_ending);
+
+		//The offset has been used here
+		add_used_variable(basic_block, offset);
+
+		//And now that we have the incompatible multiplication over with, we can use a lea to add
+		instruction_t* lea_statement = emit_lea_instruction_operands_only(assignee, base_addr, final_offset);
+		lea_statement->is_branch_ending = is_branch_ending;
+
+		//This counts as a use
+		add_used_variable(basic_block, base_addr);
+		add_used_variable(basic_block, final_offset);
+
+		//Insert into the block
+		add_statement(basic_block, lea_statement);
 	}
 
-	//Now we emit the offset multiplication
-	three_addr_var_t* total_offset = emit_binary_operation_with_constant(basic_block, offset, offset, STAR, type_size, is_branch_ending);
-
-	//The offset has been used here
-	add_used_variable(basic_block, offset);
-
-	//Once we have the total offset, we add it to the base address
-	instruction_t* result = emit_binary_operation_instruction(emit_temp_var(u64), true_base_address, PLUS, total_offset);
-	
-	//if the base address is not temporary, it also counts as used
-	add_used_variable(basic_block, true_base_address);
-
-	//Add this into the block
-	add_statement(basic_block, result);
-
-	//Give back whatever we assigned
-	return result->assignee;
+	//Whatever happened return the assignee
+	return assignee;
 }
 
 

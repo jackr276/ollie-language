@@ -240,8 +240,8 @@ struct instruction_t{
 	three_addr_var_t* address_calc_reg2;
 	//What stack region do we write to or read from
 	stack_region_t* linked_stack_region;
-	//The LEA addition
-	u_int64_t lea_multiplicator;
+	//For lea multiplication
+	u_int64_t lea_multiplier;
 	//The function called
 	symtab_function_record_t* called_function;
 	//The variable record
