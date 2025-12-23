@@ -1958,23 +1958,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "nop\n");
 			break;
 
-		//
-		//
-		//
-		//
-		//
-		//
-		//
-		//
-		//TODO COMPLETE REWRITE NEEDED
-		//
-		//
-		//
-		//
-		//
-		//
-		//
-		//
 		case THREE_ADDR_CODE_LEA_STMT:
 			//Var name comes first
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
@@ -1982,31 +1965,75 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Print the assignment operator
 			fprintf(fl, " <- ");
 
-			//Now print out the rest in order
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+			//Go based on what lea statement type 
+			//we have
+			switch(stmt->lea_statement_type){
+				//We have something like t2 <- 3(t3)
+				case OIR_LEA_TYPE_OFFSET_ONLY:
+					//Print the constant out first
+					print_three_addr_constant(fl, stmt->op1_const);
 
-			//If we have a constant, we'll print that. Otherwise, print op2
-			if(stmt->op1_const != NULL){
-				//Then we have a plus
-				fprintf(fl, " + ");
+					//Then the variable encased in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
 
-				//Print the constant out
-				print_three_addr_constant(fl, stmt->op1_const);
-			}
+					break;
 
-			//If we have an op2, we must print that as well
-			if(stmt->op2 != NULL){
-				//Then we have a plus
-				fprintf(fl, " + ");
+				case OIR_LEA_TYPE_REGISTERS_ONLY:
+					//Print both variables encase in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
 
-				//Then we have the third one, times some multiplier
-				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					break;
 
-				//If we have a multiplicator, then we can print it
-				if(stmt->has_multiplicator == TRUE){
-					//And the finishing sequence
-					fprintf(fl, " * %ld", stmt->lea_multiplicator);
-				}
+				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+					//Print the constant out first
+					print_three_addr_constant(fl, stmt->op1_const);
+					
+					//Print both variables encase in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
+
+					break;
+
+				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+					//Print both variables encase in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+
+					//Now print the multiplier
+					fprintf(fl, ", %ld)", stmt->lea_multiplicator);
+
+					break;
+
+				case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
+					//Print the constant out first
+					print_three_addr_constant(fl, stmt->op1_const);
+
+					//Print both variables encase in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+
+					//Now print the multiplier
+					fprintf(fl, ", %ld)", stmt->lea_multiplicator);
+
+					break;
+
+				//Should be unreachable
+				default:
+					printf("Fatal internal compiler error: unknown lea statement type hit\n");
+					exit(1);
 			}
 
 			fprintf(fl, "\n");
