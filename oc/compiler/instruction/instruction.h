@@ -472,17 +472,17 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
 /**
  * Emit a lea statement that has one operand and an offset
  */
-instruction_t* emit_lea_instruction_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const);
+instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const);
 
 /**
  * Emit a lea statement that has no multiplier, only operands
  */
-instruction_t* emit_lea_instruction_operands_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
+instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
 
 /**
  * Emit a lea statement that has a multiplier and operands
  */
-instruction_t* emit_lea_instruction_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form

@@ -2422,7 +2422,7 @@ static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_blo
 	//by powers of 2 as the scale
 	if(is_power_of_2(member_type->type_size) == TRUE){
 		//Let the helper emit the lea
-		instruction_t* address_calculation = emit_lea_instruction_multiplier_and_operands(assignee, base_addr, offset, member_type->type_size);
+		instruction_t* address_calculation = emit_lea_multiplier_and_operands(assignee, base_addr, offset, member_type->type_size);
 		address_calculation->is_branch_ending = is_branch_ending;
 
 		//Do our used variable tracking as needed
@@ -2460,7 +2460,7 @@ static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_blo
 		add_used_variable(basic_block, offset);
 
 		//And now that we have the incompatible multiplication over with, we can use a lea to add
-		instruction_t* lea_statement = emit_lea_instruction_operands_only(assignee, base_addr, final_offset);
+		instruction_t* lea_statement = emit_lea_operands_only(assignee, base_addr, final_offset);
 		lea_statement->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
@@ -2483,10 +2483,9 @@ static three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_bl
 	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(struct_type);
 
-	//Now we leverage the helper to emit this
-	instruction_t* stmt = emit_binary_operation_with_const_instruction(assignee, current_offset, PLUS, offset);
-
-	instruction_t* stmt = emit_lea
+	//Use the lea helper to emit this
+	instruction_t* stmt = emit_lea_offset_only(assignee, current_offset, offset);
+	stmt->is_branch_ending = is_branch_ending;
 
 	//The true base address was used here
 	add_used_variable(basic_block, current_offset);

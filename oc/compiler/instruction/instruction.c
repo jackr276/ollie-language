@@ -932,7 +932,7 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
  *
  * This would look something like lea 3(t5), t7
  */
-instruction_t* emit_lea_instruction_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const){
+instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -981,7 +981,7 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 /**
  * Emit a statement that is in LEA form
  */
-instruction_t* emit_lea_instruction_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
+instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
