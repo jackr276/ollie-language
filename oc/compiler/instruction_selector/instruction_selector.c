@@ -640,7 +640,7 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 				//Make it a lea
 				if(stack_offset != 0){
 					//Emit the constant
-					three_addr_const_t* lea_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+					three_addr_const_t* lea_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
 
 					//Simplify based on what we have
 					switch(instruction->op){
@@ -691,11 +691,36 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 					//Create the offset constant
 					three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
 
+					//This is now our op1_const
+					instruction->op1_const = stack_offset_constant;
+
+					//Op1 becomes the stack pointer
+					instruction->op1 = stack_pointer_variable;
+
+					//Finally declare that this is a lea statement
+					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
 					//Go based on the op here
 					switch(instruction->op){
+						//In this case, we'd have something like t5 <- <offset>(t4, t5)
 						case PLUS:
+							//This is a lea statement with registers and an offset
+							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_OFFSET;
+							
+							//Nothing else to do here
+							break;
 						
+						//For a minus, we'll need to circumvent the system by using a -1 multiplier
+						//to make this still work for our lea. Since we have op1 - op2, we can rewrite
+						//this into op1 + op2 * -1
 						case MINUS:
+							//Full stack here
+							instruction->lea_statement_type = OIR_LEA_REGISTERS_OFFSET_AND_SCALE;
+
+							//-1 to mimic the subtraction
+							instruction->lea_multiplier = -1;
+
+							break;
 						
 						//Unreachable path - hard fail if we somehow get to this
 						default:
@@ -705,21 +730,6 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 
 					//Wipe out the op once we're done
 					instruction->op = BLANK;
-
-					//This is now our op1_const
-					instruction->op1_const = stack_offset_constant;
-
-					//Op1 becomes the stack pointer
-					instruction->op1 = stack_pointer_variable;
-
-
-					//Finally declare that this is a lea statement
-					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-					//This is a lea statement with an offset only
-					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
-
-					//TODO HANDLE SUBTRACTION(RARE) CASE AND ADD COVERAGE
 					
 				//Then again all we need to do here is set the op1
 				//to be our stack pointer
@@ -737,6 +747,8 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 	
 	//Otherwise it is a global variable, and we will treat it as such
 	} else {
+		//It's going to be a similar case as above here for the global variable, with some slight additional compilications.
+		//Putting some thought into it it's likely that we'll need to generate 2 instructions for some of the cases here
 		//TODO
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(2);
@@ -1300,7 +1312,8 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1 //We don't want to be wiping this away if it's used more throughout the program
-	 	&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+	 	&& (variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE
+			|| variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE)){
 
 		//Grab this for clarity
 		instruction_t* lea_instruction = window->instruction1;
