@@ -19,6 +19,7 @@
 
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* u64;
+static generic_type_t* i64;
 static generic_type_t* u32;
 static generic_type_t* i32;
 static generic_type_t* u8;
@@ -620,6 +621,9 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 					//And op1_const is our offset
 					instruction->op1_const = emit_direct_integer_or_char_constant(stack_offset, u64);
 
+					//This is a lea with an offset only
+					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
 				//Otherwise, we'll just swap the var out with the stack pointer since
 				//they're one in the same
 				} else {
@@ -666,6 +670,9 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 					//Change the instruction type to a lea
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
+					//This is an offset only
+					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
 				//Otherwise, we'll just swap the var out with the stack pointer since
 				//they're one in the same
 				} else {
@@ -682,7 +689,22 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 				//for the second variable
 				if(stack_offset != 0){
 					//Create the offset constant
-					three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, u64);
+					three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+					//Go based on the op here
+					switch(instruction->op){
+						case PLUS:
+						
+						case MINUS:
+						
+						//Unreachable path - hard fail if we somehow get to this
+						default:
+							printf("Fatal internal compiler error: Invalid binary operand found on address calculation\n");
+							exit(1);
+					}
+
+					//Wipe out the op once we're done
+					instruction->op = BLANK;
 
 					//This is now our op1_const
 					instruction->op1_const = stack_offset_constant;
@@ -690,14 +712,12 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 					//Op1 becomes the stack pointer
 					instruction->op1 = stack_pointer_variable;
 
-					//Wipe out the op
-					instruction->op = BLANK;
-
-					//This has no lea multiplier
-					instruction->has_multiplicator = FALSE;
 
 					//Finally declare that this is a lea statement
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+					//This is a lea statement with an offset only
+					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
 					//TODO HANDLE SUBTRACTION(RARE) CASE AND ADD COVERAGE
 					
@@ -1242,31 +1262,38 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 *  Case 1 -> two registers plus multiplicator:
 	 *  	t4 <- 4
-	 *  	t5 <- t2 + t4 * 4
+	 *  	t5 <- (t2, t4,  4)
 	 *
 	 *  	Turns into:
-	 *  		t5 <- t2 + 16(still a lea)
+	 *  		t5 <- 16(t2)
 	 *
 	 *  Case 2 -> two register, multiplicator and constant
 	 *	   	t4 <- 5
-	 *	   	t5 <- t2 + 500 + t4 * 4
+	 *	   	t5 <- 500(t2, t4, 4)
 	 *	   	
 	 *	   	Turns into:
-	 *	   		t5 <- t2 + 520(still a lea)
+	 *	   		t5 <- 520(t2)
 	 *
 	 *  Case 3 -> two registers with no multiplicator
 	 *  	t4 <- 4
 	 *  	t5 <- t2 + t4
 	 *
 	 * 		Turns into:
-	 * 			t5 <- t2 + 4(still a lea)
+	 * 			t5 <- 4(t2)
 	 *
 	 * 	Case 4 -> two registers and a constant
 	 *  	t4 <- 4
-	 *  	t5 <- t2 + 500 + t4
+	 *  	t5 <- 500(t2, t4)
 	 *
 	 * 		Turns into:
-	 * 			t5 <- t2 + 504(still a lea)
+	 * 			t5 <- 504(t2)
+	 *
+	 * 	Case 5 -> One register and a constant
+	 *  	t4 <- 4
+	 *  	t5 <- 500(t4)
+	 *  	
+	 *  	Turns into:
+	 *  		t5 <- 504(no longer a lea)
 	 */
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -3744,10 +3771,8 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 /**
  * Handle a lea statement(in the three address code statement form)
  *
- * Lea statements(by the time we get here..) have the following in them:
- * op1: usually a memory address source
- * op2: the offset we're adding
- * lea_multiplicator: a multiple of 2 that we're multiplying op2 by
+ * Lea statements carry their own lea type, so it should be very easy to
+ * convert into x86 addressing mode expresssions
  */
 static void handle_lea_statement(instruction_t* instruction){
 	//Store address calc reg's 1 and 2
@@ -5777,6 +5802,7 @@ static void select_instructions(cfg_t* cfg){
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Grab these two general use types first
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64", NOT_MUTABLE)->type;
+	i64 = lookup_type_name_only(cfg->type_symtab, "i64", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(cfg->type_symtab, "u32", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
