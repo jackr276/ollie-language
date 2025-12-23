@@ -1318,62 +1318,65 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		//Grab this for clarity
 		instruction_t* lea_instruction = window->instruction1;
 
-		//
-		//
-		//
-		//TODO ENTIRELY INCOMPLETE
-		//
-		//
-		//
-		//
+		//Go based on what kind of lea we've got here
+		switch(lea_instruction->lea_statement_type){
+			/**
+			 * 	t4 <- 4
+			 * 	t5 <- (t2, t4,  4)
+			 *
+			 * 	Turns into:
+			 * 		t5 <- 16(t2)
+			 */
+			case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+				break;
+				
+			/**
+			 * t4 <- 5
+			 * t5 <- 500(t2, t4, 4)
+			 *	   	
+ 			 *	Turns into:
+ 			 *		t5 <- 520(t2)
+ 			 **/
+			case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
+				break;
 
-		//Step 1 to think about - do we even have a multiplicator? If
-		//yes, there are some additional things to be thinking about
-		if(lea_instruction->has_multiplicator == TRUE){
-			//Grab it out
-			int64_t multiplier = lea_instruction->lea_multiplier;
 
-		//If we get here, we have no multiplier
-		} else {
+			/**
+			 * t4 <- 4
+			 * t5 <- t2 + t4
+			 *
+			 * Turns into:
+			 *   t5 <- 4(t2)
+			 */
+			case OIR_LEA_TYPE_REGISTERS_ONLY:
+				break;
+				
 
+			/**
+			 * t4 <- 4
+			 * t5 <- 500(t2, t4)
+			 *
+			 * Turns into:
+			 *  	t5 <- 504(t2)
+			 */
+			case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+				break;
+
+
+			/**
+			 * t4 <- 4
+			 * t5 <- 500(t4)
+			 *  	
+			 * Turns into:
+			 *	t5 <- 504(no longer a lea)
+			 */
+			case OIR_LEA_TYPE_OFFSET_ONLY:
+				break;
+				
+			//By default - just do nothing
+			default:
+				break;
 		}
-
-		//What we can do is rewrite the LEA statement all together as a simple addition statement. We'll
-		//evaluate the multiplication of the constant and lea multiplicator at comptime
-		u_int64_t address_offset = window->instruction2->lea_multiplier;
-
-		//Let's now grab what the constant is
-		three_addr_const_t* constant = window->instruction1->op1_const;
-
-		//We can just use the long version here
-		address_offset *= constant->constant_value.signed_long_constant;
-
-		//Once we've done this, the address offset is now properly multiplied. We'll reuse
-		//the constant from operation one, and convert the lea statement into a BIN_OP_WITH_CONST
-		//statement. This saves a lot of loading and arithmetic operations
-	
-		//This is now a long const
-		constant->const_type = LONG_CONST;
-
-		//Set this to be the address offset
-		constant->constant_value.signed_long_constant = address_offset;
-
-		//Add it into instruction 2
-		window->instruction2->op1_const = constant;
-
-		//We'll now transfrom instruction 2 into a bin op with const
-		window->instruction2->op2 = NULL;
-		window->instruction2->op = PLUS;
-		window->instruction2->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-		//We can now scrap the first instruction entirely
-		delete_statement(window->instruction1);
-
-		//Reconstruct the window. Instruction 2 is the new start
-		reconstruct_window(window, window->instruction2);
-
-		//This counts as a change 
-		changed = TRUE;
 	}
 
 
