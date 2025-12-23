@@ -1409,8 +1409,25 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			 *   t5 <- 4(t2)
 			 */
 			case OIR_LEA_TYPE_REGISTERS_ONLY:
-				break;
+				//Copy it over
+				lea_instruction->op1_const = move_instruction->op1_const;
+
+				//This no longer exists
+				lea_instruction->op2 = NULL;
+
+				//The calculation type is now offset only
+				lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+				//Delete the move now
+				delete_statement(move_instruction);
 				
+				//Reconstruct around the lea
+				reconstruct_window(window, lea_instruction);
+
+				//Counts as a change
+				changed = TRUE;
+
+				break;
 
 			/**
 			 * t4 <- 4
@@ -1420,6 +1437,24 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			 *  	t5 <- 504(t2)
 			 */
 			case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+				//Add the 2 together, the result is in the lea's op1_const
+				add_constants(lea_instruction->op1_const, move_instruction->op1_const);
+
+				//This no longer exists
+				lea_instruction->op2 = NULL;
+
+				//The calculation type is now offset only
+				lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+				//Delete the move now
+				delete_statement(move_instruction);
+				
+				//Reconstruct around the lea
+				reconstruct_window(window, lea_instruction);
+
+				//Counts as a change
+				changed = TRUE;
+
 				break;
 
 
@@ -1431,6 +1466,26 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			 *	t5 <- 504(no longer a lea)
 			 */
 			case OIR_LEA_TYPE_OFFSET_ONLY:
+				//Add the 2 together, the result is in the lea's op1_const
+				add_constants(lea_instruction->op1_const, move_instruction->op1_const);
+				
+				//Null out the addressing mode and ops
+				lea_instruction->lea_statement_type = OIR_LEA_TYPE_NONE;
+				lea_instruction->op1 = NULL;
+				lea_instruction->op2 = NULL;
+
+				//This is actually no longer a lea now, it's a pure assignment instruction
+				lea_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+				//Delete the move now
+				delete_statement(move_instruction);
+				
+				//Reconstruct around the lea
+				reconstruct_window(window, lea_instruction);
+
+				//Counts as a change
+				changed = TRUE;
+
 				break;
 				
 			//By default - just do nothing
@@ -3887,6 +3942,9 @@ static void handle_lea_statement(instruction_t* instruction){
 			
 			//The op1 is now our address calc register
 			instruction->address_calc_reg1 = instruction->op1;
+
+			//Copy the offset constant over
+			instruction->offset.offset_constant = instruction->op1_const;
 
 			break;
 
