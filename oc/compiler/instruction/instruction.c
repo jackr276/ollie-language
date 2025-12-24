@@ -596,6 +596,60 @@ u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
 
 
 /**
+ * Is this constant a power of 2 that is lea compatible(1, 2, 4, 8)?
+ *
+ * This is used specifically for lea computations and determining whether
+ * certain multiplies are eligible
+ */
+u_int8_t is_constant_lea_compatible_power_of_2(three_addr_const_t* constant){
+	//For holding the expanded constant value
+	int64_t constant_value_expanded;
+
+	//Extraction
+	switch(constant->const_type){
+		case INT_CONST:
+			constant_value_expanded = constant->constant_value.signed_integer_constant; 
+			break;
+
+		case INT_CONST_FORCE_U:
+			constant_value_expanded = constant->constant_value.unsigned_integer_constant; 
+			break;
+
+		case LONG_CONST:
+			constant_value_expanded = constant->constant_value.signed_long_constant; 
+			break;
+
+		case LONG_CONST_FORCE_U:
+			constant_value_expanded = constant->constant_value.unsigned_long_constant; 
+			break;
+
+		//Chars are always unsigned
+		case CHAR_CONST:
+			constant_value_expanded = constant->constant_value.char_constant; 
+			break;
+
+		//If we get here it's a definite no
+		default:
+			return FALSE;
+	}
+
+	//In order to work for lea, the constant must be one of: 1, 2, 4, 8. Anything
+	//else is incompatible
+	switch(constant_value_expanded){
+		//The only acceptable values
+		case 1:
+		case 2:
+		case 4:
+		case 8:
+			return TRUE;
+		//Everything else is a no
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is this operation a pure copy? In other words, is it a move instruction
  * that moves one register to another?
  */

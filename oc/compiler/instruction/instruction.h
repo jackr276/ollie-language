@@ -399,6 +399,11 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant);
 u_int8_t is_constant_power_of_2(three_addr_const_t* constant);
 
 /**
+ * Is this constant a power of 2 that is lea compatible(1, 2, 4, 8)?
+ */
+u_int8_t is_constant_lea_compatible_power_of_2(three_addr_const_t* constant);
+
+/**
  * Create and return a temporary variable
 */
 three_addr_var_t* emit_temp_var(generic_type_t* type);
