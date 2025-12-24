@@ -1389,6 +1389,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 * 		Turns into:
 	 * 		  t5 <- 4(, t7, 4)
+	 *
+	 *  Case 9 -> Two registers, offset and scale
+	 *  	t4 <- 4
+	 *  	t5 <- 44(t4, t7, 4)
+	 *
+	 * 		Turns into:
+	 * 		  t5 <- 48(, t7, 4)
 	 */
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -1650,6 +1657,38 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
 					//Copy the constant over
 					lea_instruction->op1_const = move_instruction->op1_const;
+
+					//Now we need to move op2 into the op1 spot
+					lea_instruction->op1 = lea_instruction->op2;
+
+					//Null out op2
+					lea_instruction->op2 = NULL;
+
+					//This has become a scale and offset type
+					lea_instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE;
+
+					//Delete the move now
+					delete_statement(move_instruction);
+					
+					//Reconstruct around the lea
+					reconstruct_window(window, lea_instruction);
+
+					//Counts as a change
+					changed = TRUE;
+
+					break;
+
+
+				/**
+				 * t4 <- 4
+				 * t5 <- 44(t4, t7, 4)
+				 *
+				 * Turns into:
+				 *  t5 <- 48(, t7, 4)
+				 */
+				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+					//Add the two together, result is in the lea
+					add_constants(lea_instruction->op1_const, move_instruction->op1_const);
 
 					//Now we need to move op2 into the op1 spot
 					lea_instruction->op1 = lea_instruction->op2;
@@ -5019,7 +5058,7 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 				instruction->address_calc_reg1 = stack_pointer_variable;
 			}
 
-		//Otherwise, we are loading a global variable
+		//Otherwise, we are loading a global variable with a subsequent offset
 		} else {
 			printf("TODO NOT IMPLEMENTED\n");
 			exit(1);

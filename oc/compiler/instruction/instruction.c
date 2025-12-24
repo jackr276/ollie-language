@@ -4550,6 +4550,38 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 
 /**
+ * Emit a fully formed global variable x86 address calculation lea
+ *
+ * This will always produce instructions like: leaq global_var(%rip), t8
+ */
+instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64){
+	//Emit a temp var that is always a u64(memory address)
+	three_addr_var_t* destination = emit_temp_var(u64);
+
+	//Get the intstruction out
+	instruction_t* lea = calloc(1, sizeof(instruction_t));
+
+	//This will be leaq always
+	lea->instruction_type = LEAQ;
+
+	//Global var address calc mode
+	lea->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+	//We already know what the destination will be
+	lea->destination_register = destination;
+
+	//Address calc reg 1 is the instruction pointer(relative addressing)
+	lea->address_calc_reg1 = instruction_pointer;
+
+	//The offset is the global variable(unique case)
+	lea->offset.global_variable = global_variable;
+
+	//And give it back
+	return lea;
+}
+
+
+/**
  * Emit a stack allocation statement
  */
 instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
