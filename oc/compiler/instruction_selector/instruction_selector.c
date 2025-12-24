@@ -1312,6 +1312,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *
 	 *  	Turns into:
 	 *  		t5 <- 4(t7)
+	 *
+	 *  Case 8 ->  Two registers and offset(op1)
+	 *  	t4 <- 4
+	 *  	t5 <- 500(t4, t7)
+	 *
+	 *  	Turns into:
+	 *  		t5 <- 504(t7)
 	 */
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -1510,13 +1517,12 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				 */
 				case OIR_LEA_TYPE_REGISTERS_ONLY:
 					//Copy the constant right on over
-					lea_instruction->offset.offset_constant = move_instruction->op1_const;
+					lea_instruction->op1_const = move_instruction->op1_const;
 
-					//Op2 becomes address calc reg 1
-					lea_instruction->address_calc_reg1 = lea_instruction->op2;
+					//op2 becomes op1
+					lea_instruction->op1 = lea_instruction->op2;
 
-					//Now null out both ops
-					lea_instruction->op1 = NULL;
+					//Now remove the old op2
 					lea_instruction->op2 = NULL;
 
 					//This is now an offset only type statement
@@ -1531,6 +1537,37 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//Counts as a change
 					changed = TRUE;
 					
+					break;
+
+				/**
+				 * t4 <- 4
+				 * t5 <- 500(t4, t7)
+				 *
+				 * Turns into:
+				 *	t5 <- 504(t7)
+				 */
+				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+					//Sum the 2 together, result is in the lea's offset
+					add_constants(lea_instruction->op1_const, move_instruction->op1_const);
+
+					//op2 becomes op1
+					lea_instruction->op1 = lea_instruction->op2;
+
+					//Now remove the old op2
+					lea_instruction->op2 = NULL;
+
+					//This is now an offset only type statement
+					lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+					//Delete the move now
+					delete_statement(move_instruction);
+					
+					//Reconstruct around the lea
+					reconstruct_window(window, lea_instruction);
+
+					//Counts as a change
+					changed = TRUE;
+
 					break;
 					
 				//By default - just do nothing
