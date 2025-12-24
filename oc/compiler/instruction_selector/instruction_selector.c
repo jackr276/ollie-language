@@ -1264,7 +1264,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	
 
 	/**
-	 * --------------------- Folding constant assingments in LEA statements ----------------------
+	 * --------------------- Folding constant assingments in LEA statements with op2 ----------------------
 	 *  In cases where we have a lea statement that uses a constant which is assigned to a temporary
 	 *  variable right before it, we should eliminate that unnecessary assingment by folding that constant
 	 *  into the lea statement.
@@ -1310,8 +1310,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction1->assignee->use_count <= 1 //We don't want to be wiping this away if it's used more throughout the program
-	 	&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+		&& window->instruction1->assignee->use_count <= 1){
 
 		//Grab this for clarity
 		instruction_t* move_instruction = window->instruction1;
@@ -1321,177 +1320,186 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		three_addr_const_t* lea_constant;
 		int64_t lea_multiplier;
 
-		//Go based on what kind of lea we've got here
-		switch(lea_instruction->lea_statement_type){
-			/**
-			 * 	t4 <- 4
-			 * 	t5 <- (t2, t4,  4)
-			 *
-			 * 	Turns into:
-			 * 		t5 <- 16(t2)
-			 */
-			case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
-				//Let's extract the constants that we're after here
-				lea_multiplier = lea_instruction->lea_multiplier;
+		//First 4 cases - if op2 and the assignee are equal
+		if(variables_equal(move_instruction->assignee, lea_instruction->op2, FALSE) == TRUE){
+			//Go based on what kind of lea we've got here
+			switch(lea_instruction->lea_statement_type){
+				/**
+				 * 	t4 <- 4
+				 * 	t5 <- (t2, t4,  4)
+				 *
+				 * 	Turns into:
+				 * 		t5 <- 16(t2)
+				 */
+				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+					//Let's extract the constants that we're after here
+					lea_multiplier = lea_instruction->lea_multiplier;
 
-				//This will become the lea's constant
-				lea_constant = move_instruction->op1_const;
+					//This will become the lea's constant
+					lea_constant = move_instruction->op1_const;
 
-				//Now let's multiply the 2 together, the result will be in the lea constant
-				lea_constant = multiply_constant_by_raw_int64_value(lea_constant, i64, lea_multiplier);
-				
-				//Finally, we can reconstruct the entire thing
-				lea_instruction->op1_const = lea_constant;
+					//Now let's multiply the 2 together, the result will be in the lea constant
+					lea_constant = multiply_constant_by_raw_int64_value(lea_constant, i64, lea_multiplier);
+					
+					//Finally, we can reconstruct the entire thing
+					lea_instruction->op1_const = lea_constant;
 
-				//This no longer exists
-				lea_instruction->op2 = NULL;
+					//This no longer exists
+					lea_instruction->op2 = NULL;
 
-				//The calculation type is now offset only
-				lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+					//The calculation type is now offset only
+					lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
-				//Delete the move now
-				delete_statement(move_instruction);
-				
-				//Reconstruct around the lea
-				reconstruct_window(window, lea_instruction);
+					//Delete the move now
+					delete_statement(move_instruction);
+					
+					//Reconstruct around the lea
+					reconstruct_window(window, lea_instruction);
 
-				//Counts as a change
-				changed = TRUE;
+					//Counts as a change
+					changed = TRUE;
 
-				break;
-				
-			/**
-			 * t4 <- 5
-			 * t5 <- 500(t2, t4, 4)
-			 *	   	
- 			 *	Turns into:
- 			 *		t5 <- 520(t2)
- 			 **/
-			case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
-				//Let's extract the constants that we're after here
-				lea_multiplier = lea_instruction->lea_multiplier;
+					break;
+					
+				/**
+				 * t4 <- 5
+				 * t5 <- 500(t2, t4, 4)
+				 *	   	
+				 *	Turns into:
+				 *		t5 <- 520(t2)
+				 **/
+				case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
+					//Let's extract the constants that we're after here
+					lea_multiplier = lea_instruction->lea_multiplier;
 
-				//This will become the lea's constant
-				lea_constant = move_instruction->op1_const;
+					//This will become the lea's constant
+					lea_constant = move_instruction->op1_const;
 
-				//First step, multiply the constant by the lea multiplier
-				lea_constant = multiply_constant_by_raw_int64_value(lea_constant, i64, lea_multiplier);
+					//First step, multiply the constant by the lea multiplier
+					lea_constant = multiply_constant_by_raw_int64_value(lea_constant, i64, lea_multiplier);
 
-				//Following that, we will add it to the existing offset. The result will
-				//be in the offset constant itself
-				add_constants(lea_instruction->op1_const, lea_constant);
+					//Following that, we will add it to the existing offset. The result will
+					//be in the offset constant itself
+					add_constants(lea_instruction->op1_const, lea_constant);
 
-				//This no longer exists
-				lea_instruction->op2 = NULL;
+					//This no longer exists
+					lea_instruction->op2 = NULL;
 
-				//The calculation type is now offset only
-				lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+					//The calculation type is now offset only
+					lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
-				//Delete the move now
-				delete_statement(move_instruction);
-				
-				//Reconstruct around the lea
-				reconstruct_window(window, lea_instruction);
+					//Delete the move now
+					delete_statement(move_instruction);
+					
+					//Reconstruct around the lea
+					reconstruct_window(window, lea_instruction);
 
-				//Counts as a change
-				changed = TRUE;
+					//Counts as a change
+					changed = TRUE;
 
-				break;
-
-
-			/**
-			 * t4 <- 4
-			 * t5 <- t2 + t4
-			 *
-			 * Turns into:
-			 *   t5 <- 4(t2)
-			 */
-			case OIR_LEA_TYPE_REGISTERS_ONLY:
-				//Copy it over
-				lea_instruction->op1_const = move_instruction->op1_const;
-
-				//This no longer exists
-				lea_instruction->op2 = NULL;
-
-				//The calculation type is now offset only
-				lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
-
-				//Delete the move now
-				delete_statement(move_instruction);
-				
-				//Reconstruct around the lea
-				reconstruct_window(window, lea_instruction);
-
-				//Counts as a change
-				changed = TRUE;
-
-				break;
-
-			/**
-			 * t4 <- 4
-			 * t5 <- 500(t2, t4)
-			 *
-			 * Turns into:
-			 *  	t5 <- 504(t2)
-			 */
-			case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
-				//Add the 2 together, the result is in the lea's op1_const
-				add_constants(lea_instruction->op1_const, move_instruction->op1_const);
-
-				//This no longer exists
-				lea_instruction->op2 = NULL;
-
-				//The calculation type is now offset only
-				lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
-
-				//Delete the move now
-				delete_statement(move_instruction);
-				
-				//Reconstruct around the lea
-				reconstruct_window(window, lea_instruction);
-
-				//Counts as a change
-				changed = TRUE;
-
-				break;
+					break;
 
 
-			/**
-			 * t4 <- 4
-			 * t5 <- 500(t4)
-			 *  	
-			 * Turns into:
-			 *	t5 <- 504(no longer a lea)
-			 */
-			case OIR_LEA_TYPE_OFFSET_ONLY:
-				//Add the 2 together, the result is in the lea's op1_const
-				add_constants(lea_instruction->op1_const, move_instruction->op1_const);
-				
-				//Null out the addressing mode and ops
-				lea_instruction->lea_statement_type = OIR_LEA_TYPE_NONE;
-				lea_instruction->op1 = NULL;
-				lea_instruction->op2 = NULL;
+				/**
+				 * t4 <- 4
+				 * t5 <- t2 + t4
+				 *
+				 * Turns into:
+				 *   t5 <- 4(t2)
+				 */
+				case OIR_LEA_TYPE_REGISTERS_ONLY:
+					//Copy it over
+					lea_instruction->op1_const = move_instruction->op1_const;
 
-				//This is actually no longer a lea now, it's a pure assignment instruction
-				lea_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+					//This no longer exists
+					lea_instruction->op2 = NULL;
 
-				//Delete the move now
-				delete_statement(move_instruction);
-				
-				//Reconstruct around the lea
-				reconstruct_window(window, lea_instruction);
+					//The calculation type is now offset only
+					lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
-				//Counts as a change
-				changed = TRUE;
+					//Delete the move now
+					delete_statement(move_instruction);
+					
+					//Reconstruct around the lea
+					reconstruct_window(window, lea_instruction);
 
-				break;
-				
-			//By default - just do nothing
-			default:
-				break;
+					//Counts as a change
+					changed = TRUE;
+
+					break;
+
+				/**
+				 * t4 <- 4
+				 * t5 <- 500(t2, t4)
+				 *
+				 * Turns into:
+				 *  	t5 <- 504(t2)
+				 */
+				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+					//Add the 2 together, the result is in the lea's op1_const
+					add_constants(lea_instruction->op1_const, move_instruction->op1_const);
+
+					//This no longer exists
+					lea_instruction->op2 = NULL;
+
+					//The calculation type is now offset only
+					lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+					//Delete the move now
+					delete_statement(move_instruction);
+					
+					//Reconstruct around the lea
+					reconstruct_window(window, lea_instruction);
+
+					//Counts as a change
+					changed = TRUE;
+
+					break;
+
+				//Otherwise - nothing for us to do with this
+				default:
+					break;
+			}
+
+		//The final case - we just have the op1 as equal
+		} else if(variables_equal(move_instruction->assignee, lea_instruction->op1, FALSE) == TRUE){
+			switch(lea_instruction->lea_statement_type){
+				/**
+				 * t4 <- 4
+				 * t5 <- 500(t4)
+				 *  	
+				 * Turns into:
+				 *	t5 <- 504(no longer a lea)
+				 */
+				case OIR_LEA_TYPE_OFFSET_ONLY:
+					//Add the 2 together, the result is in the lea's op1_const
+					add_constants(lea_instruction->op1_const, move_instruction->op1_const);
+					
+					//Null out the addressing mode and ops
+					lea_instruction->lea_statement_type = OIR_LEA_TYPE_NONE;
+					lea_instruction->op1 = NULL;
+					lea_instruction->op2 = NULL;
+
+					//This is actually no longer a lea now, it's a pure assignment instruction
+					lea_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+
+					//Delete the move now
+					delete_statement(move_instruction);
+					
+					//Reconstruct around the lea
+					reconstruct_window(window, lea_instruction);
+
+					//Counts as a change
+					changed = TRUE;
+
+					break;
+					
+				//By default - just do nothing
+				default:
+					break;
+			}
 		}
 	}
-
 
 	/**
 	 * =================== Adjacent assignment statement folding ====================
