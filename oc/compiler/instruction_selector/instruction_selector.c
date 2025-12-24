@@ -5058,10 +5058,22 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 				instruction->address_calc_reg1 = stack_pointer_variable;
 			}
 
-		//Otherwise, we are loading a global variable with a subsequent offset
+		//Otherwise, we are loading a global variable with a subsequent offset. We will need to first
+		//load the address of said global variable, and then use that with an address calculation. We 
+		//are not able to combine the 2 in such a way
 		} else {
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			//Let the helper do the work
+			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(instruction->op1, instruction_pointer_variable, u64);
+
+			//Now insert this before the given instruction
+			insert_instruction_before_given(global_variable_address, instruction);
+
+			//The destination of the global variable address will be our new address calc reg 1. 
+			//We already have the offset loaded in, so that remains unchanged
+			instruction->address_calc_reg1 = global_variable_address->destination_register;
+
+			//This is an offset only version
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 		}
 
 	//Otherwise we aren't on the stack, it's just an offset. In that case, we'll keep the
@@ -5131,10 +5143,25 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 				instruction->address_calc_reg2 = instruction->op2;
 			}
 
-		//Otherwise, we are loading a global variable
+		//Otherwise, we are loading a global variable with a subsequent offset. We will need to first
+		//load the address of said global variable, and then use that with an address calculation. We 
+		//are not able to combine the 2 in such a way
 		} else {
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			//Let the helper do the work
+			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(instruction->op1, instruction_pointer_variable, u64);
+
+			//Now insert this before the given instruction
+			insert_instruction_before_given(global_variable_address, instruction);
+
+			//The destination of the global variable address will be our new address calc reg 1. 
+			//We already have the offset loaded in, so that remains unchanged
+			instruction->address_calc_reg1 = global_variable_address->destination_register;
+
+			//The second address calc register is whatever is in op2
+			instruction->address_calc_reg2 = instruction->op2;
+
+			//These are registers only
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 		}
 
 	//Otherwise we aren't on the stack, so we can just keep both registers
