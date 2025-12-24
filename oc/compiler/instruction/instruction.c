@@ -2042,6 +2042,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 					break;
 
+				case OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION:
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
+					break;
+
 				case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
 					//Print the constant out first
 					print_three_addr_constant(fl, stmt->op1_const);
@@ -2238,7 +2245,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 */
 		case ADDRESS_CALCULATION_MODE_GLOBAL_VAR:
 			//Print the actual string name of the variable - no SSA and no registers
-			fprintf(fl, "%s", instruction->op2->linked_var->var_name.string);
+			fprintf(fl, "%s", instruction->offset.global_variable->linked_var->var_name.string);
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
