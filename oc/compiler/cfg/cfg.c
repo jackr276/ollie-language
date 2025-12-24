@@ -113,38 +113,19 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer, u_int8_t is_branch_ending);
 
 /**
- * Let's determine if a value is a positive power of 2.
- * Here's how this will work. In binary, powers of 2 look like:
- * 0010
- * 0100
- * 1000
- * ....
- *
- * In other words, they have exactly 1 on bit that is not in the LSB position
- *
- * Here's an example: 5 = 0101, so 5-1 = 0100
- *
- * 0101 & (0100) = 0100 which is 4, not 0
- *
- * How about 8?
- * 8 is 1000
- * 8 - 1 = 0111
- *
- * 1000 & 0111 = 0, so 8 is a power of 2
- *
- * Therefore, the formula we will use is value & (value - 1) == 0
+ * Lea statements may only have: 1, 2, 4, or 8 as their scales
+ * due to internal hardware constraints. This operation will find
+ * if a given value is compatible
  */
-static u_int8_t is_power_of_2(int64_t value){
-	//If it's negative or 0, we're done here
-	if(value <= 0){
-		return FALSE;
-	}
-
-	//Using the bitwise formula described above
-	if((value & (value - 1)) == 0){
-		return TRUE;
-	} else {
-		return FALSE;
+static u_int8_t is_lea_compatible_power_of_2(int64_t value){
+	switch(value){
+		case 1:
+		case 2:
+		case 4:
+		case 8:
+			return TRUE;
+		default:
+			return FALSE;
 	}
 }
 
@@ -2418,9 +2399,8 @@ static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_blo
 	//We need a new temp var for the assignee. We know it's an address always
 	three_addr_var_t* assignee = emit_temp_var(offset->type);
 
-	//Is this a power of 2? Remember that Lea statements can only multiply
-	//by powers of 2 as the scale
-	if(is_power_of_2(member_type->type_size) == TRUE){
+	//Is this a lea compatible power of 2? If so we will use the lea shortcut
+	if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
 		//Let the helper emit the lea
 		instruction_t* address_calculation = emit_lea_multiplier_and_operands(assignee, base_addr, offset, member_type->type_size);
 		address_calculation->is_branch_ending = is_branch_ending;

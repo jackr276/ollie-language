@@ -1311,7 +1311,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction1->op == STAR
-		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE //Must be a power of 2 for lea
+		&& is_constant_lea_compatible_power_of_2(window->instruction1->op1_const) == TRUE //Must be: 1, 2, 4, 8 for lea
 		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == FALSE){
 
 		//This is now a lea statement
@@ -1336,7 +1336,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == STAR
-		&& is_constant_power_of_2(window->instruction2->op1_const) == TRUE //Must be a power of 2 for lea
+		&& is_constant_lea_compatible_power_of_2(window->instruction2->op1_const) == TRUE //Must be: 1, 2, 4, 8 for lea
 		&& variables_equal_no_ssa(window->instruction2->assignee, window->instruction2->op1, FALSE) == FALSE){
 
 		//This is now a lea statement
