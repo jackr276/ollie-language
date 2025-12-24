@@ -4629,6 +4629,28 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	//The final first operand will be the expression package's assignee for now
 	three_addr_var_t* final_op1 = right_hand_package.assignee;
 
+	//If the final op1 is a memory address, we need to emit a temp assignment
+	//to make it not one. This is because later on down in the instruction selector,
+	//we will need to translate a memory address into an actual result and we can't
+	//do that inside of a store
+	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		//Emit the assignment
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
+		assignment->is_branch_ending = is_branch_ending;
+
+		//Counts as a use
+		add_used_variable(current_block, final_op1);
+
+		//Insert this into the block before the store
+		insert_instruction_after_given(assignment, last_instruction);
+
+		//This is now the last instruction
+		last_instruction = assignment;
+
+		//And the final op1 is this one's assignee
+		final_op1 = last_instruction->assignee;
+	}
+
 	//Emit the left hand unary expression
 	cfg_result_package_t unary_package = emit_unary_expression(current_block, left_child, is_branch_ending);
 
@@ -8540,11 +8562,37 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	//Emit the right hand expression here
 	cfg_result_package_t package = emit_expression(current_block, expression_node, is_branch_ending, FALSE);
 
+	//Reassign what the current block is in case it's changed
+	current_block = package.final_block;
+
+	//What will our final op1 end up as?
+	three_addr_var_t* final_op1 = package.assignee;
+
 	//Store the last instruction for later use
 	instruction_t* last_instruction = current_block->exit_statement;
 
-	//Reassign the block here
-	current_block = package.final_block;
+	//If the final op1 is a memory address, we need to emit a temp assignment
+	//to make it not one. This is because later on down in the instruction selector,
+	//we will need to translate a memory address into an actual result and we can't
+	//do that inside of a store
+	if(final_op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		//Emit the assignment
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(u64), final_op1);
+		assignment->is_branch_ending = is_branch_ending;
+
+		//Counts as a use
+		add_used_variable(current_block, final_op1);
+
+		//Add this at the very end of the block. Remember - there is a chance that
+		//the last instruction is NULL so we'll dodge that here by doing this
+		add_statement(current_block, assignment);
+
+		//This is now the last instruction
+		last_instruction = assignment;
+
+		//And the final op1 is this one's assignee
+		final_op1 = last_instruction->assignee;
+	}
 
 	//Now update the final block
 	let_results.final_block = current_block;
@@ -8556,14 +8604,14 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 	 */
 	if(let_variable->linked_var == NULL || let_variable->linked_var->stack_variable == FALSE){
 		//The actual statement is the assignment of right to left
-		instruction_t* assignment_statement = emit_assignment_instruction(let_variable, package.assignee);
+		instruction_t* assignment_statement = emit_assignment_instruction(let_variable, final_op1);
 		assignment_statement->is_branch_ending = is_branch_ending;
 
 		//The let variable was assigned
 		add_assigned_variable(current_block, let_variable);
 
 		//If this is not temporary, then it counts as used
-		add_used_variable(current_block, package.assignee);
+		add_used_variable(current_block, final_op1);
 
 		//Finally we'll add this into the overall block
 		add_statement(current_block, assignment_statement);
@@ -8606,10 +8654,10 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
 
 			//This is now our op1
-			store_statement->op1 = package.assignee;
+			store_statement->op1 = final_op1;
 
 			//No matter what happened, we used this
-			add_used_variable(current_block, package.assignee);
+			add_used_variable(current_block, final_op1);
 
 		//Otherwise, we can do a small optimization here by scrapping the 
 		//constant assignment and just putting the constant in directly

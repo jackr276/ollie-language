@@ -817,6 +817,26 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			break;
 	}
 
+	//If we have a third - remember this is not a guarantee for all windows
+	if(third != NULL){
+		//Check if we have any such cases for the third in the window
+		switch(third->statement_type){
+			case THREE_ADDR_CODE_ASSN_STMT:
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				//If it is a memory address, then we'll do this
+				if(third->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+					remediate_memory_address_in_non_access_context(cfg, third);
+				}
+				
+				break;
+
+			//By default do nothing
+			default:
+				break;
+		}
+	}
+
 
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
 	//see, we perform one small optimization
