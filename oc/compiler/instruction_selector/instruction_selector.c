@@ -5190,6 +5190,13 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 				//And this is whatever was there before
 				instruction->address_calc_reg2 = instruction->op2;
 
+				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+				//must adhere to this one's type
+				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				}
+
 			//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
 			} else {
 				//Change the mode
@@ -5198,6 +5205,13 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 				//Copy both over
 				instruction->address_calc_reg1 = stack_pointer_variable;
 				instruction->address_calc_reg2 = instruction->op2;
+
+				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+				//must adhere to this one's type
+				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				}
 			}
 
 		//Otherwise, we are loading a global variable with a subsequent offset. We will need to first
@@ -5210,6 +5224,9 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 			//Now insert this before the given instruction
 			insert_instruction_before_given(global_variable_address, instruction);
 
+			//These are registers only
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
 			//The destination of the global variable address will be our new address calc reg 1. 
 			//We already have the offset loaded in, so that remains unchanged
 			instruction->address_calc_reg1 = global_variable_address->destination_register;
@@ -5217,8 +5234,12 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 			//The second address calc register is whatever is in op2
 			instruction->address_calc_reg2 = instruction->op2;
 
-			//These are registers only
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			//must adhere to this one's type
+			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			}
 		}
 
 	//Otherwise we aren't on the stack, so we can just keep both registers
@@ -5229,6 +5250,13 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 		//Assign over like such
 		instruction->address_calc_reg1 = instruction->op1;
 		instruction->address_calc_reg2 = instruction->op2;
+
+		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+		//must adhere to this one's type
+		if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+			instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+		}
 	}
 }
 
