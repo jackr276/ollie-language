@@ -1311,8 +1311,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count <= 1 //We don't want to be wiping this away if it's used more throughout the program
-	 	&& (variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE
-			|| variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE)){
+	 	&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
 
 		//Grab this for clarity
 		instruction_t* move_instruction = window->instruction1;
@@ -4882,9 +4881,9 @@ static void handle_store_instruction(instruction_t* instruction){
 /**
  * Handle an instruction like
  *
- * store t5[4] <- t7
+ * store MEM<t5>[4] <- t7
  *
- * movX t7, 4(t4)
+ * movX t7, 8(%rsp)
  *
  * This will always be an OFFSET_ONLY calculation type
  */
@@ -4951,26 +4950,75 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 /**
  * Handle an instruction like
  *
- * store t5[t6] <- t7
+ * store MEM<t5>[t6] <- t7
  *
- * movX t7, (t4,t6)
+ * movX t7, 4(%rsp, t6)
  *
- * This will always be a REGISTERS_ONLY calculation type
+ * This will most often generate stores with offsets and registers
  */
 static void handle_store_with_variable_offset_instruction(instruction_t* instruction){
-	//This will always be offset only
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-
-	//This is a write
-	instruction->memory_access_type = WRITE_TO_MEMORY;
-
-	//The base address is the assignee
-	instruction->address_calc_reg1 = instruction->assignee;
-	//Op1 is the address calcu register
-	instruction->address_calc_reg2 = instruction->op1;
-
 	//Invoke the helper for our source assignment
 	handle_store_instruction_sources_and_instruction_type(instruction);
+
+	//This is a write regardless
+	instruction->memory_access_type = WRITE_TO_MEMORY;
+
+	//Do we have a memory address variable(very common) or not?
+	if(instruction->assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		//Grab the linked var out
+		symtab_variable_record_t* linked_var = instruction->assignee->linked_var;
+
+		//If we have a non-global variable, then we've got a stack
+		//address
+		if(linked_var->membership != GLOBAL_VARIABLE){
+			//Get the stack offset
+			int64_t stack_offset = instruction->assignee->linked_var->stack_region->base_address;
+
+			//If it's not 0, we need to do some arithmetic with the constants
+			if(stack_offset != 0){
+				//This is still the stack pointer
+				instruction->address_calc_reg1 = stack_pointer_variable;
+
+				//This is the variable offset
+				instruction->address_calc_reg2 = instruction->op1;
+
+				//We will need to have a stack offset here since the memory base address has one
+				instruction->offset.offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+				//Once that's done, we just need to change the address calc mode
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+			//Even if this is 0, we still need to account for the offset in the original
+			//statement
+			} else {
+				//The base address is the assignee
+				instruction->address_calc_reg1 = stack_pointer_variable;
+
+				//And the offset is op1
+				instruction->address_calc_reg2 = instruction->op1;
+				
+				//This has registers only
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			}
+
+		} else {
+			//TODO
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+		}
+
+	//Otherwise there is no memory address, so we just handle normally
+	} else {
+		//The base address is the assignee
+		instruction->address_calc_reg1 = instruction->assignee;
+
+		//And the offset is op1
+		instruction->address_calc_reg2 = instruction->op1;
+
+		//The offset is already stored where we need it to be
+		//Set the type
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY; 
+	}
 }
 
 
