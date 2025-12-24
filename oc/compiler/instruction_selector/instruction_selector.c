@@ -4038,7 +4038,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			
 			//Copy over the address calc registers
 			instruction->address_calc_reg1 = instruction->op1;
-			instruction->address_calc_reg1 = instruction->op2;
+			instruction->address_calc_reg2 = instruction->op2;
 
 			break;
 
@@ -4049,7 +4049,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 			//Copy over the address calc registers
 			instruction->address_calc_reg1 = instruction->op1;
-			instruction->address_calc_reg1 = instruction->op2;
+			instruction->address_calc_reg2 = instruction->op2;
 
 			//Set the appropriate value here
 			instruction->offset.offset_constant = instruction->op1_const;
@@ -4076,7 +4076,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 			//Copy over the address calc registers
 			instruction->address_calc_reg1 = instruction->op1;
-			instruction->address_calc_reg1 = instruction->op2;
+			instruction->address_calc_reg2 = instruction->op2;
 
 			//Set the appropriate value here
 			instruction->offset.offset_constant = instruction->op1_const;
@@ -4090,7 +4090,9 @@ static void handle_lea_statement(instruction_t* instruction){
 
 			//Copy over the address calc registers
 			instruction->address_calc_reg1 = instruction->op1;
-			instruction->address_calc_reg1 = instruction->op2;
+			instruction->address_calc_reg2 = instruction->op2;
+
+			//The scale is already stored in the multiplier
 
 			break;
 
