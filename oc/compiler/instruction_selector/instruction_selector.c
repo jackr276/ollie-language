@@ -1305,6 +1305,13 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  	
 	 *  	Turns into:
 	 *  		t5 <- 504(no longer a lea)
+	 *
+	 *  Case 6 ->  Two registers(op1)
+	 *  	t4 <- 4
+	 *  	t5 <- (t4, t7)
+	 *
+	 *  	Turns into:
+	 *  		t5 <- 4(t7)
 	 */
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -1492,6 +1499,38 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 					//Counts as a change
 					changed = TRUE;
 
+					break;
+
+				/**
+				 * t4 <- 4
+				 * t5 <- (t4, t7)
+				 *
+				 * Turns into:
+				 *	t5 <- 4(t7)
+				 */
+				case OIR_LEA_TYPE_REGISTERS_ONLY:
+					//Copy the constant right on over
+					lea_instruction->offset.offset_constant = move_instruction->op1_const;
+
+					//Op2 becomes address calc reg 1
+					lea_instruction->address_calc_reg1 = lea_instruction->op2;
+
+					//Now null out both ops
+					lea_instruction->op1 = NULL;
+					lea_instruction->op2 = NULL;
+
+					//This is now an offset only type statement
+					lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+					//Delete the move now
+					delete_statement(move_instruction);
+					
+					//Reconstruct around the lea
+					reconstruct_window(window, lea_instruction);
+
+					//Counts as a change
+					changed = TRUE;
+					
 					break;
 					
 				//By default - just do nothing
