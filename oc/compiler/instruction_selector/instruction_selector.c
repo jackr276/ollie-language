@@ -714,7 +714,7 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 						//this into op1 + op2 * -1
 						case MINUS:
 							//Full stack here
-							instruction->lea_statement_type = OIR_LEA_REGISTERS_OFFSET_AND_SCALE;
+							instruction->lea_statement_type = OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE;
 
 							//-1 to mimic the subtraction
 							instruction->lea_multiplier = -1;
@@ -1264,7 +1264,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	
 
 	/**
-	 * --------------------- Folding constant assingments in LEA statements with op2 ----------------------
+	 * --------------------- Folding constant assingments in LEA statements with ----------------------
 	 *  In cases where we have a lea statement that uses a constant which is assigned to a temporary
 	 *  variable right before it, we should eliminate that unnecessary assingment by folding that constant
 	 *  into the lea statement.
@@ -1382,7 +1382,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 				 *	Turns into:
 				 *		t5 <- 520(t2)
 				 **/
-				case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
+				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
 					//Let's extract the constants that we're after here
 					lea_multiplier = lea_instruction->lea_multiplier;
 
@@ -4043,7 +4043,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 
 		//Converts to an addressing mode with the trifecta
-		case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
+		case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
 			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 

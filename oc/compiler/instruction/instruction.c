@@ -2049,7 +2049,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					fprintf(fl, ")");
 					break;
 
-				case OIR_LEA_REGISTERS_OFFSET_AND_SCALE:
+				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
 					//Print the constant out first
 					print_three_addr_constant(fl, stmt->op1_const);
 
@@ -2060,6 +2060,22 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 
 					//Now print the multiplier
+					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+
+				case OIR_LEA_TYPE_INDEX_AND_SCALE:
+					//Print out the scale and multiplier
+					fprintf(fl, "( , ");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+
+					break;
+
+				case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+					//Print the offset first
+					print_three_addr_constant(fl, stmt->op1_const);
+					//Print out the scale and multiplier
+					fprintf(fl, "( , ");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 					fprintf(fl, ", %ld)", stmt->lea_multiplier);
 
 					break;
@@ -2249,18 +2265,6 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
-
-
-			//
-			//
-			//
-			//TODO FIX THIS TO USE OFFSET
-			//
-			//
-			//
-			//
-			//
-			//
 			fprintf(fl, ")");
 
 		   	break;
@@ -2316,7 +2320,23 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->address_calc_reg2, mode);
 			fprintf(fl, ", %ld)", instruction->lea_multiplier);
+			break;
+
+		//Index is in address calc reg 1 for this
+		case ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE:
+			fprintf(fl, "( , ");
+			print_variable(fl, instruction->address_calc_reg1, mode);
+			fprintf(fl, ", %ld)", instruction->lea_multiplier);
+			break;
 			
+		//Index is in address calc reg 1 for this
+		case ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE:
+			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			fprintf(fl, "( , ");
+			print_variable(fl, instruction->address_calc_reg1, mode);
+			fprintf(fl, ", %ld)", instruction->lea_multiplier);
+			break;
+
 		//Do nothing
 		default:
 			break;
