@@ -591,7 +591,7 @@ static u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t o
  * Remediate a memory address that is *not* in a memory access(load or store) context. This will primarily
  * be hit when we're taking memory addresses or doing pointer arithmetic with arrays
  */
-static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instruction_t* instruction){
+static void remediate_memory_address_in_non_access_context(instruction_t* instruction){
 	//Grab this out
 	symtab_variable_record_t* var = instruction->op1->linked_var;
 
@@ -600,6 +600,19 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
 	 * on a stack
 	 */
 	if(var->membership != GLOBAL_VARIABLE){
+		//We have no stack region - this likely means that it's a
+		//reference parameter of some kind. In this case, we will *remove*
+		//the special memory type of this paramter and just let it use
+		//the variable as normal
+		if(var->stack_region == NULL){
+			//Remediate the type here
+			instruction->op1->variable_type = VARIABLE_TYPE_NON_TEMP;
+
+			//And just let it go now 
+			return;
+		}
+
+
 		//Extract the stack offset for our use. This will determine how 
 		//we process things down below
 		int64_t stack_offset = var->stack_region->base_address;
@@ -760,7 +773,7 @@ static void remediate_memory_address_in_non_access_context(cfg_t* cfg, instructi
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
  */
-static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
+static u_int8_t simplify_window(instruction_window_t* window){
 	//By default, we didn't change anything
 	u_int8_t changed = FALSE;
 
@@ -790,7 +803,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			//If it is a memory address, then we'll do this
 			if(first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-				remediate_memory_address_in_non_access_context(cfg, first);
+				remediate_memory_address_in_non_access_context(first);
 			}
 			
 			break;
@@ -807,7 +820,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			//If it is a memory address, then we'll do this
 			if(second->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-				remediate_memory_address_in_non_access_context(cfg, second);
+				remediate_memory_address_in_non_access_context(second);
 			}
 			
 			break;
@@ -826,7 +839,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 				//If it is a memory address, then we'll do this
 				if(third->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-					remediate_memory_address_in_non_access_context(cfg, third);
+					remediate_memory_address_in_non_access_context(third);
 				}
 				
 				break;
@@ -2418,7 +2431,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
  * etc. Simplification happens first over the entirety of the OIR using the sliding window
  * technique. Following this, the instruction selector runs over the same area
  */
-static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* entry){
+static u_int8_t simplifier_pass(basic_block_t* entry){
 	//First we'll grab the entry
 	basic_block_t* current = entry;
 
@@ -2435,7 +2448,7 @@ static u_int8_t simplifier_pass(cfg_t* cfg, basic_block_t* entry){
 		//Run through and simplify everything we can
 		do{
 			//Simplify the window
-			changed = simplify_window(cfg, &window);
+			changed = simplify_window(&window);
 
 			//Set this flag if it was changed
 			if(changed == TRUE){
@@ -2470,7 +2483,7 @@ static void simplify(cfg_t* cfg){
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Let this keep going until we're done changing
-		while(simplifier_pass(cfg, function_entry) == TRUE);
+		while(simplifier_pass(function_entry) == TRUE);
 	}
 }
 
@@ -4148,10 +4161,6 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
  * convert into x86 addressing mode expresssions
  */
 static void handle_lea_statement(instruction_t* instruction){
-	//Store address calc reg's 1 and 2
-	three_addr_var_t* address_calc_reg1 = instruction->op1;
-	three_addr_var_t* address_calc_reg2 = instruction->op2;
-	
 	//Select the size of our variable
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -5433,7 +5442,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
-static void select_instruction_patterns(cfg_t* cfg, instruction_window_t* window){
+static void select_instruction_patterns(instruction_window_t* window){
 	//============================= Address Calculation Optimization  ==============================
 	//These are patterns that span multiple instructions. Often we're able to
 	//condense these multiple instructions into one singular x86 instruction
@@ -5684,7 +5693,7 @@ static void select_instructions(cfg_t* cfg){
 			//Run through the window so long as we are not at the end
 			do{
 				//Select the instructions
-				select_instruction_patterns(cfg, &window);
+				select_instruction_patterns(&window);
 
 				//Slide the window
 				slide_window(&window);
