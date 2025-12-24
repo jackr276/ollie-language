@@ -1376,12 +1376,19 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 	 *  	Turns into:
 	 *  		t5 <- 4(t7)
 	 *
-	 *  Case 8 ->  Two registers and offset(op1)
+	 *  Case 7 ->  Two registers and offset(op1)
 	 *  	t4 <- 4
 	 *  	t5 <- 500(t4, t7)
 	 *
 	 *  	Turns into:
 	 *  		t5 <- 504(t7)
+	 *
+	 *  Case 8 -> Two registers and scale
+	 *  	t4 <- 4
+	 *  	t5 <- (t4, t7, 4)
+	 *
+	 * 		Turns into:
+	 * 		  t5 <- 4(, t7, 4)
 	 */
 	if(window->instruction2 != NULL 
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -1621,6 +1628,37 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 
 					//This is now an offset only type statement
 					lea_instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+					//Delete the move now
+					delete_statement(move_instruction);
+					
+					//Reconstruct around the lea
+					reconstruct_window(window, lea_instruction);
+
+					//Counts as a change
+					changed = TRUE;
+
+					break;
+
+				/**
+				 * t4 <- 4
+				 * t5 <- (t4, t7, 4)
+				 *
+				 * Turns into:
+				 *   t5 <- 4(, t7, 4)
+				 */
+				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+					//Copy the constant over
+					lea_instruction->op1_const = move_instruction->op1_const;
+
+					//Now we need to move op2 into the op1 spot
+					lea_instruction->op1 = lea_instruction->op2;
+
+					//Null out op2
+					lea_instruction->op2 = NULL;
+
+					//This has become a scale and offset type
+					lea_instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE;
 
 					//Delete the move now
 					delete_statement(move_instruction);
@@ -4157,6 +4195,27 @@ static void handle_lea_statement(instruction_t* instruction){
 
 			//The scale is already stored in the multiplier
 
+			break;
+
+		case OIR_LEA_TYPE_INDEX_AND_SCALE:
+			//Set the mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE;
+
+			//Address calc reg 1 is all we have here, the scale is already stored
+			instruction->address_calc_reg1 = instruction->op1;
+			
+			break;
+
+		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+			//Set the mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE;
+
+			//Address calc reg 1 is all we have here, the scale is already stored
+			instruction->address_calc_reg1 = instruction->op1;
+
+			//Copy over the offset
+			instruction->offset.offset_constant = instruction->op1_const;
+			
 			break;
 
 		//This is unreachable and should never happen. Hard error if it does
