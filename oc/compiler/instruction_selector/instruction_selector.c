@@ -4212,7 +4212,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
 				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 
@@ -4230,7 +4230,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
 				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 
@@ -4264,7 +4264,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
 				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 
@@ -4285,7 +4285,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
 				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 
@@ -5193,7 +5193,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
 					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 				}
 
@@ -5209,7 +5209,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
 					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 				}
 			}
@@ -5237,7 +5237,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
 				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 		}
@@ -5254,7 +5254,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 		//must adhere to this one's type
-		if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type)){
+		if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
 			instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 		}
 	}
@@ -5434,6 +5434,9 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 			//If it's not 0, we need to do some arithmetic with the constants
 			if(stack_offset != 0){
+				//Once that's done, we just need to change the address calc mode
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
 				//This is still the stack pointer
 				instruction->address_calc_reg1 = stack_pointer_variable;
 
@@ -5443,20 +5446,31 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 				//We will need to have a stack offset here since the memory base address has one
 				instruction->offset.offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
 
-				//Once that's done, we just need to change the address calc mode
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+				//must adhere to this one's type
+				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				}
 
 			//Even if this is 0, we still need to account for the offset in the original
 			//statement
 			} else {
+				//This has registers only
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
 				//The base address is the assignee
 				instruction->address_calc_reg1 = stack_pointer_variable;
 
 				//And the offset is op1
 				instruction->address_calc_reg2 = instruction->op1;
-				
-				//This has registers only
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
+				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+				//must adhere to this one's type
+				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				}
 			}
 
 		//If we have a global variable, we will need to first load in the address and then go through and 
@@ -5468,6 +5482,9 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 			//Now insert this before the given instruction
 			insert_instruction_before_given(global_variable_address, instruction);
 
+			//We have 2 registers so this is registers only
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
 			//The destination of the global variable address will be our new address calc reg 1. 
 			//We already have the offset loaded in, so that remains unchanged
 			instruction->address_calc_reg1 = global_variable_address->destination_register;
@@ -5475,21 +5492,32 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 			//Address calc reg 2 is op1 always
 			instruction->address_calc_reg2 = instruction->op1;
 
-			//We have 2 registers so this is registers only
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			//must adhere to this one's type
+			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			}
 		}
 
 	//Otherwise there is no memory address, so we just handle normally
 	} else {
+		//The offset is already stored where we need it to be
+		//Set the type
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY; 
+
 		//The base address is the assignee
 		instruction->address_calc_reg1 = instruction->assignee;
 
 		//And the offset is op1
 		instruction->address_calc_reg2 = instruction->op1;
 
-		//The offset is already stored where we need it to be
-		//Set the type
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY; 
+		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+		//must adhere to this one's type
+		if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+			instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+		}
 	}
 }
 
