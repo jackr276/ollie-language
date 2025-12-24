@@ -5221,9 +5221,8 @@ static void handle_store_instruction(instruction_t* instruction){
 			//The address calc reg1 is the instruction pointer
 			instruction->address_calc_reg1 = instruction_pointer_variable;
 
-			//Remember that op2 will always hold the global var's name, so we'll just
-			//rearrange here
-			instruction->op2 = instruction->assignee;
+			//The global variable is held by the offset
+			instruction->offset.global_variable = instruction->assignee;
 		}
 
 	//Otherwise this is something like a pointer dereference, just a pure store so we'll
@@ -5292,10 +5291,21 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 			}
 
+		//If we have a global variable, we will need to first load in the address and then go through and 
+		//handle the value normally
 		} else {
-			//TODO
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			//Let the helper do the work
+			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(instruction->assignee, instruction_pointer_variable, u64);
+
+			//Now insert this before the given instruction
+			insert_instruction_before_given(global_variable_address, instruction);
+
+			//The destination of the global variable address will be our new address calc reg 1. 
+			//We already have the offset loaded in, so that remains unchanged
+			instruction->address_calc_reg1 = global_variable_address->destination_register;
+
+			//This is an offset only version
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 		}
 
 	//Otherwise there is no memory address, so we just handle normally
@@ -5364,10 +5374,24 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 			}
 
+		//If we have a global variable, we will need to first load in the address and then go through and 
+		//handle the value normally
 		} else {
-			//TODO
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			//Let the helper do the work
+			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(instruction->assignee, instruction_pointer_variable, u64);
+
+			//Now insert this before the given instruction
+			insert_instruction_before_given(global_variable_address, instruction);
+
+			//The destination of the global variable address will be our new address calc reg 1. 
+			//We already have the offset loaded in, so that remains unchanged
+			instruction->address_calc_reg1 = global_variable_address->destination_register;
+
+			//Address calc reg 2 is op1 always
+			instruction->address_calc_reg2 = instruction->op1;
+
+			//We have 2 registers so this is registers only
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 		}
 
 	//Otherwise there is no memory address, so we just handle normally
