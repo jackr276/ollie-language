@@ -11,7 +11,6 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -4890,18 +4889,62 @@ static void handle_store_instruction(instruction_t* instruction){
  * This will always be an OFFSET_ONLY calculation type
  */
 static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
-	//This will always be offset only
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-
-	//This is a write
-	instruction->memory_access_type = WRITE_TO_MEMORY;
-
-	//The base address is the assignee
-	instruction->address_calc_reg1 = instruction->assignee;
-	//Our offset has already been saved at the start - so we're good here
-	
 	//Invoke the helper for our source assignment
 	handle_store_instruction_sources_and_instruction_type(instruction);
+
+	//This is a write regardless
+	instruction->memory_access_type = WRITE_TO_MEMORY;
+
+	//Do we have a memory address variable(very common) or not?
+	if(instruction->assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		//Grab the linked var out
+		symtab_variable_record_t* linked_var = instruction->assignee->linked_var;
+
+		//If we have a non-global variable, then we've got a stack
+		//address
+		if(linked_var->membership != GLOBAL_VARIABLE){
+			//Get the stack offset
+			int64_t stack_offset = instruction->assignee->linked_var->stack_region->base_address;
+
+			//If it's not 0, we need to do some arithmetic with the constants
+			if(stack_offset != 0){
+				//This is still the stack pointer
+				instruction->address_calc_reg1 = stack_pointer_variable;
+
+				//We'll now add the stack offset to the offset that we already have
+				//in the "offset variable"
+				sum_constant_with_raw_int64_value(instruction->offset.offset_constant, i64, stack_offset);
+
+				//Once that's done, we just need to change the address calc mode
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+			//Even if this is 0, we still need to account for the offset in the original
+			//statement
+			} else {
+				//The base address is the assignee
+				instruction->address_calc_reg1 = stack_pointer_variable;
+
+				//The offset is already stored in the "offset" field
+				
+				//This has the address calc and the offset
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			}
+
+		} else {
+			//TODO
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+		}
+
+	//Otherwise there is no memory address, so we just handle normally
+	} else {
+		//The base address is the assignee
+		instruction->address_calc_reg1 = instruction->assignee;
+
+		//The offset is already stored where we need it to be
+		//Set the type
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY; 
+	}
 }
 
 
