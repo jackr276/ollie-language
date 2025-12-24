@@ -817,6 +817,7 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			break;
 	}
 
+
 	//Now we'll match based off of a series of patterns. Depending on the pattern that we
 	//see, we perform one small optimization
 	
@@ -1261,7 +1262,69 @@ static u_int8_t simplify_window(cfg_t* cfg, instruction_window_t* window){
 			changed = TRUE;
 		}
 	}
-	
+
+
+	/**
+	 * ====================== Translating multiplications into leas if compatible ================
+	 * If we have something like:
+	 * 	t27 <- t26 * 8
+	 *
+	 * Since 8 is a power of 2, we are actually able to translate this into a lea. We want to
+	 * do this because lea instructions, when multiplying, generate fewer instructions than
+	 * actually doing multiplication. This is reserved for cases where the assignee and op1
+	 * are not equal. These usually arise in address calculation scenarios
+	 *
+	 * We will check both instructions 1 and 2 for this to get as much as we can on one go
+	 */
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction1->op == STAR
+		&& is_constant_power_of_2(window->instruction1->op1_const) == TRUE //Must be a power of 2 for lea
+		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == FALSE){
+
+		//This is now a lea statement
+		window->instruction1->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+		//The lea type will be scale and index
+		window->instruction1->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+		
+		//Knock out the op
+		window->instruction1->op = BLANK;
+
+		//Copy over from the constant to the lea multiplier
+		window->instruction1->lea_multiplier = window->instruction1->op1_const->constant_value.signed_long_constant;
+
+		//We can now null out the constant
+		window->instruction1->op1_const = NULL;
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
+		&& window->instruction2->op == STAR
+		&& is_constant_power_of_2(window->instruction2->op1_const) == TRUE //Must be a power of 2 for lea
+		&& variables_equal(window->instruction2->assignee, window->instruction2->op1, FALSE) == FALSE){
+
+		//This is now a lea statement
+		window->instruction2->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+		//The lea type will be scale and index
+		window->instruction2->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+		
+		//Knock out the op
+		window->instruction2->op = BLANK;
+
+		//Copy over from the constant to the lea multiplier
+		window->instruction2->lea_multiplier = window->instruction2->op1_const->constant_value.signed_long_constant;
+
+		//We can now null out the constant
+		window->instruction2->op1_const = NULL;
+
+		//This counts as a change
+		changed = TRUE;
+	}
+
 
 	/**
 	 * --------------------- Folding constant assingments in LEA statements with ----------------------
