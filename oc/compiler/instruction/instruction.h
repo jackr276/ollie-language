@@ -706,6 +706,14 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8
 instruction_t* copy_instruction(instruction_t* copied);
 
 /**
+ * Sum a constant by a raw int64_t value
+ * 
+ * NOTE: The result is always stored in the first one, and the first one will become 
+ * a long constant. This is specifically designed for lea simplification/address computation
+ */
+three_addr_const_t* sum_constant_with_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant);
+
+/**
  * Multiply a constant by a raw int64_t value
  * 
  * NOTE: The result is always stored in the first one, and the first one will become 
