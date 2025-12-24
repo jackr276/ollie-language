@@ -4868,9 +4868,6 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	//Handle destination assignment based on op1
 	handle_load_instruction_destination_assignment(instruction, instruction->op1->type);
 
-	//This will always be offset only
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
 	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
@@ -4921,9 +4918,9 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 /**
  * Handle a load with variable offset instruction
  *
- * load t5 <- t23[t24] --> movx (t23, t24), t5
+ * load t5 <- MEM<t23>[t24] --> movx 4(%rsp, t24), t5
  *
- * This will always generate an address calculation mode of OFFSET_ONLY 
+ * This usually generates addressing mode expressions with registers and offsets
  */
 static void handle_load_with_variable_offset_instruction(instruction_t* instruction){
 	//We need the destination and source sizes to determine our movement instruction
@@ -4935,19 +4932,59 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	//Let the helper decide for us
 	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
 
-	//This will always be offset only
-	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
-
-	//Load is from memory
+	//This is a read from memory type
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
-	//Op1 is our base address
-	instruction->address_calc_reg1 = instruction->op1;
-	//Op2 is the variable offset
-	instruction->address_calc_reg2 = instruction->op2;
-
 	//Handle the destination assignment
-	handle_load_instruction_destination_assignment(instruction, instruction->address_calc_reg1->type);
+	handle_load_instruction_destination_assignment(instruction, instruction->op1->type);
+
+	//If we have a memory address variable(super common), we'll need to
+	//handle this now
+	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		//If this is *not* a global variable
+		if(instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+			//This is our stack offset, it will be needed going forward
+			int64_t stack_offset = instruction->op1->linked_var->stack_region->base_address;
+
+			//If we actually have a stack offset to deal with
+			if(stack_offset != 0){
+				//We'll have something like <offset>(%rsp, t4)
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+				//Emit the offset
+				instruction->offset.offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+				//This will be the stack pointer
+				instruction->address_calc_reg1 = stack_pointer_variable;
+
+				//And this is whatever was there before
+				instruction->address_calc_reg2 = instruction->op2;
+
+			//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
+			} else {
+				//Change the mode
+				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+				
+				//Copy both over
+				instruction->address_calc_reg1 = stack_pointer_variable;
+				instruction->address_calc_reg2 = instruction->op2;
+			}
+
+		//Otherwise, we are loading a global variable
+		} else {
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+		}
+
+	//Otherwise we aren't on the stack, so we can just keep both registers
+	} else {
+		//Just have registers here
+		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+
+		//Assign over like such
+		instruction->address_calc_reg1 = instruction->op1;
+		instruction->address_calc_reg2 = instruction->op2;
+	}
 }
 
 
