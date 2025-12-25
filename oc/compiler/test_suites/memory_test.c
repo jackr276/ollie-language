@@ -6,6 +6,7 @@
 */
 
 #include <linux/limits.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <dirent.h>
@@ -35,6 +36,8 @@ struct worker_thread_params_t{
 	heap_queue_t file_queue;
 	//The total number of errors
 	u_int32_t* total_errors;
+	//The number of error files
+	u_int32_t* error_file_count;
 	//The array of errored out files
 	char files_in_error[TEST_FILES][MAX_FILE_SIZE];
 };
@@ -64,7 +67,13 @@ void* worker(void* parameters){
 	
 	//For holding our file name
 	char* file_name;
+
+	//The return code for our command
+	int32_t return_code;
 	
+	//The number of errors for each given file
+	int32_t num_errors;
+
 	//Forever loop while there is work to do
 	while(TRUE){
 		//Lock the queue mutex
@@ -87,10 +96,45 @@ void* worker(void* parameters){
 		//Unlock the file queue mutex
 		pthread_mutex_unlock(&file_queue_mutex);
 
+		//Our command. We use 2>&1 to write all errors to stdout so that we can grep it
+		sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", file_name);
 
-		//Lock the result mutex
+		//Run the command in the system
+		return_code = system(command);
+		
+
+		//Lock the result mutex. This also doubles as a mutex for stdout. We delay
+		//printing anything until we're in here to keep results consistent
 		pthread_mutex_lock(&result_mutex);
 
+		printf("\n=========== Checking %s =================\n", file_name);
+		printf("Running test command: %s\n\n", command);
+
+		//If we exited, get the exit code
+		if(WIFEXITED(return_code)){
+			//Get the actual exit code(this will be the error number)
+			num_errors = WEXITSTATUS(return_code);
+			
+		//If we got a bad signal, get out
+		} else if (WIFSIGNALED((return_code))){
+			printf("ERROR: command terminated with signal %d\n", WTERMSIG(return_code));
+		}
+
+		//Bookkeeping for final printing
+		if(num_errors > 0){
+			//Get this into the list
+			strncpy(params->files_in_error[*(params->error_file_count)], file_name, 300);
+			//Bump up the count
+			(params->error_file_count)++;
+		}
+
+		//Update the total error count
+		*(params->total_errors) += num_errors;
+
+		//Get the error count out
+		printf("\nTEST FILE: %s -> %d ERRORS\n", file_name, num_errors);
+
+		printf("\n=========================================\n");
 		//Unlock the result mutex
 		pthread_mutex_unlock(&result_mutex);
 	}
@@ -118,6 +162,9 @@ int main(int argc, char** argv){
 		exit(1);
 	}
 
+	//Get the thread count
+	int thread_count = atoi(argv[1]);
+
 	//Extract it and open it
 	char* directory_path = argv[2];
 	DIR* directory = opendir(directory_path);
@@ -131,60 +178,49 @@ int main(int argc, char** argv){
 	//Run through everything in the given directory
 	struct dirent* directory_entry;
 
-	//For creating our commands
-	char command[3000];
-
-	//Total number of errors we have
-	int total_errors = 0;
-
-	//Number of files in error
-	int number_of_error_files = 0;
-
-	//The number of files in error
-	char files_in_error[TEST_FILES][MAX_FILE_SIZE];
-
-	//So long as we can keep reading from the directory
+	//So long as we can keep reading from the directory, we will stuff the
+	//queue with what we need
 	while((directory_entry = readdir(directory)) != NULL){
-		printf("=========== Checking %s =================\n", directory_entry->d_name);
+		//Create some space for it
+		char* file_name = calloc(sizeof(char), MAX_FILE_SIZE);
 
-		//Our command. We use 2>&1 to write all errors to stdout so that we can grep it
-		sprintf(command, "exit $(valgrind ./oc/out/ocd -ditsa@ -f ./oc/test_files/%s 2>&1 | grep \"SUMMARY\" | sed -n 's/.*ERROR SUMMARY: \\([0-9]\\+\\).*/\\1/p')", directory_entry->d_name);
-		printf("Running test command: %s\n\n", command);
-
-		//Get the return code
-		int return_code = system(command);
-
-		//Number of errors
-		int num_errors = 0;
-
-		//If we exited, get the exit code
-		if(WIFEXITED(return_code)){
-			//Get the actual exit code(this will be the error number)
-			num_errors = WEXITSTATUS(return_code);
-			
-		//If we got a bad signal, get out
-		} else if (WIFSIGNALED((return_code))){
-			printf("ERROR: command terminated with signal %d\n", WTERMSIG(return_code));
-			exit(1);
-		}
-
-		//Get the error count out
-		printf("\nTEST FILE: %s -> %d ERRORS\n", directory_entry->d_name, num_errors);
-
-		//Bookkeeping for final printing
-		if(num_errors > 0){
-			//Get this into the list
-			strncpy(files_in_error[number_of_error_files], directory_entry->d_name, 300);
-			number_of_error_files++;
-		}
+		//Copy it over
+		strncpy(file_name, directory_entry->d_name, MAX_FILE_SIZE);
 
 
-		//Increment the overall number
-		total_errors += num_errors;
+
 	}
 
 	//Close the directory
 	closedir(directory);
+
+	//Display for the user
+	printf("\n===================================== SETUP ================================\n");
+	printf("THREADS: %d\n", thread_count);
+	printf("DIRECTOR: %s\n", directory_path);
+	printf("\n===================================== SETUP ================================\n\n");
+
+	//=========================== Setup for threads ============================
+	
+	//Total number of errors we have
+	u_int32_t total_errors = 0;
+
+	//Number of files in error
+	u_int32_t number_of_error_files = 0;
+
+	//The number of files in error
+	char files_in_error[TEST_FILES][MAX_FILE_SIZE];
+
+	//Spawn a worker for each thread
+	for(u_int16_t i = 0; i < thread_count; i++){
+
+	}
+
+	//Wait for them all to join
+	for(u_int16_t i = 0; i < thread_count; i++){
+
+	}
+
 
 	printf("================================ Ollie Memory Check Summary =================================== \n");
 	printf("TOTAL ERRORS: %d\n", total_errors);
