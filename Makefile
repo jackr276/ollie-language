@@ -439,7 +439,7 @@ performance_test: oc
 # A memory check run will use valgrind and run a C test that checks each file individually for memory errors
 # This can be slow but it runs as part of CI
 memory_check: oc_debug memory_checker
-	$(OUT_LOCAL)/memory_checker 16 $(OUT_LOCAL)/oc_debug $(TEST_FILE_DIR)
+	$(OUT_LOCAL)/memory_checker 16 $(TEST_FILE_DIR)
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test

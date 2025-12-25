@@ -29,18 +29,15 @@
 pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-//Parameter struct for everything that we need to run
-typedef struct worker_thread_params_t worker_thread_params_t;
-struct worker_thread_params_t{
-	//A queue of all files
-	heap_queue_t file_queue;
-	//The total number of errors
-	u_int32_t* total_errors;
-	//The number of error files
-	u_int32_t* error_file_count;
-	//The array of errored out files
-	char files_in_error[TEST_FILES][MAX_FILE_SIZE];
-};
+//The file queue
+heap_queue_t file_queue;
+//Total number of errors we have
+u_int32_t total_errors = 0;
+//Number of files in error
+u_int32_t number_of_error_files = 0;
+//The number of files in error
+char files_in_error[TEST_FILES][MAX_FILE_SIZE];
+
 
 /**
  * Worker thread:
@@ -58,12 +55,9 @@ struct worker_thread_params_t{
  *		Unlocks the result mutex
  * }
  */
-void* worker(void* parameters){
+void* worker(){
 	//For creating our commands
 	char command[3000];
-
-	//Cast assign here for convenience
-	worker_thread_params_t* params = parameters;
 	
 	//For holding our file name
 	char* file_name;
@@ -82,7 +76,7 @@ void* worker(void* parameters){
 		//If we find that the queue is empty, we leave this
 		//thread. We need to make sure to unlock the mutex
 		//before leaving
-		if(queue_is_empty(&(params->file_queue)) == TRUE){
+		if(queue_is_empty(&file_queue) == TRUE){
 			//Unlock the file queue mutex
 			pthread_mutex_unlock(&file_queue_mutex);
 
@@ -91,7 +85,7 @@ void* worker(void* parameters){
 		}
 
 		//Get our file out of the queue
-		file_name = dequeue(&(params->file_queue));
+		file_name = dequeue(&file_queue);
 
 		//Unlock the file queue mutex
 		pthread_mutex_unlock(&file_queue_mutex);
@@ -123,13 +117,13 @@ void* worker(void* parameters){
 		//Bookkeeping for final printing
 		if(num_errors > 0){
 			//Get this into the list
-			strncpy(params->files_in_error[*(params->error_file_count)], file_name, 300);
+			strncpy(files_in_error[number_of_error_files], file_name, 300);
 			//Bump up the count
-			(params->error_file_count)++;
+			number_of_error_files++;
 		}
 
 		//Update the total error count
-		*(params->total_errors) += num_errors;
+		total_errors += num_errors;
 
 		//Get the error count out
 		printf("\nTEST FILE: %s -> %d ERRORS\n", file_name, num_errors);
@@ -145,6 +139,9 @@ void* worker(void* parameters){
 * on make to verify that certain rules are precompiled for us
 */
 int main(int argc, char** argv){
+	//Initialize the heap queue
+	file_queue = heap_queue_alloc();
+
 	//Do we even have valgrind - if this returns 1 we don't so
 	//get out
 	int valgrind_found = system("which valgrind");
@@ -181,14 +178,19 @@ int main(int argc, char** argv){
 	//So long as we can keep reading from the directory, we will stuff the
 	//queue with what we need
 	while((directory_entry = readdir(directory)) != NULL){
+		//If se see '.' or '..' bail out
+		if(directory_entry->d_name[0] == '.'){
+			continue;
+		}
+
 		//Create some space for it
 		char* file_name = calloc(sizeof(char), MAX_FILE_SIZE);
 
 		//Copy it over
 		strncpy(file_name, directory_entry->d_name, MAX_FILE_SIZE);
 
-
-
+		//Add it into the queue
+		enqueue(&file_queue, file_name);
 	}
 
 	//Close the directory
@@ -202,25 +204,18 @@ int main(int argc, char** argv){
 
 	//=========================== Setup for threads ============================
 	
-	//Total number of errors we have
-	u_int32_t total_errors = 0;
-
-	//Number of files in error
-	u_int32_t number_of_error_files = 0;
-
-	//The number of files in error
-	char files_in_error[TEST_FILES][MAX_FILE_SIZE];
+	//Space for our threads
+	pthread_t* threads = calloc(thread_count, sizeof(pthread_t));
 
 	//Spawn a worker for each thread
 	for(u_int16_t i = 0; i < thread_count; i++){
-
+		pthread_create(&(threads[i]), NULL, worker, NULL);
 	}
 
 	//Wait for them all to join
 	for(u_int16_t i = 0; i < thread_count; i++){
-
+		pthread_join(threads[i], NULL);
 	}
-
 
 	printf("================================ Ollie Memory Check Summary =================================== \n");
 	printf("TOTAL ERRORS: %d\n", total_errors);
@@ -230,7 +225,7 @@ int main(int argc, char** argv){
 		printf("FILES IN ERROR:\n");
 
 		//Print out all of them
-		for(int32_t i = 0; i < number_of_error_files; i++){
+		for(u_int32_t i = 0; i < number_of_error_files; i++){
 			printf("%d) %s\n", i, files_in_error[i]);
 		}
 
