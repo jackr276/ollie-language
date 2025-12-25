@@ -14,13 +14,11 @@
 #include <sys/types.h>
 //For multithreading
 #include <pthread.h>
-//For our worker queue
-#include "../utils/queue/heap_queue.h"
 //For any needed constants
 #include "../utils/constants.h"
 
-//Generic amount of test files
-#define TEST_FILES 500
+//Generic amount of test files - up as we get more
+#define TEST_FILES 1000
 
 //Maximum size of a given file in linux
 #define MAX_FILE_SIZE 300
@@ -29,14 +27,18 @@
 pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-//The file queue
-heap_queue_t file_queue;
 //Total number of errors we have
 u_int32_t total_errors = 0;
 //Number of files in error
 u_int32_t number_of_error_files = 0;
 //The number of files in error
 char files_in_error[TEST_FILES][MAX_FILE_SIZE];
+//All test files that we have to deal with
+char test_files[TEST_FILES][MAX_FILE_SIZE];
+//The current test file index
+u_int32_t current_test_file_index;
+//The total number of actual test files
+u_int32_t total_test_files;
 
 
 /**
@@ -68,7 +70,7 @@ void* worker(){
 	//The number of errors for each given file
 	int32_t num_errors;
 
-	//Forever loop while there is work to do
+	//Forever loop w5hile there is work to do
 	while(TRUE){
 		//Lock the queue mutex
 		pthread_mutex_lock(&file_queue_mutex);
@@ -76,7 +78,7 @@ void* worker(){
 		//If we find that the queue is empty, we leave this
 		//thread. We need to make sure to unlock the mutex
 		//before leaving
-		if(queue_is_empty(&file_queue) == TRUE){
+		if(current_test_file_index >= total_test_files){
 			//Unlock the file queue mutex
 			pthread_mutex_unlock(&file_queue_mutex);
 
@@ -85,7 +87,10 @@ void* worker(){
 		}
 
 		//Get our file out of the queue
-		file_name = dequeue(&file_queue);
+		file_name = test_files[current_test_file_index];
+
+		//Increment this for the next go around
+		current_test_file_index++;
 
 		//Unlock the file queue mutex
 		pthread_mutex_unlock(&file_queue_mutex);
@@ -134,14 +139,12 @@ void* worker(){
 	}
 }
 
+
 /**
 * Hook in and run via the main function. We will be relying
 * on make to verify that certain rules are precompiled for us
 */
 int main(int argc, char** argv){
-	//Initialize the heap queue
-	file_queue = heap_queue_alloc();
-
 	//Do we even have valgrind - if this returns 1 we don't so
 	//get out
 	int valgrind_found = system("which valgrind");
@@ -159,7 +162,7 @@ int main(int argc, char** argv){
 		exit(1);
 	}
 
-	//Get the thread count
+	//Get the thread count - very rough - I'm not really concerned about user-friendliness with this
 	int thread_count = atoi(argv[1]);
 
 	//Extract it and open it
@@ -175,22 +178,25 @@ int main(int argc, char** argv){
 	//Run through everything in the given directory
 	struct dirent* directory_entry;
 
+	//Initialize the total test file counts
+	total_test_files = 0;
+
 	//So long as we can keep reading from the directory, we will stuff the
 	//queue with what we need
 	while((directory_entry = readdir(directory)) != NULL){
-		//If se see '.' or '..' bail out
+		//If we see '.' or '..' bail out
 		if(directory_entry->d_name[0] == '.'){
 			continue;
 		}
 
-		//Create some space for it
-		char* file_name = calloc(sizeof(char), MAX_FILE_SIZE);
+		//Grab a pointer to its region
+		char* file_name = test_files[total_test_files];
 
 		//Copy it over
 		strncpy(file_name, directory_entry->d_name, MAX_FILE_SIZE);
 
-		//Add it into the queue
-		enqueue(&file_queue, file_name);
+		//Increment the test file number
+		total_test_files++;
 	}
 
 	//Close the directory
@@ -217,8 +223,12 @@ int main(int argc, char** argv){
 		pthread_join(threads[i], NULL);
 	}
 
-	printf("================================ Ollie Memory Check Summary =================================== \n");
+	//Get rid of all these threads
+	free(threads);
+
+	printf("\n\n\n\n\n\n================================ Ollie Memory Check Summary =================================== \n");
 	printf("TOTAL ERRORS: %d\n", total_errors);
+	printf("TOTAL ERROR FILES: %d\n", number_of_error_files);
 
 	//Only print out if we need to
 	if(total_errors > 0){
@@ -231,9 +241,12 @@ int main(int argc, char** argv){
 
 		//One final error for emphasis
 		printf("\n\nMEMORY CHECK FAILURE: DEVELOPER ATTENTION IS REQUIRED\n\n");
+
+	} else {
+		printf("ALL TEST CASES CLEAN\n");
 	}
 
-	printf("================================ Ollie Memory Check Summary =================================== \n");
+	printf("================================ Ollie Memory Check Summary =================================== \n\n\n\n\n\n");
 
 	//Destroy the mutices
 	pthread_mutex_destroy(&file_queue_mutex);
