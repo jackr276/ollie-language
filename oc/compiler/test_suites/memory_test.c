@@ -11,12 +11,40 @@
 #include <dirent.h>
 #include <string.h>
 #include <sys/types.h>
+//For multithreading
+#include <pthread.h>
 
 //Generic amount of test files
 #define TEST_FILES 500
 
 //Maximum size of a given file in linux
 #define MAX_FILE_SIZE 300
+
+//Mutices for shared states
+pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/**
+ * Worker thread:
+ *
+ * While(true){
+ * 		Locks the file queue
+ * 		if(queue is empty) -> exit
+ * 		Polls the queue for a file(deletes from the queue)
+ * 		Unlocks the file queue
+ *
+ * 		Does the work
+ *
+ * 		Locks the 
+ *
+ * }
+ *
+ * Runs the command
+ * 
+ */
+void* worker(void* parameters){
+
+}
 
 /**
 * Hook in and run via the main function. We will be relying
