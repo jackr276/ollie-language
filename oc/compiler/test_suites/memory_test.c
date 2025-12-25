@@ -234,6 +234,10 @@ int main(int argc, char** argv){
 	}
 
 	printf("================================ Ollie Memory Check Summary =================================== \n");
+
+	//Destroy the mutices
+	pthread_mutex_destroy(&file_queue_mutex);
+	pthread_mutex_destroy(&result_mutex);
 	
 	//All went well
 	return total_errors;
