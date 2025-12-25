@@ -13,6 +13,10 @@
 #include <sys/types.h>
 //For multithreading
 #include <pthread.h>
+//For our worker queue
+#include "../utils/queue/heap_queue.h"
+//For any needed constants
+#include "../utils/constants.h"
 
 //Generic amount of test files
 #define TEST_FILES 500
@@ -23,6 +27,17 @@
 //Mutices for shared states
 pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+//Parameter struct for everything that we need to run
+typedef struct worker_thread_params_t worker_thread_params_t;
+struct worker_thread_params_t{
+	//A queue of all files
+	heap_queue_t file_queue;
+	//The total number of errors
+	u_int32_t* total_errors;
+	//The array of errored out files
+	char files_in_error[TEST_FILES][MAX_FILE_SIZE];
+};
 
 /**
  * Worker thread:
@@ -35,15 +50,50 @@ pthread_mutex_t result_mutex = PTHREAD_MUTEX_INITIALIZER;
  *
  * 		Does the work
  *
- * 		Locks the 
- *
+ * 		Locks the result mutex
+ *		Updates the results
+ *		Unlocks the result mutex
  * }
- *
- * Runs the command
- * 
  */
 void* worker(void* parameters){
+	//For creating our commands
+	char command[3000];
 
+	//Cast assign here for convenience
+	worker_thread_params_t* params = parameters;
+	
+	//For holding our file name
+	char* file_name;
+	
+	//Forever loop while there is work to do
+	while(TRUE){
+		//Lock the queue mutex
+		pthread_mutex_lock(&file_queue_mutex);
+
+		//If we find that the queue is empty, we leave this
+		//thread. We need to make sure to unlock the mutex
+		//before leaving
+		if(queue_is_empty(&(params->file_queue)) == TRUE){
+			//Unlock the file queue mutex
+			pthread_mutex_unlock(&file_queue_mutex);
+
+			//Nothing of meaning to return here
+			return NULL;
+		}
+
+		//Get our file out of the queue
+		file_name = dequeue(&(params->file_queue));
+
+		//Unlock the file queue mutex
+		pthread_mutex_unlock(&file_queue_mutex);
+
+
+		//Lock the result mutex
+		pthread_mutex_lock(&result_mutex);
+
+		//Unlock the result mutex
+		pthread_mutex_unlock(&result_mutex);
+	}
 }
 
 /**
