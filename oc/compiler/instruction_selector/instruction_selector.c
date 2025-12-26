@@ -5459,8 +5459,6 @@ static void handle_load_statement_base_address(instruction_t* load_statement){
  * Combine and select all cases where we have a variable offset load that can be combined
  * with a lea to form a singular instruction. This handles all cases, and performs the deletion
  * of the given lea statement at the end
- *
- * Remember that by the time we reach this, we know that the lea 
  */
 static void combine_lea_with_variable_offset_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* variable_offset_load){
 	//Cache all of these now before we do any manipulations
@@ -5878,6 +5876,76 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 
 /**
+ * Combine and select all cases where we have a variable offset store that can be combined
+ * with a lea to form a singular instruction. This handles all cases, and performs the deletion
+ * of the given lea statement at the end
+ */
+static void combine_lea_with_variable_offset_store_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* variable_offset_store){
+	/**
+	 * Go through all valid cases here. Note that anything where we have 2 registers in the lea
+	 * will not work because we then wouldn't have enough room for the base address/rsp register
+	 * in the final load. As such the ones that work here revolve around one register lea's that can
+	 * be combined
+	 */
+	switch(lea_statement->lea_statement_type){
+		/**
+		 * Turns:
+		 *  t4 <- 4(t5)
+		 *  load t6 <- MEM<t3>[t4]
+		 *
+		 *  movX 8(rsp, t4), t6
+		 */
+		case OIR_LEA_TYPE_OFFSET_ONLY:
+
+			break;
+			
+		/**
+		 * Turns:
+		 *  t4 <- (, t5, 4)
+		 *  load t6 <- MEM<t3>[t4]
+		 *
+		 *  movX 16(rsp, t5, 4), t6
+		 */
+		case OIR_LEA_TYPE_INDEX_AND_SCALE:
+
+			break;
+
+		/**
+		 * Turns:
+		 *  t4 <- 4(, t5, 4)
+		 *  load t6 <- MEM<t3>[t4]
+		 *
+		 *  movX 20(rsp, t5, 4), t6
+		 */
+		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+
+			break;
+
+		//By default - if we can't handle it, we just invoke the other helpers and call
+		//it quits. This ensures uniform behavior and correctness
+		default:
+			handle_lea_statement(lea_statement);
+			handle_store_with_variable_offset_instruction(variable_offset_store);
+
+			//Reconstruct around the last one(the load)
+			reconstruct_window(window, variable_offset_store);
+
+			//And get out
+			return;
+	}
+	
+	//NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
+	//Invoke the helper for our source assignment
+	handle_store_instruction_sources_and_instruction_type(variable_offset_store);
+	//This is a write regardless
+	variable_offset_store->memory_access_type = WRITE_TO_MEMORY;
+
+	//The window always needs to be rebuilt around the last instruction that we touched
+	reconstruct_window(window, variable_offset_store);
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -5953,6 +6021,23 @@ static void select_instruction_patterns(instruction_window_t* window){
 		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
 		//rule is done and we can return
 		combine_lea_with_variable_offset_load_instruction(window, window->instruction1, window->instruction2);
+		return;
+	}
+
+	/**
+	 * Compressing variable offset stores with leas that come beforehand. We do this to turn
+	 * 2 expressions into one big addressing expression
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION //Nothing to do if we have this
+		//Is the lea's assignee equal to the offset(op1) of the store
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
+
+		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
+		//rule is done and we can return
+		combine_lea_with_variable_offset_store_instruction(window, window->instruction1, window->instruction2);
 		return;
 	}
 
