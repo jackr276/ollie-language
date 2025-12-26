@@ -6061,8 +6061,8 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 				variable_offset_store->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
 			}
 
-			//The calculation mode here will always be registers and offset
-			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+			//This will always have registers, an offset and a scale
+			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 			//The lea is redundant
 			delete_statement(lea_statement);
@@ -6189,23 +6189,6 @@ static void select_instruction_patterns(instruction_window_t* window){
 		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
 		//rule is done and we can return
 		combine_lea_with_variable_offset_store_instruction(window, window->instruction1, window->instruction2);
-		return;
-	}
-
-	/**
-	 * Do the same as above for instructions 2 & 3
-	 */
-	if(window->instruction2 != NULL
-		&& window->instruction3 != NULL
-		&& window->instruction3->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction2->lea_statement_type != OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION //Nothing to do if we have this
-		//Is the lea's assignee equal to the offset of the load
-		&& variables_equal(window->instruction2->assignee, window->instruction3->op2, TRUE) == TRUE){
-
-		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
-		//rule is done and we can return
-		combine_lea_with_variable_offset_load_instruction(window, window->instruction2, window->instruction3);
 		return;
 	}
 
