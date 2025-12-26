@@ -5956,6 +5956,22 @@ static void select_instruction_patterns(instruction_window_t* window){
 		return;
 	}
 
+	/**
+	 * Do the same as above for instructions 2 & 3
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction3 != NULL
+		&& window->instruction3->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction2->lea_statement_type != OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION //Nothing to do if we have this
+		//Is the lea's assignee equal to the offset of the load
+		&& variables_equal(window->instruction2->assignee, window->instruction3->op2, TRUE) == TRUE){
+
+		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
+		//rule is done and we can return
+		combine_lea_with_variable_offset_load_instruction(window, window->instruction2, window->instruction3);
+		return;
+	}
 
 	//We could see logical and/logical or
 	if(is_instruction_binary_operation(window->instruction1) == TRUE){
