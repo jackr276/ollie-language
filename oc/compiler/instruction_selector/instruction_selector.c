@@ -1768,11 +1768,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * 	
 	 * 	Can become:
 	 * 	 t5 <- 4(, t7, 4)
+	 *
+	 * CASE 2: 
+	 * 	t4 <- 4(, t7, 4)
+	 * 	t5 <- 4(t4)
+	 * 	
+	 * 	Can become:
+	 * 	 t5 <- 8(, t7, 4)
+	 *
+	 * 
+	 * NOTE: This has been written to be extensible. It is by no means exhaustive yet, and
+	 * there are likely many other cases not currently handled by this that should be
 	 */
 	if(window->instruction2 != NULL
-		&& window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT 
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT){
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LEA_STMT){
 
 		//Grab these references for our convenience
 		instruction_t* first_lea = window->instruction1;
@@ -1780,10 +1791,63 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//If the first one's assignee is the second one's op1
 		if(variables_equal(first_lea->assignee, second_lea->op1, FALSE) == TRUE){
+			//Go based on the first one's addressing mode
+			switch(first_lea->lea_statement_type){
+				case OIR_LEA_TYPE_INDEX_AND_SCALE:
+					//Now go based on the second one's type
+					switch(second->lea_statement_type){
+						/**
+						 * 	t4 <- (, t7, 4)
+						 * 	t5 <- 4(t4)
+						 * 	
+						 * 	Can become:
+						 * 	 t5 <- 4(, t7, 4)
+						 */
+						case OIR_LEA_TYPE_OFFSET_ONLY:
+
+							break;
+							
+						//Do nothing
+						default:
+							break;
+					}
+
+					break;
+
+				case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+					//Now go based on the second one's type
+					switch(second->lea_statement_type){
+						/**
+						 * 	t4 <- 4(, t7, 4)
+						 * 	t5 <- 4(t4)
+						 * 	
+						 * 	Can become:
+						 * 	 t5 <- 8(, t7, 4)
+						 */
+						case OIR_LEA_TYPE_OFFSET_ONLY:
+
+							break;
+							
+						//Do nothing
+						default:
+							break;
+					}
+
+					break;
+
+				//Just do nothing by default
+				default:
+					break;
+			}
 			
 		//Rarer but still possible case - is the assignee equal to the op2
 		} else if(variables_equal(first_lea->assignee, second_lea->op2, FALSE) == TRUE){
-
+			//Go based on the first one's type
+			switch(first_lea->lea_statement_type){
+				//Just do nothing by default
+				default:
+					break;
+			}
 		}
 	}
 
