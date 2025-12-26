@@ -794,11 +794,34 @@ static void remediate_memory_address_in_non_access_context(instruction_window_t*
 				//Let the helper emit the statement. We will use a temp destination for this
 				global_var_address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
 
+				//This goes in before the given one
+				insert_instruction_before_given(global_var_address_instruction, instruction);
+
+				//We'll now replace op1 with what our assignee here is
+				instruction->op1 = global_var_address_instruction->assignee;
+
+				//And now we'll reconstruct around our instruction just ot keep the window in order
+				reconstruct_window(window, instruction);
+
 				break;
 
+			/**
+			 * A global var address assignment like this will generate
+			 * 2 separate instructions. One instruction will hold the global variable address,
+			 * while the other holds the actual binary operation
+			 */
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 				//Let the helper emit the statement. We will use a temp destination for this
 				global_var_address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+
+				//This goes in before the given one
+				insert_instruction_before_given(global_var_address_instruction, instruction);
+
+				//We'll now replace op1 with what our assignee here is
+				instruction->op1 = global_var_address_instruction->assignee;
+
+				//And now we'll reconstruct around our instruction just ot keep the window in order
+				reconstruct_window(window, instruction);
 
 				break;
 
@@ -4579,7 +4602,7 @@ static void handle_lea_statement(instruction_t* instruction){
 		//Special kind to support global vars
 		case OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION:
 			//Set the mode
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
 
 			//Copy over the address calc register
 			instruction->address_calc_reg1 = instruction->op1;
