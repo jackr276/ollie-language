@@ -318,7 +318,7 @@ instruction_selector_test.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
 	$(CC) $(CFLAGS) -o $(OUT_LOCAL)/instruction_selector_test.o $(TEST_SUITE_PATH)/instruction_selector_test.c
 
 memory_checker.o: $(TEST_SUITE_PATH)/memory_test.c
-	$(CC) $(CFLAGS) -o $(OUT_LOCAL)/memory_checker.o $(TEST_SUITE_PATH)/memory_test.c
+	$(CC) $(CFLAGS) -pthread -o $(OUT_LOCAL)/memory_checker.o $(TEST_SUITE_PATH)/memory_test.c
 
 instruction_selector_testd.o: $(TEST_SUITE_PATH)/instruction_selector_test.c
 	$(CC) $(CFLAGS) -g -o $(OUT_LOCAL)/instruction_selector_testd.o $(TEST_SUITE_PATH)/instruction_selector_test.c
@@ -351,7 +351,7 @@ oc_debug: compilerd.o parserd.o lexerd.o symtabd.o heapstackd.o type_systemd.o a
 	$(CC) -o $(OUT_LOCAL)/ocd $(OUT_LOCAL)/compilerd.o $(OUT_LOCAL)/parserd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/heapstackd.o $(OUT_LOCAL)/symtabd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/type_systemd.o $(OUT_LOCAL)/astd.o $(OUT_LOCAL)/cfgd.o $(OUT_LOCAL)/call_graphd.o $(OUT_LOCAL)/instructiond.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/preprocd.o $(OUT_LOCAL)/dependency_treed.o $(OUT_LOCAL)/dynamic_arrayd.o $(OUT_LOCAL)/lightstackd.o $(OUT_LOCAL)/optimizerd.o $(OUT_LOCAL)/instruction_selectord.o $(OUT_LOCAL)/jump_tabled.o $(OUT_LOCAL)/stack_data_aread.o $(OUT_LOCAL)/register_allocatord.o $(OUT_LOCAL)/instruction_schedulerd.o $(OUT_LOCAL)/interference_graphd.o $(OUT_LOCAL)/file_builderd.o $(OUT_LOCAL)/dynamic_stringd.o $(OUT_LOCAL)/nesting_stackd.o $(OUT_LOCAL)/postprocessord.o $(OUT_LOCAL)/data_dependency_graphd.o $(OUT_LOCAL)/max_priority_queued.o
 
 memory_checker: memory_checker.o
-	$(CC) -o $(OUT_LOCAL)/memory_checker $(OUT_LOCAL)/memory_checker.o
+	$(CC) -pthread -o $(OUT_LOCAL)/memory_checker $(OUT_LOCAL)/memory_checker.o
 
 stest: symtab_test
 	$(OUT_LOCAL)/symtab_test
@@ -439,7 +439,7 @@ performance_test: oc
 # A memory check run will use valgrind and run a C test that checks each file individually for memory errors
 # This can be slow but it runs as part of CI
 memory_check: oc_debug memory_checker
-	$(OUT_LOCAL)/memory_checker $(OUT_LOCAL)/oc_debug $(TEST_FILE_DIR)
+	$(OUT_LOCAL)/memory_checker 16 $(TEST_FILE_DIR)
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
