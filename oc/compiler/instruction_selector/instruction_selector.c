@@ -5876,6 +5876,64 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 
 /**
+ * Handle the base address for a store statement in all of its forms. This includes
+ * global variables, stack variables, and plain variables as well. This is meant to
+ * be used by the lea combiner rule. It will *not* modify addressing modes and it should
+ * not be expected to give a full and complete result back. It will only modify
+ * address calc reg1 and the offset if appropriate
+ */
+static void handle_store_statement_base_address(instruction_t* store_instruction){
+	//Do we have a memory address variable(very common) or not?
+	if(store_instruction->assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		//Grab the linked var out
+		symtab_variable_record_t* linked_var = store_instruction->assignee->linked_var;
+
+		//If we have a non-global variable, then we've got a stack
+		//address
+		if(linked_var->membership != GLOBAL_VARIABLE){
+			//Get the stack offset
+			int64_t stack_offset = linked_var->stack_region->base_address;
+
+			//If it's not 0, we need to do some arithmetic with the constants
+			if(stack_offset != 0){
+				//Once that's done, we just need to change the address calc mode
+				store_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+				//This is still the stack pointer
+				store_instruction->address_calc_reg1 = stack_pointer_variable;
+
+				//We will need to have a stack offset here since the memory base address has one
+				store_instruction->offset.offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+			//All that we need to do now is use the stack pointer
+			} else {
+				//The base address is the assignee
+				store_instruction->address_calc_reg1 = stack_pointer_variable;
+			}
+
+		//If we have a global variable, we will need to first load in the address and then go through and 
+		//handle the value normally
+		} else {
+			//Let the helper do the work
+			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(store_instruction->assignee, instruction_pointer_variable, u64);
+
+			//Now insert this before the given instruction
+			insert_instruction_before_given(global_variable_address, store_instruction);
+
+			//The destination of the global variable address will be our new address calc reg 1. 
+			//We already have the offset loaded in, so that remains unchanged
+			store_instruction->address_calc_reg1 = global_variable_address->destination_register;
+		}
+
+	//Otherwise there is no memory address, so we just handle normally
+	} else {
+		//The base address is the assignee
+		store_instruction->address_calc_reg1 = store_instruction->assignee;
+	}
+}
+
+
+/**
  * Combine and select all cases where we have a variable offset store that can be combined
  * with a lea to form a singular instruction. This handles all cases, and performs the deletion
  * of the given lea statement at the end
