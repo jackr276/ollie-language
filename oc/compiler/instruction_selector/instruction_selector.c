@@ -5187,7 +5187,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				 * In the event that we do this, we need to emit a simple copy of the source
 				 * variable and give it the 64 bit type so that we have a quad word register
 				 */
-				if(is_type_unsigned_64_bit(store_instruction->assignee->type) == TRUE
+				if(is_type_unsigned_64_bit(destination_type) == TRUE
 					&& is_type_32_bit_int(store_instruction->op2->type) == TRUE){
 
 					//First we duplicate it
@@ -5254,9 +5254,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
  * of a load instruction. This will also handle the edge case where we are
  * loading from a 32 bit memory region into an unsigned 64 bit region
  */
-static void handle_load_instruction_destination_assignment(instruction_t* load_instruction, generic_type_t* memory_region_type){
+static void handle_load_instruction_destination_assignment(instruction_t* load_instruction){
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
+
+	//This is always the memory region type
+	generic_type_t* memory_region_type = load_instruction->memory_read_write_type;
 
 	//Let's look for the special case here
 	if(is_type_32_bit_int(memory_region_type) == TRUE
@@ -5302,7 +5305,7 @@ static void handle_load_instruction(instruction_t* instruction){
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//Invoke the helper to handle the assignee and any edge cases
-	handle_load_instruction_destination_assignment(instruction, instruction->op1->type);
+	handle_load_instruction_destination_assignment(instruction);
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -5380,7 +5383,7 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//Handle destination assignment based on op1
-	handle_load_instruction_destination_assignment(instruction, instruction->op1->type);
+	handle_load_instruction_destination_assignment(instruction);
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -5463,7 +5466,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//Handle the destination assignment
-	handle_load_instruction_destination_assignment(instruction, instruction->op1->type);
+	handle_load_instruction_destination_assignment(instruction);
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -5766,7 +5769,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 	//This is a read from memory type
 	variable_offset_load->memory_access_type = READ_FROM_MEMORY;
 	//Handle the destination assignment
-	handle_load_instruction_destination_assignment(variable_offset_load, variable_offset_load->op1->type);
+	handle_load_instruction_destination_assignment(variable_offset_load);
 
 	//The window always needs to be rebuilt around the last instruction that we touched
 	reconstruct_window(window, variable_offset_load);
