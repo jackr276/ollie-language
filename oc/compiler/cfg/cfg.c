@@ -2397,7 +2397,7 @@ static three_addr_var_t* handle_pointer_arithmetic(basic_block_t* basic_block, o
  */
 static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, generic_type_t* member_type, u_int8_t is_branch_ending){
 	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(offset->type);
+	three_addr_var_t* assignee = emit_temp_var(i64);
 
 	//Is this a lea compatible power of 2? If so we will use the lea shortcut
 	if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
