@@ -591,7 +591,7 @@ static u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t o
  * Remediate a memory address that is *not* in a memory access(load or store) context. This will primarily
  * be hit when we're taking memory addresses or doing pointer arithmetic with arrays
  */
-static void remediate_memory_address_in_non_access_context(instruction_t* instruction){
+static void remediate_memory_address_in_non_access_context(instruction_window_t* window, instruction_t* instruction){
 	//Grab this out
 	symtab_variable_record_t* var = instruction->op1->linked_var;
 
@@ -757,8 +757,11 @@ static void remediate_memory_address_in_non_access_context(instruction_t* instru
 				exit(1);
 		}
 	
-	//Otherwise it is a global variable, and we will treat it as such. Global variables will generate 2 instructions on most occassions
-	//the lea instruction to grab the address and then the actual address manipulation in the binary operation
+	/**
+	 * Otherwise it is a global variable, and we will treat it as such. Global variables will generate 2 instructions on most occassions
+	 * the lea instruction to grab the address and then the actual address manipulation in the binary operation. Note that for these steps,
+	 * window reconstruction is required
+	 */
 	} else {
 		//The global variable address calculation
 		instruction_t* global_var_address_instruction;
@@ -769,20 +772,34 @@ static void remediate_memory_address_in_non_access_context(instruction_t* instru
 			 */
 			case THREE_ADDR_CODE_ASSN_STMT:
 				//Let the helper emit the statement
-				global_var_address_instruction = emit_global_variable_address_calculation_x86(instruction->op1, instruction_pointer_variable, u64);
-
-				global_var_address_instruction->assignee = instruction->o
-
+				global_var_address_instruction = emit_global_variable_address_calculation_oir(instruction->assignee, instruction->op1, instruction_pointer_variable);
 
 				//Insert this after the given instruction
-				insert_instruction_after_given(global_var_address_instruction, );
+				insert_instruction_after_given(global_var_address_instruction, instruction);
+
+				//Once we've done that, the old instruction is useless to us
+				delete_statement(instruction);
+
+				//Rebuild the window based around the new instruction
+				reconstruct_window(window, global_var_address_instruction);
 
 				break;
 
+			/**
+			 * A global var address assignment like this will generate
+			 * 2 separate instructions. One instruction will hold the global variable address,
+			 * while the other holds the actual binary operation
+			 */
 			case THREE_ADDR_CODE_BIN_OP_STMT:
+				//Let the helper emit the statement. We will use a temp destination for this
+				global_var_address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+
 				break;
 
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				//Let the helper emit the statement. We will use a temp destination for this
+				global_var_address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+
 				break;
 
 			//This should never happen
@@ -829,7 +846,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			//If it is a memory address, then we'll do this
 			if(first->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-				remediate_memory_address_in_non_access_context(first);
+				remediate_memory_address_in_non_access_context(window, first);
 			}
 			
 			break;
@@ -846,7 +863,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			//If it is a memory address, then we'll do this
 			if(second->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-				remediate_memory_address_in_non_access_context(second);
+				remediate_memory_address_in_non_access_context(window, second);
 			}
 			
 			break;
@@ -865,7 +882,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 				//If it is a memory address, then we'll do this
 				if(third->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-					remediate_memory_address_in_non_access_context(third);
+					remediate_memory_address_in_non_access_context(window, third);
 				}
 				
 				break;

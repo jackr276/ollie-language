@@ -4641,11 +4641,15 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	//We already know what the destination will be
 	lea->assignee = assignee;
 
+	//Copy the global var and give a non-memory address version of it
+	three_addr_var_t* remediated_version = emit_var_copy(global_variable);
+	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
+
 	//Op1 is the instruction pointer(relative addressing)
 	lea->op1 = instruction_pointer;
 
 	//The op2 is always the global var itself
-	lea->op2 = global_variable;
+	lea->op2 = remediated_version;
 
 	//And give it back
 	return lea;
