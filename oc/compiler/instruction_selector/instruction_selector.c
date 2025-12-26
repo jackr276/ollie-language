@@ -5401,6 +5401,61 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 
 
 /**
+ * Handle the base address for a load statement in all of its forms. This includes
+ * global variables, stack variables, and plain variables as well. This is meant to
+ * be used by the lea combiner rule. It will *not* modify addressing modes and it should
+ * not be expected to give a full and complete result back. It will only modify
+ * address calc reg1 and the offset if appropriate
+ */
+static void handle_load_statement_base_address(instruction_t* load_statement){
+	//If we have a memory address variable(super common), we'll need to
+	//handle this now
+	if(load_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+		//If this is *not* a global variable
+		if(load_statement->op1->linked_var->membership != GLOBAL_VARIABLE){
+			//This is our stack offset, it will be needed going forward
+			int64_t stack_offset = load_statement->op1->linked_var->stack_region->base_address;
+
+			//If we actually have a stack offset to deal with. We'll store the offset constant
+			//and op1
+			if(stack_offset != 0){
+				//Emit the offset
+				load_statement->offset.offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+				//This will be the stack pointer
+				load_statement->address_calc_reg1 = stack_pointer_variable;
+
+			//Otherwise there's no stack offset, so we'll just have the stack
+			//pointer
+			} else {
+				//Copy both over
+				load_statement->address_calc_reg1 = stack_pointer_variable;
+			}
+
+		//Otherwise, we are loading a global variable with a subsequent offset. We will need to first
+		//load the address of said global variable, and then use that with an address calculation. We 
+		//are not able to combine the 2 in such a way
+		} else {
+			//Let the helper do the work
+			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_statement->op1, instruction_pointer_variable, u64);
+
+			//Now insert this before the given instruction
+			insert_instruction_before_given(global_variable_address, load_statement);
+
+			//The destination of the global variable address will be our new address calc reg 1. 
+			//We already have the offset loaded in, so that remains unchanged
+			load_statement->address_calc_reg1 = global_variable_address->destination_register;
+		}
+
+	//Otherwise we aren't on the stack, so we can just keep both registers
+	} else {
+		//Assign over like such
+		load_statement->address_calc_reg1 = load_statement->op1;
+	}
+}
+
+
+/**
  * Combine and select all cases where we have a variable offset load that can be combined
  * with a lea to form a singular instruction. This handles all cases, and performs the deletion
  * of the given lea statement at the end
@@ -5413,7 +5468,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 	u_int8_t is_destination_signed = is_type_signed(variable_offset_load->assignee->type);
 	variable_size_t source_size = get_type_size(variable_offset_load->op1->type);
 
-	//Go through all of our various cases here
+	/**
+	 * Go through all valid cases here. Note that anything where we have 2 registers in the lea
+	 * will not work because we then wouldn't have enough room for the base address/rsp register
+	 * in the final load. As such the ones that work here revolve around one register lea's that can
+	 * be combined
+	 */
 	switch(lea_statement->lea_statement_type){
 		/**
 		 * Turns:
@@ -5423,6 +5483,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		 *  movX 8(rsp, t4), t6
 		 */
 		case OIR_LEA_TYPE_OFFSET_ONLY:
+
+			break;
 			
 		/**
 		 * Turns:
@@ -5432,6 +5494,10 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		 *  movX 16(rsp, t5, 4), t6
 		 */
 		case OIR_LEA_TYPE_INDEX_AND_SCALE:
+			//Copy the scale over
+			variable_offset_load->lea_multiplier = lea_statement->lea_multiplier;
+
+			break;
 
 		/**
 		 * Turns:
@@ -5441,14 +5507,10 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		 *  movX 20(rsp, t5, 4), t6
 		 */
 		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+			//Copy the scale over
+			variable_offset_load->lea_multiplier = lea_statement->lea_multiplier;
 
-		case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
-
-		case OIR_LEA_TYPE_REGISTERS_ONLY:
-
-		case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
-
-		case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+			break;
 
 		//By default - if we can't handle it, we just invoke the other helpers and call
 		//it quits. This ensures uniform behavior and correctness
