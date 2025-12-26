@@ -688,6 +688,13 @@ instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destina
 instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on);
 
 /**
+ * Emit a fully formed global variable OIR address calculation lea
+ *
+ * This will always produce instructions like: t8 <- global_var(%rip)
+ */
+instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer);
+
+/**
  * Emit a fully formed global variable x86 address calculation lea
  */
 instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64);

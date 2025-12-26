@@ -757,13 +757,39 @@ static void remediate_memory_address_in_non_access_context(instruction_t* instru
 				exit(1);
 		}
 	
-	//Otherwise it is a global variable, and we will treat it as such
+	//Otherwise it is a global variable, and we will treat it as such. Global variables will generate 2 instructions on most occassions
+	//the lea instruction to grab the address and then the actual address manipulation in the binary operation
 	} else {
-		//It's going to be a similar case as above here for the global variable, with some slight additional compilications.
-		//Putting some thought into it it's likely that we'll need to generate 2 instructions for some of the cases here
-		//TODO
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(2);
+		//The global variable address calculation
+		instruction_t* global_var_address_instruction;
+
+		switch(instruction->statement_type){
+			/**
+			 * A global variable address assignment like this will turn into a leaq statement
+			 */
+			case THREE_ADDR_CODE_ASSN_STMT:
+				//Let the helper emit the statement
+				global_var_address_instruction = emit_global_variable_address_calculation_x86(instruction->op1, instruction_pointer_variable, u64);
+
+				global_var_address_instruction->assignee = instruction->o
+
+
+				//Insert this after the given instruction
+				insert_instruction_after_given(global_var_address_instruction, );
+
+				break;
+
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+				break;
+
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				break;
+
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
+				exit(1);
+		}
 	}
 }
 

@@ -4624,6 +4624,36 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 
 /**
+ * Emit a fully formed global variable OIR address calculation lea
+ *
+ * This will always produce instructions like: t8 <- global_var(%rip)
+ */
+instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer){
+	//Get the intstruction out
+	instruction_t* lea = calloc(1, sizeof(instruction_t));
+
+	//This will be leaq always
+	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+	//Global var address calc mode
+	lea->lea_statement_type = OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION;
+
+	//We already know what the destination will be
+	lea->assignee = assignee;
+
+	//Op1 is the instruction pointer(relative addressing)
+	lea->op1 = instruction_pointer;
+
+	//The op2 is always the global var itself
+	lea->op2 = global_variable;
+
+	//And give it back
+	return lea;
+}
+
+
+
+/**
  * Emit a fully formed global variable x86 address calculation lea
  *
  * This will always produce instructions like: leaq global_var(%rip), t8
