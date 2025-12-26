@@ -4173,7 +4173,7 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1){
+instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_write_type){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4187,6 +4187,10 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 	stmt->op1 = op1;
 	//What function are we in
 	stmt->function = current_function;
+
+	//Important - add the type that we expect to be writing to in memory
+	stmt->memory_read_write_type = memory_write_type;
+
 	//And that's it, we'll now just give it back
 	return stmt;
 }
@@ -4196,7 +4200,7 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
  * Emit a store with offset ir code. We take in a base address(assignee), 
  * a variable offset(op1), and the value we're storing(op2)
  */
-instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee){
+instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4217,6 +4221,9 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	//Save our current function
 	stmt->function = current_function;
 
+	//Important - add the type that we expect to be writing to in memory
+	stmt->memory_read_write_type = memory_write_type;
+
 	//And give it back
 	return stmt;
 }
@@ -4226,7 +4233,7 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
  * Emit a store with offset ir code. We take in a base address(assignee), 
  * a constant offset(offset), and the value we're storing(op2)
  */
-instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee){
+instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4247,6 +4254,9 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	//Save our current function
 	stmt->function = current_function;
 
+	//Important - add the type that we expect to be writing to in memory
+	stmt->memory_read_write_type = memory_write_type;
+
 	//And give it back
 	return stmt;
 }
@@ -4256,7 +4266,7 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
  * Emit a load statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1){
+instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_read_type){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4266,6 +4276,10 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 	stmt->op1 = op1;
 	//What function are we in
 	stmt->function = current_function;
+
+	//Important - store the type that we expect to be getting out of memory
+	stmt->memory_read_write_type = memory_read_type;
+	
 	//And that's it, we'll now just give it back
 	return stmt;
 }
@@ -4275,7 +4289,7 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
  * Emit a load with offset ir code. We take in a base address(op1), 
  * an offset(op2), and the value we're loading into(assignee)
  */
-instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset){
+instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset, generic_type_t* memory_read_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4292,6 +4306,9 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 	//Save our current function
 	stmt->function = current_function;
 
+	//Important - store the type that we expect to be getting out of memory
+	stmt->memory_read_write_type = memory_read_type;
+
 	//And give it back
 	return stmt;
 }
@@ -4301,7 +4318,7 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
  * Emit a load with constant offset ir code. We take in a base address(op1), 
  * an offset(offset), and the value we're loading into(assignee)
  */
-instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset){
+instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset, generic_type_t* memory_read_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4317,6 +4334,9 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 
 	//Save our current function
 	stmt->function = current_function;
+
+	//Important - store the type that we expect to be getting out of memory
+	stmt->memory_read_write_type = memory_read_type;
 
 	//And give it back
 	return stmt;

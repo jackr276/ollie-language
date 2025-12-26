@@ -205,14 +205,6 @@ struct three_addr_const_t{
 struct instruction_t{
 	//Store inlined assembly in a string
 	dynamic_string_t inlined_assembly;
-	//Generic parameter list - could be used for phi functions or function calls
-	dynamic_array_t parameters;
-	//What block holds this?
-	void* block_contained_in;
-	//We have 2 ways to jump. The if jump is our affirmative jump,
-	//else is our alternative
-	void* if_block;
-	void* else_block;
 	//For linked list properties -- the next statement
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
@@ -245,6 +237,17 @@ struct instruction_t{
 	three_addr_var_t* address_calc_reg2;
 	//What stack region do we write to or read from
 	stack_region_t* linked_stack_region;
+	//Generic parameter list - could be used for phi functions or function calls
+	dynamic_array_t parameters;
+	//What block holds this?
+	void* block_contained_in;
+	//We have 2 ways to jump. The if jump is our affirmative jump,
+	//else is our alternative
+	void* if_block;
+	void* else_block;
+	//What is the type of the memory that we are trying to access? This is done
+	//to maintain separation from the base addresses and the memory that we're using
+	generic_type_t* memory_read_write_type;
 	//For lea multiplication
 	u_int64_t lea_multiplier;
 	//The function called
@@ -524,37 +527,37 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_write_type);
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 
  * an offset(op1), and the value we're storing(op2)
  */
-instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee);
+instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 
  * a constant offset(op1_const), and the value we're storing(op2)
  */
-instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee);
+instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
  * Emit a load statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_read_type);
 
 /**
  * Emit a load with offset ir code. We take in a base address(op1), 
  * an offset(op2), and the value we're loading into(assignee)
  */
-instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset);
+instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset, generic_type_t* memory_read_type);
 
 /**
  * Emit a load with constant offset ir code. We take in a base address(op1), 
  * an offset(op1_const), and the value we're loading into(assignee)
  */
-instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset);
+instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset, generic_type_t* memory_read_type);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
