@@ -2577,12 +2577,8 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 			//Dereference the type
 			generic_type_t* dereferenced_type = dereference_type(return_variable->type);
 
-			//This is the return variable
-			three_addr_var_t* dereferenced_version = emit_var_copy(return_variable);
-			dereferenced_version->type = dereferenced_type; 
-			
 			//Dereference the return variable into this
-			instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ret_node->inferred_type), dereferenced_version);
+			instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ret_node->inferred_type), return_variable, dereferenced_type);
 			
 			//Counts as a use
 			add_used_variable(current, load_instruction->op1);
@@ -2848,7 +2844,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		}
 
 		//Store for later on
-		three_addr_var_t* type_adjusted_memory_address;
+		three_addr_var_t* memory_address;
 
 		//There are 2 cases here - if we have a local stack variable, we'll need to load the memory
 		//address up itself. However, if we have a function parameter that's a reference variable,
@@ -2856,19 +2852,17 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//not load a memory address at all
 		if(type->type_class != TYPE_CLASS_REFERENCE || ident_node->variable->membership != FUNCTION_PARAMETER){
 			//Emit the memory address variable
-			type_adjusted_memory_address = emit_memory_address_var(ident_node->variable);
-			type_adjusted_memory_address->type = true_type;
+			memory_address = emit_memory_address_var(ident_node->variable);
 
 		//Otherwise this is our special case with a reference function parameter - so all we'll do
 		//is rememdiate the type
 		} else {
-			type_adjusted_memory_address = emit_var(ident_node->variable);
-			type_adjusted_memory_address->type = true_type;
+			memory_address = emit_var(ident_node->variable);
 		}
 
 		//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
 		//a reference
-		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(true_type), type_adjusted_memory_address);
+		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(true_type), memory_address, true_type);
 		load_instruction->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
@@ -3222,7 +3216,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	//The current offset is not null, we need to emit some calculation here
 	if(*current_offset != NULL){
 		//Emit the load
-		load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset);
+		load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
 		load_instruction->is_branch_ending = is_branch_ending;
 
 		//This counts as a use for both
@@ -3241,7 +3235,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	//If we get here, we have an empty offset so we just need a regular load
 	} else {
 		//Regular load here
-		load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address);
+		load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
 		load_instruction->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
@@ -3311,7 +3305,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	//The current offset could be NULL
 	if(*current_offset != NULL){
 		//Emit our load statement here
-		instruction_t* load_statement = emit_load_with_variable_offset_ir_code(emit_temp_var(raw_union_type), *base_address, *current_offset);
+		instruction_t* load_statement = emit_load_with_variable_offset_ir_code(emit_temp_var(raw_union_type), *base_address, *current_offset, (*base_address)->type);
 		load_statement->is_branch_ending = is_branch_ending;
 
 		//These count as uses
@@ -3331,7 +3325,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	//here
 	} else {
 		//Emit our load statement here
-		instruction_t* load_statement = emit_load_ir_code(emit_temp_var(raw_union_type), *base_address);
+		instruction_t* load_statement = emit_load_ir_code(emit_temp_var(raw_union_type), *base_address, (*base_address)->type);
 		load_statement->is_branch_ending = is_branch_ending;
 
 		//These count as uses
@@ -3479,11 +3473,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 	//Do we need a dereference(load or store) here?
 	if(root->dereference_needed == TRUE){
-		//We will use this as the original memory access type for our use here
-		three_addr_var_t* type_adjusted_base_address = emit_var_copy(base_address);
-		//Change the type to what we're accessing memory-wise
-		type_adjusted_base_address->type = original_memory_access_type;
-
 		//Based on what we have here - we emit the appropriate statement
 		switch(root->side){
 			//Left side = store statement
@@ -3491,10 +3480,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//This could not be null in the case of structs & arrays
 				if(current_offset != NULL){
 					//Intentionally leave the storee null, it will be populated down the line
-					store_instruction = emit_store_with_variable_offset_ir_code(type_adjusted_base_address, current_offset, NULL);
+					store_instruction = emit_store_with_variable_offset_ir_code(base_address, current_offset, NULL, original_memory_access_type);
 
 					//Counts as uses for both
-					add_used_variable(current_block, type_adjusted_base_address);
+					add_used_variable(current_block, base_address);
 					add_used_variable(current_block, current_offset);
 
 					//Add it into the block
@@ -3507,10 +3496,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				} else {
 					//Emit the store here - remember we leave the op1 NULL so that
 					//a later rule can fill it in
-					store_instruction = emit_store_ir_code(type_adjusted_base_address, NULL);
+					store_instruction = emit_store_ir_code(base_address, NULL, original_memory_access_type);
 
 					//Counts as a use
-					add_used_variable(current_block, type_adjusted_base_address);
+					add_used_variable(current_block, base_address);
 
 					//Add it into our block
 					add_statement(current_block, store_instruction);
@@ -3526,10 +3515,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//This will not be null in the case of structs & arrays
 				if(current_offset != NULL){
 					//Calculate our load here
-					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(parent_node_type), type_adjusted_base_address, current_offset);
+					load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(parent_node_type), base_address, current_offset, original_memory_access_type);
 
 					//Counts as uses for both
-					add_used_variable(current_block, type_adjusted_base_address);
+					add_used_variable(current_block, base_address);
 					add_used_variable(current_block, current_offset);
 
 					//Add it into the block
@@ -3542,10 +3531,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				//relying on the base address
 				} else {
 					//Emit the load instruction between the base address and the parent node type
-					load_instruction = emit_load_ir_code(emit_temp_var(parent_node_type), type_adjusted_base_address);
+					load_instruction = emit_load_ir_code(emit_temp_var(parent_node_type), base_address, original_memory_access_type);
 
 					//Counts as a use
-					add_used_variable(current_block, type_adjusted_base_address);
+					add_used_variable(current_block, base_address);
 
 					//Add it into the block
 					add_statement(current_block, load_instruction);
@@ -3747,11 +3736,10 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 		//Get the version that represents our memory indirection. Be sure to use the "true type" here
 		//just in case we were dealing with a reference
-		three_addr_var_t* indirect_version = emit_memory_address_var(postfix_node->variable);
-		indirect_version->type = true_type;
+		three_addr_var_t* memory_address_var = emit_memory_address_var(postfix_node->variable);
 
 		//Now we need to add the final store
-		instruction_t* store_instruction = emit_store_ir_code(indirect_version, assignee); 
+		instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, true_type);
 
 		//Counts as a use
 		add_used_variable(current_block, assignee);
@@ -3935,11 +3923,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//Get the version that represents our memory indirection. Be sure to use the "true type" here
 				//just in case we were dealing with a reference
-				three_addr_var_t* indirect_version = emit_memory_address_var(unary_expression_child->variable);
-				indirect_version->type = true_type;
+				three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
 				//Now we need to add the final store
-				instruction_t* store_instruction = emit_store_ir_code(indirect_version, assignee); 
+				instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, true_type);
 
 				//Counts as a use
 				add_used_variable(current_block, assignee);
@@ -3974,14 +3961,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//And the final type comes from when we dereference it
 			generic_type_t* dereferenced_type = dereference_type(pointer_type);
 
-			//The indiredct version's type is just what we point to
-			three_addr_var_t* indirect_version = emit_var_copy(assignee);
-
-			//The type here is what we have after our derference. It is not the inferred type
-			//of the unary node itself, because that type may have undergone type coercion and
-			//is not always accurate to the memory region itself
-			indirect_version->type = dereferenced_type;
-
 			/**
 			 * If we make it here, we will return an *incomplete* store
 			 * instruction with the knowledge that whomever called use
@@ -3994,16 +3973,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			if(unary_expression_parent->side == SIDE_TYPE_LEFT &&
 				(unary_expression_parent->next_sibling != NULL && unary_expression_parent->next_sibling->side == SIDE_TYPE_RIGHT)){
 				//We will intentionally leave op1 blank so that it can be filled in down the line
-				instruction_t* store_instruction = emit_store_ir_code(indirect_version, NULL);
+				instruction_t* store_instruction = emit_store_ir_code(assignee, NULL, dereferenced_type);
 
 				//This counts as a use
-				add_used_variable(current_block, indirect_version);
+				add_used_variable(current_block, assignee);
 
 				//Now let's get this into the block
 				add_statement(current_block, store_instruction);
 
-				//This one's assignee is just the dereferenced var
-				unary_package.assignee = indirect_version;
+				//Add the assignee in here
+				unary_package.assignee = assignee;
 
 			/**
 			 * If we get here, we know that we either have a right hand operation or we're on the left hand
@@ -4011,10 +3990,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
 			} else {
 				//If the side type here is right, we'll need a load instruction
-				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(unary_expression_parent->inferred_type), indirect_version);
+				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(unary_expression_parent->inferred_type), assignee, dereferenced_type);
 
 				//The dereferenced variable has been used
-				add_used_variable(current_block, indirect_version);
+				add_used_variable(current_block, assignee);
 
 				//Add it in
 				add_statement(current_block, load_instruction);
@@ -4177,7 +4156,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							add_statement(current_block, address_assignment);
 
 							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
-							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, address_assignment->assignee);
+							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, address_assignment->assignee, u64);
 							store->is_branch_ending = is_branch_ending;
 
 							//This comes afterwards
@@ -4753,12 +4732,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			true_type = true_type->internal_types.references;
 		}
 
-		//NOTE: we use the type of the left hand var for our address because we are dereferencing
-		three_addr_var_t* true_base_address = emit_var_copy(memory_address);
-		true_base_address->type = true_type;
-
 		//Now for the final store code
-		instruction_t* final_assignment = emit_store_ir_code(true_base_address, NULL);
+		instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, true_type);
 		final_assignment->is_branch_ending = is_branch_ending;
 
 		//If the last instruction is *not* a constant assignment, we can go ahead like this
@@ -4784,7 +4759,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		}
 
 		//If this is not a temp var, then we can flag it as being assigned
-		add_assigned_variable(current_block, true_base_address);
+		add_assigned_variable(current_block, memory_address);
 		
 		//Now add thi statement in here
 		add_statement(current_block, final_assignment);
@@ -7989,11 +7964,10 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 			}
 
 			//Copy the type over here
-			three_addr_var_t* type_adjusted_address = emit_memory_address_var(parameter);
-			type_adjusted_address->type = parameter->type_defined_as;
+			three_addr_var_t* parameter_var = emit_memory_address_var(parameter);
 
 			//Now we'll need to do our initial load
-			instruction_t* store_code = emit_store_ir_code(type_adjusted_address, emit_var(parameter));
+			instruction_t* store_code = emit_store_ir_code(parameter_var, emit_var(parameter), parameter->type_defined_as);
 
 			//Bookkeeping here
 			add_used_variable(function_starting_block, store_code->op1);
@@ -8252,16 +8226,11 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//First we emit the offset
 	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(offset, u64);
 
-	//The true base address will have it's type modified to the dereferenced type
-	three_addr_var_t* true_base_address = emit_var_copy(base_address);
-	true_base_address->type = inferred_type;
-
 	//Now we need to emit the store operation
-	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(true_base_address, offset_constant, NULL);
+	instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, offset_constant, NULL, inferred_type);
 
 	//This counts as a use for both of these
 	add_used_variable(current_block, base_address);
-	add_used_variable(current_block, true_base_address);
 
 	//If the last instruction is *not* a constant assignment, we can go ahead like this
 	if(last_instruction == NULL
@@ -8376,10 +8345,6 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 	//The string index starts off at 0
 	u_int32_t current_index = 0;
 
-	//Let's emit our modified base address that's a char type while we're at it
-	three_addr_var_t* type_adjusted_base_address = emit_var_copy(base_address);
-	type_adjusted_base_address->type = char_type;
-
 	//Now we'll go through every single character here and emit a load instruction for them
 	while(current_index <= string_initializer->string_value.current_length){
 		//Grab the value that we want out
@@ -8393,14 +8358,14 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* current_block
 		three_addr_const_t* constant = emit_direct_integer_or_char_constant(char_value, char_type);
 
 		//Now finally we'll store it
-		instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(type_adjusted_base_address, emit_direct_integer_or_char_constant(stack_offset, u64), NULL);
+		instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(base_address, emit_direct_integer_or_char_constant(stack_offset, u64), NULL, char_type);
 		store_instruction->is_branch_ending = is_branch_ending;
 
 		//We can skip the assignment here and just directly put the constant in
 		store_instruction->op1_const = constant;
 
 		//These both count as used
-		add_used_variable(current_block, type_adjusted_base_address);
+		add_used_variable(current_block, base_address);
 
 		//Add the instruction in
 		add_statement(current_block, store_instruction);
@@ -8604,15 +8569,14 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		}
 
 		//NOTE: We use the type of our let variable here for the address assignment
-		three_addr_var_t* true_base_address = emit_memory_address_var(let_variable->linked_var);
-		true_base_address->type = true_stored_type;
+		three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
 		
 		//Emit the store code
-		instruction_t* store_statement = emit_store_ir_code(true_base_address, NULL);
+		instruction_t* store_statement = emit_store_ir_code(base_address, NULL, true_stored_type);
 		store_statement->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
-		add_used_variable(current_block, true_base_address);
+		add_used_variable(current_block, base_address);
 
 		//If the last instruction is *not* a constant assignment, we can go ahead like this
 		if(last_instruction == NULL
