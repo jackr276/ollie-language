@@ -1787,7 +1787,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Grab these references for our convenience
 		instruction_t* first_lea = window->instruction1;
-		instruction_t* second_lea = window->instruction1;
+		instruction_t* second_lea = window->instruction2;
 
 		//If the first one's assignee is the second one's op1
 		if(variables_equal(first_lea->assignee, second_lea->op1, FALSE) == TRUE){
@@ -1804,6 +1804,23 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 * 	 t5 <- 4(, t7, 4)
 						 */
 						case OIR_LEA_TYPE_OFFSET_ONLY:
+							//Copy over op1
+							second_lea->op1 = first_lea->op1;
+
+							//Copy this over too
+							second_lea->lea_multiplier = first_lea->lea_multiplier;
+
+							//Now change the type of it
+							second_lea->lea_statement_type = OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE;
+
+							//Now delete the entire first lea - it's useless
+							delete_statement(first_lea);
+
+							//Rebuild around the second lea
+							reconstruct_window(window, second_lea);
+
+							//This counts as a change
+							changed = TRUE;
 
 							break;
 							
@@ -1825,6 +1842,26 @@ static u_int8_t simplify_window(instruction_window_t* window){
 						 * 	 t5 <- 8(, t7, 4)
 						 */
 						case OIR_LEA_TYPE_OFFSET_ONLY:
+							//Add the 2 constants together - the result is in the second lea's op1_const
+							add_constants(second_lea->op1_const, first_lea->op1_const);
+
+							//Copy over op1
+							second_lea->op1 = first_lea->op1;
+
+							//Copy this over too
+							second_lea->lea_multiplier = first_lea->lea_multiplier;
+
+							//Now change the type of it
+							second_lea->lea_statement_type = OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE;
+
+							//Now delete the entire first lea - it's useless
+							delete_statement(first_lea);
+
+							//Rebuild around the second lea
+							reconstruct_window(window, second_lea);
+
+							//This counts as a change
+							changed = TRUE;
 
 							break;
 							
@@ -4406,7 +4443,7 @@ static void handle_lea_statement(instruction_t* instruction){
 
 		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
 			//Set the mode
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE;
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE;
 
 			//Address calc reg 1 is all we have here, the scale is already stored
 			instruction->address_calc_reg1 = instruction->op1;
