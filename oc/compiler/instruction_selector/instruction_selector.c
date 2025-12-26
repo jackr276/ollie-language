@@ -1888,6 +1888,81 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+	/**
+	 * ====================== Combining loads and preceeding binary operations =============
+	 *
+	 * If we have:
+	 *
+	 * t8 <- t7 + 4
+	 * load t5 <- t8
+	 *
+	 * We can instead combine this to be
+	 * load t5 <- t7[4]
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT){
+		//Go based on the first statement
+		switch (window->instruction1->statement_type) {
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+				//If the first one is used less than once and they match
+				if(window->instruction1->assignee->use_count <= 1
+					&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+
+					//This is now a load with variable offset
+					window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET;
+
+					//Copy these both over
+					window->instruction2->op1 = window->instruction1->op1;
+					window->instruction2->op2 = window->instruction1->op2;
+
+					//Now scrap instruction 1
+					delete_statement(window->instruction1);
+
+					//Rebuild around instruction 2
+					reconstruct_window(window, window->instruction2);
+
+					//Is a change
+					changed = TRUE;
+				}
+
+				break;
+
+			//Same treatment for if we have a binary operation with const here
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				//If the first one is used less than once and they match
+				if(window->instruction1->assignee->use_count <= 1
+					&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+
+					//This is now a load with contant offset
+					window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+
+					//Copy these both over
+					window->instruction2->op1 = window->instruction1->op1;
+					window->instruction2->offset.offset_constant = window->instruction1->op1_const;
+
+					//Now scrap instruction 1
+					delete_statement(window->instruction1);
+
+					//Rebuild around instruction 2
+					reconstruct_window(window, window->instruction2);
+
+					//Is a change
+					changed = TRUE;
+				}
+
+				break;
+				
+			//By default do nothing
+			default:
+				break;
+		}
+	}
+
+
+	/**
+	 * ====================== Combining stores and preceeding binary operations =============
+	 */
+
 
 	/**
 	 * =================== Adjacent assignment statement folding ====================
