@@ -1750,6 +1750,44 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * ==================== Lea statement compression ==============================
+	 * Do we have 2 lea statements one after the other that can be combined? If so, we
+	 * should be doing so before the instruction selection takes place to ensure that we
+	 * have the minimum number of instructions possible
+	 *
+	 * Let's first check to see if we have 2 adjacent lea statements. If we do, we can
+	 * do some more investigation
+	 *
+	 * Cases handled:
+	 *
+	 * CASE 1: 
+	 * 	t4 <- (, t7, 4)
+	 * 	t5 <- 4(t4)
+	 * 	
+	 * 	Can become:
+	 * 	 t5 <- 4(, t7, 4)
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT){
+
+		//Grab these references for our convenience
+		instruction_t* first_lea = window->instruction1;
+		instruction_t* second_lea = window->instruction1;
+
+		//If the first one's assignee is the second one's op1
+		if(variables_equal(first_lea->assignee, second_lea->op1, FALSE) == TRUE){
+			
+		//Rarer but still possible case - is the assignee equal to the op2
+		} else if(variables_equal(first_lea->assignee, second_lea->op2, FALSE) == TRUE){
+
+		}
+	}
+
+
 	/**
 	 * =================== Adjacent assignment statement folding ====================
 	 * If we have a binary operation or a bin op with const statement followed by an
