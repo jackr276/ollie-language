@@ -5406,22 +5406,62 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
  * of the given lea statement at the end
  *
  * Remember that by the time we reach this, we know that the lea 
- *
- * Returns TRUE if simplification did happen, FALSE if not
  */
-static u_int8_t combine_lea_with_variable_offset_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* variable_offset_load){
-	//Type sanitation here - is this even possible to do?
-	switch(lea_statement->lea_statement_type){
-		default:
-			return FALSE;
-	}
-
-
-	//We need the destination and source sizes to determine our movement instruction
+static void combine_lea_with_variable_offset_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* variable_offset_load){
+	//Cache all of these now before we do any manipulations
 	variable_size_t destination_size = get_type_size(variable_offset_load->assignee->type);
-	//Is the destination signed? This is also required inof
 	u_int8_t is_destination_signed = is_type_signed(variable_offset_load->assignee->type);
 	variable_size_t source_size = get_type_size(variable_offset_load->op1->type);
+
+	//Go through all of our various cases here
+	switch(lea_statement->lea_statement_type){
+		/**
+		 * Turns:
+		 *  t4 <- 4(t5)
+		 *  load t6 <- MEM<t3>[t4]
+		 *
+		 *  movX 8(rsp, t4), t6
+		 */
+		case OIR_LEA_TYPE_OFFSET_ONLY:
+			
+		/**
+		 * Turns:
+		 *  t4 <- (, t5, 4)
+		 *  load t6 <- MEM<t3>[t4]
+		 *
+		 *  movX 16(rsp, t5, 4), t6
+		 */
+		case OIR_LEA_TYPE_INDEX_AND_SCALE:
+
+		/**
+		 * Turns:
+		 *  t4 <- 4(, t5, 4)
+		 *  load t6 <- MEM<t3>[t4]
+		 *
+		 *  movX 20(rsp, t5, 4), t6
+		 */
+		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+
+		case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+
+		case OIR_LEA_TYPE_REGISTERS_ONLY:
+
+		case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+
+		case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+
+		//By default - if we can't handle it, we just invoke the other helpers and call
+		//it quits. This ensures uniform behavior and correctness
+		default:
+			handle_lea_statement(lea_statement);
+			handle_load_with_variable_offset_instruction(variable_offset_load);
+
+			//Reconstruct around the last one(the load)
+			reconstruct_window(window, variable_offset_load);
+
+			//And get out
+			return;
+	}
 
 	//Let the helper decide for us
 	variable_offset_load->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
@@ -5431,15 +5471,6 @@ static u_int8_t combine_lea_with_variable_offset_load_instruction(instruction_wi
 
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(variable_offset_load, variable_offset_load->op1->type);
-
-	//Go through all of our various cases here
-	switch(lea_statement->lea_statement_type){
-
-		//Just do nothing by default - the instruction selector
-		//will pick it up and fix it
-		default:
-			return FALSE;
-	}
 }
 
 
@@ -5770,20 +5801,17 @@ static void select_instruction_patterns(instruction_window_t* window){
 	 * Compressing variable offset loads with leas that come beforehand. We do this to turn
 	 * 2 expressions into one big addressing expression
 	 */
-	if(window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION //Nothing to do if we have this
 		//Is the lea's assignee equal to the offset of the load
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, TRUE) == TRUE){
 
-		//Let the helper rule handle it
-		u_int8_t succeeded = combine_lea_with_variable_offset_load_instruction(window, window->instruction1, window->instruction2);
-
-		//If this actually worked, we will just leve here. If it didn't work, we will let the rest of
-		//the function play out and do the selection for us
-		if(succeeded == TRUE){
-			return;
-		}
+		//Let the helper deal with it. This helper handles all possible cases, so once it's done this whole
+		//rule is done and we can return
+		combine_lea_with_variable_offset_load_instruction(window, window->instruction1, window->instruction2);
+		return;
 	}
 
 
