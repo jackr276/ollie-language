@@ -5954,6 +5954,37 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 		 *  movX 8(rsp, t4), t6
 		 */
 		case OIR_LEA_TYPE_OFFSET_ONLY:
+			//Let the helper deal with the base address
+			handle_store_statement_base_address(variable_offset_store);
+
+			//If we're able to combine constants here, we will
+			if(variable_offset_store->offset.offset_constant != NULL){
+				//Add the 2, result is in the store's constant
+				add_constants(variable_offset_store->offset.offset_constant, lea_statement->op1_const);
+
+			//Otherwise do a straight copy
+			} else {
+				variable_offset_store->offset.offset_constant = lea_statement->op1_const;
+			}
+
+			//Now get the address calc reg 2
+			variable_offset_store->address_calc_reg2 = lea_statement->op1;
+
+			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			//must adhere to this one's type
+			if(is_expanding_move_required(variable_offset_store->address_calc_reg1->type, variable_offset_store->address_calc_reg2->type) == TRUE){
+				variable_offset_store->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
+			}
+
+			//The calculation mode here will always be registers and offset
+			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+			//The lea is redundant
+			delete_statement(lea_statement);
+
+			//Rebuild around the final instruction(the store)
+			reconstruct_window(window, variable_offset_store);
 
 			break;
 			
@@ -5965,6 +5996,34 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 		 *  movX 16(rsp, t5, 4), t6
 		 */
 		case OIR_LEA_TYPE_INDEX_AND_SCALE:
+			//Let the helper deal with the base address
+			handle_store_statement_base_address(variable_offset_store);
+
+			//Now get the address calc reg 2
+			variable_offset_store->address_calc_reg2 = lea_statement->op1;
+
+			//Copy over the lea multiplier
+			variable_offset_store->lea_multiplier = lea_statement->lea_multiplier;
+
+			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			//must adhere to this one's type
+			if(is_expanding_move_required(variable_offset_store->address_calc_reg1->type, variable_offset_store->address_calc_reg2->type) == TRUE){
+				variable_offset_store->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
+			}
+
+			//Determine the calculation mode based on the present of offset
+			if(variable_offset_store->offset.offset_constant != NULL){
+				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+			} else {
+				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+			}
+
+			//The lea is redundant
+			delete_statement(lea_statement);
+
+			//Rebuild around the final instruction(the store)
+			reconstruct_window(window, variable_offset_store);
 
 			break;
 
@@ -5976,6 +6035,40 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 		 *  movX 20(rsp, t5, 4), t6
 		 */
 		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+			//Let the helper deal with the base address
+			handle_store_statement_base_address(variable_offset_store);
+
+			//If we're able to combine constants here, we will
+			if(variable_offset_store->offset.offset_constant != NULL){
+				//Add the 2, result is in the store's constant
+				add_constants(variable_offset_store->offset.offset_constant, lea_statement->op1_const);
+
+			//Otherwise do a straight copy
+			} else {
+				variable_offset_store->offset.offset_constant = lea_statement->op1_const;
+			}
+
+			//Now get the address calc reg 2
+			variable_offset_store->address_calc_reg2 = lea_statement->op1;
+
+			//Copy over the lea multiplier
+			variable_offset_store->lea_multiplier = lea_statement->lea_multiplier;
+
+			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			//must adhere to this one's type
+			if(is_expanding_move_required(variable_offset_store->address_calc_reg1->type, variable_offset_store->address_calc_reg2->type) == TRUE){
+				variable_offset_store->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
+			}
+
+			//The calculation mode here will always be registers and offset
+			variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+			//The lea is redundant
+			delete_statement(lea_statement);
+
+			//Rebuild around the final instruction(the store)
+			reconstruct_window(window, variable_offset_store);
 
 			break;
 
