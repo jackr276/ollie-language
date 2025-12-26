@@ -5401,6 +5401,49 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 
 
 /**
+ * Combine and select all cases where we have a variable offset load that can be combined
+ * with a lea to form a singular instruction. This handles all cases, and performs the deletion
+ * of the given lea statement at the end
+ *
+ * Remember that by the time we reach this, we know that the lea 
+ *
+ * Returns TRUE if simplification did happen, FALSE if not
+ */
+static u_int8_t combine_lea_with_variable_offset_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* variable_offset_load){
+	//Type sanitation here - is this even possible to do?
+	switch(lea_statement->lea_statement_type){
+		default:
+			return FALSE;
+	}
+
+
+	//We need the destination and source sizes to determine our movement instruction
+	variable_size_t destination_size = get_type_size(variable_offset_load->assignee->type);
+	//Is the destination signed? This is also required inof
+	u_int8_t is_destination_signed = is_type_signed(variable_offset_load->assignee->type);
+	variable_size_t source_size = get_type_size(variable_offset_load->op1->type);
+
+	//Let the helper decide for us
+	variable_offset_load->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
+
+	//This is a read from memory type
+	variable_offset_load->memory_access_type = READ_FROM_MEMORY;
+
+	//Handle the destination assignment
+	handle_load_instruction_destination_assignment(variable_offset_load, variable_offset_load->op1->type);
+
+	//Go through all of our various cases here
+	switch(lea_statement->lea_statement_type){
+
+		//Just do nothing by default - the instruction selector
+		//will pick it up and fix it
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Handle a store instruction. This will be reorganized into a memory accessing move.
  */
 static void handle_store_instruction(instruction_t* instruction){
@@ -5721,6 +5764,28 @@ static void select_instruction_patterns(instruction_window_t* window){
 		reconstruct_window(window, window->instruction2);
 		return;
 	}
+
+
+	/**
+	 * Compressing variable offset loads with leas that come beforehand. We do this to turn
+	 * 2 expressions into one big addressing expression
+	 */
+	if(window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION //Nothing to do if we have this
+		//Is the lea's assignee equal to the offset of the load
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, TRUE) == TRUE){
+
+		//Let the helper rule handle it
+		u_int8_t succeeded = combine_lea_with_variable_offset_load_instruction(window, window->instruction1, window->instruction2);
+
+		//If this actually worked, we will just leve here. If it didn't work, we will let the rest of
+		//the function play out and do the selection for us
+		if(succeeded == TRUE){
+			return;
+		}
+	}
+
 
 	//We could see logical and/logical or
 	if(is_instruction_binary_operation(window->instruction1) == TRUE){
