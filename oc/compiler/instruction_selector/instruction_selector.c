@@ -1906,6 +1906,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case THREE_ADDR_CODE_BIN_OP_STMT:
 				//If the first one is used less than once and they match
 				if(window->instruction1->assignee->use_count <= 1
+					&& window->instruction1->op == PLUS //We can only handle addition
 					&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
 					//This is now a load with variable offset
@@ -1930,7 +1931,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//Same treatment for if we have a binary operation with const here
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 				//If the first one is used less than once and they match
-				if(window->instruction1->assignee->use_count <= 1
+				if((window->instruction1->assignee->use_count <= 1 || window->instruction1->assignee == window->instruction1->op1)
+					&& (window->instruction1->op == PLUS || window->instruction1->op == MINUS) //We can only handle addition/subtraction
 					&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
 
 					//This is now a load with contant offset
@@ -1939,6 +1941,11 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//Copy these both over
 					window->instruction2->op1 = window->instruction1->op1;
 					window->instruction2->offset.offset_constant = window->instruction1->op1_const;
+
+					//If we have a minus, we'll just convert to a negative
+					if(window->instruction1->op == MINUS){
+						window->instruction2->offset.offset_constant->constant_value.signed_long_constant *= -1;
+					}
 
 					//Now scrap instruction 1
 					delete_statement(window->instruction1);
@@ -1961,7 +1968,80 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 	/**
 	 * ====================== Combining stores and preceeding binary operations =============
+	 *
+	 * If we have:
+	 *
+	 * t8 <- t7 + 4
+	 * load t8 <- t5
+	 *
+	 * We can instead combine this to be
+	 * store t7[4] <- t5
 	 */
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
+		//Go based on the first statement
+		switch (window->instruction1->statement_type) {
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+				//If the first one is used less than once and they match
+				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
+					&& window->instruction1->op == PLUS //We can only handle addition
+					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
+
+					//This is now a load with variable offset
+					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
+
+					//Copy these both over
+					window->instruction2->assignee = window->instruction1->assignee;
+					window->instruction2->op1 = window->instruction1->op1;
+
+					//Now scrap instruction 1
+					delete_statement(window->instruction1);
+
+					//Rebuild around instruction 2
+					reconstruct_window(window, window->instruction2);
+
+					//Is a change
+					changed = TRUE;
+				}
+
+				break;
+
+			//Same treatment for if we have a binary operation with const here
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				//If the first one is used less than once and they match
+				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& (window->instruction1->op == PLUS || window->instruction1->op == MINUS) //We can only handle addition/subtraction
+					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
+
+					//This is now a load with contant offset
+					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+
+					//Copy these both over
+					window->instruction2->assignee = window->instruction1->assignee;
+					window->instruction2->offset.offset_constant = window->instruction1->op1_const;
+
+					//If we have a minus, we'll just convert to a negative
+					if(window->instruction1->op == MINUS){
+						window->instruction2->offset.offset_constant->constant_value.signed_long_constant *= -1;
+					}
+
+					//Now scrap instruction 1
+					delete_statement(window->instruction1);
+
+					//Rebuild around instruction 2
+					reconstruct_window(window, window->instruction2);
+
+					//Is a change
+					changed = TRUE;
+				}
+
+				break;
+				
+			//By default do nothing
+			default:
+				break;
+		}
+	}
 
 
 	/**
@@ -5023,8 +5103,8 @@ static instruction_t* emit_move_instruction_directly(three_addr_var_t* destinati
  * unsigned 64 bit memory region
  */
 static void handle_store_instruction_sources_and_instruction_type(instruction_t* store_instruction){
-	//This is always the destination type
-	generic_type_t* destination_type = store_instruction->assignee->type;
+	//The destination type is always stored in the instruction itself
+	generic_type_t* destination_type = store_instruction->memory_read_write_type;
 
 	//The source type will be assigned later
 	generic_type_t* source_type;
@@ -5212,7 +5292,8 @@ static void handle_load_instruction(instruction_t* instruction){
 	variable_size_t destination_size = get_type_size(instruction->assignee->type);
 	//Is the destination signed? This is also required inof
 	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-	variable_size_t source_size = get_type_size(instruction->op1->type);
+	//For a load, the source size is stored in the instruction itself
+	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
 	//Let the helper select for us
 	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
@@ -5289,7 +5370,8 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	variable_size_t destination_size = get_type_size(instruction->assignee->type);
 	//Is the destination signed? This is also required inof
 	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-	variable_size_t source_size = get_type_size(instruction->op1->type);
+	//For a load, the source size is stored in the destination itself
+	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
 	//Let the helper decide for us
 	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
@@ -5371,7 +5453,8 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	variable_size_t destination_size = get_type_size(instruction->assignee->type);
 	//Is the destination signed? This is also required inof
 	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-	variable_size_t source_size = get_type_size(instruction->op1->type);
+	//For a load, the source size is stored in the destination itself
+	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
 	//Let the helper decide for us
 	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
@@ -5539,7 +5622,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 	//Cache all of these now before we do any manipulations
 	variable_size_t destination_size = get_type_size(variable_offset_load->assignee->type);
 	u_int8_t is_destination_signed = is_type_signed(variable_offset_load->assignee->type);
-	variable_size_t source_size = get_type_size(variable_offset_load->op1->type);
+	//For a load, the source size is stored in the destination itself
+	variable_size_t source_size = get_type_size(variable_offset_load->memory_read_write_type);
 
 	/**
 	 * Go through all valid cases here. Note that anything where we have 2 registers in the lea
