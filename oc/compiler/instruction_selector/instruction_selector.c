@@ -5483,6 +5483,33 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		 *  movX 8(rsp, t4), t6
 		 */
 		case OIR_LEA_TYPE_OFFSET_ONLY:
+			//Let the helper deal with the load base address
+			handle_load_statement_base_address(variable_offset_load);
+
+			//If there are any constants to add, we'll do that now
+			if(variable_offset_load->offset.offset_constant != NULL){
+				add_constants(variable_offset_load->offset.offset_constant, lea_statement->op1_const);
+
+			//Otherwise copy it over
+			} else {
+				variable_offset_load->offset.offset_constant = lea_statement->op1_const;
+			}
+
+			//Our op2 is now the first operand from the old lea
+			variable_offset_load->address_calc_reg2 = lea_statement->op1;
+
+			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			//must adhere to this one's type
+			if(is_expanding_move_required(variable_offset_load->address_calc_reg1->type, variable_offset_load->address_calc_reg2->type) == TRUE){
+				variable_offset_load->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
+			}
+
+			//This one will have an addressing type of registers and offset
+			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+			//The lea is now useless so get rid of it
+			delete_statement(lea_statement);
 
 			break;
 			
@@ -5494,8 +5521,31 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		 *  movX 16(rsp, t5, 4), t6
 		 */
 		case OIR_LEA_TYPE_INDEX_AND_SCALE:
+			//Let the helper deal with the load base address
+			handle_load_statement_base_address(variable_offset_load);
+
 			//Copy the scale over
 			variable_offset_load->lea_multiplier = lea_statement->lea_multiplier;
+
+			//Our op2 is now the first operand from the old lea
+			variable_offset_load->address_calc_reg2 = lea_statement->op1;
+
+			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			//must adhere to this one's type
+			if(is_expanding_move_required(variable_offset_load->address_calc_reg1->type, variable_offset_load->address_calc_reg2->type) == TRUE){
+				variable_offset_load->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
+			}
+
+			//The calculation mode type depends on the constant
+			if(variable_offset_load->offset.offset_constant != NULL){
+				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
+			} else {
+				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
+			}
+
+			//The lea is now useless so get rid of it
+			delete_statement(lea_statement);
 
 			break;
 
@@ -5507,6 +5557,9 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		 *  movX 20(rsp, t5, 4), t6
 		 */
 		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+			//Let the helper deal with the load base address
+			handle_load_statement_base_address(variable_offset_load);
+
 			//Copy the scale over
 			variable_offset_load->lea_multiplier = lea_statement->lea_multiplier;
 
@@ -5524,15 +5577,17 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//And get out
 			return;
 	}
-
+	
+	//NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
 	//Let the helper decide for us
 	variable_offset_load->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
-
 	//This is a read from memory type
 	variable_offset_load->memory_access_type = READ_FROM_MEMORY;
-
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(variable_offset_load, variable_offset_load->op1->type);
+
+	//The window always needs to be rebuilt around the last instruction that we touched
+	reconstruct_window(window, variable_offset_load);
 }
 
 
