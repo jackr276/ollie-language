@@ -2001,6 +2001,9 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 	//Are we using user-defined enum values? If so, we need to check for duplicates
 	//that already exist in the list
 	if(user_defined_values == TRUE){
+		//TODO HERE need an inorder insert
+
+		
 		//Extract the enum member's actual value
 		for(u_int16_t i = 0; i < enum_type->internal_types.enumeration_table.current_index; i++){
 			//Grab the variable out

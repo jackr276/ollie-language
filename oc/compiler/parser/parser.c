@@ -7574,6 +7574,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 				break;
 
+			//Go through our enum type here
 			case TYPE_CLASS_ENUMERATED:
 				break;
 				
