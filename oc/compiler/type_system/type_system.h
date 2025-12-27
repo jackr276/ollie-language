@@ -10,6 +10,7 @@
 
 #include "../lexer/lexer.h"
 #include "../utils/dynamic_array/dynamic_array.h"
+#include <stdint.h>
 #include <sys/types.h>
 
 #define MAX_FUNCTION_TYPE_PARAMS 6
@@ -118,6 +119,9 @@ struct generic_type_t{
 
 	//When was it defined: -1 = generic type
 	int32_t line_number;
+	//These 2 are used for enum types, quickly accessing min and max values
+	int32_t max_enum_value;
+	int32_t min_enum_value;
 	//All generic types have a size
 	u_int32_t type_size;
 	//Has this type been fully defined or not? This will be used to avoid 
@@ -363,6 +367,14 @@ variable_size_t get_type_size(generic_type_t* type);
  * Is a type signed?
  */
 u_int8_t is_type_signed(generic_type_t* type);
+
+/**
+ * Is a given type "exhaustive switch eligible"?
+ *
+ * The only types that are are 8 bit integers and enums
+ * who have less than 1024 member
+ */
+u_int8_t is_exhaustive_switch_eligible(generic_type_t* type);
 
 /**
  * Is this type equivalent to a char**? This is used

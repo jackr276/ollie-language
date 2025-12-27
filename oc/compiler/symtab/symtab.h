@@ -134,12 +134,12 @@ struct symtab_variable_record_t{
 	//We are able to alias variables as other variables. This is
 	//typically only used for function parameters in the presaving step
 	symtab_variable_record_t* alias;
-	//What is the enum member value
-	u_int64_t enum_member_value;
 	//The associate region that this variable is stored in
 	stack_region_t* stack_region;
 	//The line number
 	u_int32_t line_number;
+	//What is the enum member value
+	int32_t enum_member_value;
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
 	//The hash of it
