@@ -5836,7 +5836,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 		//This means that the user attempted to add a duplicate value
 		if(success == FAILURE){
-			sprintf(info, "Duplicate enum value %ld", member_record->enum_member_value);
+			sprintf(info, "Duplicate enum value %d", member_record->enum_member_value);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return FAILURE;
@@ -5847,7 +5847,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 		//This means that the user attempted to add a duplicate value
 		if(success == FAILURE){
-			sprintf(info, "Duplicate enum value %ld", member_record->enum_member_value);
+			sprintf(info, "Duplicate enum value %d", member_record->enum_member_value);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return FAILURE;
@@ -7576,6 +7576,50 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 			//Go through our enum type here
 			case TYPE_CLASS_ENUMERATED:
+				//If we don't have these, then we already know we can't go further
+				if(switch_stmt_node->lower_bound != type->min_enum_value
+					|| switch_stmt_node->upper_bound != type->max_enum_value){
+					check_for_exhaustive = FALSE;
+				}
+
+				//Are we going to bother checking to see if it's exhaustive?
+				if(check_for_exhaustive == TRUE){
+					//Did we find a gap? assume no to start
+					u_int8_t gap_found = FALSE;
+
+					//Run through the list and ensure that there are no gaps between the values
+					for(int32_t i = 1; i < values_max_index; i++){
+						//This is a gap, immediate exit
+						if(values[i] - values[i - 1] != 1){
+							gap_found = TRUE;
+							break;
+						}
+					}
+
+					//If there is no gap, then this is exhaustive and we do *not* need 
+					//a default clause
+					if(gap_found == FALSE){
+						//If we haven't found a default clause, it's a failure
+						if(found_default_clause == TRUE){
+							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", current_line);
+						}	
+
+					//Otherwise it's not exhaustive, so we do
+					} else {
+						//If we haven't found a default clause, it's a failure
+						if(found_default_clause == FALSE){
+							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+						}	
+					}
+
+				//If not, then this *needs* to have a default statement
+				} else {
+					//If we haven't found a default clause, it's a failure
+					if(found_default_clause == FALSE){
+						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+					}	
+				}
+
 				break;
 				
 			//We should never hit this, so if we do get out
@@ -7588,7 +7632,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	} else {
 		//If we haven't found a default clause, it's a failure
 		if(found_default_clause == FALSE){
-			return print_and_return_error("Switch statements are required to have a \"default\" clause", current_line);
+			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
 		}	
 	}
 
