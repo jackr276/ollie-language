@@ -7494,6 +7494,94 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
 	//mean that we may not need a default clause at all
 	if(is_exhaustive_switch_eligible(type) == TRUE){
+		//Should we check for exhaustiveness here? Assume true
+		//unless told otherwise
+		u_int8_t check_for_exhaustive = TRUE;
+
+		//Now go based on what kind of type we have here
+		switch(type->type_class){
+			//For basic types, we need to check if we're getting a full range
+			case TYPE_CLASS_BASIC:
+				switch(type->basic_type_token){
+					case U8:
+					case CHAR:
+						//If we want to check for exhaustive, we'll need 
+						//the low and high to be the lower and upper bounds
+						if(switch_stmt_node->lower_bound != 0 
+							|| switch_stmt_node->upper_bound != UINT8_MAX){
+
+							//Don't bother checking
+							check_for_exhaustive = FALSE;
+						}
+
+						break;
+					
+					case I8:
+						//If we want to check for exhaustive, we'll need 
+						//the low and high to be the lower and upper bounds
+						if(switch_stmt_node->lower_bound != INT8_MIN 
+							|| switch_stmt_node->upper_bound != INT8_MAX){
+
+							//Don't bother checking
+							check_for_exhaustive = FALSE;
+						}
+						
+						break;
+
+					//Unreachable so if we hit this get out
+					default:
+						printf("Fatal internal compiler error. Unreachable path hit in switch statement validator\n");
+						exit(1);
+				}
+
+				//Are we going to bother checking to see if it's exhaustive?
+				if(check_for_exhaustive == TRUE){
+					//Did we find a gap? assume no to start
+					u_int8_t gap_found = FALSE;
+
+					//Run through the list and ensure that there are no gaps between the values
+					for(int32_t i = 1; i < values_max_index; i++){
+						//This is a gap, immediate exit
+						if(values[i] - values[i - 1] != 1){
+							gap_found = TRUE;
+							break;
+						}
+					}
+
+					//If there is no gap, then this is exhaustive and we do *not* need 
+					//a default clause
+					if(gap_found == FALSE){
+						//If we haven't found a default clause, it's a failure
+						if(found_default_clause == TRUE){
+							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", current_line);
+						}	
+
+					//Otherwise it's not exhaustive, so we do
+					} else {
+						//If we haven't found a default clause, it's a failure
+						if(found_default_clause == FALSE){
+							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+						}	
+					}
+
+				//If not, then this *needs* to have a default statement
+				} else {
+					//If we haven't found a default clause, it's a failure
+					if(found_default_clause == FALSE){
+						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+					}	
+				}
+
+				break;
+
+			case TYPE_CLASS_ENUMERATED:
+				break;
+				
+			//We should never hit this, so if we do get out
+			default:
+				printf("Fatal internal compiler error. Unreachable path hit in switch statement validator\n");
+				exit(1);
+		}
 
 	//Otherwise it's not even exhaustive switch eligible, so a default clause is a must in Ollie
 	} else {
