@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -153,6 +154,32 @@ static u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
 		return TRUE;
 	} else {
 		return FALSE;
+	}
+}
+
+
+/**
+ * Insert a value into a list in sorted order(least to greatest).
+ * We assume that the list is inherently large enought to do this.
+ * This is meant primarily for case statement handling. It also validates
+ * the uniqueness constraint of the list given in
+ */
+static u_int8_t sorted_list_insert_unique(int32_t* list, int32_t max_index, int32_t value){
+	//We will need this outside of the loop's scope
+	int32_t i;
+
+	//Run through everything in the list
+	for(i = 0; i < max_index; i++){
+		//Once we've found it, we can get out
+		if(value < list[i]){
+			break;
+		}
+
+		//This invalidates the uniqueness constraint
+		//so we need to fail out
+		if(value == list[i]){
+			return FALSE;
+		}
 	}
 }
 
@@ -8474,6 +8501,8 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		return print_and_return_error(info, current_line);
 	}
 
+	//TODO WILL ALL NEED TO CHANGE
+	
 	//Run through and check for duplicates. All of our case values are stored in 
 	//this one giant list of int32_t values for this exact reason. If we have duplicates,
 	//then the jump table simply won't work
@@ -8484,6 +8513,8 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			return print_and_return_error(info, parser_line_num);
 		}
 	}
+
+	//TODO WILL ALL NEED TO CHANGE
 
 	//Store our value inside of our big list of values for the next run
 	values[*current_case_value]= case_stmt->constant_value.signed_int_value;
