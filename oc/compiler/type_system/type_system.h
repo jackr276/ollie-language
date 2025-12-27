@@ -365,6 +365,14 @@ variable_size_t get_type_size(generic_type_t* type);
 u_int8_t is_type_signed(generic_type_t* type);
 
 /**
+ * Is a given type "exhaustive switch eligible"?
+ *
+ * The only types that are are 8 bit integers and enums
+ * who have less than 1024 member
+ */
+u_int8_t is_exhaustive_switch_eligible(generic_type_t* type);
+
+/**
  * Is this type equivalent to a char**? This is used
  * exclusively for main function validation
  */

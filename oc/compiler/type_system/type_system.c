@@ -2201,6 +2201,44 @@ u_int8_t is_type_signed(generic_type_t* type){
 
 
 /**
+ * Is a given type "exhaustive switch eligible"?
+ *
+ * The only types that are are 8 bit integers and enums
+ * who have less than 1024 member
+ */
+u_int8_t is_exhaustive_switch_eligible(generic_type_t* type){
+	//Make sure it's not aliased
+	type = dealias_type(type);
+
+	//The only 2 that could be are enums and 8 bit types
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			//Only 8 bit values here
+			switch(type->basic_type_token){
+				case I8:
+				case U8:
+				case CHAR:
+					return TRUE;
+				default:
+					return FALSE;
+			}
+
+		//For an enum to work, the size must be less
+		//than 1024
+		case TYPE_CLASS_ENUMERATED:
+			if(type->internal_types.enumeration_table.current_index < MAX_SWITCH_RANGE){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Select the size based only on a type
  */
 variable_size_t get_type_size(generic_type_t* type){

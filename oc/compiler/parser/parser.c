@@ -7486,6 +7486,8 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
+
+
 	//If we have an entirely empty switch statement
 	if(is_empty == TRUE){
 		return print_and_return_error("Switch statements with no cases are not allowed", current_line);
