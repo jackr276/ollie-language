@@ -7486,17 +7486,22 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-
-
-	//If we have an entirely empty switch statement
+	//If we have an entirely empty switch statement, it's a failure
 	if(is_empty == TRUE){
 		return print_and_return_error("Switch statements with no cases are not allowed", current_line);
 	}
 
-	//If we haven't found a default clause, it's a failure
-	if(found_default_clause == FALSE){
-		return print_and_return_error("Switch statements are required to have a \"default\" clause", current_line);
-	}	
+	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
+	//mean that we may not need a default clause at all
+	if(is_exhaustive_switch_eligible(type) == TRUE){
+
+	//Otherwise it's not even exhaustive switch eligible, so a default clause is a must in Ollie
+	} else {
+		//If we haven't found a default clause, it's a failure
+		if(found_default_clause == FALSE){
+			return print_and_return_error("Switch statements are required to have a \"default\" clause", current_line);
+		}	
+	}
 
 	//If we do have a c-style switch statement here, we'll need to redefine the type
 	//that the origin switch node is
@@ -8464,17 +8469,28 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			//if the user does this
 			switch(const_node->constant_type){
 				case INT_CONST:
-				case INT_CONST_FORCE_U:
-				case LONG_CONST:
-				case LONG_CONST_FORCE_U:
-
 					//Store the value
 					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
 					break;
-
+				case HEX_CONST:
+					//Store the value
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
+					break;
+				case INT_CONST_FORCE_U:
+					//Store the value
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_int_value;
+					break;
+				case LONG_CONST:
+					//Store the value
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_long_value;
+					break;
+				case LONG_CONST_FORCE_U:
+					//Store the value
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_long_value;
+					break;
 				case CHAR_CONST:
 					//Just assign the char value here
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.char_value;
 
 				default:
 					return print_and_return_error("Illegal type given as case statement value", parser_line_num);
