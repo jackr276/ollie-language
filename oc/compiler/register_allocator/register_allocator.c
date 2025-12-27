@@ -771,7 +771,7 @@ static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basi
  */
 static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//If this is not temporary, we can handle it like any other statement
-	if(instruction->destination_register->is_temporary == FALSE){
+	if(instruction->destination_register->variable_type != VARIABLE_TYPE_TEMP){
 		//Handle the destination variable
 		assign_live_range_to_destination_variable(live_ranges, basic_block, instruction);
 
@@ -2382,7 +2382,7 @@ static void handle_pure_copy_source_spill(instruction_t* instruction, u_int32_t 
 		instruction->source_register = NULL;
 
 		//Create the offset using a u64
-		instruction->offset = emit_direct_integer_or_char_constant(offset, u64_type);
+		instruction->offset.offset_constant = emit_direct_integer_or_char_constant(offset, u64_type);
 	}
 }
 
@@ -2417,7 +2417,7 @@ static void handle_constant_assignment_destination_spill(instruction_t* instruct
 		instruction->destination_register = NULL;
 
 		//Create the offset using a u64
-		instruction->offset = emit_direct_integer_or_char_constant(offset, u64_type);
+		instruction->offset.offset_constant = emit_direct_integer_or_char_constant(offset, u64_type);
 	}
 }
 

@@ -47,6 +47,18 @@ typedef enum {
 
 
 /**
+ * What type of variable is this? Variables
+ * can be temporary, stack variables, or normal
+ * vars
+ */
+typedef enum {
+	VARIABLE_TYPE_TEMP,
+	VARIABLE_TYPE_NON_TEMP,
+	VARIABLE_TYPE_MEMORY_ADDRESS
+} variable_type_t;
+
+
+/**
  * A global variable stores the variable itself
  * and it stores the value, if it has one
  */
@@ -147,8 +159,6 @@ struct three_addr_var_t{
 	//Is this variable dereferenced in some way
 	//(either loaded from or stored to)
 	u_int8_t is_dereferenced;
-	//Is this a temp variable?
-	u_int8_t is_temporary;
 	//Is this a stack pointer?
 	u_int8_t is_stack_pointer;
 	//What is the parameter number of this var? Used for parameter passing. If
@@ -160,6 +170,8 @@ struct three_addr_var_t{
 	general_purpose_register_t variable_register;
 	//What membership do we have if any
 	variable_membership_t membership;
+	//What type of variable is this
+	variable_type_t variable_type;
 };
 
 
@@ -193,14 +205,6 @@ struct three_addr_const_t{
 struct instruction_t{
 	//Store inlined assembly in a string
 	dynamic_string_t inlined_assembly;
-	//Generic parameter list - could be used for phi functions or function calls
-	dynamic_array_t parameters;
-	//What block holds this?
-	void* block_contained_in;
-	//We have 2 ways to jump. The if jump is our affirmative jump,
-	//else is our alternative
-	void* if_block;
-	void* else_block;
 	//For linked list properties -- the next statement
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
@@ -222,14 +226,30 @@ struct instruction_t{
 	//Certain instructions like conversions, and divisions, have more
 	//than one destination register
 	three_addr_var_t* destination_register2;
-	three_addr_const_t* offset;
+	//Lea statements can have an offset or a global
+	//variable name as the offset, so we accomodate both
+	union {
+		three_addr_const_t* offset_constant;
+		three_addr_var_t* global_variable;
+	} offset;
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
 	//What stack region do we write to or read from
 	stack_region_t* linked_stack_region;
-	//The LEA addition
-	u_int64_t lea_multiplicator;
+	//Generic parameter list - could be used for phi functions or function calls
+	dynamic_array_t parameters;
+	//What block holds this?
+	void* block_contained_in;
+	//We have 2 ways to jump. The if jump is our affirmative jump,
+	//else is our alternative
+	void* if_block;
+	void* else_block;
+	//What is the type of the memory that we are trying to access? This is done
+	//to maintain separation from the base addresses and the memory that we're using
+	generic_type_t* memory_read_write_type;
+	//For lea multiplication
+	u_int64_t lea_multiplier;
 	//The function called
 	symtab_function_record_t* called_function;
 	//The variable record
@@ -249,14 +269,14 @@ struct instruction_t{
 	u_int8_t is_branch_ending;
 	//Cannot be coalesced
 	u_int8_t cannot_be_combined;
-	//Does this have a multiplicator
-	u_int8_t has_multiplicator;
 	//Is this a regular or inverse branch
 	u_int8_t inverse_branch;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?
 	address_calculation_mode_t calculation_mode;
+	//What is the lea type(only used during the IR phase)
+	oir_lea_type_t lea_statement_type;
 	//Do we have a read, write, or no attempt to access memory(default)
 	memory_access_type_t memory_access_type;
 	//The register that we're popping or pushing
@@ -382,6 +402,11 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant);
 u_int8_t is_constant_power_of_2(three_addr_const_t* constant);
 
 /**
+ * Is this constant a power of 2 that is lea compatible(1, 2, 4, 8)?
+ */
+u_int8_t is_constant_lea_compatible_power_of_2(three_addr_const_t* constant);
+
+/**
  * Create and return a temporary variable
 */
 three_addr_var_t* emit_temp_var(generic_type_t* type);
@@ -396,6 +421,12 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
  * we are assigning to a variable, that will create a new generation of variable.
 */
 three_addr_var_t* emit_var(symtab_variable_record_t* var);
+
+/**
+ * Create and return a three address var from an existing variable. These special
+ * "memory address vars" will represent the memory address of the variable in question
+*/
+three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var);
 
 /**
  * Emit a variable for an identifier node. This rule is designed to account for the fact that
@@ -452,14 +483,19 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee);
 instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg);
 
 /**
- * Emit a lea statement with no type size multiplier on it
+ * Emit a lea statement that has one operand and an offset
  */
-instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
+instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const);
 
 /**
- * Emit a statement that is in LEA form
+ * Emit a lea statement that has no multiplier, only operands
  */
-instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
+instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
+
+/**
+ * Emit a lea statement that has a multiplier and operands
+ */
+instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form
@@ -491,37 +527,37 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_write_type);
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 
  * an offset(op1), and the value we're storing(op2)
  */
-instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee);
+instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
  * Emit a store with offset ir code. We take in a base address(assignee), 
  * a constant offset(op1_const), and the value we're storing(op2)
  */
-instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee);
+instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type);
 
 /**
  * Emit a load statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1);
+instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_read_type);
 
 /**
  * Emit a load with offset ir code. We take in a base address(op1), 
  * an offset(op2), and the value we're loading into(assignee)
  */
-instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset);
+instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset, generic_type_t* memory_read_type);
 
 /**
  * Emit a load with constant offset ir code. We take in a base address(op1), 
  * an offset(op1_const), and the value we're loading into(assignee)
  */
-instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset);
+instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset, generic_type_t* memory_read_type);
 
 /**
  * Emit a statement that is assigning a const to a var i.e. var1 <- const
@@ -553,11 +589,6 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee);
  * Emit an increment instruction
  */
 instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
-
-/**
- * Emit a memory address assignment statement
- */
-instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1);
 
 /**
  * Emit a decrement instruction
@@ -657,6 +688,18 @@ instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destina
 instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on);
 
 /**
+ * Emit a fully formed global variable OIR address calculation lea
+ *
+ * This will always produce instructions like: t8 <- global_var(%rip)
+ */
+instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer);
+
+/**
+ * Emit a fully formed global variable x86 address calculation lea
+ */
+instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64);
+
+/**
  * Emit a stack allocation statement
  */
 instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset);
@@ -681,6 +724,22 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8
  * Emit a complete, one-for-one copy of an instruction
  */
 instruction_t* copy_instruction(instruction_t* copied);
+
+/**
+ * Sum a constant by a raw int64_t value
+ * 
+ * NOTE: The result is always stored in the first one, and the first one will become 
+ * a long constant. This is specifically designed for lea simplification/address computation
+ */
+three_addr_const_t* sum_constant_with_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant);
+
+/**
+ * Multiply a constant by a raw int64_t value
+ * 
+ * NOTE: The result is always stored in the first one, and the first one will become 
+ * a long constant. This is specifically designed for lea simplification
+ */
+three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant);
 
 /**
  * Emit the product of two given constants. The result will overwrite the first constant given

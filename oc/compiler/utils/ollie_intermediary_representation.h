@@ -55,6 +55,25 @@ typedef enum {
 
 
 /**
+ * What is the type in our IR that the lea
+ * statement is using. This is designed
+ * to reduce comparisons/complexity throught
+ * the IR parsing
+ */
+typedef enum {
+	OIR_LEA_TYPE_NONE = 0, //default is always none
+	OIR_LEA_TYPE_OFFSET_ONLY, // 4(%rax)
+	OIR_LEA_TYPE_REGISTERS_ONLY, // (%rax, %rcx)
+	OIR_LEA_TYPE_REGISTERS_AND_OFFSET, // 4(%rax, %rcx)
+	OIR_LEA_TYPE_REGISTERS_AND_SCALE, // (%rax, %rcx, 8)
+	OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE, // 4(%rax, %rcx, 8)
+	OIR_LEA_TYPE_INDEX_AND_SCALE, // (, %rcx, 8)
+	OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE, // 44(, %rcx, 8)
+	OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION // super rar case where we have <global_var>(%rip)
+} oir_lea_type_t;
+
+
+/**
  * All OIR statement types
  */
 typedef enum {
@@ -120,8 +139,6 @@ typedef enum {
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A memory access statement
 	THREE_ADDR_CODE_MEM_ACCESS_STMT,
-	//A memory address statement
-	THREE_ADDR_CODE_MEM_ADDRESS_STMT
 } instruction_stmt_type_t;
 
 #endif /* OLLIE_INTERMEDIARY_REPRESENTATION_H */

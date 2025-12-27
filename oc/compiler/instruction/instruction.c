@@ -5,6 +5,7 @@
 */
 
 #include "instruction.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -595,6 +596,60 @@ u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
 
 
 /**
+ * Is this constant a power of 2 that is lea compatible(1, 2, 4, 8)?
+ *
+ * This is used specifically for lea computations and determining whether
+ * certain multiplies are eligible
+ */
+u_int8_t is_constant_lea_compatible_power_of_2(three_addr_const_t* constant){
+	//For holding the expanded constant value
+	int64_t constant_value_expanded;
+
+	//Extraction
+	switch(constant->const_type){
+		case INT_CONST:
+			constant_value_expanded = constant->constant_value.signed_integer_constant; 
+			break;
+
+		case INT_CONST_FORCE_U:
+			constant_value_expanded = constant->constant_value.unsigned_integer_constant; 
+			break;
+
+		case LONG_CONST:
+			constant_value_expanded = constant->constant_value.signed_long_constant; 
+			break;
+
+		case LONG_CONST_FORCE_U:
+			constant_value_expanded = constant->constant_value.unsigned_long_constant; 
+			break;
+
+		//Chars are always unsigned
+		case CHAR_CONST:
+			constant_value_expanded = constant->constant_value.char_constant; 
+			break;
+
+		//If we get here it's a definite no
+		default:
+			return FALSE;
+	}
+
+	//In order to work for lea, the constant must be one of: 1, 2, 4, 8. Anything
+	//else is incompatible
+	switch(constant_value_expanded){
+		//The only acceptable values
+		case 1:
+		case 2:
+		case 4:
+		case 8:
+			return TRUE;
+		//Everything else is a no
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is this operation a pure copy? In other words, is it a move instruction
  * that moves one register to another?
  */
@@ -666,7 +721,7 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	dynamic_array_add(&emitted_vars, var);
 
 	//Mark this as temporary
-	var->is_temporary = TRUE;
+	var->variable_type = VARIABLE_TYPE_TEMP;
 	//Store the type info
 	var->type = type;
 	//Store the temp var number
@@ -702,7 +757,51 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	}
 
 	//This is not temporary
-	emitted_var->is_temporary = FALSE;
+	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+	//We always store the type as the type with which this variable was defined in the CFG
+	emitted_var->type = var->type_defined_as;
+	//And store the symtab record
+	emitted_var->linked_var = var;
+
+	//Store the associate stack region(this is usually null)
+	emitted_var->stack_region = var->stack_region;
+
+	//The membership is also copied
+	emitted_var->membership = var->membership;
+
+	//Copy these over
+	emitted_var->parameter_number = var->function_parameter_order;
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
+ * Create and return a three address var from an existing variable. These special
+ * "memory address vars" will represent the memory address of the variable in question
+*/
+three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_vars, emitted_var);
+
+	//If we have an aliased variable(almost exclusively function
+	//parameters), we will instead emit the alias of that variable instead
+	//of the variable itself
+	if(var->alias != NULL){
+		var = var->alias;
+	}
+
+	//This is a memory address variable. We will flag this for special
+	//printing
+	emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
+
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = var->type_defined_as;
 	//And store the symtab record
@@ -738,7 +837,8 @@ three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generi
 	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//This is not temporary
-	emitted_var->is_temporary = FALSE;
+	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+
 	//This variable's type will be what the identifier node deemed it as
 	emitted_var->type = inferred_type;
 	//And store the symtab record
@@ -763,8 +863,8 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range){
 	//Add into here for memory management
 	dynamic_array_add(&emitted_vars, emitted_var);
 
-	//This is temporary
-	emitted_var->is_temporary = TRUE;
+	//This is a temp var
+	emitted_var->variable_type = VARIABLE_TYPE_TEMP;
 
 	//Link this in with our live range
 	emitted_var->associated_live_range = range;
@@ -792,7 +892,7 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	memcpy(emitted_var, var, sizeof(three_addr_var_t));
 	
 	//Transfer this status over
-	emitted_var->is_temporary = var->is_temporary;
+	emitted_var->variable_type = var->variable_type;
 
 	//Is this a stack pointer?
 	emitted_var->is_stack_pointer = var->is_stack_pointer;
@@ -883,9 +983,37 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
 
 
 /**
- * Emit a lea statement with no type size multiplier on it
+ * Emit a lea statement that has one operand and an offset
+ *
+ * This would look something like lea 3(t5), t7
  */
-instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
+instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_const_t* op1_const){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = op1;
+	stmt->op1_const = op1_const;
+
+	//What function are we in
+	stmt->function = current_function;
+
+	//This only has registers
+	stmt->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
+
+	//And now we give it back
+	return stmt;
+}
+
+
+/**
+ * Emit a lea statement with no type size multiplier on it
+ *
+ * This is designed to emit things like lea (t2, t3), t5
+ */
+instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -896,6 +1024,9 @@ instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, th
 	stmt->op2 = op2;
 	//What function are we in
 	stmt->function = current_function;
+
+	//This only has registers
+	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_ONLY;
 
 	//And now we give it back
 	return stmt;
@@ -905,7 +1036,7 @@ instruction_t* emit_lea_instruction_no_mulitplier(three_addr_var_t* assignee, th
 /**
  * Emit a statement that is in LEA form
  */
-instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
+instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -914,12 +1045,12 @@ instruction_t* emit_lea_instruction(three_addr_var_t* assignee, three_addr_var_t
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	stmt->op2 = op2;
-	stmt->lea_multiplicator = type_size;
+	stmt->lea_multiplier = type_size;
 	//What function are we in
 	stmt->function = current_function;
 
-	//This has a multiplicator, so indicate that
-	stmt->has_multiplicator = TRUE;
+	//This has registers and a multiplier
+	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
 
 	//And now we give it back
 	return stmt;
@@ -939,7 +1070,7 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
 	//We store the jumping to block as our operand. It's really a jump table
 	stmt->if_block = op1;
 	stmt->op2 = op2;
-	stmt->lea_multiplicator = type_size;
+	stmt->lea_multiplier= type_size;
 
 	//Mark the current function
 	stmt->function = current_function;
@@ -1278,42 +1409,59 @@ static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg)
  * and nothing more. This function is also designed to take into account the indirection aspected as well
  */
 void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode_t mode){
-	//If we're printing live ranges, we'll use the LR number
-	if(mode == PRINTING_LIVE_RANGES){
-		fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
-	} else if(mode == PRINTING_REGISTERS){
-		if(variable->associated_live_range->reg == NO_REG){
+	//Go based on what printing mode we're after
+	switch(mode){
+		case PRINTING_LIVE_RANGES:
 			fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
-		} else
+			break;
 
-		//Switch based on the variable's size to print out the register
-		switch(variable->variable_size){
-			case QUAD_WORD:
-				print_64_bit_register_name(fl, variable->associated_live_range->reg);
+		case PRINTING_REGISTERS:
+			//Special edge case
+			if(variable->associated_live_range->reg == NO_REG){
+				fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
 				break;
-			case DOUBLE_WORD:
-				print_32_bit_register_name(fl, variable->associated_live_range->reg);
-				break;
-			case WORD:
-				print_16_bit_register_name(fl, variable->associated_live_range->reg);
-				break;
-			case BYTE:
-				print_8_bit_register_name(fl, variable->associated_live_range->reg);
-				break;
-			default:
-				print_64_bit_register_name(fl, variable->associated_live_range->reg);
-				printf("DEFAULTED\n");
-				break;
-		}
+			}
+			
+			//Switch based on the variable's size to print out the register
+			switch(variable->variable_size){
+				case QUAD_WORD:
+					print_64_bit_register_name(fl, variable->associated_live_range->reg);
+					break;
+				case DOUBLE_WORD:
+					print_32_bit_register_name(fl, variable->associated_live_range->reg);
+					break;
+				case WORD:
+					print_16_bit_register_name(fl, variable->associated_live_range->reg);
+					break;
+				case BYTE:
+					print_8_bit_register_name(fl, variable->associated_live_range->reg);
+					break;
+				default:
+					print_64_bit_register_name(fl, variable->associated_live_range->reg);
+					printf("DEFAULTED\n");
+					break;
+			}
 
-	//Otherwise if it's a temp
-	} else if(variable->is_temporary == TRUE){
-		//Print out it's temp var number
-		fprintf(fl, "t%d", variable->temp_var_number);
+			break;
 
-	} else {
-		//Otherwise, print out the SSA generation along with the variable
-		fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
+		default:
+			//Go based on our type of var here
+			switch(variable->variable_type){
+				case VARIABLE_TYPE_TEMP:
+					//Print out it's temp var number
+					fprintf(fl, "t%d", variable->temp_var_number);
+					break;
+				case VARIABLE_TYPE_NON_TEMP:
+					//Print out the SSA generation along with the variable
+					fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
+					break;
+				case VARIABLE_TYPE_MEMORY_ADDRESS:
+					//Print out the normal version, plus the MEM<> wrapper
+					fprintf(fl, "MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
+					break;
+			}
+
+			break;
 	}
 }
 
@@ -1590,20 +1738,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
-		case THREE_ADDR_CODE_MEM_ADDRESS_STMT:
-			//This one comes first
-			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-
-			//Then the arrow
-			fprintf(fl, " <- Memory address of ");
-
-			//Now we'll do op1, token, op2
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-
-			//We need a newline here
-			fprintf(fl, "\n");
-			break;
-
 		case THREE_ADDR_CODE_ASSN_STMT:
 			//We'll print out the left and right ones here
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
@@ -1675,7 +1809,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->offset);
+			print_three_addr_constant(fl, stmt->offset.offset_constant);
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op2 or op1_const)
@@ -1745,7 +1879,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->offset);
+			print_three_addr_constant(fl, stmt->offset.offset_constant);
 			fprintf(fl, "]"); 
 
 			fprintf(fl, "\n");
@@ -1912,28 +2046,101 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Print the assignment operator
 			fprintf(fl, " <- ");
 
-			//Now print out the rest in order
-			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-			//Then we have a plus
-			fprintf(fl, " + ");
+			//Go based on what lea statement type 
+			//we have
+			switch(stmt->lea_statement_type){
+				//We have something like t2 <- 3(t3)
+				case OIR_LEA_TYPE_OFFSET_ONLY:
+					//Print the constant out first
+					print_three_addr_constant(fl, stmt->op1_const);
 
-			//If we have a constant, we'll print that. Otherwise, print op2
-			if(stmt->op1_const != NULL){
-				//Print the constant out
-				print_three_addr_constant(fl, stmt->op1_const);
-				fprintf(fl, "\n");
-			} else {
-				//Then we have the third one, times some multiplier
-				print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					//Then the variable encased in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
 
-				//If we have a multiplicator, then we can print it
-				if(stmt->has_multiplicator == TRUE){
-					//And the finishing sequence
-					fprintf(fl, " * %ld", stmt->lea_multiplicator);
-				}
+					break;
 
-				fprintf(fl, "\n");
+				case OIR_LEA_TYPE_REGISTERS_ONLY:
+					//Print both variables encase in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
+
+					break;
+
+				case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
+					//Print the constant out first
+					print_three_addr_constant(fl, stmt->op1_const);
+					
+					//Print both variables encase in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
+
+					break;
+
+				case OIR_LEA_TYPE_REGISTERS_AND_SCALE:
+					//Print both variables encase in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+
+					//Now print the multiplier
+					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+
+					break;
+
+				case OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION:
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
+					break;
+
+				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
+					//Print the constant out first
+					print_three_addr_constant(fl, stmt->op1_const);
+
+					//Print both variables encase in parenthesis
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", ");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+
+					//Now print the multiplier
+					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+
+				case OIR_LEA_TYPE_INDEX_AND_SCALE:
+					//Print out the scale and multiplier
+					fprintf(fl, "( , ");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+
+					break;
+
+				case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
+					//Print the offset first
+					print_three_addr_constant(fl, stmt->op1_const);
+					//Print out the scale and multiplier
+					fprintf(fl, "( , ");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ", %ld)", stmt->lea_multiplier);
+
+					break;
+
+				//Should be unreachable
+				default:
+					printf("Fatal internal compiler error: unknown lea statement type hit\n");
+					exit(1);
 			}
+
+			fprintf(fl, "\n");
 			break;
 
 		case THREE_ADDR_CODE_PHI_FUNC:
@@ -1970,7 +2177,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 
 			//Finally the multiplicator
-			fprintf(fl, " * %ld\n", stmt->lea_multiplicator);
+			fprintf(fl, " * %ld\n", stmt->lea_multiplier);
 			break;
 
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
@@ -2108,7 +2315,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 */
 		case ADDRESS_CALCULATION_MODE_GLOBAL_VAR:
 			//Print the actual string name of the variable - no SSA and no registers
-			fprintf(fl, "%s", instruction->op2->linked_var->var_name.string);
+			fprintf(fl, "%s", instruction->offset.global_variable->linked_var->var_name.string);
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
@@ -2129,13 +2336,13 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->address_calc_reg2, mode);
 			fprintf(fl, ", ");
-			fprintf(fl, "%ld", instruction->lea_multiplicator);
+			fprintf(fl, "%ld", instruction->lea_multiplier);
 			fprintf(fl, ")");
 			break;
 
 		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset);
+			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ")");
@@ -2151,7 +2358,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset);
+			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ", ");
@@ -2161,13 +2368,29 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset);
+			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->address_calc_reg2, mode);
-			fprintf(fl, ", %ld)", instruction->lea_multiplicator);
+			fprintf(fl, ", %ld)", instruction->lea_multiplier);
+			break;
+
+		//Index is in address calc reg 1 for this
+		case ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE:
+			fprintf(fl, "( , ");
+			print_variable(fl, instruction->address_calc_reg1, mode);
+			fprintf(fl, ", %ld)", instruction->lea_multiplier);
+			break;
 			
+		//Index is in address calc reg 1 for this
+		case ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE:
+			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			fprintf(fl, "( , ");
+			print_variable(fl, instruction->address_calc_reg1, mode);
+			fprintf(fl, ", %ld)", instruction->lea_multiplier);
+			break;
+
 		//Do nothing
 		default:
 			break;
@@ -3486,7 +3709,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			print_variable(fl, instruction->source_register, mode);
 
 			//And then a comma and the multplicator
-			fprintf(fl, ",%ld)\n", instruction->lea_multiplicator);
+			fprintf(fl, ",%ld)\n", instruction->lea_multiplier);
 
 			break;
 
@@ -3526,24 +3749,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 
 /**
- * Emit a memory address assignment statement
- */
-instruction_t* emit_memory_address_assignment(three_addr_var_t* assignee, three_addr_var_t* op1){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Let's now populate it with values
-	stmt->statement_type = THREE_ADDR_CODE_MEM_ADDRESS_STMT; 
-	stmt->assignee = assignee;
-	stmt->op1 = op1;
-	//What function are we in
-	stmt->function = current_function;
-	//And that's it, we'll just leave our now
-	return stmt;
-}
-
-
-/**
  * Emit a decrement instruction
  */
 instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
@@ -3555,7 +3760,7 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 
 	//If this is not a temporary variable, then we'll
 	//emit an exact copy and let the SSA system handle it
-	if(decrementee->is_temporary == FALSE){
+	if(decrementee->variable_type != VARIABLE_TYPE_TEMP){
 		dec_stmt->assignee = emit_var_copy(decrementee);
 
 	//Otherwise, we'll need to spawn a new temporary variable
@@ -3653,7 +3858,7 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 
 	//If this is not a temporary variable, then we'll
 	//emit an exact copy and let the SSA system handle it
-	if(incrementee->is_temporary == FALSE){
+	if(incrementee->variable_type != VARIABLE_TYPE_TEMP){
 		inc_stmt->assignee = emit_var_copy(incrementee);
 
 	//Otherwise, we'll need to spawn a new temporary variable
@@ -3894,7 +4099,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->memory_access_type = READ_FROM_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->offset.offset_constant = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -3939,7 +4144,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->memory_access_type = WRITE_TO_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->offset.offset_constant = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -3968,7 +4173,7 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
  * Emit a store statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1){
+instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_write_type){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -3982,6 +4187,10 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 	stmt->op1 = op1;
 	//What function are we in
 	stmt->function = current_function;
+
+	//Important - add the type that we expect to be writing to in memory
+	stmt->memory_read_write_type = memory_write_type;
+
 	//And that's it, we'll now just give it back
 	return stmt;
 }
@@ -3991,7 +4200,7 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
  * Emit a store with offset ir code. We take in a base address(assignee), 
  * a variable offset(op1), and the value we're storing(op2)
  */
-instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee){
+instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_address, three_addr_var_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4012,6 +4221,9 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	//Save our current function
 	stmt->function = current_function;
 
+	//Important - add the type that we expect to be writing to in memory
+	stmt->memory_read_write_type = memory_write_type;
+
 	//And give it back
 	return stmt;
 }
@@ -4021,7 +4233,7 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
  * Emit a store with offset ir code. We take in a base address(assignee), 
  * a constant offset(offset), and the value we're storing(op2)
  */
-instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee){
+instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4034,13 +4246,16 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	stmt->assignee->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not op1_const 
-	stmt->offset = offset;
+	stmt->offset.offset_constant = offset;
 
 	//What we're storing
 	stmt->op2 = storee;
 
 	//Save our current function
 	stmt->function = current_function;
+
+	//Important - add the type that we expect to be writing to in memory
+	stmt->memory_read_write_type = memory_write_type;
 
 	//And give it back
 	return stmt;
@@ -4051,7 +4266,7 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
  * Emit a load statement. This is like an assignment instruction, but we're explicitly
  * using stack memory here
  */
-instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1){
+instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* op1, generic_type_t* memory_read_type){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4061,6 +4276,10 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 	stmt->op1 = op1;
 	//What function are we in
 	stmt->function = current_function;
+
+	//Important - store the type that we expect to be getting out of memory
+	stmt->memory_read_write_type = memory_read_type;
+	
 	//And that's it, we'll now just give it back
 	return stmt;
 }
@@ -4070,7 +4289,7 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
  * Emit a load with offset ir code. We take in a base address(op1), 
  * an offset(op2), and the value we're loading into(assignee)
  */
-instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset){
+instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* offset, generic_type_t* memory_read_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4087,6 +4306,9 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 	//Save our current function
 	stmt->function = current_function;
 
+	//Important - store the type that we expect to be getting out of memory
+	stmt->memory_read_write_type = memory_read_type;
+
 	//And give it back
 	return stmt;
 }
@@ -4096,7 +4318,7 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
  * Emit a load with constant offset ir code. We take in a base address(op1), 
  * an offset(offset), and the value we're loading into(assignee)
  */
-instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset){
+instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* offset, generic_type_t* memory_read_type){
 	//First allocate
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4108,10 +4330,13 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	stmt->op1 = base_address;
 
 	//Our offset is stored in "offset", not op1_const
-	stmt->offset = offset;
+	stmt->offset.offset_constant = offset;
 
 	//Save our current function
 	stmt->function = current_function;
+
+	//Important - store the type that we expect to be getting out of memory
+	stmt->memory_read_write_type = memory_read_type;
 
 	//And give it back
 	return stmt;
@@ -4399,6 +4624,72 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 
 /**
+ * Emit a fully formed global variable OIR address calculation lea
+ *
+ * This will always produce instructions like: t8 <- global_var(%rip)
+ */
+instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer){
+	//Get the intstruction out
+	instruction_t* lea = calloc(1, sizeof(instruction_t));
+
+	//This will be leaq always
+	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+	//Global var address calc mode
+	lea->lea_statement_type = OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION;
+
+	//We already know what the destination will be
+	lea->assignee = assignee;
+
+	//Copy the global var and give a non-memory address version of it
+	three_addr_var_t* remediated_version = emit_var_copy(global_variable);
+	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
+
+	//Op1 is the instruction pointer(relative addressing)
+	lea->op1 = instruction_pointer;
+
+	//The op2 is always the global var itself
+	lea->op2 = remediated_version;
+
+	//And give it back
+	return lea;
+}
+
+
+
+/**
+ * Emit a fully formed global variable x86 address calculation lea
+ *
+ * This will always produce instructions like: leaq global_var(%rip), t8
+ */
+instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64){
+	//Emit a temp var that is always a u64(memory address)
+	three_addr_var_t* destination = emit_temp_var(u64);
+
+	//Get the intstruction out
+	instruction_t* lea = calloc(1, sizeof(instruction_t));
+
+	//This will be leaq always
+	lea->instruction_type = LEAQ;
+
+	//Global var address calc mode
+	lea->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+
+	//We already know what the destination will be
+	lea->destination_register = destination;
+
+	//Address calc reg 1 is the instruction pointer(relative addressing)
+	lea->address_calc_reg1 = instruction_pointer;
+
+	//The offset is the global variable(unique case)
+	lea->offset.global_variable = global_variable;
+
+	//And give it back
+	return lea;
+}
+
+
+/**
  * Emit a stack allocation statement
  */
 instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
@@ -4466,6 +4757,138 @@ instruction_t* copy_instruction(instruction_t* copied){
 
 	//Give back the copied one
 	return copied;
+}
+
+
+/**
+ * Sum a constant by a raw int64_t value
+ * 
+ * NOTE: The result is always stored in the first one, and the first one will become 
+ * a long constant. This is specifically designed for lea simplification/address computation
+ */
+three_addr_const_t* sum_constant_with_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant){
+	//Go based on the first one's type
+	switch(constant->const_type){
+		case INT_CONST_FORCE_U:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_integer_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant += raw_constant;
+
+			break;
+
+		case INT_CONST:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_integer_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant += raw_constant;
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_long_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant += raw_constant;
+
+			break;
+
+		case LONG_CONST:
+			//Multiply
+			constant->constant_value.signed_long_constant += raw_constant;
+
+			break;
+
+		case CHAR_CONST:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.char_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant += raw_constant;
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+			exit(1);
+	}
+
+	//This will always be forced to be an i64
+	constant->type = i64_type;
+	constant->const_type = LONG_CONST;
+
+	//Give it back for clarity
+	return constant;
+}
+
+
+/**
+ * Multiply a constant by a raw int64_t value
+ * 
+ * NOTE: The result is always stored in the first one, and the first one will become 
+ * a long constant. This is specifically designed for lea simplification
+ */
+three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant){
+	//Go based on the first one's type
+	switch(constant->const_type){
+		case INT_CONST_FORCE_U:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_integer_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		case INT_CONST:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_integer_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_long_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		case LONG_CONST:
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		case CHAR_CONST:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.char_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+			exit(1);
+	}
+
+	//This will always be forced to be an i64
+	constant->type = i64_type;
+	constant->const_type = LONG_CONST;
+
+	//Give it back for clarity
+	return constant;
 }
 
 
@@ -5223,12 +5646,12 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 	}
 
 	//Another easy way to tell
-	if(a->is_temporary != b->is_temporary){
+	if(a->variable_type != b->variable_type){
 		return FALSE;
 	}
 
 	//For temporary variables, the comparison is very easy
-	if(a->is_temporary){
+	if(a->variable_type == VARIABLE_TYPE_TEMP){
 		if(a->temp_var_number == b->temp_var_number){
 			return TRUE;
 		} else {
@@ -5267,12 +5690,12 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b, u_int8
 	}
 
 	//Another easy way to tell
-	if(a->is_temporary != b->is_temporary){
+	if(a->variable_type != b->variable_type){
 		return FALSE;
 	}
 
 	//For temporary variables, the comparison is very easy
-	if(a->is_temporary){
+	if(a->variable_type == VARIABLE_TYPE_TEMP){
 		if(a->temp_var_number == b->temp_var_number){
 			return TRUE;
 		} else {

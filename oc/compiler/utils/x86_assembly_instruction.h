@@ -32,6 +32,8 @@ typedef enum{
 	ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET, // 4(%rax, %rcx)
 	ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE, // (%rax, %rcx, 8)
 	ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE, // 4(%rax, %rcx, 8)
+	ADDRESS_CALCULATION_MODE_INDEX_AND_SCALE, // (, %rcx, 8)
+	ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE, // 4(, %rcx, 8)
 	ADDRESS_CALCULATION_MODE_GLOBAL_VAR //Super special case, we will use address_calc_reg2 as the offset like this: <val>(%rip)
 } address_calculation_mode_t;
 
