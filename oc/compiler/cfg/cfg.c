@@ -6509,6 +6509,20 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		result_package.final_block = function_exit_block;
 	}
 
+	/**
+	 * If the default clause is NULL, which it may very well be, we will created
+	 * our own dummy default clause that just jumps to the end. This maintains
+	 * the intention of the programmer but also allows us to reuse the code
+	 * from default blocks
+	 */
+	if(default_block == NULL){
+		//Create it
+		default_block = basic_block_alloc_and_estimate();
+
+		//Emit a jump from it to the end block
+		emit_jump(default_block, result_package.final_block);
+	}
+
 	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
 	//will be set to point to the default block. 
 	for(u_int16_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
