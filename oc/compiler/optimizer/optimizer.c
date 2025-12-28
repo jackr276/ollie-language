@@ -195,9 +195,11 @@ static void mark_and_add_stack_variable_definitions(cfg_t* cfg, three_addr_var_t
 
 /**
  * Mark definitions(assignment) of a three address variable within
- * the current function. If a definition is not marked, it must be added to the worklist
+ * the current function. If a definition is not marked, it must be added to the worklist. This
+ * is only intended to handle register variable definitions. There is a separate function
+ * designed specifically for stack variables
  */
-static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//If this is NULL, just leave
 	if(variable == NULL || current_function == NULL){
 		return;
@@ -277,38 +279,21 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 /**
  * The mark and add definition rule will call one of 2 overloads, based
- * on what the variable that we're marking actually is
- *
- *
- *
- *
- * TODO WIP until we fix the memory address of 
+ * on what the variable that we're marking actually is(stack or register)
+ */
 static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
-	//What kind of variable do we have? Is this a temporary variable or is it
-	//referencing a real variable/address in the code
-	if(variable->is_temporary == TRUE){
-		//Off the bat - temp vars exist for register instructions, so we can pass control to the
-		//register helper and then leave
-		mark_and_add_register_variable_definition(cfg, variable, current_function, worklist);
-		return;
-	}
-
-	//Otherwise, we have a non-temporary variable. If our non-temporary variable exists
-	//on the stack or it's some kind of memory address, we need to mark that as important
-	
-	//We expect this to be false most of the time for local vars,
-	//parameters, etc
-	if(is_memory_region(variable->type) == FALSE){
-		//Treat this like any other register variable
+	//If this is not a memory address variable, we will use the normal path for mark
+	//and sweep and treat this as a register variable
+	if(variable->variable_type != VARIABLE_TYPE_MEMORY_ADDRESS){
+		//Invoke the helper for this
 		mark_and_add_register_variable_definition(cfg, variable, current_function, worklist);
 
-	//Otherwise, we likely have something like:
-	// load t3 <- 
+	//Otherwise it is a stack variable, so we need to take a different path for this
 	} else {
-
+		//Invoke the dedicated helper for this kind of mark
+		mark_and_add_stack_variable_definitions(cfg, variable, current_function, worklist);
 	}
 }
- */
 
 
 /**
@@ -431,17 +416,22 @@ static void mark(cfg_t* cfg){
 					break;
 
 				/**
-				 * All stores are considered useful because they modify areas
-				 * on the stack
+				 * Store statements that modify *global variables* are always
+				 * considered useful because it is not possible for us to determine if/when
+				 * they will be used. As such, we mark these from the start
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT:
 				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-					current_stmt->mark = TRUE;
-					//Add it to the list
-					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
-					current->contains_mark = TRUE;
+					//If it's a global var
+					if(current_stmt->assignee->membership == GLOBAL_VARIABLE){
+						current_stmt->mark = TRUE;
+						//Add it to the list
+						dynamic_array_add(&worklist, current_stmt);
+						//The block now has a mark
+						current->contains_mark = TRUE;
+					}
+
 					break;
 
 				//Let's see what other special cases we have
