@@ -190,9 +190,9 @@ static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
  */
 static void mark_and_add_memory_variable_definitions(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//Mark this variable's specific stack region as being important
-	if(variable->linked_var != NULL && variable->linked_var->stack_region != NULL){
-		if(variable->linked_var->stack_region->mark == FALSE){
-			mark_stack_region(variable->linked_var->stack_region);
+	if(variable->linked_var != NULL && variable->stack_region != NULL){
+		if(variable->stack_region->mark == FALSE){
+			mark_stack_region(variable->stack_region);
 
 		//Otherwise, it was already marked so we won't retread old ground here
 		} else {

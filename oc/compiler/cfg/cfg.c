@@ -4143,7 +4143,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							//We need to load a reference to this into memory
 							stack_region_t* region = create_stack_region_for_type(&(current_function->data_area), unary_expression_parent->inferred_type);
 
-							//Flag the variable in here
+							//This is what is being referenced
 							region->variable_referenced = unary_expression_child->variable;
 
 							//Emit the purpose made memory address var
@@ -4159,11 +4159,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							//Create the memory address var through the symtab to avoid compatibility issues
 							symtab_variable_record_t* memory_address_temp_var = create_temp_memory_address_variable(u64, variable_symtab, region, increment_and_get_temp_id());
 
+
 							//Emit the temp memory address var here
 							three_addr_var_t* stored_memory_address = emit_memory_address_var(memory_address_temp_var);
 
 							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
-							instruction_t* store = emit_store_ir_code(memory_address, address_assignment->assignee, u64);
+							instruction_t* store = emit_store_ir_code(stored_memory_address, address_assignment->assignee, u64);
 							store->is_branch_ending = is_branch_ending;
 
 							//This comes afterwards
