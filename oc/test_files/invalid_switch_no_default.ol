@@ -1,6 +1,6 @@
 /**
 * Author: Jack Robbins
-* Test switching on an enum
+* Testing a switch that is not exhaustive and as such needs a default
 */
 
 /**
@@ -11,31 +11,28 @@ define enum type_enum{
 	TYPE_TWO,
 	TYPE_THREE,
 	TYPE_FOUR,
-	TYPE_FIVE,
-	TYPE_SIX
+	TYPE_FIVE
 } as my_enum_type;
 
 fn tester(param:my_enum_type) -> i32{
 	let x:mut i32 = 32;
 
+	//This will fail - the switch is not exhaustive and needs a default
 	switch(param){
 		case TYPE_ONE -> {
 			x = 32;
 		}
-		case TYPE_TWO -> {
-			x = -3;
+
+		case TYPE_FOUR -> {
+			x = -2;
+
 		}
-		case TYPE_FOUR -> {}
 		case TYPE_THREE -> {
 			x = 211;
 		}
 
 		case TYPE_FIVE -> {
 			x = 22;
-		}
-
-		default -> {
-			x = x - 22;
 		}
 	}
 

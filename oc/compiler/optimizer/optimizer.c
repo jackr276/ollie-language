@@ -209,12 +209,12 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//If it's not in the current function and it's temporary, get rid of it
-		if(variable->is_temporary == TRUE && block->function_defined_in != current_function){
+		if(variable->variable_type == VARIABLE_TYPE_TEMP && block->function_defined_in != current_function){
 			continue;
 		}
 
 		//If this does assign the variable, we'll look through it
-		if(variable->is_temporary == FALSE){
+		if(variable->variable_type != VARIABLE_TYPE_TEMP){
 			//Let's find where we assign it
 			instruction_t* stmt = block->exit_statement;
 
