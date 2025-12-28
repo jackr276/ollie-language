@@ -89,9 +89,6 @@ static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t siz
 void mark_stack_region(stack_region_t* region){
 	//Flag that this is marked
 	region->mark = TRUE;
-
-	//TODO - potentially need to think about how we do variable marking here if that is even needed.
-	//It may be complete overkill/unnecessary, so I will not implement it for now
 }
 
 

@@ -188,8 +188,23 @@ static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
  * This is because we need to do extra tracking for stack variables and the store statements 
  * that are used to populate them
  */
-static void mark_and_add_stack_variable_definitions(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_memory_variable_definitions(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+	//Mark this variable's specific stack region as being important
+	if(variable->linked_var != NULL && variable->linked_var->stack_region != NULL){
+		mark_stack_region(variable->linked_var->stack_region);
+	}
 
+	//Run through all of the blocks in the current function
+	for(u_int16_t i= 0; i < cfg->created_blocks.current_index; i++){
+		//Extract
+		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), i);
+
+		//If these blocks are not in the same function, skip it
+		if(block->function_defined_in != current_function){
+			continue;
+		}
+
+	}
 }
 
 
@@ -200,18 +215,14 @@ static void mark_and_add_stack_variable_definitions(cfg_t* cfg, three_addr_var_t
  * designed specifically for stack variables
  */
 static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
-	//If this is NULL, just leave
-	if(variable == NULL || current_function == NULL){
-		return;
-	}
-
 	//Run through everything here
 	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//If it's not in the current function and it's temporary, get rid of it
-		if(variable->variable_type == VARIABLE_TYPE_TEMP && block->function_defined_in != current_function){
+		//if(variable->variable_type == VARIABLE_TYPE_TEMP && block->function_defined_in != current_function){
+		if(block->function_defined_in != current_function){
 			continue;
 		}
 
@@ -282,16 +293,21 @@ static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var
  * on what the variable that we're marking actually is(stack or register)
  */
 static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+	//If this is NULL, just leave
+	if(variable == NULL || current_function == NULL){
+		return;
+	}
+
 	//If this is not a memory address variable, we will use the normal path for mark
 	//and sweep and treat this as a register variable
 	if(variable->variable_type != VARIABLE_TYPE_MEMORY_ADDRESS){
 		//Invoke the helper for this
 		mark_and_add_register_variable_definition(cfg, variable, current_function, worklist);
 
-	//Otherwise it is a stack variable, so we need to take a different path for this
+	//Otherwise it is a stack/global variable, so we need to take a different path for this
 	} else {
 		//Invoke the dedicated helper for this kind of mark
-		mark_and_add_stack_variable_definitions(cfg, variable, current_function, worklist);
+		mark_and_add_memory_variable_definitions(cfg, variable, current_function, worklist);
 	}
 }
 
