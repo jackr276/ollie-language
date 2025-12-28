@@ -4704,6 +4704,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//Finally we'll struct the whole thing
 		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
+		//Copy this over if there is one
+		left_hand_var->stack_region = final_op1->stack_region;
+
 		//If this is not a temp var, then we can flag it as being assigned
 		add_assigned_variable(current_block, left_hand_var);
 

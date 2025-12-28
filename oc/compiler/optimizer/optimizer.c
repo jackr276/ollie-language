@@ -184,88 +184,23 @@ static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
 
 
 /**
- * A special mark and add definition rule exists for stack variables or any memory region.
- * This is because we need to do extra tracking for stack variables and the store statements 
- * that are used to populate them
+ * Mark definitions(assignment) of a three address variable within a given
+ * function. The current_function parameter is an optimization step designed to help
+ * us weed out useless blocks. Note that the variable passed in may be null. If it is,
+ * we just leave immediately
  */
-static void mark_and_add_memory_variable_definitions(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
-	//Mark this variable's specific stack region as being important
-	if(variable->linked_var != NULL && variable->stack_region != NULL){
-		if(variable->stack_region->mark == FALSE){
-			mark_stack_region(variable->stack_region);
-
-		//Otherwise, it was already marked so we won't retread old ground here
-		} else {
-			return;
-		}
+static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+	//If the variable is NULL, we leave
+	if(variable == NULL){
+		return;
 	}
 
-	printf("HERE WITH \n");
-	print_variable(stdout, variable, PRINTING_VAR_INLINE);
-	printf("\n\n\n\n");
-
-	//Run through all of the blocks in the current function
-	for(u_int16_t i= 0; i < cfg->created_blocks.current_index; i++){
-		//Extract
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), i);
-
-		//If these blocks are not in the same function, skip it
-		if(block->function_defined_in != current_function){
-			continue;
-		}
-
-		//Grab a cursor to the last statement in the block
-		instruction_t* cursor = block->exit_statement;
-
-		//Run through the entire block backwards and check for
-		//ways to mark
-		while(cursor != NULL){
-			//Not interested if this is NULL or if it's already been
-			//marked
-			if(cursor->assignee == NULL || cursor->mark == TRUE){
-				cursor = cursor->previous_statement;
-				continue;
-			}
-			
-			printf("CHECKING \n");
-			print_variable(stdout, cursor->assignee, PRINTING_VAR_INLINE);
-			printf("\n\n\n\n");
-
-			//If the assignee is equal to the given variable, we mark it
-			if(variables_equal(cursor->assignee, variable, TRUE) == TRUE){
-				//Add this in
-				dynamic_array_add(worklist, cursor);
-				//Mark it
-				cursor->mark = TRUE;
-				//Mark it
-				block->contains_mark = TRUE;
-			
-			//Also, if the assignee has the same stack region as the given variable, we
-			//also mark that as said stack region is now imprortant
-			} else if(cursor->assignee->stack_region != NULL
-						&& cursor->assignee->stack_region == variable->stack_region){
-				//Add this in
-				dynamic_array_add(worklist, cursor);
-				//Mark it
-				cursor->mark = TRUE;
-				//Mark it
-				block->contains_mark = TRUE;
-			}
-
-			//Go back up
-			cursor = cursor->previous_statement;
-		}
+	//If this variable has a stack region, then we will be marking
+	//said stack region
+	if(variable->stack_region != NULL){
+		mark_stack_region(variable->stack_region);
 	}
-}
 
-
-/**
- * Mark definitions(assignment) of a three address variable within
- * the current function. If a definition is not marked, it must be added to the worklist. This
- * is only intended to handle register variable definitions. There is a separate function
- * designed specifically for stack variables
- */
-static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//Run through everything here
 	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block out
@@ -335,129 +270,6 @@ static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var
 			}
 		}
 	}
-}
-
-
-/**
- * The mark and add definition rule will call one of 2 overloads, based
- * on what the variable that we're marking actually is(stack or register)
- */
-static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
-	//If this is NULL, just leave
-	if(variable == NULL){
-		return;
-	}
-
-	//If this is not a memory address variable, we will use the normal path for mark
-	//and sweep and treat this as a register variable
-	if(variable->variable_type != VARIABLE_TYPE_MEMORY_ADDRESS
-		&& is_memory_address_type(variable->type) == FALSE){
-		//Invoke the helper for this
-		mark_and_add_register_variable_definition(cfg, variable, current_function, worklist);
-
-	//Otherwise it is a stack/global variable, so we need to take a different path for this
-	} else {
-		//Invoke the dedicated helper for this kind of mark
-		mark_and_add_memory_variable_definitions(cfg, variable, current_function, worklist);
-	}
-}
-
-
-/**
- * Determine if a store statement assignee is critical or not. We determine something as critical if it
- * modifies/references something from outside of the current function(i.e. global var or function param)
- */
-static u_int8_t determine_if_store_assignee_is_critical(cfg_t* cfg, three_addr_var_t* assignee, symtab_function_record_t* function){
-	//Run through all blocks
-	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
-		//Grab it out
-		basic_block_t* current_block = dynamic_array_get_at(&(cfg->created_blocks), i);
-
-		//If this block is not a part of the current function, we're done
-		if(current_block->function_defined_in != function){
-			continue;
-		}
-
-		//Now let's crawl through everything in this block
-		instruction_t* cursor = current_block->leader_statement;
-
-		//Go through every statement
-		while(cursor != NULL){
-			//Let's first filter out statments that can't matter
-			switch(cursor->statement_type){
-				//These are never going to matter to use because they are other
-				//stores
-				case THREE_ADDR_CODE_STORE_STATEMENT:
-				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-					//Push it up and skip
-					cursor = cursor->next_statement;
-					continue;
-
-				default:
-					//No assignee means it can't be what we're after
-					if(cursor->assignee == NULL){
-						//Push it up and skip
-						cursor = cursor->next_statement;
-						continue;
-					}
-
-					break;
-			}
-
-			//If we make it down here it's worth exploring more. Let's first
-			//see if we have equal assignees. If not, we'll skip
-			if(variables_equal(assignee, cursor->assignee, TRUE) == FALSE){
-				//Push it up and skip
-				cursor = cursor->next_statement;
-				continue;
-			}
-
-			//Let's now look at the op1 of this statement that assigns the given variable. Is this op1 important?
-			three_addr_var_t* originator = cursor->op1;
-
-			//If the linked var is not NULL, we will use it for our searching
-			if(originator->linked_var != NULL){
-				//Global vars are important by default
-				if(originator->linked_var->membership == GLOBAL_VARIABLE){
-					return TRUE;
-				}
-
-				//Function parameters are important by default
-				if(originator->linked_var->membership == FUNCTION_PARAMETER){
-					return TRUE;
-				}
-
-				//Otherwise, we've hit a dead end. So, what we'll do now is recursively
-				//call this function on itself to see if we have any assignment chains that
-				//are affecting this
-				return determine_if_store_assignee_is_critical(cfg, originator, function);
-
-			//Otherwise it's a temp var, so we'll use the variable's membership itself
-			} else {
-				//Global vars are important by default
-				if(originator->membership == GLOBAL_VARIABLE){
-					return TRUE;
-				}
-
-				//Function parameters are important by default
-				if(originator->membership == FUNCTION_PARAMETER){
-					return TRUE;
-				}
-
-				//Otherwise, we've hit a dead end. So, what we'll do now is recursively
-				//call this function on itself to see if we have any assignment chains that
-				//are affecting this
-				return determine_if_store_assignee_is_critical(cfg, originator, function);
-			}
-
-			//Push it up
-			cursor = cursor->next_statement;
-		}
-	}
-
-	//If we made it all the way down here, then it is not important
-	return FALSE;
 }
 
 
@@ -587,47 +399,17 @@ static void mark(cfg_t* cfg){
 					break;
 
 				/**
-				 * Store statements that modify *global variables* are always
-				 * considered useful because it is not possible for us to determine if/when
-				 * they will be used. As such, we mark these from the start
+				 * All store statements are considered useful by the ollie optimizer,
+				 * regardless of the actual use count tracking
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT:
 				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-					//If it's a global var
-					if(current_stmt->assignee->membership == GLOBAL_VARIABLE){
-						current_stmt->mark = TRUE;
-						//Add it to the list
-						dynamic_array_add(&worklist, current_stmt);
-						//The block now has a mark
-						current->contains_mark = TRUE;
-
-					//Any kind of function parameter storing is automatically important because
-					//we are modifying a value that is outside of the current function. As such
-					//any stores like this are marked automatically
-					} else if(current_stmt->assignee->membership == FUNCTION_PARAMETER){
-						current_stmt->mark = TRUE;
-						//Add it to the list
-						dynamic_array_add(&worklist, current_stmt);
-						//The block now has a mark
-						current->contains_mark = TRUE;
-
-					/**
-					 * Otherwise, we'll need to do some more exploring here by figuring out
-					 * if the given assignee is "important" or not. This will be done
-					 * by tracing to find it's roots, and determining if it's important from there
-					 */
-					} else {
-						//Let the helper do it
-						if(determine_if_store_assignee_is_critical(cfg, current_stmt->assignee, current_function) == TRUE){
-							current_stmt->mark = TRUE;
-							//Add it to the list
-							dynamic_array_add(&worklist, current_stmt);
-							//The block now has a mark
-							current->contains_mark = TRUE;
-						}
-					}
-
+					current_stmt->mark = TRUE;
+					//Add it to the list
+					dynamic_array_add(&worklist, current_stmt);
+					//The block now has a mark
+					current->contains_mark = TRUE;
 					break;
 
 				//Let's see what other special cases we have
