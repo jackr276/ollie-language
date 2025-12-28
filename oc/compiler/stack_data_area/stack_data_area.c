@@ -193,6 +193,35 @@ void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region){
 
 
 /**
+ * Sweep the stack data area from any unmarked regions
+ */
+void sweep_stack_data_area(stack_data_area_t* area){
+	//What regions are marked for deletion
+	dynamic_array_t marked_for_deletion = dynamic_array_alloc();
+
+	//Run through the entire data area
+	for(u_int16_t i = 0; i < area->stack_regions.current_index; i++){
+		//Grab the region out
+		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
+
+		//Not marked, it needs to go
+		if(region->mark == FALSE){
+			dynamic_array_add(&marked_for_deletion, region);
+		}
+	}
+
+	//Once we have all of these that are marked for deletion, we will delete them all
+	for(u_int16_t i = 0; i < marked_for_deletion.current_index; i++){
+		//Delete it from the stack
+		dynamic_array_delete(&(area->stack_regions), dynamic_array_get_at(&marked_for_deletion, i));
+	}
+
+	//And once all of the deletion is done, we will invoke the stack realigner to fix all of the alignments
+	realign_data_area(area);
+}
+
+
+/**
  * Print the stack data area out in its entirety
  */
 void print_stack_data_area(stack_data_area_t* area){
