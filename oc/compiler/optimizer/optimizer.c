@@ -216,8 +216,9 @@ static void mark_and_add_memory_variable_definitions(cfg_t* cfg, three_addr_var_
 		//Run through the entire block backwards and check for
 		//ways to mark
 		while(cursor != NULL){
-			//Not interested if this is NULL
-			if(cursor->assignee == NULL){
+			//Not interested if this is NULL or if it's already been
+			//marked
+			if(cursor->assignee == NULL || cursor->mark == TRUE){
 				cursor = cursor->previous_statement;
 				continue;
 			}
@@ -909,6 +910,19 @@ static void sweep(cfg_t* cfg){
 					break;
 			}
 		}
+	}
+
+	//Once we've done all of the actual sweeping inside of the blocks, we will now also clean up
+	//the stack from any unmarked regions. If a region is unmarked, it is entirely useless and as such
+	//we'll just get rid of it
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Extract the block
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+
+		//We really want this one's stack
+		stack_data_area_t* stack =  &(function_entry->function_defined_in->data_area);
+
+		//TODO STACK SWEEP
 	}
 }
 
