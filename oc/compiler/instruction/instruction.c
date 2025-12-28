@@ -162,7 +162,7 @@ void insert_instruction_before_given(instruction_t* insertee, instruction_t* giv
 	given->previous_statement = insertee;
 
 	//Save the function as well
-	insertee->function = given->function;
+	insertee->function = block->function_defined_in;
 }
 
 
@@ -198,7 +198,7 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
 	}
 
 	//Save the function as well
-	insertee->function = given->function;
+	insertee->function = block->function_defined_in;
 }
 
 
