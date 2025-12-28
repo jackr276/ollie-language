@@ -28,6 +28,8 @@ pub fn main(arg:mut i32, argv:char**) -> i32{
 	}
 
 
+	//Useless store - has no effect on anything
+	oneD[2] = 3;
 
 	//So it isn't optimized away
 	ret arr[7][x] + oneDi32[2];// + *(j+1);

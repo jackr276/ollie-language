@@ -247,7 +247,6 @@ static void mark_and_add_memory_variable_definitions(cfg_t* cfg, three_addr_var_
 					break;
 			}
 
-
 			//Go back up
 			cursor = cursor->previous_statement;
 		}
@@ -494,6 +493,11 @@ static void mark(cfg_t* cfg){
 						dynamic_array_add(&worklist, current_stmt);
 						//The block now has a mark
 						current->contains_mark = TRUE;
+
+					//TODO FUNC PARAM
+					} else if(current_stmt->assignee->membership == FUNCTION_PARAMETER){
+						printf("HERE\n\n\n\n");
+
 					}
 
 					break;
