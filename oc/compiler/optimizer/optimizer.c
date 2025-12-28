@@ -617,17 +617,13 @@ static void mark(cfg_t* cfg){
 					} else {
 						//Let the helper do it
 						if(determine_if_store_assignee_is_critical(cfg, current_stmt->assignee, current->function_defined_in) == TRUE){
-
+							current_stmt->mark = TRUE;
+							//Add it to the list
+							dynamic_array_add(&worklist, current_stmt);
+							//The block now has a mark
+							current->contains_mark = TRUE;
 						}
 					}
-
-					/**
-					 * Otherwise we have a temp variable. The question now is where did this temp var
-					 * come from? If it came from, for instance, a function parameter, then we need 
-					 * mark this as important
-					 */
-
-					//TODO WE ARE NOT COMPREHENSIVE HERE
 
 					break;
 
