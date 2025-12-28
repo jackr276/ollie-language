@@ -1,6 +1,7 @@
 /**
 * Author: Jack Robbins
-* Test switching on an enum
+* Test switching on an enum that is exhaustive - and as such needs no default
+* clause
 */
 
 /**
@@ -11,8 +12,7 @@ define enum type_enum{
 	TYPE_TWO,
 	TYPE_THREE,
 	TYPE_FOUR,
-	TYPE_FIVE,
-	TYPE_SIX
+	TYPE_FIVE
 } as my_enum_type;
 
 fn tester(param:my_enum_type) -> i32{
@@ -25,7 +25,10 @@ fn tester(param:my_enum_type) -> i32{
 		case TYPE_TWO -> {
 			x = -3;
 		}
-		case TYPE_FOUR -> {}
+		case TYPE_FOUR -> {
+			x = -2;
+
+		}
 		case TYPE_THREE -> {
 			x = 211;
 		}

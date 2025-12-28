@@ -40,6 +40,9 @@ variable_symtab_t* variable_symtab;
 //Store for use
 static generic_type_t* char_type = NULL;
 static generic_type_t* u8 = NULL;
+static generic_type_t* i8 = NULL;
+static generic_type_t* u16 = NULL;
+static generic_type_t* i16 = NULL;
 static generic_type_t* i32 = NULL;
 static generic_type_t* u32 = NULL;
 static generic_type_t* u64 = NULL;
@@ -6509,10 +6512,26 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 		result_package.final_block = function_exit_block;
 	}
 
+	/**
+	 * If the default clause is NULL, which it may very well be, we will created
+	 * our own dummy default clause that just jumps to the end. This maintains
+	 * the intention of the programmer but also allows us to reuse the code
+	 * from default blocks
+	 */
+	if(default_block == NULL){
+		//Create it
+		default_block = basic_block_alloc_and_estimate();
+
+		//Emit a jump from it to the end block
+		emit_jump(default_block, result_package.final_block);
+	}
+
 	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
-	//will be set to point to the default block
+	//will be set to point to the default block. 
 	for(u_int16_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
-		//If it's null, we'll make it the default
+		//If it's null, we'll make it the default. This should only happen in switches
+		//that are non-exhaustive. For exhaustive switches, the parser has already ensured that we
+		//will have a block for every case value
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 		}
@@ -6638,7 +6657,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	
 	//Keep a reference to whatever the current switch statement block is
 	basic_block_t* current_block;
-	basic_block_t* default_block;
+	basic_block_t* default_block = NULL;
 	
 	//Let's first emit the expression. This will at least give us an assignee to work with
 	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE, TRUE);
@@ -6711,6 +6730,19 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
+	}
+
+	/**
+	 * It is entirely possible that we have no default block here. In that case, we will
+	 * make our own "dummy" default block that simply breaks to end and has no effect. This
+	 * will preserve the intention of the programmer and keep our flow simpler here
+	 */
+	if(default_block == NULL){
+		//Create it
+		default_block = basic_block_alloc_and_estimate();
+
+		//All that this block has is a direct jump to the end
+		emit_jump(default_block, ending_block);
 	}
 
 	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
@@ -7845,10 +7877,16 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 /**
  * Go through a function end block and determine/insert the ret statements that we need
+ *
+ * In the event that a given function does not return where it should, a "ret 0" will be used.
+ * This is technically undefined behavior, so users will get what they get here
  */
 static void determine_and_insert_return_statements(basic_block_t* function_exit_block){
 	//For convenience
 	symtab_function_record_t* function_defined_in = function_exit_block->function_defined_in;
+
+	//For accurate error printing
+	u_int8_t is_main_function = strcmp(function_defined_in->func_name.string, "main") == 0 ? TRUE : FALSE;
 
 	//Run through all of the predecessors
 	for(u_int16_t i = 0; i < function_exit_block->predecessors.current_index; i++){
@@ -7858,16 +7896,61 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 		//If the exit statement is not a return statement, we need to know what's happening here
 		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 			//If this isn't void, then we need to throw a warning
-			if(function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
-				|| function_defined_in->return_type->basic_type_token != VOID){
+			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
+				|| function_defined_in->return_type->basic_type_token != VOID)
+				//It's a technically supported use-case to not put a return on main
+				&& is_main_function == FALSE){
 				print_parse_message(WARNING, "Non-void function does not return in all control paths", 0);
 			}
+
+			//If it's not a void type, we do one thing
+			if(function_defined_in->return_type->basic_type_token != VOID){
+				//The appropriate type for the return variable
+				generic_type_t* return_var_type;
+
+				//Determine a type compatible for us to use
+				switch(function_defined_in->return_type->type_size){
+					case 1:
+						return_var_type = i8;
+						break;
+					case 2:
+						return_var_type = i16;
+						break;
+					case 4:
+						return_var_type = i32;
+						break;
+					//Anything else is just going in %rax
+					default:
+						return_var_type = i64;
+						break;
+				}
+
+				//Emit the constant with the appropriate type
+				three_addr_const_t* ret_const = emit_direct_integer_or_char_constant(0, return_var_type);
+
+				//Now emit the assignment
+				instruction_t* assignment = emit_assignment_with_const_instruction(emit_temp_var(return_var_type), ret_const);
 			
-			//We'll now manually insert the ret statement here
-			instruction_t* instruction = emit_ret_instruction(NULL);
-			
-			//We'll now add this at the very end of the block
-			add_statement(block, instruction);
+				//This goes into the block
+				add_statement(block, assignment); 
+
+				//We'll now manually insert a ret 0 based on whatever the return type of the function is
+				instruction_t* return_instruction = emit_ret_instruction(assignment->assignee);
+
+				//This counts as a use
+				add_used_variable(block, assignment->assignee);
+				
+				//We'll now add this at the very end of the block
+				add_statement(block, return_instruction);
+
+			//Otherwise it is void, so we just emit a plain "ret"
+			} else {
+				//Void returning - just emit a plain ret
+				instruction_t* return_instruction = emit_ret_instruction(NULL);
+				
+				//We'll now add this at the very end of the block
+				add_statement(block, return_instruction);
+			}
 		}
 	}
 }
@@ -8876,7 +8959,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(type_symtab, "i32", NOT_MUTABLE)->type;
+	u16 = lookup_type_name_only(type_symtab, "u16", NOT_MUTABLE)->type;
+	i16 = lookup_type_name_only(type_symtab, "i16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
+	i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE)->type;
 	char_type = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
 
 	//We'll first create the fresh CFG here

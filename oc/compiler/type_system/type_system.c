@@ -3,6 +3,7 @@
 */
 
 #include "type_system.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1753,6 +1754,10 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 	//Store the name
 	type->type_name = type_name;
 
+	//Initialize the min/max values here to be good for sorting
+	type->max_enum_value = INT32_MIN;
+	type->min_enum_value = INT32_MAX;
+
 	//Reserve space for the enum table
 	type->internal_types.enumeration_table = dynamic_array_alloc();
 
@@ -1995,6 +2000,9 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 	//For the type system
 	symtab_variable_record_t* enum_variable = enum_member;
 
+	//Grab the value out for ease of use
+	int32_t enum_member_value = enum_variable->enum_member_value;
+
 	//Flag what this is
 	enum_variable->membership = ENUM_MEMBER;
 
@@ -2007,12 +2015,21 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 			symtab_variable_record_t* variable = dynamic_array_get_at(&(enum_type->internal_types.enumeration_table), i);
 
 			//If these 2 equal, we fail out
-			if(variable->enum_member_value == ((symtab_variable_record_t*)enum_member)->enum_member_value){
+			if(variable->enum_member_value == enum_member_value){
 				return FAILURE;
 			}
 		}
-
 		//If we survive to here, then we're good
+	}
+
+	//Update the values for the min and max enum values
+	if(enum_member_value < enum_type->min_enum_value){
+		enum_type->min_enum_value = enum_member_value;
+	}
+
+	//Update the max too
+	if(enum_member_value > enum_type->max_enum_value){
+		enum_type->max_enum_value = enum_member_value;
 	}
 
 	//Just throw the member in
@@ -2194,6 +2211,44 @@ u_int8_t is_type_signed(generic_type_t* type){
 		case F32:
 		case F64:
 			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is a given type "exhaustive switch eligible"?
+ *
+ * The only types that are are 8 bit integers and enums
+ * who have less than 1024 member
+ */
+u_int8_t is_exhaustive_switch_eligible(generic_type_t* type){
+	//Make sure it's not aliased
+	type = dealias_type(type);
+
+	//The only 2 that could be are enums and 8 bit types
+	switch(type->type_class){
+		case TYPE_CLASS_BASIC:
+			//Only 8 bit values here
+			switch(type->basic_type_token){
+				case I8:
+				case U8:
+				case CHAR:
+					return TRUE;
+				default:
+					return FALSE;
+			}
+
+		//For an enum to work, the size must be less
+		//than 1024
+		case TYPE_CLASS_ENUMERATED:
+			if(type->internal_types.enumeration_table.current_index < MAX_SWITCH_RANGE){
+				return TRUE;
+			} else {
+				return FALSE;
+			}
+
 		default:
 			return FALSE;
 	}

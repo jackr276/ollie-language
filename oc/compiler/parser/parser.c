@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -102,7 +103,7 @@ static generic_ast_node_t* compound_statement(FILE* fl);
 static generic_ast_node_t* statement(FILE* fl);
 static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side);
-static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, u_int32_t* current_case_value);
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* current_case_value);
 static generic_ast_node_t* default_statement(FILE* fl);
 static generic_ast_node_t* declare_statement(FILE* fl, u_int8_t is_global);
 static generic_ast_node_t* defer_statement(FILE* fl);
@@ -154,6 +155,48 @@ static u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
 	} else {
 		return FALSE;
 	}
+}
+
+
+/**
+ * Insert a value into a list in sorted order(least to greatest).
+ * We assume that the list is inherently large enought to do this.
+ * This is meant primarily for case statement handling. It also validates
+ * the uniqueness constraint of the list given in
+ */
+static int32_t sorted_list_insert_unique(int32_t* list, int32_t* max_index, int32_t value){
+	//We will need this outside of the loop's scope
+	int32_t i;
+
+	//Run through everything in the list
+	for(i = 0; i < *max_index; i++){
+		//Once we've found it, we can get out
+		if(value < list[i]){
+			break;
+		}
+
+		//This invalidates the uniqueness constraint
+		//so we need to fail out
+		if(value == list[i]){
+			return FALSE;
+		}
+	}
+
+	//Bump this up now, we're going to have one more element
+	*max_index += 1;
+
+	//Shift everything in the list to the right to
+	//make room
+	for(int32_t j = *max_index - 1; j > i; j--){
+		//Shift over by 1 each time
+		list[j] = list[j - 1];
+	}
+
+	//And finally, put in our guy
+	list[i] = value;
+
+	//This worked
+	return TRUE;
 }
 
 
@@ -5793,7 +5836,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 		//This means that the user attempted to add a duplicate value
 		if(success == FAILURE){
-			sprintf(info, "Duplicate enum value %ld", member_record->enum_member_value);
+			sprintf(info, "Duplicate enum value %d", member_record->enum_member_value);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return FAILURE;
@@ -5804,7 +5847,7 @@ static u_int8_t enum_definer(FILE* fl){
 
 		//This means that the user attempted to add a duplicate value
 		if(success == FAILURE){
-			sprintf(info, "Duplicate enum value %ld", member_record->enum_member_value);
+			sprintf(info, "Duplicate enum value %d", member_record->enum_member_value);
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return FAILURE;
@@ -7301,7 +7344,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 
 	//What is the current case statement value that we're on?. This is 
 	//used in the values[] above
-	u_int32_t current_case_value = 0;
+	int32_t values_max_index = 0;
 
 	//So long as we don't see a right curly
 	while(lookahead.tok != R_CURLY){
@@ -7311,7 +7354,7 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 			case CASE:
 				//Handle a case statement here. We'll need to pass
 				//the node in because of the type checking that we do
-				stmt = case_statement(fl, switch_stmt_node, values, &current_case_value);
+				stmt = case_statement(fl, switch_stmt_node, values, &values_max_index);
 
 				//Go based on what our class here
 				switch(stmt->ast_node_type){
@@ -7443,15 +7486,155 @@ static generic_ast_node_t* switch_statement(FILE* fl){
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
 	}
 
-	//If we have an entirely empty switch statement
+	//If we have an entirely empty switch statement, it's a failure
 	if(is_empty == TRUE){
 		return print_and_return_error("Switch statements with no cases are not allowed", current_line);
 	}
 
-	//If we haven't found a default clause, it's a failure
-	if(found_default_clause == FALSE){
-		return print_and_return_error("Switch statements are required to have a \"default\" clause", current_line);
-	}	
+	//Do we have a type that is eligible for a "exhaustive switch"? If so, this would
+	//mean that we may not need a default clause at all
+	if(is_exhaustive_switch_eligible(type) == TRUE){
+		//Should we check for exhaustiveness here? Assume true
+		//unless told otherwise
+		u_int8_t check_for_exhaustive = TRUE;
+
+		//Now go based on what kind of type we have here
+		switch(type->type_class){
+			//For basic types, we need to check if we're getting a full range
+			case TYPE_CLASS_BASIC:
+				switch(type->basic_type_token){
+					case U8:
+					case CHAR:
+						//If we want to check for exhaustive, we'll need 
+						//the low and high to be the lower and upper bounds
+						if(switch_stmt_node->lower_bound != 0 
+							|| switch_stmt_node->upper_bound != UINT8_MAX){
+
+							//Don't bother checking
+							check_for_exhaustive = FALSE;
+						}
+
+						break;
+					
+					case I8:
+						//If we want to check for exhaustive, we'll need 
+						//the low and high to be the lower and upper bounds
+						if(switch_stmt_node->lower_bound != INT8_MIN 
+							|| switch_stmt_node->upper_bound != INT8_MAX){
+
+							//Don't bother checking
+							check_for_exhaustive = FALSE;
+						}
+						
+						break;
+
+					//Unreachable so if we hit this get out
+					default:
+						printf("Fatal internal compiler error. Unreachable path hit in switch statement validator\n");
+						exit(1);
+				}
+
+				//Are we going to bother checking to see if it's exhaustive?
+				if(check_for_exhaustive == TRUE){
+					//Did we find a gap? assume no to start
+					u_int8_t gap_found = FALSE;
+
+					//Run through the list and ensure that there are no gaps between the values
+					for(int32_t i = 1; i < values_max_index; i++){
+						//This is a gap, immediate exit
+						if(values[i] - values[i - 1] != 1){
+							gap_found = TRUE;
+							break;
+						}
+					}
+
+					//If there is no gap, then this is exhaustive and we do *not* need 
+					//a default clause
+					if(gap_found == FALSE){
+						//If we haven't found a default clause, it's a failure
+						if(found_default_clause == TRUE){
+							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", current_line);
+						}	
+
+					//Otherwise it's not exhaustive, so we do
+					} else {
+						//If we haven't found a default clause, it's a failure
+						if(found_default_clause == FALSE){
+							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+						}	
+					}
+
+				//If not, then this *needs* to have a default statement
+				} else {
+					//If we haven't found a default clause, it's a failure
+					if(found_default_clause == FALSE){
+						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+					}	
+				}
+
+				break;
+
+			//Go through our enum type here
+			case TYPE_CLASS_ENUMERATED:
+				//If we don't have these, then we already know we can't go further
+				if(switch_stmt_node->lower_bound != type->min_enum_value
+					|| switch_stmt_node->upper_bound != type->max_enum_value){
+					check_for_exhaustive = FALSE;
+				}
+
+				//Are we going to bother checking to see if it's exhaustive?
+				if(check_for_exhaustive == TRUE){
+					//Did we find a gap? assume no to start
+					u_int8_t gap_found = FALSE;
+
+					//Run through the list and ensure that there are no gaps between the values
+					for(int32_t i = 1; i < values_max_index; i++){
+						//This is a gap, immediate exit
+						if(values[i] - values[i - 1] != 1){
+							gap_found = TRUE;
+							break;
+						}
+					}
+
+					//If there is no gap, then this is exhaustive and we do *not* need 
+					//a default clause
+					if(gap_found == FALSE){
+						//If we haven't found a default clause, it's a failure
+						if(found_default_clause == TRUE){
+							return print_and_return_error("\"default\" clause in exhaustive switch is unreachable", current_line);
+						}	
+
+					//Otherwise it's not exhaustive, so we do
+					} else {
+						//If we haven't found a default clause, it's a failure
+						if(found_default_clause == FALSE){
+							return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+						}	
+					}
+
+				//If not, then this *needs* to have a default statement
+				} else {
+					//If we haven't found a default clause, it's a failure
+					if(found_default_clause == FALSE){
+						return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+					}	
+				}
+
+				break;
+				
+			//We should never hit this, so if we do get out
+			default:
+				printf("Fatal internal compiler error. Unreachable path hit in switch statement validator\n");
+				exit(1);
+		}
+
+	//Otherwise it's not even exhaustive switch eligible, so a default clause is a must in Ollie
+	} else {
+		//If we haven't found a default clause, it's a failure
+		if(found_default_clause == FALSE){
+			return print_and_return_error("Non-exhaustive switch statements are required to have a \"default\" clause", current_line);
+		}	
+	}
 
 	//If we do have a c-style switch statement here, we'll need to redefine the type
 	//that the origin switch node is
@@ -8337,7 +8520,7 @@ static generic_ast_node_t* default_statement(FILE* fl){
  *
  * NOTE: We assume that we have already seen and consumed the first case token here
  */
-static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, u_int32_t* current_case_value){
+static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* values_max_index){
 	//Freeze the current line number
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
@@ -8419,17 +8602,29 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			//if the user does this
 			switch(const_node->constant_type){
 				case INT_CONST:
-				case INT_CONST_FORCE_U:
-				case LONG_CONST:
-				case LONG_CONST_FORCE_U:
-
 					//Store the value
 					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
 					break;
-
+				case HEX_CONST:
+					//Store the value
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
+					break;
+				case INT_CONST_FORCE_U:
+					//Store the value
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_int_value;
+					break;
+				case LONG_CONST:
+					//Store the value
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_long_value;
+					break;
+				case LONG_CONST_FORCE_U:
+					//Store the value
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_long_value;
+					break;
 				case CHAR_CONST:
 					//Just assign the char value here
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.char_value;
+					break;
 
 				default:
 					return print_and_return_error("Illegal type given as case statement value", parser_line_num);
@@ -8474,22 +8669,15 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		return print_and_return_error(info, current_line);
 	}
 
-	//Run through and check for duplicates. All of our case values are stored in 
-	//this one giant list of int32_t values for this exact reason. If we have duplicates,
-	//then the jump table simply won't work
-	for(u_int32_t i = 0; i < *current_case_value; i++){
-		//If we have a duplicate, this is bad
-		if(values[i] == case_stmt->constant_value.signed_int_value){
-			sprintf(info, "Value %d is duplicated in the switch statement", case_stmt->constant_value.signed_int_value);
-			return print_and_return_error(info, parser_line_num);
-		}
+	//Let the helper deal with this. If we get a false here, then we bail out. This ensures that we have a nice sorted list
+	//of values to deal with, which makes completeness validations in the parent method easier
+	u_int8_t uniqueness_worked = sorted_list_insert_unique(values, values_max_index, case_stmt->constant_value.signed_int_value);
+
+	//This means that a duplicate value was detected
+	if(uniqueness_worked == FALSE){
+		sprintf(info, "Value %d is duplicated in the switch statement", case_stmt->constant_value.signed_int_value);
+		return print_and_return_error(info, parser_line_num);
 	}
-
-	//Store our value inside of our big list of values for the next run
-	values[*current_case_value]= case_stmt->constant_value.signed_int_value;
-
-	//Now bump this value up for the next run
-	(*current_case_value)++;
 
 	//One last thing to check -- we need a colon
 	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
