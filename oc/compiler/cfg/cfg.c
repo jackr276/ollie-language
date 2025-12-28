@@ -7936,6 +7936,9 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 
 				//We'll now manually insert a ret 0 based on whatever the return type of the function is
 				instruction_t* return_instruction = emit_ret_instruction(assignment->assignee);
+
+				//This counts as a use
+				add_used_variable(block, assignment->assignee);
 				
 				//We'll now add this at the very end of the block
 				add_statement(block, return_instruction);
