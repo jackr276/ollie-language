@@ -408,12 +408,51 @@ static u_int8_t determine_if_store_assignee_is_critical(cfg_t* cfg, three_addr_v
 				continue;
 			}
 
+
 			printf("\nVARIABLE: ");
 			print_variable(stdout, assignee, PRINTING_VAR_INLINE);
 
-			printf("ASSIGNED TO AT: ");
+			printf("\nASSIGNED TO AT: ");
 			print_three_addr_code_stmt(stdout, cursor);
 			printf("\n\n\n");
+
+			//Let's now look at the op1 of this statement that assigns the given variable. Is this op1 important?
+			three_addr_var_t* originator = cursor->op1;
+
+			//If the linked var is not NULL, we will use it for our searching
+			if(originator->linked_var != NULL){
+				//Global vars are important by default
+				if(originator->linked_var->membership == GLOBAL_VARIABLE){
+					return TRUE;
+				}
+
+				//Function parameters are important by default
+				if(originator->linked_var->membership == FUNCTION_PARAMETER){
+					return TRUE;
+				}
+
+				//Otherwise, we've hit a dead end. So, what we'll do now is recursively
+				//call this function on itself to see if we have any assignment chains that
+				//are affecting this
+				return determine_if_store_assignee_is_critical(cfg, originator, function);
+
+			//Otherwise it's a temp var, so we'll use the variable's membership itself
+			} else {
+				//Global vars are important by default
+				if(originator->membership == GLOBAL_VARIABLE){
+					return TRUE;
+				}
+
+				//Function parameters are important by default
+				if(originator->membership == FUNCTION_PARAMETER){
+					return TRUE;
+				}
+
+				//Otherwise, we've hit a dead end. So, what we'll do now is recursively
+				//call this function on itself to see if we have any assignment chains that
+				//are affecting this
+				return determine_if_store_assignee_is_critical(cfg, originator, function);
+			}
 
 			//Push it up
 			cursor = cursor->next_statement;
