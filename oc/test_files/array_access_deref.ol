@@ -11,6 +11,17 @@ pub fn access_array(a:mut i32**) -> i32{
 }
 
 
+pub fn access_array2(a:mut i32**) -> i32{
+	//Test our tracking abilities
+	let x:mut i32* = *a;
+
+	x[1] = 3;
+	x[2] = 3;
+
+	ret 0;
+}
+
+
 pub fn main() -> i32 {
 	//The compiler should detect and count the number
 	//in the array initializer list.

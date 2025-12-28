@@ -504,12 +504,20 @@ static void mark(cfg_t* cfg){
 						current->contains_mark = TRUE;
 					}
 
+					/**
+					 * Otherwise we have a temp variable. The question now is where did this temp var
+					 * come from? If it came from, for instance, a function parameter, then we need 
+					 * mark this as important
+					 */
+
+					//TODO WE ARE NOT COMPREHENSIVE HERE
+
 					break;
 
 				//Let's see what other special cases we have
 				default:
 					break;
-				}
+			}
 
 			//Advance the current statement up
 			current_stmt = current_stmt->next_statement;
