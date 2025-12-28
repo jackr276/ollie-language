@@ -825,6 +825,38 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 
 
 /**
+ * Create and return a three address var from an existing variable. These special
+ * "memory address vars" will represent the memory address of the variable in question
+*/
+three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_region_t* region){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_vars, emitted_var);
+
+	//This is a memory address variable. We will flag this for special
+	//printing
+	emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
+
+	//We always store the type as the type with which this variable was defined in the CFG
+	emitted_var->type = type;
+
+	//Give it a temp var number
+	emitted_var->temp_var_number = increment_and_get_temp_id();
+
+	//Store the associate stack region(this is usually null)
+	emitted_var->stack_region = region;
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
  * Emit a variable for an identifier node. This rule is designed to account for the fact that
  * some identifiers may have had their types casted / coerced, so we need to keep the actual
  * inferred type here
@@ -1456,8 +1488,13 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 					fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
 					break;
 				case VARIABLE_TYPE_MEMORY_ADDRESS:
-					//Print out the normal version, plus the MEM<> wrapper
-					fprintf(fl, "MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
+					if(variable->linked_var != NULL){
+						//Print out the normal version, plus the MEM<> wrapper
+						fprintf(fl, "MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
+					} else {
+						fprintf(fl, "MEM<t%d>", variable->temp_var_number);
+					}
+
 					break;
 			}
 

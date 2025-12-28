@@ -4158,6 +4158,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							//Add this into the block
 							add_statement(current_block, address_assignment);
 
+							//TODO
+							//
+							//
+							//
+							//
+							//THIS WILL NOT WORK
+
 							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
 							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, address_assignment->assignee, u64);
 							store->is_branch_ending = is_branch_ending;
