@@ -200,6 +200,10 @@ static void mark_and_add_memory_variable_definitions(cfg_t* cfg, three_addr_var_
 		}
 	}
 
+	printf("HERE WITH \n");
+	print_variable(stdout, variable, PRINTING_VAR_INLINE);
+	printf("\n\n\n\n");
+
 	//Run through all of the blocks in the current function
 	for(u_int16_t i= 0; i < cfg->created_blocks.current_index; i++){
 		//Extract
@@ -222,35 +226,35 @@ static void mark_and_add_memory_variable_definitions(cfg_t* cfg, three_addr_var_
 				cursor = cursor->previous_statement;
 				continue;
 			}
+			
+			printf("CHECKING \n");
+			print_variable(stdout, cursor->assignee, PRINTING_VAR_INLINE);
+			printf("\n\n\n\n");
 
-			//Go based on what statement is under our cursor
-			switch(cursor->statement_type){
-				case THREE_ADDR_CODE_STORE_STATEMENT:
-				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
-				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
-					//If the assignee is equal to what we're marking, we'll need to mark these
-					//statements as well
-					if(variables_equal(variable, cursor->assignee, TRUE) == TRUE){
-						//Add this in
-						dynamic_array_add(worklist, cursor);
-						//Mark it
-						cursor->mark = TRUE;
-						//Mark it
-						block->contains_mark = TRUE;
-					}
-
-					break;
-
-				//Otherwise we aren't actually modifying anything here, so
-				//we'll skip
-				default:
-					break;
+			//If the assignee is equal to the given variable, we mark it
+			if(variables_equal(cursor->assignee, variable, TRUE) == TRUE){
+				//Add this in
+				dynamic_array_add(worklist, cursor);
+				//Mark it
+				cursor->mark = TRUE;
+				//Mark it
+				block->contains_mark = TRUE;
+			
+			//Also, if the assignee has the same stack region as the given variable, we
+			//also mark that as said stack region is now imprortant
+			} else if(cursor->assignee->stack_region != NULL
+						&& cursor->assignee->stack_region == variable->stack_region){
+				//Add this in
+				dynamic_array_add(worklist, cursor);
+				//Mark it
+				cursor->mark = TRUE;
+				//Mark it
+				block->contains_mark = TRUE;
 			}
 
 			//Go back up
 			cursor = cursor->previous_statement;
 		}
-
 	}
 }
 
@@ -346,7 +350,8 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 	//If this is not a memory address variable, we will use the normal path for mark
 	//and sweep and treat this as a register variable
-	if(variable->variable_type != VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(variable->variable_type != VARIABLE_TYPE_MEMORY_ADDRESS
+		&& is_memory_address_type(variable->type) == FALSE){
 		//Invoke the helper for this
 		mark_and_add_register_variable_definition(cfg, variable, current_function, worklist);
 
@@ -407,14 +412,6 @@ static u_int8_t determine_if_store_assignee_is_critical(cfg_t* cfg, three_addr_v
 				cursor = cursor->next_statement;
 				continue;
 			}
-
-
-			printf("\nVARIABLE: ");
-			print_variable(stdout, assignee, PRINTING_VAR_INLINE);
-
-			printf("\nASSIGNED TO AT: ");
-			print_three_addr_code_stmt(stdout, cursor);
-			printf("\n\n\n");
 
 			//Let's now look at the op1 of this statement that assigns the given variable. Is this op1 important?
 			three_addr_var_t* originator = cursor->op1;
