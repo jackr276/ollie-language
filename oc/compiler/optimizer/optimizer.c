@@ -191,7 +191,13 @@ static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
 static void mark_and_add_memory_variable_definitions(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//Mark this variable's specific stack region as being important
 	if(variable->linked_var != NULL && variable->linked_var->stack_region != NULL){
-		mark_stack_region(variable->linked_var->stack_region);
+		if(variable->linked_var->stack_region->mark == FALSE){
+			mark_stack_region(variable->linked_var->stack_region);
+
+		//Otherwise, it was already marked so we won't retread old ground here
+		} else {
+			return;
+		}
 	}
 
 	//Run through all of the blocks in the current function
@@ -202,6 +208,47 @@ static void mark_and_add_memory_variable_definitions(cfg_t* cfg, three_addr_var_
 		//If these blocks are not in the same function, skip it
 		if(block->function_defined_in != current_function){
 			continue;
+		}
+
+		//Grab a cursor to the last statement in the block
+		instruction_t* cursor = block->exit_statement;
+
+		//Run through the entire block backwards and check for
+		//ways to mark
+		while(cursor != NULL){
+			//Not interested if this is NULL
+			if(cursor->assignee == NULL){
+				cursor = cursor->previous_statement;
+				continue;
+			}
+
+			//Go based on what statement is under our cursor
+			switch(cursor->statement_type){
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//If the assignee is equal to what we're marking, we'll need to mark these
+					//statements as well
+					if(variables_equal(variable, cursor->assignee, TRUE) == TRUE){
+						//Add this in
+						dynamic_array_add(worklist, cursor);
+						//Mark it
+						cursor->mark = TRUE;
+						//Mark it
+						block->contains_mark = TRUE;
+					}
+
+					break;
+
+				//Otherwise we aren't actually modifying anything here, so
+				//we'll skip
+				default:
+					break;
+			}
+
+
+			//Go back up
+			cursor = cursor->previous_statement;
 		}
 
 	}
