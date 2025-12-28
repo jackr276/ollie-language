@@ -359,6 +359,73 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 
 /**
+ * Determine if a store statement assignee is critical or not. We determine something as critical if it
+ * modifies/references something from outside of the current function(i.e. global var or function param)
+ */
+static u_int8_t determine_if_store_assignee_is_critical(cfg_t* cfg, three_addr_var_t* assignee, symtab_function_record_t* function){
+	//Run through all blocks
+	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
+		//Grab it out
+		basic_block_t* current_block = dynamic_array_get_at(&(cfg->created_blocks), i);
+
+		//If this block is not a part of the current function, we're done
+		if(current_block->function_defined_in != function){
+			continue;
+		}
+
+		//Now let's crawl through everything in this block
+		instruction_t* cursor = current_block->leader_statement;
+
+		//Go through every statement
+		while(cursor != NULL){
+			//Let's first filter out statments that can't matter
+			switch(cursor->statement_type){
+				//These are never going to matter to use because they are other
+				//stores
+				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+				case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+					//Push it up and skip
+					cursor = cursor->next_statement;
+					continue;
+
+				default:
+					//No assignee means it can't be what we're after
+					if(cursor->assignee == NULL){
+						//Push it up and skip
+						cursor = cursor->next_statement;
+						continue;
+					}
+
+					break;
+			}
+
+			//If we make it down here it's worth exploring more. Let's first
+			//see if we have equal assignees. If not, we'll skip
+			if(variables_equal(assignee, cursor->assignee, TRUE) == FALSE){
+				//Push it up and skip
+				cursor = cursor->next_statement;
+				continue;
+			}
+
+			printf("\nVARIABLE: ");
+			print_variable(stdout, assignee, PRINTING_VAR_INLINE);
+
+			printf("ASSIGNED TO AT: ");
+			print_three_addr_code_stmt(stdout, cursor);
+			printf("\n\n\n");
+
+			//Push it up
+			cursor = cursor->next_statement;
+		}
+	}
+
+	//If we made it all the way down here, then it is not important
+	return FALSE;
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -502,6 +569,17 @@ static void mark(cfg_t* cfg){
 						dynamic_array_add(&worklist, current_stmt);
 						//The block now has a mark
 						current->contains_mark = TRUE;
+
+					/**
+					 * Otherwise, we'll need to do some more exploring here by figuring out
+					 * if the given assignee is "important" or not. This will be done
+					 * by tracing to find it's roots, and determining if it's important from there
+					 */
+					} else {
+						//Let the helper do it
+						if(determine_if_store_assignee_is_critical(cfg, current_stmt->assignee, current->function_defined_in) == TRUE){
+
+						}
 					}
 
 					/**
