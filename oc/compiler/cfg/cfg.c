@@ -40,6 +40,9 @@ variable_symtab_t* variable_symtab;
 //Store for use
 static generic_type_t* char_type = NULL;
 static generic_type_t* u8 = NULL;
+static generic_type_t* i8 = NULL;
+static generic_type_t* u16 = NULL;
+static generic_type_t* i16 = NULL;
 static generic_type_t* i32 = NULL;
 static generic_type_t* u32 = NULL;
 static generic_type_t* u64 = NULL;
@@ -7874,10 +7877,17 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 /**
  * Go through a function end block and determine/insert the ret statements that we need
+ *
+ * In the event that a given function does not return where it should, a "ret 0" will be used.
+ * This is technically undefined behavior, so users will get what they get here
  */
 static void determine_and_insert_return_statements(basic_block_t* function_exit_block){
 	//For convenience
 	symtab_function_record_t* function_defined_in = function_exit_block->function_defined_in;
+
+	//Is this the main function or not? If it is the main function, and it's missing a return, we
+	//will need to insert a ret 0 for it
+	u_int8_t is_main_function = strcmp(function_defined_in->func_name.string, "main") == 0 ? TRUE : FALSE;
 
 	//Run through all of the predecessors
 	for(u_int16_t i = 0; i < function_exit_block->predecessors.current_index; i++){
@@ -7887,16 +7897,47 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 		//If the exit statement is not a return statement, we need to know what's happening here
 		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 			//If this isn't void, then we need to throw a warning
-			if(function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
-				|| function_defined_in->return_type->basic_type_token != VOID){
+			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
+				|| function_defined_in->return_type->basic_type_token != VOID)
+				//It's a technically supported use-case to not put a return on main
+				&& is_main_function == FALSE){
 				print_parse_message(WARNING, "Non-void function does not return in all control paths", 0);
 			}
-			
-			//We'll now manually insert the ret statement here
-			instruction_t* instruction = emit_ret_instruction(NULL);
+
+			//The appropriate type for the return variable
+			generic_type_t* return_var_type;
+
+			//Determine a type compatible for us to use
+			switch(function_defined_in->return_type->type_size){
+				case 1:
+					return_var_type = i8;
+					break;
+				case 2:
+					return_var_type = i16;
+					break;
+				case 4:
+					return_var_type = i32;
+					break;
+				//Anything else is just going in %rax
+				default:
+					return_var_type = i64;
+					break;
+			}
+
+			//Emit the constant with the appropriate type
+			three_addr_const_t* ret_const = emit_direct_integer_or_char_constant(0, return_var_type);
+
+			//Now emit the assignment
+			instruction_t* assignment = emit_assignment_with_const_instruction(emit_temp_var(return_var_type), ret_const);
+		
+			//This goes into the block
+			add_statement(block, assignment); 
+
+			//We'll now manually insert a ret 0 based on whatever the return type of the function is
+			instruction_t* return_instruction = emit_ret_instruction(assignment->assignee);
 			
 			//We'll now add this at the very end of the block
-			add_statement(block, instruction);
+			add_statement(block, return_instruction);
 		}
 	}
 }
@@ -8905,7 +8946,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(type_symtab, "i32", NOT_MUTABLE)->type;
+	u16 = lookup_type_name_only(type_symtab, "u16", NOT_MUTABLE)->type;
+	i16 = lookup_type_name_only(type_symtab, "i16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(type_symtab, "u8", NOT_MUTABLE)->type;
+	i8 = lookup_type_name_only(type_symtab, "i8", NOT_MUTABLE)->type;
 	char_type = lookup_type_name_only(type_symtab, "char", NOT_MUTABLE)->type;
 
 	//We'll first create the fresh CFG here
