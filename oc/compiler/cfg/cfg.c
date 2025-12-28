@@ -7885,8 +7885,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	//For convenience
 	symtab_function_record_t* function_defined_in = function_exit_block->function_defined_in;
 
-	//Is this the main function or not? If it is the main function, and it's missing a return, we
-	//will need to insert a ret 0 for it
+	//For accurate error printing
 	u_int8_t is_main_function = strcmp(function_defined_in->func_name.string, "main") == 0 ? TRUE : FALSE;
 
 	//Run through all of the predecessors
@@ -7904,40 +7903,51 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				print_parse_message(WARNING, "Non-void function does not return in all control paths", 0);
 			}
 
-			//The appropriate type for the return variable
-			generic_type_t* return_var_type;
+			//If it's not a void type, we do one thing
+			if(function_defined_in->return_type->basic_type_token != VOID){
+				//The appropriate type for the return variable
+				generic_type_t* return_var_type;
 
-			//Determine a type compatible for us to use
-			switch(function_defined_in->return_type->type_size){
-				case 1:
-					return_var_type = i8;
-					break;
-				case 2:
-					return_var_type = i16;
-					break;
-				case 4:
-					return_var_type = i32;
-					break;
-				//Anything else is just going in %rax
-				default:
-					return_var_type = i64;
-					break;
-			}
+				//Determine a type compatible for us to use
+				switch(function_defined_in->return_type->type_size){
+					case 1:
+						return_var_type = i8;
+						break;
+					case 2:
+						return_var_type = i16;
+						break;
+					case 4:
+						return_var_type = i32;
+						break;
+					//Anything else is just going in %rax
+					default:
+						return_var_type = i64;
+						break;
+				}
 
-			//Emit the constant with the appropriate type
-			three_addr_const_t* ret_const = emit_direct_integer_or_char_constant(0, return_var_type);
+				//Emit the constant with the appropriate type
+				three_addr_const_t* ret_const = emit_direct_integer_or_char_constant(0, return_var_type);
 
-			//Now emit the assignment
-			instruction_t* assignment = emit_assignment_with_const_instruction(emit_temp_var(return_var_type), ret_const);
-		
-			//This goes into the block
-			add_statement(block, assignment); 
-
-			//We'll now manually insert a ret 0 based on whatever the return type of the function is
-			instruction_t* return_instruction = emit_ret_instruction(assignment->assignee);
+				//Now emit the assignment
+				instruction_t* assignment = emit_assignment_with_const_instruction(emit_temp_var(return_var_type), ret_const);
 			
-			//We'll now add this at the very end of the block
-			add_statement(block, return_instruction);
+				//This goes into the block
+				add_statement(block, assignment); 
+
+				//We'll now manually insert a ret 0 based on whatever the return type of the function is
+				instruction_t* return_instruction = emit_ret_instruction(assignment->assignee);
+				
+				//We'll now add this at the very end of the block
+				add_statement(block, return_instruction);
+
+			//Otherwise it is void, so we just emit a plain "ret"
+			} else {
+				//Void returning - just emit a plain ret
+				instruction_t* return_instruction = emit_ret_instruction(NULL);
+				
+				//We'll now add this at the very end of the block
+				add_statement(block, return_instruction);
+			}
 		}
 	}
 }
