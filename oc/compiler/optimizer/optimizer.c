@@ -298,9 +298,6 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
  * 				add j to worklist
  */
 static void mark(cfg_t* cfg){
-	//Pointer to the current function record
-	symtab_function_record_t* current_function;
-
 	//First we'll need a worklist
 	dynamic_array_t worklist = dynamic_array_alloc();
 
@@ -308,9 +305,6 @@ static void mark(cfg_t* cfg){
 	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block we'll work on
 		basic_block_t* current = dynamic_array_get_at(&(cfg->created_blocks), _);
-
-		//Store what the current function is
-		current_function = current->function_defined_in;
 
 		//Grab a cursor to the current statement
 		instruction_t* current_stmt = current->leader_statement;
