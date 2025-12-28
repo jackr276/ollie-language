@@ -6640,7 +6640,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	
 	//Keep a reference to whatever the current switch statement block is
 	basic_block_t* current_block;
-	basic_block_t* default_block;
+	basic_block_t* default_block = NULL;
 	
 	//Let's first emit the expression. This will at least give us an assignee to work with
 	cfg_result_package_t input_results = emit_expression(root_level_block, case_stmt_cursor, TRUE, TRUE);
@@ -6713,6 +6713,19 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		
 		//Move the cursor up
 		case_stmt_cursor = case_stmt_cursor->next_sibling;
+	}
+
+	/**
+	 * It is entirely possible that we have no default block here. In that case, we will
+	 * make our own "dummy" default block that simply breaks to end and has no effect. This
+	 * will preserve the intention of the programmer and keep our flow simpler here
+	 */
+	if(default_block == NULL){
+		//Create it
+		default_block = basic_block_alloc_and_estimate();
+
+		//All that this block has is a direct jump to the end
+		emit_jump(default_block, ending_block);
 	}
 
 	//Now at the ever end, we'll need to fill the remaining jump table blocks that are empty
