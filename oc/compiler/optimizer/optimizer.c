@@ -268,8 +268,7 @@ static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var
 		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//If it's not in the current function and it's temporary, get rid of it
-		//if(variable->variable_type == VARIABLE_TYPE_TEMP && block->function_defined_in != current_function){
-		if(block->function_defined_in != current_function){
+		if(variable->variable_type == VARIABLE_TYPE_TEMP && block->function_defined_in != current_function){
 			continue;
 		}
 
@@ -494,10 +493,15 @@ static void mark(cfg_t* cfg){
 						//The block now has a mark
 						current->contains_mark = TRUE;
 
-					//TODO FUNC PARAM
+					//Any kind of function parameter storing is automatically important because
+					//we are modifying a value that is outside of the current function. As such
+					//any stores like this are marked automatically
 					} else if(current_stmt->assignee->membership == FUNCTION_PARAMETER){
-						printf("HERE\n\n\n\n");
-
+						current_stmt->mark = TRUE;
+						//Add it to the list
+						dynamic_array_add(&worklist, current_stmt);
+						//The block now has a mark
+						current->contains_mark = TRUE;
 					}
 
 					break;
