@@ -272,7 +272,8 @@ static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var
 		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//If it's not in the current function and it's temporary, get rid of it
-		if(variable->variable_type == VARIABLE_TYPE_TEMP && block->function_defined_in != current_function){
+		if(block->function_defined_in != current_function){
+			printf("BLOCK .L%d is not in function %s but is in function %s\n\n\n", block->block_id, current_function->func_name.string, block->function_defined_in->func_name.string);
 			continue;
 		}
 
@@ -344,7 +345,7 @@ static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var
  */
 static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
 	//If this is NULL, just leave
-	if(variable == NULL || current_function == NULL){
+	if(variable == NULL){
 		return;
 	}
 
@@ -486,6 +487,9 @@ static u_int8_t determine_if_store_assignee_is_critical(cfg_t* cfg, three_addr_v
  * 				add j to worklist
  */
 static void mark(cfg_t* cfg){
+	//Pointer to the current function record
+	symtab_function_record_t* current_function;
+
 	//First we'll need a worklist
 	dynamic_array_t worklist = dynamic_array_alloc();
 
@@ -493,6 +497,9 @@ static void mark(cfg_t* cfg){
 	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the block we'll work on
 		basic_block_t* current = dynamic_array_get_at(&(cfg->created_blocks), _);
+
+		//Store what the current function is
+		current_function = current->function_defined_in;
 
 		//Grab a cursor to the current statement
 		instruction_t* current_stmt = current->leader_statement;
@@ -613,7 +620,7 @@ static void mark(cfg_t* cfg){
 					 */
 					} else {
 						//Let the helper do it
-						if(determine_if_store_assignee_is_critical(cfg, current_stmt->assignee, current->function_defined_in) == TRUE){
+						if(determine_if_store_assignee_is_critical(cfg, current_stmt->assignee, current_function) == TRUE){
 							current_stmt->mark = TRUE;
 							//Add it to the list
 							dynamic_array_add(&worklist, current_stmt);

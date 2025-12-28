@@ -28,15 +28,15 @@ u_int32_t* num_warnings_ref;
 //Keep the type symtab up and running
 type_symtab_t* type_symtab;
 //The CFG that we're working with
-cfg_t* cfg = NULL;
+static cfg_t* cfg = NULL;
 //Keep a reference to whatever function we are currently in
-symtab_function_record_t* current_function;
+static symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
-basic_block_t* function_exit_block = NULL;
+static basic_block_t* function_exit_block = NULL;
 //Keep a varaible/record for the instruction pointer(rip)
-three_addr_var_t* instruction_pointer_var = NULL;
+static three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
-variable_symtab_t* variable_symtab;
+static variable_symtab_t* variable_symtab;
 //Store for use
 static generic_type_t* char_type = NULL;
 static generic_type_t* u8 = NULL;
@@ -927,6 +927,9 @@ void add_statement(basic_block_t* target, instruction_t* statement_node){
 
 	//Save what block we're in
 	statement_node->block_contained_in = target;
+
+	//Store the function as well
+	statement_node->function = target->function_defined_in;
 }
 
 
@@ -8016,9 +8019,6 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	current_function_labeled_blocks = dynamic_array_alloc();
 	//Keep an array for all of the jump statements as well
 	current_function_user_defined_jump_statements = dynamic_array_alloc();
-
-	//Reset the three address code accordingly
-	set_new_function(func_record);
 
 	//The starting block
 	basic_block_t* function_starting_block = basic_block_alloc_and_estimate();

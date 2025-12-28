@@ -309,11 +309,6 @@ void insert_instruction_before_given(instruction_t* insertee, instruction_t* giv
 void insert_instruction_after_given(instruction_t* insertee, instruction_t* given);
 
 /**
- * Declare that we are in a new function
- */
-void set_new_function(symtab_function_record_t* func);
-
-/**
  * Helper function to determine if an operator is a relational operator
  */
 u_int8_t is_operator_relational_operator(ollie_token_t op);
