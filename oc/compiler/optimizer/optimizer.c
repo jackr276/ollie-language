@@ -273,7 +273,6 @@ static void mark_and_add_register_variable_definition(cfg_t* cfg, three_addr_var
 
 		//If it's not in the current function and it's temporary, get rid of it
 		if(block->function_defined_in != current_function){
-			printf("BLOCK .L%d is not in function %s but is in function %s\n\n\n", block->block_id, current_function->func_name.string, block->function_defined_in->func_name.string);
 			continue;
 		}
 
