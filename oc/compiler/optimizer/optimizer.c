@@ -938,7 +938,9 @@ static void sweep(cfg_t* cfg){
 		//We really want this one's stack
 		stack_data_area_t* stack =  &(function_entry->function_defined_in->data_area);
 
-		//TODO STACK SWEEP
+		//Invoke the stack sweeper. This function will go through an remove any stack regions
+		//that have been flagged as unimportant
+		sweep_stack_data_area(stack);
 	}
 }
 
