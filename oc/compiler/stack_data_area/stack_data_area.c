@@ -83,6 +83,16 @@ static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t siz
 
 
 /**
+ * Mark a stack region as important. This will handle any/all variable marking as important
+ * as well if applicable
+ */
+void mark_stack_region(stack_region_t* region){
+	//Flag that this is marked
+	region->mark = TRUE;
+}
+
+
+/**
  * Create a stack region for the type provided. This will handle alignment and addition
  * of this stack region
  */
@@ -178,6 +188,35 @@ void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region){
 	dynamic_array_delete(&(area->stack_regions), region);
 
 	//Realign the entire thing now
+	realign_data_area(area);
+}
+
+
+/**
+ * Sweep the stack data area from any unmarked regions
+ */
+void sweep_stack_data_area(stack_data_area_t* area){
+	//What regions are marked for deletion
+	dynamic_array_t marked_for_deletion = dynamic_array_alloc();
+
+	//Run through the entire data area
+	for(u_int16_t i = 0; i < area->stack_regions.current_index; i++){
+		//Grab the region out
+		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
+
+		//Not marked, it needs to go
+		if(region->mark == FALSE){
+			dynamic_array_add(&marked_for_deletion, region);
+		}
+	}
+
+	//Once we have all of these that are marked for deletion, we will delete them all
+	for(u_int16_t i = 0; i < marked_for_deletion.current_index; i++){
+		//Delete it from the stack
+		dynamic_array_delete(&(area->stack_regions), dynamic_array_get_at(&marked_for_deletion, i));
+	}
+
+	//And once all of the deletion is done, we will invoke the stack realigner to fix all of the alignments
 	realign_data_area(area);
 }
 

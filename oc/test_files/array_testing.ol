@@ -27,8 +27,6 @@ pub fn main(arg:mut i32, argv:char**) -> i32{
 		i = arr[0][0];
 	}
 
-
-
 	//So it isn't optimized away
 	ret arr[7][x] + oneDi32[2];// + *(j+1);
 }

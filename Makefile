@@ -433,7 +433,7 @@ performance_test: oc
 	@for input in $(inputs); do \
 		output=$$(echo $$input | sed 's|^$(TEST_FILE_DIR)|$(OUTPUTTED_ASSEMBLY_DIR)|' | sed 's|\.ol$$|.s|'); \
 		echo "Running ./oc/out/oc -ts -f $$input -o $$output"; \
-		./oc/out/oc -ts -f $$input -o $$output; \
+		./oc/out/oc -tms -f $$input -o $$output; \
 	done
 
 # A memory check run will use valgrind and run a C test that checks each file individually for memory errors

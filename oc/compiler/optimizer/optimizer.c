@@ -184,13 +184,21 @@ static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
 
 
 /**
- * Mark definitions(assignment) of a three address variable within
- * the current function. If a definition is not marked, it must be added to the worklist
+ * Mark definitions(assignment) of a three address variable within a given
+ * function. The current_function parameter is an optimization step designed to help
+ * us weed out useless blocks. Note that the variable passed in may be null. If it is,
+ * we just leave immediately
  */
 static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
-	//If this is NULL, just leave
-	if(variable == NULL || current_function == NULL){
+	//If the variable is NULL, we leave
+	if(variable == NULL){
 		return;
+	}
+
+	//If this variable has a stack region, then we will be marking
+	//said stack region
+	if(variable->stack_region != NULL){
+		mark_stack_region(variable->stack_region);
 	}
 
 	//Run through everything here
@@ -199,7 +207,7 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
 		//If it's not in the current function and it's temporary, get rid of it
-		if(variable->variable_type == VARIABLE_TYPE_TEMP && block->function_defined_in != current_function){
+		if(block->function_defined_in != current_function){
 			continue;
 		}
 
@@ -385,8 +393,8 @@ static void mark(cfg_t* cfg){
 					break;
 
 				/**
-				 * All stores are considered useful because they modify areas
-				 * on the stack
+				 * All store statements are considered useful by the ollie optimizer,
+				 * regardless of the actual use count tracking
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT:
 				case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
@@ -401,7 +409,7 @@ static void mark(cfg_t* cfg){
 				//Let's see what other special cases we have
 				default:
 					break;
-				}
+			}
 
 			//Advance the current statement up
 			current_stmt = current_stmt->next_statement;
@@ -810,6 +818,21 @@ static void sweep(cfg_t* cfg){
 					break;
 			}
 		}
+	}
+
+	//Once we've done all of the actual sweeping inside of the blocks, we will now also clean up
+	//the stack from any unmarked regions. If a region is unmarked, it is entirely useless and as such
+	//we'll just get rid of it
+	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Extract the block
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+
+		//We really want this one's stack
+		stack_data_area_t* stack =  &(function_entry->function_defined_in->data_area);
+
+		//Invoke the stack sweeper. This function will go through an remove any stack regions
+		//that have been flagged as unimportant
+		sweep_stack_data_area(stack);
 	}
 }
 

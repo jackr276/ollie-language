@@ -17,8 +17,6 @@
 
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
-//The current function
-static symtab_function_record_t* current_function = NULL;
 
 //All created vars
 dynamic_array_t emitted_vars;
@@ -162,6 +160,9 @@ void insert_instruction_before_given(instruction_t* insertee, instruction_t* giv
 	//The insertee is before the given, so its next is the given
 	insertee->next_statement = given;
 	given->previous_statement = insertee;
+
+	//Save the function as well
+	insertee->function = block->function_defined_in;
 }
 
 
@@ -195,15 +196,9 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
 	} else {
 		block->exit_statement = given;
 	}
-}
 
-
-/**
- * Declare that we are in a new function
- */
-void set_new_function(symtab_function_record_t* func){
-	//We'll save this up top
-	current_function = func;
+	//Save the function as well
+	insertee->function = block->function_defined_in;
 }
 
 
@@ -825,6 +820,38 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 
 
 /**
+ * Create and return a three address var from an existing variable. These special
+ * "memory address vars" will represent the memory address of the variable in question
+*/
+three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_region_t* region){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_vars, emitted_var);
+
+	//This is a memory address variable. We will flag this for special
+	//printing
+	emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
+
+	//We always store the type as the type with which this variable was defined in the CFG
+	emitted_var->type = type;
+
+	//Give it a temp var number
+	emitted_var->temp_var_number = increment_and_get_temp_id();
+
+	//Store the associate stack region(this is usually null)
+	emitted_var->stack_region = region;
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
  * Emit a variable for an identifier node. This rule is designed to account for the fact that
  * some identifiers may have had their types casted / coerced, so we need to keep the actual
  * inferred type here
@@ -997,9 +1024,6 @@ instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t
 	stmt->op1 = op1;
 	stmt->op1_const = op1_const;
 
-	//What function are we in
-	stmt->function = current_function;
-
 	//This only has registers
 	stmt->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
 
@@ -1022,8 +1046,6 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
 	stmt->op2 = op2;
-	//What function are we in
-	stmt->function = current_function;
 
 	//This only has registers
 	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_ONLY;
@@ -1046,8 +1068,6 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 	stmt->op1 = op1;
 	stmt->op2 = op2;
 	stmt->lea_multiplier = type_size;
-	//What function are we in
-	stmt->function = current_function;
 
 	//This has registers and a multiplier
 	stmt->lea_statement_type = OIR_LEA_TYPE_REGISTERS_AND_SCALE;
@@ -1072,9 +1092,6 @@ instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assign
 	stmt->op2 = op2;
 	stmt->lea_multiplier= type_size;
 
-	//Mark the current function
-	stmt->function = current_function;
-
 	//And now we'll give it back
 	return stmt;
 }
@@ -1089,8 +1106,7 @@ instruction_t* emit_idle_instruction(){
 
 	//Store the class
 	stmt->statement_type = THREE_ADDR_CODE_IDLE_STMT;
-	//What function are we in
-	stmt->function = current_function;
+
 	//And we're done
 	return stmt;
 }
@@ -1456,8 +1472,13 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 					fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
 					break;
 				case VARIABLE_TYPE_MEMORY_ADDRESS:
-					//Print out the normal version, plus the MEM<> wrapper
-					fprintf(fl, "MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
+					if(variable->linked_var != NULL){
+						//Print out the normal version, plus the MEM<> wrapper
+						fprintf(fl, "MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
+					} else {
+						fprintf(fl, "MEM<t%d>", variable->temp_var_number);
+					}
+
 					break;
 			}
 
@@ -3770,8 +3791,7 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 
 	//This is always our input variable
 	dec_stmt->op1 = decrementee;
-	//What function are we in
-	dec_stmt->function = current_function;
+
 	//And give it back
 	return dec_stmt;
 }
@@ -3796,9 +3816,6 @@ instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t*
 
 	op1->use_count++;
 	op2->use_count++;
-
-	//Assign the function too
-	stmt->function = current_function;
 
 	//And now we'll give it back
 	return stmt;
@@ -3868,8 +3885,7 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 
 	//No matter what this is the op1
 	inc_stmt->op1 = incrementee;
-	//What function are we in
-	inc_stmt->function = current_function;
+
 	//And give it back
 	return inc_stmt;
 }
@@ -3977,8 +3993,7 @@ instruction_t* emit_ret_instruction(three_addr_var_t* returnee){
 	stmt->statement_type = THREE_ADDR_CODE_RET_STMT;
 	//Set op1 to be the returnee
 	stmt->op1 = returnee;
-	//What function are we in
-	stmt->function = current_function;
+
 	//And that's all, so we'll hop out
 	return stmt;
 }
@@ -3998,8 +4013,6 @@ instruction_t* emit_binary_operation_instruction(three_addr_var_t* assignee, thr
 	stmt->op1 = op1;
 	stmt->op = op;
 	stmt->op2 = op2;
-	//What function are we in
-	stmt->function = current_function;
 
 	//Give back the newly allocated statement
 	return stmt;
@@ -4019,8 +4032,7 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 	stmt->op1 = op1;
 	stmt->op = op;
 	stmt->op1_const = op2;
-	//What function are we in
-	stmt->function = current_function;
+
 	//Give back the newly allocated statement
 	return stmt;
 }
@@ -4039,8 +4051,7 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 	//Let's now populate it with values
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
-	//What function are we in
-	stmt->function = current_function;
+
 	//And that's it, we'll just leave our now
 	return stmt;
 }
@@ -4057,8 +4068,7 @@ instruction_t* emit_memory_access_instruction(three_addr_var_t* assignee, three_
 	stmt->statement_type = THREE_ADDR_CODE_MEM_ACCESS_STMT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
-	//Record the function that we're in
-	stmt->function = current_function;
+
 	return stmt;
 }
 
@@ -4162,8 +4172,7 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 	stmt->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 	stmt->assignee = assignee;
 	stmt->op1_const = constant;
-	//What function are we in
-	stmt->function = current_function;
+
 	//And that's it, we'll now just give it back
 	return stmt;
 }
@@ -4185,8 +4194,6 @@ instruction_t* emit_store_ir_code(three_addr_var_t* assignee, three_addr_var_t* 
 	stmt->assignee->is_dereferenced = TRUE;
 
 	stmt->op1 = op1;
-	//What function are we in
-	stmt->function = current_function;
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->memory_read_write_type = memory_write_type;
@@ -4218,9 +4225,6 @@ instruction_t* emit_store_with_variable_offset_ir_code(three_addr_var_t* base_ad
 	//What we're storing
 	stmt->op2 = storee;
 
-	//Save our current function
-	stmt->function = current_function;
-
 	//Important - add the type that we expect to be writing to in memory
 	stmt->memory_read_write_type = memory_write_type;
 
@@ -4251,9 +4255,6 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	//What we're storing
 	stmt->op2 = storee;
 
-	//Save our current function
-	stmt->function = current_function;
-
 	//Important - add the type that we expect to be writing to in memory
 	stmt->memory_read_write_type = memory_write_type;
 
@@ -4274,8 +4275,6 @@ instruction_t* emit_load_ir_code(three_addr_var_t* assignee, three_addr_var_t* o
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
 	stmt->assignee = assignee;
 	stmt->op1 = op1;
-	//What function are we in
-	stmt->function = current_function;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->memory_read_write_type = memory_read_type;
@@ -4303,9 +4302,6 @@ instruction_t* emit_load_with_variable_offset_ir_code(three_addr_var_t* assignee
 	//And op2 is our offset
 	stmt->op2 = offset;
 
-	//Save our current function
-	stmt->function = current_function;
-
 	//Important - store the type that we expect to be getting out of memory
 	stmt->memory_read_write_type = memory_read_type;
 
@@ -4332,9 +4328,6 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	//Our offset is stored in "offset", not op1_const
 	stmt->offset.offset_constant = offset;
 
-	//Save our current function
-	stmt->function = current_function;
-
 	//Important - store the type that we expect to be getting out of memory
 	stmt->memory_read_write_type = memory_read_type;
 
@@ -4353,8 +4346,6 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block){
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_JUMP_STMT;
 	stmt->if_block = jumping_to_block;
-	//What function are we in
-	stmt->function = current_function;
 	//Give the statement back
 	return stmt;
 }
@@ -4397,9 +4388,6 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 	//And we'll store the variable that we're making a decision based on here
 	stmt->op1 = relies_on;
 
-	//What function are we in
-	stmt->function = current_function;
-
 	//Give the statement back
 	return stmt;
 }
@@ -4416,8 +4404,6 @@ instruction_t* emit_indirect_jmp_instruction(three_addr_var_t* address){
 	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
 	//The address we're jumping to is in op1
 	stmt->op1 = address;
-	//What function we're in
-	stmt->function = current_function;
 	//And give it back
 	return stmt;
 }
@@ -4434,8 +4420,6 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 	stmt->statement_type = THREE_ADDR_CODE_FUNC_CALL;
 	stmt->called_function = func_record;
 	stmt->assignee = assigned_to;
-	//What function are we in
-	stmt->function = current_function;
 
 	//We do NOT add parameters here, instead we had them in the CFG function
 	//Just give back the result
@@ -4456,8 +4440,6 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 	stmt->op1 = function_pointer;
 	//Mark the assignee
 	stmt->assignee = assigned_to;
-	//Mark what function we're in
-	stmt->function = current_function;
 
 	return stmt;
 }
@@ -4531,8 +4513,6 @@ instruction_t* emit_neg_instruction(three_addr_var_t* assignee, three_addr_var_t
 	stmt->statement_type = THREE_ADDR_CODE_NEG_STATEMENT;
 	stmt->assignee = assignee;
 	stmt->op1 = negatee;
-	//What function are we in
-	stmt->function = current_function;
 
 	//Give it back
 	return stmt;
@@ -4552,8 +4532,6 @@ instruction_t* emit_not_instruction(three_addr_var_t* var){
 	stmt->assignee = var;
 	//For the potential of temp variables
 	stmt->op1 = var;
-	//What function are we in
-	stmt->function = current_function;
 
 	//Give the statement back
 	return stmt;
@@ -4572,8 +4550,6 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 	stmt->assignee = assignee;
 	//Leave it in here
 	stmt->op1 = op1;
-	//What function are we in
-	stmt->function = current_function;
 
 	//Give the stmt back
 	return stmt;
@@ -4594,9 +4570,6 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node){
 	//Copy this over
 	stmt->inlined_assembly = clone_dynamic_string(&(asm_inline_node->string_value));
 
-	//What function are we in
-	stmt->function = current_function;
-
 	//And we're done, now we'll bail out
 	return stmt;
 }
@@ -4615,8 +4588,6 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_PHI_FUNC;
-	//What function are we in
-	stmt->function = current_function;
 
 	//And give the statement back
 	return stmt;

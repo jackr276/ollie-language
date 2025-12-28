@@ -28,15 +28,15 @@ u_int32_t* num_warnings_ref;
 //Keep the type symtab up and running
 type_symtab_t* type_symtab;
 //The CFG that we're working with
-cfg_t* cfg = NULL;
+static cfg_t* cfg = NULL;
 //Keep a reference to whatever function we are currently in
-symtab_function_record_t* current_function;
+static symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
-basic_block_t* function_exit_block = NULL;
+static basic_block_t* function_exit_block = NULL;
 //Keep a varaible/record for the instruction pointer(rip)
-three_addr_var_t* instruction_pointer_var = NULL;
+static three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
-variable_symtab_t* variable_symtab;
+static variable_symtab_t* variable_symtab;
 //Store for use
 static generic_type_t* char_type = NULL;
 static generic_type_t* u8 = NULL;
@@ -854,6 +854,9 @@ static void add_phi_statement(basic_block_t* target, instruction_t* phi_statemen
 		exit(1);
 	}
 
+	//This needs to match up for later processing
+	phi_statement->function = target->function_defined_in;
+
 	//Special case -- we're adding the head
 	if(target->leader_statement == NULL || target->exit_statement == NULL){
 		//Assign this to be the head and the tail
@@ -906,6 +909,9 @@ void add_statement(basic_block_t* target, instruction_t* statement_node){
 
 	//No matter what - we are adding a statement to this block
 	target->number_of_instructions++;
+
+	//Store the function as well
+	statement_node->function = target->function_defined_in;
 
 	//Special case--we're adding the head
 	if(target->leader_statement == NULL || target->exit_statement == NULL){
@@ -4142,11 +4148,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 						if(existing_region == NULL){
 							//We need to load a reference to this into memory
 							stack_region_t* region = create_stack_region_for_type(&(current_function->data_area), unary_expression_parent->inferred_type);
-							//Flag the variable in here
-							region->variable_referenced = unary_expression_child->variable;
 
-							//We need a stack offset
-							three_addr_const_t* offset = emit_direct_integer_or_char_constant(region->base_address, u64);
+							//This is what is being referenced
+							region->variable_referenced = unary_expression_child->variable;
 
 							//Emit the purpose made memory address var
 							three_addr_var_t* memory_address = emit_memory_address_var(unary_expression_child->variable);
@@ -4158,8 +4162,15 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							//Add this into the block
 							add_statement(current_block, address_assignment);
 
+							//Create the memory address var through the symtab to avoid compatibility issues
+							symtab_variable_record_t* memory_address_temp_var = create_temp_memory_address_variable(u64, variable_symtab, region, increment_and_get_temp_id());
+
+
+							//Emit the temp memory address var here
+							three_addr_var_t* stored_memory_address = emit_memory_address_var(memory_address_temp_var);
+
 							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
-							instruction_t* store = emit_store_with_constant_offset_ir_code(cfg->stack_pointer, offset, address_assignment->assignee, u64);
+							instruction_t* store = emit_store_ir_code(stored_memory_address, address_assignment->assignee, u64);
 							store->is_branch_ending = is_branch_ending;
 
 							//This comes afterwards
@@ -4167,30 +4178,33 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
 							//a simple binary operation instruction
-							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg->stack_pointer, PLUS, offset);
-							address->is_branch_ending = is_branch_ending;
+							instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(unary_expression_parent->inferred_type), stored_memory_address);
+							final_assignment->is_branch_ending = is_branch_ending;
 
 							//Add it into the block
-							add_statement(current_block, address);
+							add_statement(current_block, final_assignment);
 
 							//The final assignee is this offset here
-							unary_package.assignee = address->assignee;
+							unary_package.assignee = final_assignment->assignee;
 
 						//Otherwise, we do have it, so all we need to do is reuse the pointer that we already have
 						} else {
-							//Emit the offset
-							three_addr_const_t* offset = emit_direct_integer_or_char_constant(existing_region->base_address, u64);
+							//Create the memory address var through the symtab to avoid compatibility issues
+							symtab_variable_record_t* memory_address_temp_var = create_temp_memory_address_variable(u64, variable_symtab, existing_region, increment_and_get_temp_id());
+
+							//Emit the temp memory address var here
+							three_addr_var_t* stored_memory_address = emit_memory_address_var(memory_address_temp_var);
 
 							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
 							//a simple binary operation instruction
-							instruction_t* address = emit_binary_operation_with_const_instruction(emit_temp_var(unary_expression_parent->inferred_type), cfg->stack_pointer, PLUS, offset);
-							address->is_branch_ending = is_branch_ending;
+							instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(unary_expression_parent->inferred_type), stored_memory_address);
+							final_assignment->is_branch_ending = is_branch_ending;
 
 							//Add it into the block
-							add_statement(current_block, address);
+							add_statement(current_block, final_assignment); 
 
 							//The final assignee is this offset here
-							unary_package.assignee = address->assignee;
+							unary_package.assignee = final_assignment->assignee;
 						}
 					}
 
@@ -4689,6 +4703,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		&& left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
 		//Finally we'll struct the whole thing
 		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
+
+		//Copy this over if there is one
+		left_hand_var->stack_region = final_op1->stack_region;
 
 		//If this is not a temp var, then we can flag it as being assigned
 		add_assigned_variable(current_block, left_hand_var);
@@ -8008,9 +8025,6 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	current_function_labeled_blocks = dynamic_array_alloc();
 	//Keep an array for all of the jump statements as well
 	current_function_user_defined_jump_statements = dynamic_array_alloc();
-
-	//Reset the three address code accordingly
-	set_new_function(func_record);
 
 	//The starting block
 	basic_block_t* function_starting_block = basic_block_alloc_and_estimate();

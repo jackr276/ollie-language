@@ -350,6 +350,47 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 	return record;
 }
 
+
+/**
+ * Create a variable for a memory address that is not from an actual var
+ */
+symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* type, variable_symtab_t* variable_symtab, stack_region_t* stack_region, u_int32_t temp_id){
+	//And here is the special part - we'll need to make a symtab record
+	//for this variable and add it in
+	char variable_name[100];
+	//Grab a new temp var number from here. We use the
+	//^ because it is illegal for variables typed in by the
+	//user to have that, so we will not have collisions
+	sprintf(variable_name, "^t%d", temp_id);
+
+	//Create and set the name here
+	dynamic_string_t string = dynamic_string_alloc();
+	dynamic_string_set(&string, variable_name);
+
+	//Now create and add the symtab record for this variable
+	symtab_variable_record_t* record = create_variable_record(string);
+	//Store the type here
+	record->type_defined_as = type;
+
+	//Store the stack region too
+	record->stack_region = stack_region;
+	
+	//Insert this into the variable symtab
+	insert_variable(variable_symtab, record);
+
+	//The current generation is always 1 at first
+	record->current_generation = 1;
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	//And give it back
+	return record;
+}
+
+
 /**
  * Create and return a ternary variable. A ternary variable is halfway
  * between a temp and a full fledged non-temp variable. It will have a 

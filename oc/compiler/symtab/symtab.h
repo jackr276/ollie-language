@@ -346,6 +346,11 @@ symtab_variable_record_t* create_ternary_variable(generic_type_t* type, variable
 symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
+ * Create a variable for a memory address that is not from an actual var
+ */
+symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* type, variable_symtab_t* variable_symtab, stack_region_t* stack_region, u_int32_t temp_id);
+
+/**
  * Add a parameter to a function and perform all internal bookkeeping needed
  */
 u_int8_t add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);

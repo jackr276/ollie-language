@@ -15,6 +15,7 @@ fn construct_pointer_arrays(arg:i32) -> i64 {
 
 	arr[2]=>x = 32;
 
+	ret arr[3]=>x;
 }
 
 
