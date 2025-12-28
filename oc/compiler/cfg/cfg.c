@@ -6510,9 +6510,11 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	}
 
 	//Run through the entire jump table. Any nodes that are not occupied(meaning there's no case statement with that value)
-	//will be set to point to the default block
+	//will be set to point to the default block. 
 	for(u_int16_t i = 0; i < jump_calculation_block->jump_table->num_nodes; i++){
-		//If it's null, we'll make it the default
+		//If it's null, we'll make it the default. This should only happen in switches
+		//that are non-exhaustive. For exhaustive switches, the parser has already ensured that we
+		//will have a block for every case value
 		if(dynamic_array_get_at(&(jump_calculation_block->jump_table->nodes), i) == NULL){
 			dynamic_array_set_at(&(jump_calculation_block->jump_table->nodes), default_block, i);
 		}

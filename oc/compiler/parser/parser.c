@@ -8624,6 +8624,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 				case CHAR_CONST:
 					//Just assign the char value here
 					case_stmt->constant_value.signed_int_value = const_node->constant_value.char_value;
+					break;
 
 				default:
 					return print_and_return_error("Illegal type given as case statement value", parser_line_num);
