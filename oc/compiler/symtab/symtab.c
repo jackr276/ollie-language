@@ -11,6 +11,8 @@
 #include <sys/types.h>
 #include "../ast/ast.h"
 #include "../call_graph/call_graph.h"
+//For error printing
+#include "../utils/queue/min_priority_queue.h"
 #include "../utils/constants.h"
 
 //The starting offset basis for FNV-1a64
@@ -1774,6 +1776,9 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 	//For record holding
 	symtab_variable_record_t* record;
 
+	//Create a min priority queue for ordering error messages
+	min_priority_queue_t queue = min_priority_queue_alloc();
+
 	//So long as we have a sheaf
 	for(u_int16_t i = 0; i < symtab->sheafs.current_index; i++){
 		//Grab the actual sheaf out
@@ -1797,8 +1802,19 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 					break;
 			}
 
-			//Let's now analyze this record
-			
+			//Only put it into the queue if it meets one of 2 warning conditions
+			if((record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE)
+				|| (record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE)){
+				//Add it into the priority queue. The priority goes by line number
+				min_priority_queue_enqueue(&queue, record, record->line_number);
+			}
+		}
+
+		//Now that we've loaded up the priority queue, we will go through and print out appropriate error messages
+		while(min_priority_queue_is_empty(&queue) == FALSE){
+			//Dequeue the value
+			record = min_priority_queue_dequeue(&queue);
+
 			//We have a non initialized variable
 			if(record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE){
 				sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
@@ -1816,7 +1832,6 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 				print_variable_name(record);
 				(*num_warnings)++;
 			}
-
 		}
 	}
 }
