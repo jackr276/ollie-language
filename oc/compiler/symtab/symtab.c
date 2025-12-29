@@ -23,8 +23,25 @@
 #define FINALIZER_CONSTANT_1 0xff51afd7ed558ccdULL
 #define FINALIZER_CONSTANT_2 0xc4ceb9fe1a85ec53ULL
 
-//For salting mutable type hashes, we use this value
-#define MUT_SALT 0xA3B1956359A1F3D1ULL
+//Define a list of salts that can be used for mutable types
+static const u_int64_t mutability_salts[] = {
+	0xA3B1956359A1F3D1ULL,
+	0xC9E3779B97F4A7C1ULL,
+	0x123456789ABCDEF0ULL,
+	0xF0E1D2C3B4A59687ULL,
+    0x0FEDCBA987654321ULL,
+    0x9E3779B97F4A7C15ULL,
+    0x6A09E667F3BCC908ULL,
+    0xBB67AE8584CAA73BULL,
+    0x3C6EF372FE94F82BULL,
+    0xA54FF53A5F1D36F1ULL,
+    0x510E527FADE682D1ULL,
+    0x9B05688C2B3E6C1FULL,
+    0x1F83D9ABFB41BD6BULL,
+    0x5BE0CD19137E2179ULL,
+    0x8F1BBCDC68C4CFAFULL,
+    0xCBB41EF6F7F651C1ULL
+};
 
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
@@ -328,10 +345,9 @@ static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 	//onto the hash. This should(in most cases) make the hash
 	//entirely different from the non-mutable version
 	if(mutability == MUTABLE){
-		//Make it so that we have the '`' character, one
-		//that is not recognized at all be the lexer. This will
-		//ensure that we can never get a false positive
-		hash ^= MUT_SALT;
+		//To make the hashes different, we will pick from one of
+		//3 salts based on the first character in the type name
+		hash ^= mutability_salts[*type_name % 16];
 		hash *= FNV_PRIME;
 	}
 
@@ -385,10 +401,9 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
 	//onto the hash. This should(in most cases) make the hash
 	//entirely different from the non-mutable version
 	if(mutability == MUTABLE){
-		//Make it so that we have the '`' character, one
-		//that is not recognized at all be the lexer. This will
-		//ensure that we can never get a false positive
-		hash ^= MUT_SALT;
+		//To make the hashes different, we will pick from one of
+		//3 salts based on the first character in the type name
+		hash ^= mutability_salts[*type_name % 16];
 		hash *= FNV_PRIME;
 	}
 
@@ -424,11 +439,11 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
  * 	return key
 */
 static u_int64_t hash_type(generic_type_t* type){
-	//Grab a pointer to the type name
+	//Pointer to the type name
 	char* type_name = type->type_name.string;
-	
-	//Char pointer for the name
-	char* cursor = type->type_name.string;
+
+	//Char pointer for the name that will change
+	char* cursor = type_name;
 
 	//The hash we have
 	u_int64_t hash = OFFSET_BASIS;
@@ -450,10 +465,9 @@ static u_int64_t hash_type(generic_type_t* type){
 	//onto the hash. This should(in most cases) make the hash
 	//entirely different from the non-mutable version
 	if(type->mutability == MUTABLE){
-		//Make it so that we have the '`' character, one
-		//that is not recognized at all be the lexer. This will
-		//ensure that we can never get a false positive
-		hash ^= MUT_SALT;
+		//To make the hashes different, we will pick from one of
+		//3 salts based on the first character in the type name
+		hash ^= mutability_salts[*type_name % 16];
 		hash *= FNV_PRIME;
 	}
 

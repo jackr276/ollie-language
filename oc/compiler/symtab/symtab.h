@@ -21,7 +21,7 @@
 //we don't need enormous sizes to hold all of them
 #define VARIABLE_KEYSPACE 128
 //Type keyspace is made larger to accomodate more basic type classes, aliases & variants
-#define TYPE_KEYSPACE 128
+#define TYPE_KEYSPACE 256
 
 //Constants are also one per program
 #define CONSTANT_KEYSPACE 256 
