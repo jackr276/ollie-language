@@ -180,12 +180,12 @@ void finalize_type_scope(type_symtab_t* symtab){
  *
  * 	return key
 */
-static u_int16_t hash_variable(char* name){
+static u_int64_t hash_variable(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
 	//The hash we have
-	int64_t hash = FNV_PRIME;
+	u_int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -212,12 +212,12 @@ static u_int16_t hash_variable(char* name){
  *
  * 	return key
 */
-static u_int16_t hash_constant(char* name){
+static u_int64_t hash_constant(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
 	//The hash we have
-	int64_t hash = FNV_PRIME;
+	u_int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -244,12 +244,12 @@ static u_int16_t hash_constant(char* name){
  *
  * 	return key
 */
-static u_int16_t hash_function(char* name){
+static u_int64_t hash_function(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
 	//The hash we have
-	int64_t hash = FNV_PRIME;
+	u_int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -276,12 +276,12 @@ static u_int16_t hash_function(char* name){
  *
  * 	return key
  */
-static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
+static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 	//Char pointer for the name
 	char* cursor = type_name;
 
 	//The hash we have
-	int64_t hash = FNV_PRIME;
+	u_int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -320,12 +320,12 @@ static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
  *
  * 	return key
  */
-static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
+static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
 	//Char pointer for the name
 	char* cursor = type_name;
 
 	//The hash we have
-	int64_t hash = FNV_PRIME;
+	u_int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -374,12 +374,12 @@ static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
  *
  * 	return key
 */
-static u_int16_t hash_type(generic_type_t* type){
+static u_int64_t hash_type(generic_type_t* type){
 	//Char pointer for the name
 	char* cursor = type->type_name.string;
 
 	//The hash we have
-	int64_t hash = FNV_PRIME;
+	u_int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -769,8 +769,8 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 	symtab_type_record_t* cursor = symtab->current->records[record->hash];
 
 	printf("TYPE %s COLLIDES WITH TYPE %s\n\n", cursor->type->type_name.string, record->type->type_name.string);
-	printf("%s HASH: %d\n", cursor->type->type_name.string, cursor->hash);
-	printf("%s HASH: %d\n", record->type->type_name.string, record->hash);
+	printf("%s HASH: %ld\n", cursor->type->type_name.string, cursor->hash);
+	printf("%s HASH: %ld\n", record->type->type_name.string, record->hash);
 
 
 	//Get to the very last node
@@ -982,7 +982,7 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
  */
 symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name){
 	//Let's grab it's hash
-	u_int16_t h = hash_function(name); 
+	u_int64_t h = hash_function(name); 
 
 	//Grab whatever record is at that hash
 	symtab_function_record_t* record_cursor = symtab->records[h];
@@ -1009,7 +1009,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
  */
 symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name){
 	//First we'll grab the hash
-	u_int16_t h = hash_constant(name);
+	u_int64_t h = hash_constant(name);
 
 	//Grab whatever record is at that hash
 	symtab_constant_record_t* cursor = symtab->records[h];
@@ -1040,7 +1040,7 @@ symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name
  */
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name){
 	//Grab the hash
-	u_int16_t h = hash_variable(name);
+	u_int64_t h = hash_variable(name);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_variable_sheaf_t* cursor = symtab->current;
@@ -1075,7 +1075,7 @@ symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name)
  */
 symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab, char* name){
 	//Grab the hash
-	u_int16_t h = hash_variable(name);
+	u_int64_t h = hash_variable(name);
 
 	//A cursor for records iterating
 	symtab_variable_record_t* records_cursor;
@@ -1104,7 +1104,7 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
  */
 symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name){
 	//Grab the hash
-	u_int16_t h = hash_variable(name);
+	u_int64_t h = hash_variable(name);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_variable_sheaf_t* cursor;
@@ -1143,7 +1143,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
  */
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability){
 	//Grab the hash
-	u_int16_t h = hash_type_name(name, mutability);
+	u_int64_t h = hash_type_name(name, mutability);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_type_sheaf_t* cursor = symtab->current;
@@ -1226,7 +1226,7 @@ symtab_type_record_t* lookup_pointer_type(type_symtab_t* symtab, generic_type_t*
 	strcat(type_name, "*");
 
 	//Now get the hash
-	u_int16_t hash = hash_type_name(type_name, mutability);
+	u_int64_t hash = hash_type_name(type_name, mutability);
 
 	//Grab the current lexical scope. We will search here and down
 	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
@@ -1272,7 +1272,7 @@ symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_
 	strcat(type_name, "&");
 
 	//Now get the hash
-	u_int16_t hash = hash_type_name(type_name, mutability);
+	u_int64_t hash = hash_type_name(type_name, mutability);
 
 	//Grab the current lexical scope. We will search here and down
 	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
@@ -1318,7 +1318,7 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 	strcat(type_name, "[]");
 
 	//Now get the hash. We need to be using a special helper for this
-	u_int16_t hash = hash_array_type_name(type_name, num_members, mutability);
+	u_int64_t hash = hash_array_type_name(type_name, num_members, mutability);
 
 	//Grab the current lexical scope. We will search here and down
 	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
@@ -1373,7 +1373,7 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
 	}
 
 	//Grab the hash
-	u_int16_t h = hash_type(type);
+	u_int64_t h = hash_type(type);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_type_sheaf_t* cursor = symtab->current;
@@ -1421,7 +1421,7 @@ void print_function_record(symtab_function_record_t* record){
 
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->func_name.string);
-	printf("Hash: %d,\n", record->hash);
+	printf("Hash: %ld,\n", record->hash);
 	printf("}\n");
 }
 
@@ -1467,7 +1467,7 @@ void print_variable_record(symtab_variable_record_t* record){
 
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->var_name.string);
-	printf("Hash: %d,\n", record->hash);
+	printf("Hash: %ld,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("}\n");
 }
@@ -1484,7 +1484,7 @@ void print_type_record(symtab_type_record_t* record){
 
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->type->type_name.string);
-	printf("Hash: %d,\n", record->hash);
+	printf("Hash: %ld,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("}\n");
 }
