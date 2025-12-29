@@ -208,6 +208,39 @@ static u_int16_t hash_variable(char* name){
  *
  * 	return key
 */
+static u_int16_t hash_constant(char* name){
+	u_int32_t key = 37;
+	
+	char* cursor = name;
+	//Two primes(this should be good enough for us)
+	u_int32_t a = 54059;
+	u_int32_t b = 76963;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		//Sum this up for our key
+		key = (key * a) ^ (*cursor * b);
+	}
+
+	//Cut it down to our keyspace
+	return key % CONSTANT_KEYSPACE;
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * Universal hashing algorithm:
+ * 	Start with an initial small prime
+ * 	key <- small_prime
+ *
+ * 	for each hashable value:
+ * 		key <- (key * prime) ^ (value * other prime)
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+*/
 static u_int16_t hash_function(char* name){
 	u_int32_t key = 37;
 	
@@ -590,7 +623,7 @@ symtab_constant_record_t* create_constant_record(dynamic_string_t name){
 	symtab_constant_record_t* record = calloc(1, sizeof(symtab_constant_record_t));
 	
 	//Hash the name and store it
-	record->hash = hash(name.string);
+	record->hash = hash_constant(name.string);
 	//Store the name
 	record->name = name;
 	//Everything else will be handled by caller, just give this back
@@ -928,7 +961,7 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
  */
 symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name){
 	//Let's grab it's hash
-	u_int16_t h = hash(name); 
+	u_int16_t h = hash_function(name); 
 
 	//Grab whatever record is at that hash
 	symtab_function_record_t* record_cursor = symtab->records[h];
@@ -955,7 +988,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
  */
 symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name){
 	//First we'll grab the hash
-	u_int16_t h = hash(name);
+	u_int16_t h = hash_constant(name);
 
 	//Grab whatever record is at that hash
 	symtab_constant_record_t* cursor = symtab->records[h];
@@ -986,7 +1019,7 @@ symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name
  */
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name){
 	//Grab the hash
-	u_int16_t h = hash(name);
+	u_int16_t h = hash_variable(name);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_variable_sheaf_t* cursor = symtab->current;
@@ -1021,7 +1054,7 @@ symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name)
  */
 symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab, char* name){
 	//Grab the hash
-	u_int16_t h = hash(name);
+	u_int16_t h = hash_variable(name);
 
 	//A cursor for records iterating
 	symtab_variable_record_t* records_cursor;
@@ -1050,7 +1083,7 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
  */
 symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name){
 	//Grab the hash
-	u_int16_t h = hash(name);
+	u_int16_t h = hash_variable(name);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_variable_sheaf_t* cursor;
@@ -1596,7 +1629,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 	symtab_function_record_t* record;
 
 	//Run through all keyspace records
-	for(u_int16_t i = 0; i < KEYSPACE; i++){
+	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
 		record = symtab->records[i];
 
 		//We could have chaining here, so run through just in case
@@ -1652,7 +1685,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll run through every variable in here
-		for(u_int32_t i = 0; i < KEYSPACE; i++){
+		for(u_int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
 			record = sheaf->records[i];
 
 			//This will happen alot
@@ -1703,7 +1736,7 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 	symtab_function_record_t* temp;
 
 	//Run through and free all function records
-	for(u_int16_t i = 0; i < KEYSPACE; i++){
+	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
 		record = symtab->records[i];
 
 		//We could have chaining here, so run through just in case
@@ -1769,7 +1802,7 @@ void variable_symtab_dealloc(variable_symtab_t* symtab){
 		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll free all non-null records
-		for(u_int16_t j = 0; j < KEYSPACE; j++){
+		for(u_int16_t j = 0; j < VARIABLE_KEYSPACE; j++){
 			record = cursor->records[j];
 
 			//We could have chaining here, so run through just in case
@@ -1804,7 +1837,7 @@ void type_symtab_dealloc(type_symtab_t* symtab){
 		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll free all non-null records
-		for(u_int16_t j = 0; j < KEYSPACE; j++){
+		for(u_int16_t j = 0; j < TYPE_KEYSPACE; j++){
 			record = cursor->records[j];
 
 			//We could have chaining here, so run through just in case
@@ -1837,7 +1870,7 @@ void constants_symtab_dealloc(constants_symtab_t* symtab){
 	symtab_constant_record_t* temp;
 
 	//Run through every single record. If it isn't null, we free it
-	for(u_int16_t i = 0; i < KEYSPACE; i++){
+	for(u_int16_t i = 0; i < CONSTANT_KEYSPACE; i++){
 		//Grab the record here
 		cursor = symtab->records[i];
 
