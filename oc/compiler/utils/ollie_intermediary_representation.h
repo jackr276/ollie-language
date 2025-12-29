@@ -69,7 +69,8 @@ typedef enum {
 	OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE, // 4(%rax, %rcx, 8)
 	OIR_LEA_TYPE_INDEX_AND_SCALE, // (, %rcx, 8)
 	OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE, // 44(, %rcx, 8)
-	OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION // super rar case where we have <global_var>(%rip)
+	OIR_LEA_TYPE_RIP_RELATIVE, // Case where we have <global_var>(%rip)
+	OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET // Case where we have <offset> + <global_var>(%rip)
 } oir_lea_type_t;
 
 

@@ -2382,7 +2382,7 @@ static void handle_pure_copy_source_spill(instruction_t* instruction, u_int32_t 
 		instruction->source_register = NULL;
 
 		//Create the offset using a u64
-		instruction->offset.offset_constant = emit_direct_integer_or_char_constant(offset, u64_type);
+		instruction->offset = emit_direct_integer_or_char_constant(offset, u64_type);
 	}
 }
 
@@ -2417,7 +2417,7 @@ static void handle_constant_assignment_destination_spill(instruction_t* instruct
 		instruction->destination_register = NULL;
 
 		//Create the offset using a u64
-		instruction->offset.offset_constant = emit_direct_integer_or_char_constant(offset, u64_type);
+		instruction->offset = emit_direct_integer_or_char_constant(offset, u64_type);
 	}
 }
 

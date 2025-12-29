@@ -1078,6 +1078,27 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 
 
 /**
+ * Emit a lea statement that is used for string calculation(rip relative)
+ */
+instruction_t* emit_lea_rip_relative_string_constants(three_addr_var_t* assignee, three_addr_var_t* string_variable, three_addr_var_t* instruction_pointer){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = instruction_pointer;
+	stmt->op2 = string_variable;
+
+	//This is a rip-relative lea
+	stmt->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
+
+	//And now we give it back
+	return stmt;
+}
+
+
+/**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
 instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* op1, three_addr_var_t* op2, u_int64_t type_size){
@@ -1830,7 +1851,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->offset.offset_constant);
+			print_three_addr_constant(fl, stmt->offset);
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op2 or op1_const)
@@ -1900,7 +1921,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->offset.offset_constant);
+			print_three_addr_constant(fl, stmt->offset);
 			fprintf(fl, "]"); 
 
 			fprintf(fl, "\n");
@@ -2117,12 +2138,22 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 					break;
 
-				case OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION:
+				case OIR_LEA_TYPE_RIP_RELATIVE:
 					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 					fprintf(fl, "(");
 					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 					fprintf(fl, ")");
 					break;
+
+				case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
+					print_three_addr_constant(fl, stmt->op1_const);
+					fprintf(fl, "+");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
+					break;
+
 
 				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
 					//Print the constant out first
@@ -2334,9 +2365,23 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		/**
 		 * Global var address calculation
 		 */
-		case ADDRESS_CALCULATION_MODE_GLOBAL_VAR:
+		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE:
 			//Print the actual string name of the variable - no SSA and no registers
-			fprintf(fl, "%s", instruction->offset.global_variable->linked_var->var_name.string);
+			fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
+			fprintf(fl, "(");
+			//This will be the instruction pointer
+			print_variable(fl, instruction->address_calc_reg1, mode);
+			fprintf(fl, ")");
+
+		   	break;
+
+		/**
+		 * Global var address calculation with offset
+		 */
+		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET:
+			print_immediate_value_no_prefix(fl, instruction->offset);
+			//Print the actual string name of the variable - no SSA and no registers
+			fprintf(fl, "+%s", instruction->rip_offset_variable->linked_var->var_name.string);
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
@@ -2363,7 +2408,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			print_immediate_value_no_prefix(fl, instruction->offset);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ")");
@@ -2379,7 +2424,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			print_immediate_value_no_prefix(fl, instruction->offset);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ", ");
@@ -2389,7 +2434,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			print_immediate_value_no_prefix(fl, instruction->offset);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ", ");
@@ -2406,7 +2451,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			
 		//Index is in address calc reg 1 for this
 		case ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE:
-			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			print_immediate_value_no_prefix(fl, instruction->offset);
 			fprintf(fl, "( , ");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ", %ld)", instruction->lea_multiplier);
@@ -4109,7 +4154,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->memory_access_type = READ_FROM_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset.offset_constant = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->offset= emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -4154,7 +4199,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->memory_access_type = WRITE_TO_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset.offset_constant = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->offset= emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -4250,7 +4295,7 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	stmt->assignee->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not op1_const 
-	stmt->offset.offset_constant = offset;
+	stmt->offset = offset;
 
 	//What we're storing
 	stmt->op2 = storee;
@@ -4326,7 +4371,7 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	stmt->op1 = base_address;
 
 	//Our offset is stored in "offset", not op1_const
-	stmt->offset.offset_constant = offset;
+	stmt->offset = offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->memory_read_write_type = memory_read_type;
@@ -4607,7 +4652,7 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
 	//Global var address calc mode
-	lea->lea_statement_type = OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION;
+	lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
 
 	//We already know what the destination will be
 	lea->assignee = assignee;
@@ -4627,6 +4672,41 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 }
 
 
+/**
+ * Emit a fully formed global variable OIR address calculation with offset lea
+ *
+ * This will always produce instructions like: t8 <- global_var(%rip)
+ */
+instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, three_addr_const_t* constant){
+	//Get the intstruction out
+	instruction_t* lea = calloc(1, sizeof(instruction_t));
+
+	//This will be leaq always
+	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+	//Global var address calc mode
+	lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET;
+
+	//We already know what the destination will be
+	lea->assignee = assignee;
+
+	//Copy the global var and give a non-memory address version of it
+	three_addr_var_t* remediated_version = emit_var_copy(global_variable);
+	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
+
+	//Op1 is the instruction pointer(relative addressing)
+	lea->op1 = instruction_pointer;
+
+	//The op2 is always the global var itself
+	lea->op2 = remediated_version;
+
+	//Store the constant offset here as well
+	lea->op1_const = constant;
+
+	//And give it back
+	return lea;
+}
+
 
 /**
  * Emit a fully formed global variable x86 address calculation lea
@@ -4644,7 +4724,7 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 	lea->instruction_type = LEAQ;
 
 	//Global var address calc mode
-	lea->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+	lea->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
 	//We already know what the destination will be
 	lea->destination_register = destination;
@@ -4653,7 +4733,7 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 	lea->address_calc_reg1 = instruction_pointer;
 
 	//The offset is the global variable(unique case)
-	lea->offset.global_variable = global_variable;
+	lea->rip_offset_variable = global_variable;
 
 	//And give it back
 	return lea;

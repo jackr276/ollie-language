@@ -226,17 +226,13 @@ struct instruction_t{
 	//Certain instructions like conversions, and divisions, have more
 	//than one destination register
 	three_addr_var_t* destination_register2;
-	//Lea statements can have an offset or a global
-	//variable name as the offset, so we accomodate both
-	union {
-		three_addr_const_t* offset_constant;
-		three_addr_var_t* global_variable;
-	} offset;
+	//The offset constant if we have one
+	three_addr_const_t* offset;
+	//The RIP offset variable
+	three_addr_var_t* rip_offset_variable;
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
-	//What stack region do we write to or read from
-	stack_region_t* linked_stack_region;
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;
 	//What block holds this?
@@ -499,6 +495,11 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
+ * Emit a lea statement that is used for string calculation(rip relative)
+ */
+instruction_t* emit_lea_rip_relative_string_constants(three_addr_var_t* assignee, three_addr_var_t* string_variable, three_addr_var_t* instruction_pointer);
+
+/**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
 instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* jump_table, three_addr_var_t* op2, u_int64_t type_size);
@@ -687,6 +688,13 @@ instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destina
  * Emit a setne three address code statement
  */
 instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on);
+
+/**
+ * Emit a fully formed global variable OIR address calculation with offset lea
+ *
+ * This will always produce instructions like: t8 <- global_var(%rip)
+ */
+instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, three_addr_const_t* constant);
 
 /**
  * Emit a fully formed global variable OIR address calculation lea
