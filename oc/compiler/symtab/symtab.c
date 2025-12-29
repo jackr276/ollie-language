@@ -16,6 +16,9 @@
 //The FNV prime for 64 bit hashes
 #define FNV_PRIME 1099511628211
 
+//The finalizer constant
+#define FINALIZER_CONSTANT 0xd6e8feb86659fd93ULL;
+
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
 
@@ -193,6 +196,12 @@ static u_int64_t hash_variable(char* name){
 		hash *= FNV_PRIME;
 	}
 
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 32;
+	hash *= FINALIZER_CONSTANT;
+	hash ^= hash >> 32;
+
 	//Cut it down to our keyspace
 	return hash & (VARIABLE_KEYSPACE - 1);
 }
@@ -225,6 +234,12 @@ static u_int64_t hash_constant(char* name){
 		hash *= FNV_PRIME;
 	}
 
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 32;
+	hash *= FINALIZER_CONSTANT;
+	hash ^= hash >> 32;
+
 	//Cut it down to our keyspace
 	return hash & (CONSTANT_KEYSPACE - 1);
 }
@@ -256,6 +271,12 @@ static u_int64_t hash_function(char* name){
 		hash ^= *cursor;
 		hash *= FNV_PRIME;
 	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 32;
+	hash *= FINALIZER_CONSTANT;
+	hash ^= hash >> 32;
 
 	//Cut it down to our keyspace
 	return hash & (FUNCTION_KEYSPACE - 1);
@@ -306,6 +327,12 @@ static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 		hash ^= *(cursor - 1);
 		hash *= FNV_PRIME;
 	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 32;
+	hash *= FINALIZER_CONSTANT;
+	hash ^= hash >> 32;
 
 	//Cut it down to our keyspace
 	return hash & (TYPE_KEYSPACE - 1);
@@ -362,6 +389,11 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
 		hash *= FNV_PRIME;
 	}
 
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 32;
+	hash *= FINALIZER_CONSTANT;
+	hash ^= hash >> 32;
 
 	//Cut it down to our keyspace
 	return hash & (TYPE_KEYSPACE - 1);
@@ -425,6 +457,12 @@ static u_int64_t hash_type(generic_type_t* type){
 		hash ^= *(cursor - 1);
 		hash *= FNV_PRIME;
 	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 32;
+	hash *= FINALIZER_CONSTANT;
+	hash ^= hash >> 32;
 
 	//Cut it down to our keyspace
 	return hash & (TYPE_KEYSPACE - 1);
