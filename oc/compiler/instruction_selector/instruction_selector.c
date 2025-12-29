@@ -2002,6 +2002,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * 	 Turns into:
 	 * 	 	t46 <- 12+global_var(t3)
+	 *
+	 * CASE 2:
+	 * 	t45 <- 12+global_var(t3)
+	 * 	t46 <- t45 + 16
+	 *
+	 * 	Turns into:
+	 * 		t46 <- 18+global_var(t3)
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -2039,6 +2046,32 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				//This counts as a change
 				changed = TRUE;
 				
+				break;
+
+			/**
+			 * 	t45 <- 12+global_var(t3)
+			 * 	t46 <- t45 + 16
+			 *
+			 * 	Turns into:
+			 * 		t46 <- 18+global_var(t3)
+			 */
+			case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
+				//Back-copy the assignee
+				first_lea->assignee = second_bin_op->assignee;
+
+				//Add the 2 constants together, the result will be in the first one's constant
+				add_constants(first_lea->op1_const, second_bin_op->op1_const);
+				
+				//No need to change the lea type, it's already what it needs to be
+
+				//The second instruction is now useless
+				delete_statement(second_bin_op);
+
+				//And we will rebuild around the first instruction
+				reconstruct_window(window, first_lea);
+
+				//This counts as a change
+				changed = TRUE;
 				break;
 
 			//By default do nothing
