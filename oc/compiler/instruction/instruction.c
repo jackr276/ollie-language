@@ -1078,6 +1078,27 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 
 
 /**
+ * Emit a lea statement that is used for string calculation(rip relative)
+ */
+instruction_t* emit_lea_rip_relative_string_constants(three_addr_var_t* assignee, three_addr_var_t* string_variable, three_addr_var_t* instruction_pointer){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
+	stmt->assignee = assignee;
+	stmt->op1 = instruction_pointer;
+	stmt->op2 = string_variable;
+
+	//This is a rip-relative lea
+	stmt->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
+
+	//And now we give it back
+	return stmt;
+}
+
+
+/**
  * Emit an indirect jump calculation that includes a block label in three address code form
  */
 instruction_t* emit_indir_jump_address_calc_instruction(three_addr_var_t* assignee, void* op1, three_addr_var_t* op2, u_int64_t type_size){
