@@ -2117,7 +2117,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 					break;
 
-				case OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION:
+				case OIR_LEA_TYPE_RIP_RELATIVE:
 					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 					fprintf(fl, "(");
 					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
@@ -4607,7 +4607,7 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
 	//Global var address calc mode
-	lea->lea_statement_type = OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION;
+	lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
 
 	//We already know what the destination will be
 	lea->assignee = assignee;

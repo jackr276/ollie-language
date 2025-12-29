@@ -4600,7 +4600,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 
 		//Special kind to support global vars
-		case OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION:
+		case OIR_LEA_TYPE_RIP_RELATIVE:
 			//Set the mode
 			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
 
@@ -6393,7 +6393,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION //Nothing to do if we have this
+		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_RIP_RELATIVE //Nothing to do if we have this
 		//Is the lea's assignee equal to the offset of the load
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, TRUE) == TRUE){
 
@@ -6410,7 +6410,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_GLOBAL_VAR_CALCULATION //Nothing to do if we have this
+		&& window->instruction1->lea_statement_type != OIR_LEA_TYPE_RIP_RELATIVE //Nothing to do if we have this
 		//Is the lea's assignee equal to the offset(op1) of the store
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
