@@ -2124,6 +2124,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					fprintf(fl, ")");
 					break;
 
+				case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
+					print_three_addr_constant(fl, stmt->op1_const);
+					fprintf(fl, "+");
+					print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
+					fprintf(fl, "(");
+					print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
+					fprintf(fl, ")");
+					break;
+
+
 				case OIR_LEA_TYPE_REGISTERS_OFFSET_AND_SCALE:
 					//Print the constant out first
 					print_three_addr_constant(fl, stmt->op1_const);
@@ -2337,6 +2347,20 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE:
 			//Print the actual string name of the variable - no SSA and no registers
 			fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
+			fprintf(fl, "(");
+			//This will be the instruction pointer
+			print_variable(fl, instruction->address_calc_reg1, mode);
+			fprintf(fl, ")");
+
+		   	break;
+
+		/**
+		 * Global var address calculation with offset
+		 */
+		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET:
+			print_immediate_value_no_prefix(fl, instruction->offset);
+			//Print the actual string name of the variable - no SSA and no registers
+			fprintf(fl, "+%s", instruction->rip_offset_variable->linked_var->var_name.string);
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
