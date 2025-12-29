@@ -17,10 +17,15 @@
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 
-
-//We define that each lexical scope can have 5000 symbols at most
 //Chosen because it's a prime not too close to a power of 2
-#define KEYSPACE 997
+#define VARIABLE_KEYSPACE 101
+
+#define TYPE_KEYSPACE 101
+
+#define CONSTANT_KEYSPACE 101
+
+#define FUNCTION_KEYSPACE 137
+
 //The maximum number of function paramaters
 #define MAX_FUNCTION_PARAMS 6
 
