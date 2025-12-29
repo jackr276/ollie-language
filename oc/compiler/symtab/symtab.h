@@ -17,14 +17,16 @@
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 
-//Chosen because it's a prime not too close to a power of 2
-#define VARIABLE_KEYSPACE 101
+//Variables and types have a new sheaf added upon every new lexical scope. As such,
+//we don't need enormous sizes to hold all of them
+#define VARIABLE_KEYSPACE 73
+#define TYPE_KEYSPACE 73
 
-#define TYPE_KEYSPACE 101
+//Constants are also one per program
+#define CONSTANT_KEYSPACE 137
 
-#define CONSTANT_KEYSPACE 101
-
-#define FUNCTION_KEYSPACE 137
+//There's only one function keyspace per program, so it can be a bit larger
+#define FUNCTION_KEYSPACE 433
 
 //The maximum number of function paramaters
 #define MAX_FUNCTION_PARAMS 6
@@ -214,7 +216,7 @@ struct symtab_variable_sheaf_t{
 	//Link to the prior level
 	symtab_variable_sheaf_t* previous_level;
 	//How many records(names) we can have
-	symtab_variable_record_t* records[KEYSPACE];
+	symtab_variable_record_t* records[VARIABLE_KEYSPACE];
 	//The level of this particular symtab
 	u_int8_t lexical_level;
 };
@@ -227,7 +229,7 @@ struct symtab_type_sheaf_t{
 	//Link to the prior level
 	symtab_type_sheaf_t* previous_level;
 	//The hash table for our records
-	symtab_type_record_t* records[KEYSPACE];
+	symtab_type_record_t* records[TYPE_KEYSPACE];
 	//The lexical level of this sheaf
 	u_int8_t lexical_level;
 };
@@ -266,7 +268,7 @@ struct type_symtab_t{
  */
 struct constants_symtab_t{
 	//How many records(names) we can have
-	symtab_constant_record_t* records[KEYSPACE];
+	symtab_constant_record_t* records[CONSTANT_KEYSPACE];
 };
 
 
@@ -276,7 +278,7 @@ struct constants_symtab_t{
  */
 struct function_symtab_t{
 	//How many records(names) we can have
-	symtab_function_record_t* records[KEYSPACE];
+	symtab_function_record_t* records[FUNCTION_KEYSPACE];
 	//The level of this particular symtab
 	u_int8_t current_lexical_scope;
 };
