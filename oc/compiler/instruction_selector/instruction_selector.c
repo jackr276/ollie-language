@@ -4602,7 +4602,7 @@ static void handle_lea_statement(instruction_t* instruction){
 		//Special kind to support global vars
 		case OIR_LEA_TYPE_RIP_RELATIVE:
 			//Set the mode
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
 			//Copy over the address calc register
 			instruction->address_calc_reg1 = instruction->op1;
@@ -4611,6 +4611,21 @@ static void handle_lea_statement(instruction_t* instruction){
 			instruction->offset.global_variable = instruction->op2;
 
 			break;
+
+		//Support RIP relative with offset addressing
+		case OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET:
+			//Set the mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+
+			//And the address calc registers
+			instruction->address_calc_reg1 = instruction->op1;
+
+			//Store the RIP relative offset
+			instruction->offset.global_variable = instruction->op2;
+		
+			//TODO NOT DONE
+			break;
+			
 
 		//Translates to the address calc mode of the same name
 		case OIR_LEA_TYPE_REGISTERS_AND_OFFSET:
@@ -5408,7 +5423,7 @@ static void handle_load_instruction(instruction_t* instruction){
 		//Otherwise, we are loading a global variable
 		} else {
 			//This is going to be a global variable movement
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
 			//The address calc reg1 is the instruction pointer
 			instruction->address_calc_reg1 = instruction_pointer_variable;
@@ -5882,7 +5897,7 @@ static void handle_store_instruction(instruction_t* instruction){
 		//Otherwise, this is a global variable so we need to take special steps to deal with it
 		} else {
 			//This is going to be a global variable movement
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
 			//The address calc reg1 is the instruction pointer
 			instruction->address_calc_reg1 = instruction_pointer_variable;

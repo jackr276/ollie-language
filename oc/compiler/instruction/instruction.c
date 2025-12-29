@@ -2334,7 +2334,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		/**
 		 * Global var address calculation
 		 */
-		case ADDRESS_CALCULATION_MODE_GLOBAL_VAR:
+		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE:
 			//Print the actual string name of the variable - no SSA and no registers
 			fprintf(fl, "%s", instruction->offset.global_variable->linked_var->var_name.string);
 			fprintf(fl, "(");
@@ -4644,7 +4644,7 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 	lea->instruction_type = LEAQ;
 
 	//Global var address calc mode
-	lea->calculation_mode = ADDRESS_CALCULATION_MODE_GLOBAL_VAR;
+	lea->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
 	//We already know what the destination will be
 	lea->destination_register = destination;
@@ -4653,7 +4653,7 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 	lea->address_calc_reg1 = instruction_pointer;
 
 	//The offset is the global variable(unique case)
-	lea->offset.global_variable = global_variable;
+	lea->rip_offset_variable = global_variable;
 
 	//And give it back
 	return lea;

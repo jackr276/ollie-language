@@ -226,17 +226,13 @@ struct instruction_t{
 	//Certain instructions like conversions, and divisions, have more
 	//than one destination register
 	three_addr_var_t* destination_register2;
-	//Lea statements can have an offset or a global
-	//variable name as the offset, so we accomodate both
-	union {
-		three_addr_const_t* offset_constant;
-		three_addr_var_t* global_variable;
-	} offset;
+	//The offset constant if we have one
+	three_addr_const_t* offset;
+	//The RIP offset variable
+	three_addr_var_t* rip_offset_variable;
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
-	//What stack region do we write to or read from
-	stack_region_t* linked_stack_region;
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;
 	//What block holds this?
