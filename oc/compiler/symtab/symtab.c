@@ -297,7 +297,13 @@ static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
+		hash ^= *type_name;
+		hash *= FNV_PRIME;
+
 		hash ^= '`';
+		hash *= FNV_PRIME;
+
+		hash ^= *(cursor - 1);
 		hash *= FNV_PRIME;
 	}
 
@@ -346,7 +352,13 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
+		hash ^= *type_name;
+		hash *= FNV_PRIME;
+
 		hash ^= '`';
+		hash *= FNV_PRIME;
+	
+		hash ^= *(cursor - 1);
 		hash *= FNV_PRIME;
 	}
 
@@ -375,6 +387,9 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
  * 	return key
 */
 static u_int64_t hash_type(generic_type_t* type){
+	//Grab a pointer to the type name
+	char* type_name = type->type_name.string;
+	
 	//Char pointer for the name
 	char* cursor = type->type_name.string;
 
@@ -401,7 +416,13 @@ static u_int64_t hash_type(generic_type_t* type){
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash *= '`';
+		hash ^= *type_name;
+		hash *= FNV_PRIME;
+
+		hash ^= '`';
+		hash *= FNV_PRIME;
+
+		hash ^= *(cursor - 1);
 		hash *= FNV_PRIME;
 	}
 
@@ -768,7 +789,7 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 	//Grab the head record
 	symtab_type_record_t* cursor = symtab->current->records[record->hash];
 
-	printf("TYPE %s COLLIDES WITH TYPE %s\n\n", cursor->type->type_name.string, record->type->type_name.string);
+	printf("TYPE %s%s COLLIDES WITH TYPE %s%s\n\n", cursor->type->mutability == MUTABLE ? "mut ":"", cursor->type->type_name.string, record->type->mutability == MUTABLE ? "mut":"", record->type->type_name.string);
 	printf("%s HASH: %ld\n", cursor->type->type_name.string, cursor->hash);
 	printf("%s HASH: %ld\n", record->type->type_name.string, record->hash);
 
