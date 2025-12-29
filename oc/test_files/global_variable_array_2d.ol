@@ -23,7 +23,7 @@ pub fn main() -> i32 {
 	let x:i32 = array[2][2];
 
 	for(let i:mut i32 = 0; i < 8; i++){
-		array[i][x] = i * 3 - 2;
+		array[2][x] = i * 3 - 2;
 	}
 
 	//Use the addressing mode here
