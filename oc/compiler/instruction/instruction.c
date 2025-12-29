@@ -4651,6 +4651,41 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 }
 
 
+/**
+ * Emit a fully formed global variable OIR address calculation with offset lea
+ *
+ * This will always produce instructions like: t8 <- global_var(%rip)
+ */
+instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, three_addr_const_t* constant){
+	//Get the intstruction out
+	instruction_t* lea = calloc(1, sizeof(instruction_t));
+
+	//This will be leaq always
+	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+	//Global var address calc mode
+	lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET;
+
+	//We already know what the destination will be
+	lea->assignee = assignee;
+
+	//Copy the global var and give a non-memory address version of it
+	three_addr_var_t* remediated_version = emit_var_copy(global_variable);
+	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
+
+	//Op1 is the instruction pointer(relative addressing)
+	lea->op1 = instruction_pointer;
+
+	//The op2 is always the global var itself
+	lea->op2 = remediated_version;
+
+	//Store the constant offset here as well
+	lea->op1_const = constant;
+
+	//And give it back
+	return lea;
+}
+
 
 /**
  * Emit a fully formed global variable x86 address calculation lea

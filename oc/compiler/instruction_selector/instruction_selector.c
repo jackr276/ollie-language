@@ -806,9 +806,8 @@ static void remediate_memory_address_in_non_access_context(instruction_window_t*
 				break;
 
 			/**
-			 * A global var address assignment like this will generate
-			 * 2 separate instructions. One instruction will hold the global variable address,
-			 * while the other holds the actual binary operation
+			 * A global var address like this will generate one special instruction that is RIP relative
+			 * with a constant offset
 			 */
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 				//Let the helper emit the statement. We will use a temp destination for this
