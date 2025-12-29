@@ -6097,21 +6097,16 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 			}
 
-		//If we have a global variable, we will need to first load in the address and then go through and 
-		//handle the value normally
+		//If we have a global variable, we can use a special rip-relative addressing mode to make this happen
 		} else {
-			//Let the helper do the work
-			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(instruction->assignee, instruction_pointer_variable, u64);
+			//The first address calc register is the instruction pointer always
+			instruction->address_calc_reg1 = instruction_pointer_variable;
 
-			//Now insert this before the given instruction
-			insert_instruction_before_given(global_variable_address, instruction);
+			//The offset is already in place, we just need to set the rip offset variable based on the assignee
+			instruction->rip_offset_variable = instruction->assignee;
 
-			//The destination of the global variable address will be our new address calc reg 1. 
-			//We already have the offset loaded in, so that remains unchanged
-			instruction->address_calc_reg1 = global_variable_address->destination_register;
-
-			//This is an offset only version
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			//All that we need to do now is change the calculation mode to be rip with offset
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 		}
 
 	//Otherwise there is no memory address, so we just handle normally
