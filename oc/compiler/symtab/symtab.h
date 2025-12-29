@@ -20,7 +20,7 @@
 //Variables and types have a new sheaf added upon every new lexical scope. As such,
 //we don't need enormous sizes to hold all of them
 #define VARIABLE_KEYSPACE 128
-//Type keyspace is made larger to accomodate more basic type classes
+//Type keyspace is made larger to accomodate more basic type classes, aliases & variants
 #define TYPE_KEYSPACE 128
 
 //Constants are also one per program

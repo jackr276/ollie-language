@@ -23,6 +23,9 @@
 #define FINALIZER_CONSTANT_1 0xff51afd7ed558ccdULL
 #define FINALIZER_CONSTANT_2 0xc4ceb9fe1a85ec53ULL
 
+//For salting mutable type hashes, we use this value
+#define MUT_SALT 0xA3B1956359A1F3D1ULL
+
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
 
@@ -328,7 +331,7 @@ static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash ^= '`';
+		hash ^= MUT_SALT;
 		hash *= FNV_PRIME;
 	}
 
@@ -385,7 +388,7 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash ^= '`';
+		hash ^= MUT_SALT;
 		hash *= FNV_PRIME;
 	}
 
@@ -450,7 +453,7 @@ static u_int64_t hash_type(generic_type_t* type){
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash ^= '`';
+		hash ^= MUT_SALT;
 		hash *= FNV_PRIME;
 	}
 
