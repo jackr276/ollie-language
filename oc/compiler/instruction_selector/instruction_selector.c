@@ -1991,6 +1991,63 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * ========================= Combining lea's with constant binary operations =======================
+	 * This is a rule that is not yet finalized. Scenarios will be added to it as they arise
+	 *
+	 * CASE 1:
+	 * 	 t45 <- global_var(t3)
+	 * 	 t46 <- t45 + 12
+	 *
+	 * 	 Turns into:
+	 * 	 	t46 <- 12+global_var(t3)
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+
+		//Grab these for convenience
+		instruction_t* first_lea = window->instruction1;
+		instruction_t* second_bin_op = window->instruction2;
+
+		//Go based on what kind of lea we have
+		switch(window->instruction1->lea_statement_type){
+			/**
+			 * 	 t45 <- global_var(t3)
+			 * 	 t46 <- t45 + 12
+			 *
+			 * 	 Turns into:
+			 * 	 	t46 <- 12+global_var(t3)
+			 */
+			case OIR_LEA_TYPE_RIP_RELATIVE:
+				//Back-copy the assignee and op1_const
+				first_lea->assignee = second_bin_op->assignee;
+				first_lea->op1_const = second_bin_op->op1_const;
+
+				//Change the lea type to be rip relative but with an offset
+				first_lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET;
+
+				//The second instruction is now useless
+				delete_statement(second_bin_op);
+
+				//And we will rebuild around the first instruction
+				reconstruct_window(window, first_lea);
+
+				//This counts as a change
+				changed = TRUE;
+				
+				break;
+
+			//By default do nothing
+			default:
+				break;
+		}
+	}
+
+
 	/**
 	 * ====================== Combining loads and preceeding binary operations =============
 	 *
