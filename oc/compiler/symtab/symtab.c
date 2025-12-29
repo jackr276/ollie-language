@@ -1,5 +1,7 @@
 /**
- * The implementation of the symbol table
+ * Author: Jack Robbins
+ *
+ * The implementation of the symbol table. All hashing is done via the FNV-1a algorithm
 */
 
 #include "symtab.h"
@@ -11,8 +13,8 @@
 #include "../call_graph/call_graph.h"
 #include "../utils/constants.h"
 
-//Mersenne prime - will be turned into a shift + dec by the compiler
-#define PRIME_FACTOR 31
+//The FNV prime for 64 bit hashes
+#define FNV_PRIME 1099511628211
 
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
@@ -167,11 +169,12 @@ void finalize_type_scope(type_symtab_t* symtab){
 /**
  * Hash a name before entry/search into the hash table
  *
- * Universal string hashing algorithm
- * 	hash <- 0
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
  *
  * 	for each hashable value:
- * 		hash <- hash * prime + value;
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
  * 		
  * 	key % keyspace
  *
@@ -182,12 +185,12 @@ static u_int16_t hash_variable(char* name){
 	char* cursor = name;
 
 	//The hash we have
-	int64_t hash = 0;
+	int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		hash = hash * PRIME_FACTOR + *cursor;
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
 	//Cut it down to our keyspace
@@ -198,11 +201,12 @@ static u_int16_t hash_variable(char* name){
 /**
  * Hash a name before entry/search into the hash table
  *
- * Universal string hashing algorithm
- * 	hash <- 0
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
  *
  * 	for each hashable value:
- * 		hash <- hash * prime + value;
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
  * 		
  * 	key % keyspace
  *
@@ -213,12 +217,12 @@ static u_int16_t hash_constant(char* name){
 	char* cursor = name;
 
 	//The hash we have
-	int64_t hash = 0;
+	int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		hash = hash * PRIME_FACTOR + *cursor;
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
 	//Cut it down to our keyspace
@@ -229,11 +233,12 @@ static u_int16_t hash_constant(char* name){
 /**
  * Hash a name before entry/search into the hash table
  *
- * Universal string hashing algorithm
- * 	hash <- 0
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
  *
  * 	for each hashable value:
- * 		hash <- hash * prime + value;
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
  * 		
  * 	key % keyspace
  *
@@ -244,12 +249,12 @@ static u_int16_t hash_function(char* name){
 	char* cursor = name;
 
 	//The hash we have
-	int64_t hash = 0;
+	int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		hash = hash * PRIME_FACTOR + *cursor;
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
 	//Cut it down to our keyspace
@@ -259,18 +264,29 @@ static u_int16_t hash_function(char* name){
 
 /**
  * A helper function that will hash the name of a type
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
  */
 static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
 	//Char pointer for the name
 	char* cursor = type_name;
 
 	//The hash we have
-	int64_t hash = 0;
+	int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		hash = hash * PRIME_FACTOR + *cursor;
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
 	//If this is mutable, we will keep going by adding
@@ -281,33 +297,46 @@ static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash = hash * PRIME_FACTOR + '`';
+		hash ^= '`';
+		hash *= FNV_PRIME;
 	}
 
 	//Cut it down to our keyspace
-	return hash % CONSTANT_KEYSPACE;
+	return hash % TYPE_KEYSPACE;
 }
 
 
 /**
  * A helper function that will hash the name of an array type
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
  */
 static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
 	//Char pointer for the name
 	char* cursor = type_name;
 
 	//The hash we have
-	int64_t hash = 0;
+	int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		hash = hash * PRIME_FACTOR + *cursor;
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
 	//This is an array, we'll add the bounds in to further
 	//stop collisions
-	hash += num_members;
+	hash ^= num_members;
+	hash *= FNV_PRIME;
 
 	//If this is mutable, we will keep going by adding
 	//a duplicated version of the type's first character
@@ -317,7 +346,8 @@ static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash = hash * PRIME_FACTOR + '`';
+		hash ^= '`';
+		hash *= FNV_PRIME;
 	}
 
 
@@ -333,11 +363,12 @@ static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
  * "`" onto the end to make the hash *different* from
  * the non-mutable version. This should allow for a faster lookup
  *
- * Universal string hashing algorithm
- * 	hash <- 0
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
  *
  * 	for each hashable value:
- * 		hash <- hash * prime + value;
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
  * 		
  * 	key % keyspace
  *
@@ -348,17 +379,18 @@ static u_int16_t hash_type(generic_type_t* type){
 	char* cursor = type->type_name.string;
 
 	//The hash we have
-	int64_t hash = 0;
+	int64_t hash = FNV_PRIME;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		hash = hash * PRIME_FACTOR + *cursor;
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
 	//If this is an array, we'll add the bounds in
 	if(type->type_class == TYPE_CLASS_ARRAY){
-		hash += type->internal_values.num_members;
+		hash ^= type->internal_values.num_members;
+		hash *= FNV_PRIME;
 	}
 
 	//If this is mutable, we will keep going by adding
@@ -369,7 +401,8 @@ static u_int16_t hash_type(generic_type_t* type){
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash = hash * PRIME_FACTOR + '`';
+		hash *= '`';
+		hash *= FNV_PRIME;
 	}
 
 	//Cut it down to our keyspace
