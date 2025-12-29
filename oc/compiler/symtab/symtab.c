@@ -11,6 +11,9 @@
 #include "../call_graph/call_graph.h"
 #include "../utils/constants.h"
 
+//Mersenne prime - will be turned into a shift + dec by the compiler
+#define PRIME_FACTOR 31
+
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
 
@@ -164,99 +167,93 @@ void finalize_type_scope(type_symtab_t* symtab){
 /**
  * Hash a name before entry/search into the hash table
  *
- * Universal hashing algorithm:
- * 	Start with an initial small prime
- * 	key <- small_prime
+ * Universal string hashing algorithm
+ * 	hash <- 0
  *
  * 	for each hashable value:
- * 		key <- (key * prime) ^ (value * other prime)
+ * 		hash <- hash * prime + value;
  * 		
  * 	key % keyspace
  *
  * 	return key
 */
 static u_int16_t hash_variable(char* name){
-	u_int32_t key = 37;
-	
+	//Char pointer for the name
 	char* cursor = name;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+
+	//The hash we have
+	int64_t hash = 0;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
 		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash = hash * PRIME_FACTOR + *cursor;
 	}
 
 	//Cut it down to our keyspace
-	return key % VARIABLE_KEYSPACE;
+	return hash % VARIABLE_KEYSPACE;
 }
 
 
 /**
  * Hash a name before entry/search into the hash table
  *
- * Universal hashing algorithm:
- * 	Start with an initial small prime
- * 	key <- small_prime
+ * Universal string hashing algorithm
+ * 	hash <- 0
  *
  * 	for each hashable value:
- * 		key <- (key * prime) ^ (value * other prime)
+ * 		hash <- hash * prime + value;
  * 		
  * 	key % keyspace
  *
  * 	return key
 */
 static u_int16_t hash_constant(char* name){
-	u_int32_t key = 37;
-	
+	//Char pointer for the name
 	char* cursor = name;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+
+	//The hash we have
+	int64_t hash = 0;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
 		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash = hash * PRIME_FACTOR + *cursor;
 	}
 
 	//Cut it down to our keyspace
-	return key % CONSTANT_KEYSPACE;
+	return hash % CONSTANT_KEYSPACE;
 }
 
 
 /**
  * Hash a name before entry/search into the hash table
  *
- * Universal hashing algorithm:
- * 	Start with an initial small prime
- * 	key <- small_prime
+ * Universal string hashing algorithm
+ * 	hash <- 0
  *
  * 	for each hashable value:
- * 		key <- (key * prime) ^ (value * other prime)
+ * 		hash <- hash * prime + value;
  * 		
  * 	key % keyspace
  *
  * 	return key
 */
 static u_int16_t hash_function(char* name){
-	u_int32_t key = 37;
-	
+	//Char pointer for the name
 	char* cursor = name;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+
+	//The hash we have
+	int64_t hash = 0;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
 		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash = hash * PRIME_FACTOR + *cursor;
 	}
 
 	//Cut it down to our keyspace
-	return key % FUNCTION_KEYSPACE;
+	return hash % FUNCTION_KEYSPACE;
 }
 
 
@@ -264,17 +261,16 @@ static u_int16_t hash_function(char* name){
  * A helper function that will hash the name of a type
  */
 static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
-	u_int32_t key = 37;
-	
+	//Char pointer for the name
 	char* cursor = type_name;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+
+	//The hash we have
+	int64_t hash = 0;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
 		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash = hash * PRIME_FACTOR + *cursor;
 	}
 
 	//If this is mutable, we will keep going by adding
@@ -282,16 +278,14 @@ static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
 	//onto the hash. This should(in most cases) make the hash
 	//entirely different from the non-mutable version
 	if(mutability == MUTABLE){
-		//Update the key
-		key = (key * a) ^ ((*type_name) * b);
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		key = (key * a) ^ ('`' * b);
+		hash = hash * PRIME_FACTOR + '`';
 	}
 
 	//Cut it down to our keyspace
-	return key % TYPE_KEYSPACE;
+	return hash % CONSTANT_KEYSPACE;
 }
 
 
@@ -299,38 +293,36 @@ static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
  * A helper function that will hash the name of an array type
  */
 static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
-	u_int32_t key = 37;
-	
+	//Char pointer for the name
 	char* cursor = type_name;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+
+	//The hash we have
+	int64_t hash = 0;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
 		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash = hash * PRIME_FACTOR + *cursor;
 	}
 
 	//This is an array, we'll add the bounds in to further
 	//stop collisions
-	key += num_members;
+	hash += num_members;
 
 	//If this is mutable, we will keep going by adding
 	//a duplicated version of the type's first character
 	//onto the hash. This should(in most cases) make the hash
 	//entirely different from the non-mutable version
 	if(mutability == MUTABLE){
-		//Update the key
-		key = (key * a) ^ ((*type_name) * b);
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		key = (key * a) ^ ('`' * b);
+		hash = hash * PRIME_FACTOR + '`';
 	}
 
+
 	//Cut it down to our keyspace
-	return key % TYPE_KEYSPACE;
+	return hash % TYPE_KEYSPACE;
 }
 
 
@@ -338,39 +330,35 @@ static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
  * For arrays, type hashing will include their values
  *
  * For *mutable types*, the type hasher concatenates a
- * "mut" onto the end to make the hash *different* from
+ * "`" onto the end to make the hash *different* from
  * the non-mutable version. This should allow for a faster lookup
  *
- * Hash a name before entry/search into the hash table
- *
- * Universal hashing algorithm:
- * 	Start with an initial small prime
- * 	key <- small_prime
+ * Universal string hashing algorithm
+ * 	hash <- 0
  *
  * 	for each hashable value:
- * 		key <- (key * prime) ^ (value * other prime)
+ * 		hash <- hash * prime + value;
  * 		
  * 	key % keyspace
  *
  * 	return key
 */
 static u_int16_t hash_type(generic_type_t* type){
-	u_int32_t key = 37;
-	
+	//Char pointer for the name
 	char* cursor = type->type_name.string;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+
+	//The hash we have
+	int64_t hash = 0;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
 		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash = hash * PRIME_FACTOR + *cursor;
 	}
 
 	//If this is an array, we'll add the bounds in
 	if(type->type_class == TYPE_CLASS_ARRAY){
-		key += type->internal_values.num_members;
+		hash += type->internal_values.num_members;
 	}
 
 	//If this is mutable, we will keep going by adding
@@ -378,19 +366,14 @@ static u_int16_t hash_type(generic_type_t* type){
 	//onto the hash. This should(in most cases) make the hash
 	//entirely different from the non-mutable version
 	if(type->mutability == MUTABLE){
-		//Extract the first character
-		char first_character = *(type->type_name.string);
-
-		//Update the key
-		key = (key * a) ^ (first_character * b);
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		key = (key * a) ^ ('`' * b);
+		hash = hash * PRIME_FACTOR + '`';
 	}
 
 	//Cut it down to our keyspace
-	return key % TYPE_KEYSPACE;
+	return hash % TYPE_KEYSPACE;
 }
 
 
@@ -751,6 +734,11 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 	//Otherwise, there is a collision
 	//Grab the head record
 	symtab_type_record_t* cursor = symtab->current->records[record->hash];
+
+	printf("TYPE %s COLLIDES WITH TYPE %s\n\n", cursor->type->type_name.string, record->type->type_name.string);
+	printf("%s HASH: %d\n", cursor->type->type_name.string, cursor->hash);
+	printf("%s HASH: %d\n", record->type->type_name.string, record->hash);
+
 
 	//Get to the very last node
 	while(cursor->next != NULL){
