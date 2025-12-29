@@ -1842,6 +1842,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * 	Can become:
 	 * 	 t5 <- 8(, t7, 4)
 	 *
+	 * CASE 3: RIP relative addressing
+	 * 	t4 <- <global_var>(%rip)
+	 * 	t5 <- 4(t4)
+	 *
+	 * 	t5 <- 4+<global_var>(%rip)
+	 *
 	 * 
 	 * NOTE: This has been written to be extensible. It is by no means exhaustive yet, and
 	 * there are likely many other cases not currently handled by this that should be
@@ -1932,6 +1938,38 @@ static u_int8_t simplify_window(instruction_window_t* window){
 							break;
 							
 						//Do nothing
+						default:
+							break;
+					}
+
+				case OIR_LEA_TYPE_RIP_RELATIVE:
+					switch(second->lea_statement_type){
+						/**
+						 * CASE 3: RIP relative addressing
+						 * 	t4 <- <global_var>(%rip)
+						 * 	t5 <- 4(t4)
+						 *
+						 * 	t5 <- 4+<global_var>(%rip)
+						 */
+						case OIR_LEA_TYPE_OFFSET_ONLY:
+							//Copy over the global var and offset var
+							second_lea->op1 = first_lea->op1;
+							second_lea->op2 = first_lea->op2;
+
+							//Change the calculation mode
+							second_lea->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE_WITH_OFFSET;
+
+							//Now the first statement is useless
+							delete_statement(first_lea);
+
+							//Rebuild around the second instruction
+							reconstruct_window(window, second_lea);
+
+							//This counts as a change
+							changed = TRUE;
+
+							break;
+
 						default:
 							break;
 					}
