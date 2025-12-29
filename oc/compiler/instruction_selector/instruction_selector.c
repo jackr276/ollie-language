@@ -5624,22 +5624,18 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 				instruction->address_calc_reg1 = stack_pointer_variable;
 			}
 
-		//Otherwise, we are loading a global variable with a subsequent offset. We will need to first
-		//load the address of said global variable, and then use that with an address calculation. We 
-		//are not able to combine the 2 in such a way
+		//Otherwise, we are loading a global variable with a subsequent offset. We can use a special
+		//rip-relative addressing mode to make this happen in one instruction
 		} else {
-			//Let the helper do the work
-			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(instruction->op1, instruction_pointer_variable, u64);
+			//The first address calc register is the instruction pointer
+			instruction->address_calc_reg1 = instruction_pointer_variable;
 
-			//Now insert this before the given instruction
-			insert_instruction_before_given(global_variable_address, instruction);
+			//The global var comes from op1
+			instruction->rip_offset_variable = instruction->op1;
 
-			//The destination of the global variable address will be our new address calc reg 1. 
-			//We already have the offset loaded in, so that remains unchanged
-			instruction->address_calc_reg1 = global_variable_address->destination_register;
-
-			//This is an offset only version
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			//The offset is already where it needs to be
+			//Now we just need to change the mode to make this work
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 		}
 
 	//Otherwise we aren't on the stack, it's just an offset. In that case, we'll keep the
