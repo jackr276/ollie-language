@@ -13,11 +13,15 @@
 #include "../call_graph/call_graph.h"
 #include "../utils/constants.h"
 
-//The FNV prime for 64 bit hashes
-#define FNV_PRIME 1099511628211
+//The starting offset basis for FNV-1a64
+#define OFFSET_BASIS 14695981039346656037ULL
 
-//The finalizer constant
-#define FINALIZER_CONSTANT 0xd6e8feb86659fd93ULL;
+//The FNV prime for 64 bit hashes
+#define FNV_PRIME 1099511628211ULL
+
+//The finalizer constants for the avalance finalizer
+#define FINALIZER_CONSTANT_1 0xff51afd7ed558ccdULL
+#define FINALIZER_CONSTANT_2 0xc4ceb9fe1a85ec53ULL
 
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
@@ -188,7 +192,7 @@ static u_int64_t hash_variable(char* name){
 	char* cursor = name;
 
 	//The hash we have
-	u_int64_t hash = FNV_PRIME;
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -198,9 +202,11 @@ static u_int64_t hash_variable(char* name){
 
 	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
 	//itself ensures that the higher order bits effect all of the lower order ones
-	hash ^= hash >> 32;
-	hash *= FINALIZER_CONSTANT;
-	hash ^= hash >> 32;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
 	return hash & (VARIABLE_KEYSPACE - 1);
@@ -226,7 +232,7 @@ static u_int64_t hash_constant(char* name){
 	char* cursor = name;
 
 	//The hash we have
-	u_int64_t hash = FNV_PRIME;
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -236,9 +242,11 @@ static u_int64_t hash_constant(char* name){
 
 	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
 	//itself ensures that the higher order bits effect all of the lower order ones
-	hash ^= hash >> 32;
-	hash *= FINALIZER_CONSTANT;
-	hash ^= hash >> 32;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
 	return hash & (CONSTANT_KEYSPACE - 1);
@@ -264,7 +272,7 @@ static u_int64_t hash_function(char* name){
 	char* cursor = name;
 
 	//The hash we have
-	u_int64_t hash = FNV_PRIME;
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -274,9 +282,11 @@ static u_int64_t hash_function(char* name){
 
 	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
 	//itself ensures that the higher order bits effect all of the lower order ones
-	hash ^= hash >> 32;
-	hash *= FINALIZER_CONSTANT;
-	hash ^= hash >> 32;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
 	return hash & (FUNCTION_KEYSPACE - 1);
@@ -302,7 +312,7 @@ static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 	char* cursor = type_name;
 
 	//The hash we have
-	u_int64_t hash = FNV_PRIME;
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -320,19 +330,15 @@ static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 		//ensure that we can never get a false positive
 		hash ^= '`';
 		hash *= FNV_PRIME;
-
-		hash ^= *type_name;
-		hash *= FNV_PRIME;
-
-		hash ^= *(cursor - 1);
-		hash *= FNV_PRIME;
 	}
 
 	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
 	//itself ensures that the higher order bits effect all of the lower order ones
-	hash ^= hash >> 32;
-	hash *= FINALIZER_CONSTANT;
-	hash ^= hash >> 32;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
 	return hash & (TYPE_KEYSPACE - 1);
@@ -358,7 +364,7 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
 	char* cursor = type_name;
 
 	//The hash we have
-	u_int64_t hash = FNV_PRIME;
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -381,19 +387,15 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
 		//ensure that we can never get a false positive
 		hash ^= '`';
 		hash *= FNV_PRIME;
-	
-		hash ^= *type_name;
-		hash *= FNV_PRIME;
-
-		hash ^= *(cursor - 1);
-		hash *= FNV_PRIME;
 	}
 
 	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
 	//itself ensures that the higher order bits effect all of the lower order ones
-	hash ^= hash >> 32;
-	hash *= FINALIZER_CONSTANT;
-	hash ^= hash >> 32;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
 	return hash & (TYPE_KEYSPACE - 1);
@@ -426,7 +428,7 @@ static u_int64_t hash_type(generic_type_t* type){
 	char* cursor = type->type_name.string;
 
 	//The hash we have
-	u_int64_t hash = FNV_PRIME;
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
@@ -450,19 +452,15 @@ static u_int64_t hash_type(generic_type_t* type){
 		//ensure that we can never get a false positive
 		hash ^= '`';
 		hash *= FNV_PRIME;
-
-		hash ^= *type_name;
-		hash *= FNV_PRIME;
-
-		hash ^= *(cursor - 1);
-		hash *= FNV_PRIME;
 	}
 
 	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
 	//itself ensures that the higher order bits effect all of the lower order ones
-	hash ^= hash >> 32;
-	hash *= FINALIZER_CONSTANT;
-	hash ^= hash >> 32;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
 	return hash & (TYPE_KEYSPACE - 1);
