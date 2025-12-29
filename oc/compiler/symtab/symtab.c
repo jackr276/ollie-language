@@ -175,7 +175,7 @@ void finalize_type_scope(type_symtab_t* symtab){
  *
  * 	return key
 */
-static u_int16_t hash(char* name){
+static u_int16_t hash_variable(char* name){
 	u_int32_t key = 37;
 	
 	char* cursor = name;
@@ -190,7 +190,40 @@ static u_int16_t hash(char* name){
 	}
 
 	//Cut it down to our keyspace
-	return key % KEYSPACE;
+	return key % VARIABLE_KEYSPACE;
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * Universal hashing algorithm:
+ * 	Start with an initial small prime
+ * 	key <- small_prime
+ *
+ * 	for each hashable value:
+ * 		key <- (key * prime) ^ (value * other prime)
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+*/
+static u_int16_t hash_function(char* name){
+	u_int32_t key = 37;
+	
+	char* cursor = name;
+	//Two primes(this should be good enough for us)
+	u_int32_t a = 54059;
+	u_int32_t b = 76963;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		//Sum this up for our key
+		key = (key * a) ^ (*cursor * b);
+	}
+
+	//Cut it down to our keyspace
+	return key % FUNCTION_KEYSPACE;
 }
 
 
@@ -225,7 +258,7 @@ static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
 	}
 
 	//Cut it down to our keyspace
-	return key % KEYSPACE;
+	return key % TYPE_KEYSPACE;
 }
 
 
@@ -264,7 +297,7 @@ static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
 	}
 
 	//Cut it down to our keyspace
-	return key % KEYSPACE;
+	return key % TYPE_KEYSPACE;
 }
 
 
@@ -324,7 +357,7 @@ static u_int16_t hash_type(generic_type_t* type){
 	}
 
 	//Cut it down to our keyspace
-	return key % KEYSPACE;
+	return key % TYPE_KEYSPACE;
 }
 
 
@@ -338,7 +371,7 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 	//Store the name
 	record->var_name = name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash(name.string);
+	record->hash = hash_variable(name.string);
 	//The current generation is always 1 at first
 	record->current_generation = 1;
 
@@ -513,7 +546,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	//Copy the name over
 	record->func_name = name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash(name.string);
+	record->hash = hash_function(name.string);
 
 	//Store the line number
 	record->line_number = line_number;
