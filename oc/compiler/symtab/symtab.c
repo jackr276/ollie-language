@@ -844,11 +844,6 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record){
 	//Grab the head record
 	symtab_type_record_t* cursor = symtab->current->records[record->hash];
 
-	printf("TYPE %s%s COLLIDES WITH TYPE %s%s\n\n", cursor->type->mutability == MUTABLE ? "mut ":"", cursor->type->type_name.string, record->type->mutability == MUTABLE ? "mut":"", record->type->type_name.string);
-	printf("%s HASH: %ld\n", cursor->type->type_name.string, cursor->hash);
-	printf("%s HASH: %ld\n", record->type->type_name.string, record->hash);
-
-
 	//Get to the very last node
 	while(cursor->next != NULL){
 		cursor = cursor->next;
@@ -1725,12 +1720,34 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 	//For temporary holding
 	symtab_function_record_t* record;
 
+	//Create a min priority queue for ordering error messages
+	min_priority_queue_t queue = min_priority_queue_alloc();
+
 	//Run through all keyspace records
 	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
 		record = symtab->records[i];
 
 		//We could have chaining here, so run through just in case
 		while(record != NULL){
+			//If one of these 3 error conditions is true, we will print a warning
+			if((record->called == 0 && record->defined == 0)
+				|| (record->called == 0 && record->defined == 1)
+				|| (record->called == 1 && record->defined == 0)){
+
+				//Enqueue using the line number as priority
+				min_priority_queue_enqueue(&queue, record, record->line_number);
+			}
+
+			//Advance record up
+			record = record->next;
+		}
+
+		//Now that we have everything loaded into a queue by line number, we will go through
+		//and print each individual error
+		while(min_priority_queue_is_empty(&queue) == FALSE){
+			//Get it off of the queue
+			record = min_priority_queue_dequeue(&queue);
+		
 			if(record->called == 0 && record->defined == 0){
 				//Generate a warning here
 				(*num_warnings)++;
@@ -1739,6 +1756,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				print_warning(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
+
 			} else if(record->called == 0 && record->defined == 1){
 				//Generate a warning here
 				(*num_warnings)++;
@@ -1758,11 +1776,11 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				print_function_name(record);
 
 			}
-
-			//Advance record up
-			record = record->next;
 		}
 	}
+
+	//Destroy the queue
+	min_priority_queue_dealloc(&queue);
 }
 
 
@@ -1788,52 +1806,57 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 		for(u_int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
 			record = sheaf->records[i];
 
-			//This will happen alot
-			if(record == NULL){
-				continue;
-			}
+			//So long as the record is not NULL(we need to account for collisions)
+			while(record != NULL){
+				//If it's a label or struct, don't bother with it
+				switch(record->membership){
+					case LABEL_VARIABLE:
+					case STRUCT_MEMBER:
+						record = record->next;
+						continue;
+					default:
+						break;
+				}
 
-			//If it's a label or struct, don't bother with it
-			switch(record->membership){
-				case LABEL_VARIABLE:
-				case STRUCT_MEMBER:
-					continue;
-				default:
-					break;
-			}
+				//Only put it into the queue if it meets one of 2 warning conditions
+				if((record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE)
+					|| (record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE)){
+					//Add it into the priority queue. The priority goes by line number
+					min_priority_queue_enqueue(&queue, record, record->line_number);
+				}
 
-			//Only put it into the queue if it meets one of 2 warning conditions
-			if((record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE)
-				|| (record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE)){
-				//Add it into the priority queue. The priority goes by line number
-				min_priority_queue_enqueue(&queue, record, record->line_number);
-			}
-		}
-
-		//Now that we've loaded up the priority queue, we will go through and print out appropriate error messages
-		while(min_priority_queue_is_empty(&queue) == FALSE){
-			//Dequeue the value
-			record = min_priority_queue_dequeue(&queue);
-
-			//We have a non initialized variable
-			if(record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE){
-				sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
-				print_warning(info, record->line_number);
-				print_variable_name(record);
-				(*num_warnings)++;
-				//Go to the next iteration
-				continue;
-			}
-
-			//If it's mutable but never mutated
-			if(record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE){
-				sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
-				print_warning(info, record->line_number);
-				print_variable_name(record);
-				(*num_warnings)++;
+				//Push it up
+				record = record->next;
 			}
 		}
 	}
+
+	//Now that we've loaded up the priority queue, we will go through and print out appropriate error messages
+	while(min_priority_queue_is_empty(&queue) == FALSE){
+		//Dequeue the value
+		record = min_priority_queue_dequeue(&queue);
+
+		//We have a non initialized variable
+		if(record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE){
+			sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
+			print_warning(info, record->line_number);
+			print_variable_name(record);
+			(*num_warnings)++;
+			//Go to the next iteration
+			continue;
+		}
+
+		//If it's mutable but never mutated
+		if(record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE){
+			sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
+			print_warning(info, record->line_number);
+			print_variable_name(record);
+			(*num_warnings)++;
+		}
+	}
+
+	//Destroy the queue
+	min_priority_queue_dealloc(&queue);
 }
 
 
