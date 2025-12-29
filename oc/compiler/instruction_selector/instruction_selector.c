@@ -810,17 +810,17 @@ static void remediate_memory_address_in_non_access_context(instruction_window_t*
 			 * with a constant offset
 			 */
 			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-				//Let the helper emit the statement. We will use a temp destination for this
-				global_var_address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->op1, instruction_pointer_variable);
+				//Let the helper do all of the work
+				global_var_address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->assignee, instruction->op1, instruction_pointer_variable, instruction->op1_const);
 
 				//This goes in before the given one
 				insert_instruction_before_given(global_var_address_instruction, instruction);
 
-				//We'll now replace op1 with what our assignee here is
-				instruction->op1 = global_var_address_instruction->assignee;
-
-				//And now we'll reconstruct around our instruction just ot keep the window in order
-				reconstruct_window(window, instruction);
+				//Now we can delete the old one
+				delete_statement(instruction);
+				
+				//And reconstruct the window around the new one
+				reconstruct_window(window, global_var_address_instruction);
 
 				break;
 
