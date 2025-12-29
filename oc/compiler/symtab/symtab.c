@@ -194,7 +194,7 @@ static u_int64_t hash_variable(char* name){
 	}
 
 	//Cut it down to our keyspace
-	return hash % VARIABLE_KEYSPACE;
+	return hash & (VARIABLE_KEYSPACE - 1);
 }
 
 
@@ -226,7 +226,7 @@ static u_int64_t hash_constant(char* name){
 	}
 
 	//Cut it down to our keyspace
-	return hash % CONSTANT_KEYSPACE;
+	return hash & (CONSTANT_KEYSPACE - 1);
 }
 
 
@@ -258,7 +258,7 @@ static u_int64_t hash_function(char* name){
 	}
 
 	//Cut it down to our keyspace
-	return hash % FUNCTION_KEYSPACE;
+	return hash & (FUNCTION_KEYSPACE - 1);
 }
 
 
@@ -297,10 +297,10 @@ static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash ^= *type_name;
+		hash ^= '`';
 		hash *= FNV_PRIME;
 
-		hash ^= '`';
+		hash ^= *type_name;
 		hash *= FNV_PRIME;
 
 		hash ^= *(cursor - 1);
@@ -308,7 +308,7 @@ static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 	}
 
 	//Cut it down to our keyspace
-	return hash % TYPE_KEYSPACE;
+	return hash & (TYPE_KEYSPACE - 1);
 }
 
 
@@ -352,19 +352,19 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash ^= *type_name;
-		hash *= FNV_PRIME;
-
 		hash ^= '`';
 		hash *= FNV_PRIME;
 	
+		hash ^= *type_name;
+		hash *= FNV_PRIME;
+
 		hash ^= *(cursor - 1);
 		hash *= FNV_PRIME;
 	}
 
 
 	//Cut it down to our keyspace
-	return hash % TYPE_KEYSPACE;
+	return hash & (TYPE_KEYSPACE - 1);
 }
 
 
@@ -416,10 +416,10 @@ static u_int64_t hash_type(generic_type_t* type){
 		//Make it so that we have the '`' character, one
 		//that is not recognized at all be the lexer. This will
 		//ensure that we can never get a false positive
-		hash ^= *type_name;
+		hash ^= '`';
 		hash *= FNV_PRIME;
 
-		hash ^= '`';
+		hash ^= *type_name;
 		hash *= FNV_PRIME;
 
 		hash ^= *(cursor - 1);
@@ -427,7 +427,7 @@ static u_int64_t hash_type(generic_type_t* type){
 	}
 
 	//Cut it down to our keyspace
-	return hash % TYPE_KEYSPACE;
+	return hash & (TYPE_KEYSPACE - 1);
 }
 
 

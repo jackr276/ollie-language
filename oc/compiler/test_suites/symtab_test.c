@@ -85,7 +85,7 @@ static void test_types(){
 	u_int16_t basic_type_collision_count = add_all_basic_types(type_symtab);
 
 	//We really should be seeing no collisions for basic type insertion
-	assert(basic_type_collision_count <= 3);
+	assert(basic_type_collision_count <= 1);
 
 	//Print it out
 	printf("Collisions for basic types: %d\n", basic_type_collision_count);

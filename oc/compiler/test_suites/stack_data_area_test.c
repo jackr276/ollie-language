@@ -115,7 +115,7 @@ int main(int argc, char** argv){
 		cursor = dynamic_array_get_at(&(results->variable_symtab->sheafs), i);
 
 		//Look for anything in the records that is an array
-		for(u_int16_t j = 0; j < KEYSPACE; j++){
+		for(u_int16_t j = 0; j < VARIABLE_KEYSPACE; j++){
 			record = cursor->records[j];
 
 			//We could have chaining here, so run through just in case
