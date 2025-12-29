@@ -1830,7 +1830,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->offset.offset_constant);
+			print_three_addr_constant(fl, stmt->offset);
 			fprintf(fl, "] <- "); 
 
 			//Finally the storee(op2 or op1_const)
@@ -1900,7 +1900,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			//Then the constant offset
 			fprintf(fl, "["); 
-			print_three_addr_constant(fl, stmt->offset.offset_constant);
+			print_three_addr_constant(fl, stmt->offset);
 			fprintf(fl, "]"); 
 
 			fprintf(fl, "\n");
@@ -2336,7 +2336,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 */
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE:
 			//Print the actual string name of the variable - no SSA and no registers
-			fprintf(fl, "%s", instruction->offset.global_variable->linked_var->var_name.string);
+			fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
@@ -2363,7 +2363,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_OFFSET_ONLY:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			print_immediate_value_no_prefix(fl, instruction->offset);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ")");
@@ -2379,7 +2379,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			print_immediate_value_no_prefix(fl, instruction->offset);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ", ");
@@ -2389,7 +2389,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 		case ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE:
 			//Only print this if it's not 0
-			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			print_immediate_value_no_prefix(fl, instruction->offset);
 			fprintf(fl, "(");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ", ");
@@ -2406,7 +2406,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			
 		//Index is in address calc reg 1 for this
 		case ADDRESS_CALCULATION_MODE_INDEX_OFFSET_AND_SCALE:
-			print_immediate_value_no_prefix(fl, instruction->offset.offset_constant);
+			print_immediate_value_no_prefix(fl, instruction->offset);
 			fprintf(fl, "( , ");
 			print_variable(fl, instruction->address_calc_reg1, mode);
 			fprintf(fl, ", %ld)", instruction->lea_multiplier);
@@ -4109,7 +4109,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->memory_access_type = READ_FROM_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset.offset_constant = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->offset= emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -4154,7 +4154,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	stmt->memory_access_type = WRITE_TO_MEMORY;
 
 	//Emit an integer constant for this offset
-	stmt->offset.offset_constant = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
+	stmt->offset= emit_direct_integer_or_char_constant(offset, lookup_type_name_only(symtab, "u64", NOT_MUTABLE)->type);
 
 	//And we're done, we can return it
 	return stmt;
@@ -4250,7 +4250,7 @@ instruction_t* emit_store_with_constant_offset_ir_code(three_addr_var_t* base_ad
 	stmt->assignee->is_dereferenced = TRUE;
 
 	//The offset placeholder is used for our offset, not op1_const 
-	stmt->offset.offset_constant = offset;
+	stmt->offset = offset;
 
 	//What we're storing
 	stmt->op2 = storee;
@@ -4326,7 +4326,7 @@ instruction_t* emit_load_with_constant_offset_ir_code(three_addr_var_t* assignee
 	stmt->op1 = base_address;
 
 	//Our offset is stored in "offset", not op1_const
-	stmt->offset.offset_constant = offset;
+	stmt->offset = offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->memory_read_write_type = memory_read_type;

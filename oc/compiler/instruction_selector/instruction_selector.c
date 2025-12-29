@@ -2006,11 +2006,11 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Copy these both over
 					window->instruction2->op1 = window->instruction1->op1;
-					window->instruction2->offset.offset_constant = window->instruction1->op1_const;
+					window->instruction2->offset = window->instruction1->op1_const;
 
 					//If we have a minus, we'll just convert to a negative
 					if(window->instruction1->op == MINUS){
-						window->instruction2->offset.offset_constant->constant_value.signed_long_constant *= -1;
+						window->instruction2->offset->constant_value.signed_long_constant *= -1;
 					}
 
 					//Now scrap instruction 1
@@ -2084,11 +2084,11 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Copy these both over
 					window->instruction2->assignee = window->instruction1->assignee;
-					window->instruction2->offset.offset_constant = window->instruction1->op1_const;
+					window->instruction2->offset = window->instruction1->op1_const;
 
 					//If we have a minus, we'll just convert to a negative
 					if(window->instruction1->op == MINUS){
-						window->instruction2->offset.offset_constant->constant_value.signed_long_constant *= -1;
+						window->instruction2->offset->constant_value.signed_long_constant *= -1;
 					}
 
 					//Now scrap instruction 1
@@ -2681,7 +2681,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		window->instruction2->op2 = NULL;
 
 		//Copy their constants over
-		window->instruction2->offset.offset_constant = window->instruction1->op1_const;
+		window->instruction2->offset = window->instruction1->op1_const;
 
 		//We can delete the entire assignment statement
 		delete_statement(window->instruction1);
@@ -2718,7 +2718,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		window->instruction2->op1 = NULL;
 
 		//Copy their constants over
-		window->instruction2->offset.offset_constant = window->instruction1->op1_const;
+		window->instruction2->offset = window->instruction1->op1_const;
 
 		//We can delete the entire assignment statement
 		delete_statement(window->instruction1);
@@ -2741,9 +2741,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *  load t4 <- t3
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET
-		&& is_constant_value_zero(window->instruction1->offset.offset_constant) == TRUE){
+		&& is_constant_value_zero(window->instruction1->offset) == TRUE){
 		//First NULL out the constant
-		window->instruction1->offset.offset_constant = NULL;
+		window->instruction1->offset = NULL;
 
 		//Then just make this a normal load
 		window->instruction1->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
@@ -2763,9 +2763,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *  store t4 <- t3
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET 
-		&& is_constant_value_zero(window->instruction1->offset.offset_constant) == TRUE){
+		&& is_constant_value_zero(window->instruction1->offset) == TRUE){
 		//First NULL out the constant
-		window->instruction1->offset.offset_constant = NULL;
+		window->instruction1->offset = NULL;
 
 		//Slight adjustment as well, the op1's in complex stores are not the source but in regular
 		//stores they are, so we'll copy that over
@@ -3977,7 +3977,7 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 		//We'll just have an offset here
 		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 		//This is definitely not 0 if we're here
-		instruction->offset.offset_constant = instruction->op1_const;
+		instruction->offset = instruction->op1_const;
 	}
 }
 
@@ -4555,7 +4555,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			instruction->address_calc_reg1 = instruction->op1;
 
 			//Copy the offset constant over
-			instruction->offset.offset_constant = instruction->op1_const;
+			instruction->offset = instruction->op1_const;
 
 			break;
 
@@ -4595,7 +4595,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			}
 
 			//Set the appropriate value here
-			instruction->offset.offset_constant = instruction->op1_const;
+			instruction->offset = instruction->op1_const;
 
 			break;
 
@@ -4608,7 +4608,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			instruction->address_calc_reg1 = instruction->op1;
 
 			//Op2 holds the global var, which then gets moved over
-			instruction->offset.global_variable = instruction->op2;
+			instruction->rip_offset_variable = instruction->op2;
 
 			break;
 
@@ -4621,9 +4621,11 @@ static void handle_lea_statement(instruction_t* instruction){
 			instruction->address_calc_reg1 = instruction->op1;
 
 			//Store the RIP relative offset
-			instruction->offset.global_variable = instruction->op2;
-		
-			//TODO NOT DONE
+			instruction->rip_offset_variable = instruction->op2;
+
+			//And store the offset here from op1_const
+			instruction->offset = instruction->op1_const;
+
 			break;
 			
 
@@ -4644,7 +4646,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			}
 
 			//Set the appropriate value here
-			instruction->offset.offset_constant = instruction->op1_const;
+			instruction->offset = instruction->op1_const;
 
 			break;
 
@@ -4685,7 +4687,7 @@ static void handle_lea_statement(instruction_t* instruction){
 			instruction->address_calc_reg1 = instruction->op1;
 
 			//Copy over the offset
-			instruction->offset.offset_constant = instruction->op1_const;
+			instruction->offset = instruction->op1_const;
 			
 			break;
 
@@ -5408,7 +5410,7 @@ static void handle_load_instruction(instruction_t* instruction){
 				instruction->address_calc_reg1 = stack_pointer_variable;
 
 				//Store the offset too
-				instruction->offset.offset_constant = offset;
+				instruction->offset = offset;
 
 			//Otherwise there's no stack offset, so we're just dereferencing the
 			//stack pointer
@@ -5429,7 +5431,7 @@ static void handle_load_instruction(instruction_t* instruction){
 			instruction->address_calc_reg1 = instruction_pointer_variable;
 
 			//The offset field holds the global var's name
-			instruction->offset.global_variable = instruction->op1;
+			instruction->rip_offset_variable = instruction->op1;
 		}
 
 	} else {
@@ -5477,7 +5479,7 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
 				//We need to sum the existing offset with the stack offset to get an accurate picture
-				sum_constant_with_raw_int64_value(instruction->offset.offset_constant, i64, stack_offset);
+				sum_constant_with_raw_int64_value(instruction->offset, i64, stack_offset);
 
 				//We now will have something like <offset>(%rsp)
 				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -5563,7 +5565,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 				//Emit the offset
-				instruction->offset.offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+				instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
 				//This will be the stack pointer
 				instruction->address_calc_reg1 = stack_pointer_variable;
@@ -5662,7 +5664,7 @@ static void handle_load_statement_base_address(instruction_t* load_statement){
 			//and op1
 			if(stack_offset != 0){
 				//Emit the offset
-				load_statement->offset.offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+				load_statement->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
 				//This will be the stack pointer
 				load_statement->address_calc_reg1 = stack_pointer_variable;
@@ -5728,12 +5730,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			handle_load_statement_base_address(variable_offset_load);
 
 			//If there are any constants to add, we'll do that now
-			if(variable_offset_load->offset.offset_constant != NULL){
-				add_constants(variable_offset_load->offset.offset_constant, lea_statement->op1_const);
+			if(variable_offset_load->offset != NULL){
+				add_constants(variable_offset_load->offset, lea_statement->op1_const);
 
 			//Otherwise copy it over
 			} else {
-				variable_offset_load->offset.offset_constant = lea_statement->op1_const;
+				variable_offset_load->offset = lea_statement->op1_const;
 			}
 
 			//Our op2 is now the first operand from the old lea
@@ -5779,7 +5781,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			}
 
 			//The calculation mode type depends on the constant
-			if(variable_offset_load->offset.offset_constant != NULL){
+			if(variable_offset_load->offset != NULL){
 				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 			} else {
 				variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
@@ -5802,12 +5804,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			handle_load_statement_base_address(variable_offset_load);
 
 			//If there are any constants to add, we'll do that now
-			if(variable_offset_load->offset.offset_constant != NULL){
-				add_constants(variable_offset_load->offset.offset_constant, lea_statement->op1_const);
+			if(variable_offset_load->offset != NULL){
+				add_constants(variable_offset_load->offset, lea_statement->op1_const);
 
 			//Otherwise copy it over
 			} else {
-				variable_offset_load->offset.offset_constant = lea_statement->op1_const;
+				variable_offset_load->offset = lea_statement->op1_const;
 			}
 
 			//Copy the scale over
@@ -5880,7 +5882,7 @@ static void handle_store_instruction(instruction_t* instruction){
 				instruction->address_calc_reg1 = stack_pointer_variable;
 
 				//And we need to store the offset
-				instruction->offset.offset_constant = offset;
+				instruction->offset = offset;
 
 				//This counts for our destination only
 				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -5903,7 +5905,7 @@ static void handle_store_instruction(instruction_t* instruction){
 			instruction->address_calc_reg1 = instruction_pointer_variable;
 
 			//The global variable is held by the offset
-			instruction->offset.global_variable = instruction->assignee;
+			instruction->rip_offset_variable = instruction->assignee;
 		}
 
 	//Otherwise this is something like a pointer dereference, just a pure store so we'll
@@ -5955,7 +5957,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 
 				//We'll now add the stack offset to the offset that we already have
 				//in the "offset variable"
-				sum_constant_with_raw_int64_value(instruction->offset.offset_constant, i64, stack_offset);
+				sum_constant_with_raw_int64_value(instruction->offset, i64, stack_offset);
 
 				//Once that's done, we just need to change the address calc mode
 				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -6040,7 +6042,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 				instruction->address_calc_reg2 = instruction->op1;
 
 				//We will need to have a stack offset here since the memory base address has one
-				instruction->offset.offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+				instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
@@ -6146,7 +6148,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 				store_instruction->address_calc_reg1 = stack_pointer_variable;
 
 				//We will need to have a stack offset here since the memory base address has one
-				store_instruction->offset.offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+				store_instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
 			//All that we need to do now is use the stack pointer
 			} else {
@@ -6201,13 +6203,13 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			handle_store_statement_base_address(variable_offset_store);
 
 			//If we're able to combine constants here, we will
-			if(variable_offset_store->offset.offset_constant != NULL){
+			if(variable_offset_store->offset != NULL){
 				//Add the 2, result is in the store's constant
-				add_constants(variable_offset_store->offset.offset_constant, lea_statement->op1_const);
+				add_constants(variable_offset_store->offset, lea_statement->op1_const);
 
 			//Otherwise do a straight copy
 			} else {
-				variable_offset_store->offset.offset_constant = lea_statement->op1_const;
+				variable_offset_store->offset = lea_statement->op1_const;
 			}
 
 			//Now get the address calc reg 2
@@ -6256,7 +6258,7 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			}
 
 			//Determine the calculation mode based on the present of offset
-			if(variable_offset_store->offset.offset_constant != NULL){
+			if(variable_offset_store->offset != NULL){
 				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_OFFSET_AND_SCALE;
 			} else {
 				variable_offset_store->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_SCALE;
@@ -6282,13 +6284,13 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			handle_store_statement_base_address(variable_offset_store);
 
 			//If we're able to combine constants here, we will
-			if(variable_offset_store->offset.offset_constant != NULL){
+			if(variable_offset_store->offset != NULL){
 				//Add the 2, result is in the store's constant
-				add_constants(variable_offset_store->offset.offset_constant, lea_statement->op1_const);
+				add_constants(variable_offset_store->offset, lea_statement->op1_const);
 
 			//Otherwise do a straight copy
 			} else {
-				variable_offset_store->offset.offset_constant = lea_statement->op1_const;
+				variable_offset_store->offset = lea_statement->op1_const;
 			}
 
 			//Now get the address calc reg 2
