@@ -54,7 +54,8 @@ typedef enum {
 typedef enum {
 	VARIABLE_TYPE_TEMP,
 	VARIABLE_TYPE_NON_TEMP,
-	VARIABLE_TYPE_MEMORY_ADDRESS
+	VARIABLE_TYPE_MEMORY_ADDRESS,
+	VARIABLE_TYPE_LOCAL_CONSTANT
 } variable_type_t;
 
 
@@ -151,6 +152,8 @@ struct three_addr_var_t{
 	u_int32_t ssa_generation;
 	//What's the temp var number
 	u_int32_t temp_var_number;
+	//The local constant id
+	u_int32_t local_constant_id;
 	//What's the reference count of this variable.
 	//This will be needed later on down the line in 
 	//the instruction selector
