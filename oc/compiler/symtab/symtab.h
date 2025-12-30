@@ -73,17 +73,35 @@ typedef enum variable_membership_t {
 
 
 /**
+ * What kind of local constant do we have? Local constants
+ * can be strings or floating point numbers, which are represented
+ * by ".long"
+ */
+typedef enum {
+	LOCAL_CONSTANT_TYPE_STRING,
+	LOCAL_CONSTANT_TYPE_BYTES
+} local_constant_type_t;
+
+
+/**
  * A local constant(.LCx) is a value like a string that is intended to 
  * be used by a function. We define them separately because they have many less
  * fields than an actual basic block
  */
 struct local_constant_t{
-	//The actual string value of it
-	dynamic_string_t value;
+	//Holds the actual value
+	union {
+		//Local constants can be strings
+		dynamic_string_t string_value;
+		//They can also be bytes
+		u_int64_t byte_value;
+	} local_constant_value;
 	//And the ID of it
 	u_int16_t local_constant_id;
 	//The reference count of the local constant
 	u_int16_t reference_count;
+	//What is the type of it
+	local_constant_type_t local_constant_type;
 };
 
 
