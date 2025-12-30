@@ -730,6 +730,14 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 }
 
 
+/**
+ * Emit a local constant temp var
+ */
+three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant){
+	//TODO
+
+}
+
 
 /**
  * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
@@ -4000,30 +4008,20 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
  * Emit a three_addr_const_t value that is a local constant(.LCx) reference
  */
 three_addr_const_t* emit_string_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
-	//Let's create the local constant first
-	local_constant_t* local_constant = local_constant_alloc(&(const_node->string_value));
+	//Let's create the local constant first.
+	local_constant_t* local_constant = string_local_constant_alloc(&(const_node->string_value));
 
 	//Once this has been made, we can add it to the function
 	add_local_constant_to_function(function, local_constant);
 
-	//Let's allocate it first
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_consts, constant);
-
-	//Now we'll assign the appropriate values
-	constant->const_type = const_node->constant_type; 
-	constant->type = const_node->inferred_type;
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
 
 	//Increment the reference count
 	(local_constant->reference_count)++;
 
-	//Add this value in
-	constant->local_constant = local_constant;
-
 	//And give this back
-	return constant;
+	return local_constant_variable;
 }
 
 

@@ -1250,9 +1250,12 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 /**
  * Create a local constant and return the pointer to it
  */
-local_constant_t* string_local_constant_alloc(dynamic_string_t* value){
+local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_string_t* value){
 	//Dynamically allocate it
 	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
+
+	//Store the type as well
+	local_const->type = type;
 
 	//Copy the dynamic string in
 	local_const->local_constant_value.string_value = clone_dynamic_string(value);

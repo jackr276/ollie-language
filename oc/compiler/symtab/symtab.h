@@ -89,6 +89,8 @@ typedef enum {
  * fields than an actual basic block
  */
 struct local_constant_t{
+	//What is the type of the local constant?
+	generic_type_t* type;
 	//Holds the actual value
 	union {
 		//Local constants can be strings
@@ -490,7 +492,7 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 /**
  * Create a string local constant
  */
-local_constant_t* string_local_constant_alloc(dynamic_string_t* value);
+local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_string_t* value);
 
 /**
  * Add a local constant to a function

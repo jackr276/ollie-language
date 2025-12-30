@@ -2751,6 +2751,7 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	//There are several constant types that require special treatment
 	switch(constant_node->constant_type){
 		case STR_CONST:
+			///TODO SCRAP THIS
 			//Here's our constant value
 			const_val = emit_string_constant(basic_block->function_defined_in, constant_node);
 
