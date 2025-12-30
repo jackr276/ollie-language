@@ -1106,7 +1106,7 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 /**
  * Emit a lea statement that is used for string calculation(rip relative)
  */
-instruction_t* emit_lea_rip_relative_string_constants(three_addr_var_t* assignee, three_addr_var_t* string_variable, three_addr_var_t* instruction_pointer){
+instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_addr_var_t* local_constant, three_addr_var_t* instruction_pointer){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1114,7 +1114,7 @@ instruction_t* emit_lea_rip_relative_string_constants(three_addr_var_t* assignee
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->assignee = assignee;
 	stmt->op1 = instruction_pointer;
-	stmt->op2 = string_variable;
+	stmt->op2 = local_constant;
 
 	//This is a rip-relative lea
 	stmt->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
@@ -4026,7 +4026,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 /**
  * Emit a three_addr_const_t value that is a local constant(.LCx) reference
  */
-three_addr_var_t* emit_string_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
+three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
 	//Let's create the local constant first.
 	local_constant_t* local_constant = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
 

@@ -2744,20 +2744,20 @@ void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr,
  * Emit the abstract machine code for a constant to variable assignment. 
  */
 static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node, u_int8_t is_branch_ending){
-	//First we'll emit the constant
+	//Placeholders for constant/var values
 	three_addr_const_t* const_val;
+	three_addr_var_t* local_constant_val;
 	//Holder for the constant assignment
 	instruction_t* const_assignment;
 
 	//There are several constant types that require special treatment
 	switch(constant_node->constant_type){
 		case STR_CONST:
-			///TODO SCRAP THIS
 			//Here's our constant value
-			const_val = emit_string_constant(basic_block->function_defined_in, constant_node);
+			local_constant_val = emit_string_local_constant(current_function, constant_node);
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			const_assignment = emit_binary_operation_with_const_instruction(emit_temp_var(constant_node->inferred_type), instruction_pointer_var, PLUS, const_val);
+			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
 			break;
 
 		case FUNC_CONST:

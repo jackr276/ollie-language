@@ -505,9 +505,9 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
- * Emit a lea statement that is used for string calculation(rip relative)
+ * Emit a lea statement that is used for rip relative calculations
  */
-instruction_t* emit_lea_rip_relative_string_constants(three_addr_var_t* assignee, three_addr_var_t* string_variable, three_addr_var_t* instruction_pointer);
+instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_addr_var_t* local_constant_variable, three_addr_var_t* instruction_pointer);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form
