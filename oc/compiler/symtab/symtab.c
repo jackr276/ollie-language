@@ -1555,6 +1555,56 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 
 
 /**
+ * Part of optimizer's mark and sweep - remove any local constants
+ * with a reference count of 0
+ */
+void sweep_local_constants(symtab_function_record_t* record){
+	//An array that marks given constants for deletion
+	dynamic_array_t marked_for_deletion = dynamic_array_alloc();
+
+	//Run through every string constant
+	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_array_delete(&(record->local_string_constants), to_be_deleted);
+	}
+
+	//Now do the exact same thing for non-strings. We can reuse the same array
+	for(u_int16_t i = 0; i < record->local_nonstring_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_array_get_at(&(record->local_nonstring_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_array_delete(&(record->local_nonstring_constants), to_be_deleted);
+	}
+}
+
+
+/**
  * A record printer that is used for development/error messages
  */
 void print_variable_record(symtab_variable_record_t* record){

@@ -500,6 +500,12 @@ local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_stri
 void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant);
 
 /**
+ * Part of optimizer's mark and sweep - remove any local constants
+ * with a reference count of 0
+ */
+void sweep_local_constants(symtab_function_record_t* record);
+
+/**
  * Check for and print out any unused functions
  */
 void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings);

@@ -848,6 +848,9 @@ static void sweep(cfg_t* cfg){
 		//Invoke the stack sweeper. This function will go through an remove any stack regions
 		//that have been flagged as unimportant
 		sweep_stack_data_area(stack);
+
+		//Now we will sweep the local constants out of here
+		sweep_local_constants(function_entry->function_defined_in);
 	}
 }
 
