@@ -2393,8 +2393,17 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 * Global var address calculation
 		 */
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE:
+			//There are different ways that this can go
+			switch(instruction->rip_offset_variable->variable_type){
+				case VARIABLE_TYPE_LOCAL_CONSTANT:
+					fprintf(fl, ".LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
+					break;
+				default:
+					fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
+					break;
+			}
+
 			//Print the actual string name of the variable - no SSA and no registers
-			fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
@@ -2407,8 +2416,15 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 */
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET:
 			print_immediate_value_no_prefix(fl, instruction->offset);
-			//Print the actual string name of the variable - no SSA and no registers
-			fprintf(fl, "+%s", instruction->rip_offset_variable->linked_var->var_name.string);
+			//There are different ways that this can go
+			switch(instruction->rip_offset_variable->variable_type){
+				case VARIABLE_TYPE_LOCAL_CONSTANT:
+					fprintf(fl, "+.LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
+					break;
+				default:
+					fprintf(fl, "+%s", instruction->rip_offset_variable->linked_var->var_name.string);
+					break;
+			}
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
