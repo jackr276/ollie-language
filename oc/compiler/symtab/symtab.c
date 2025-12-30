@@ -1524,44 +1524,31 @@ void print_function_record(symtab_function_record_t* record){
  * Print the local constants(.LCx) that are inside of a function
  */
 void print_local_constants(FILE* fl, symtab_function_record_t* record){
-	//This means that we have no local constants(which is a very common case), so we leave
-	if(record->local_constants.internal_array == NULL || record->local_constants.current_index == 0){
-		return;
+	//Let's first print the function's string constants
+	if(record->local_string_constants.current_index != 0){
+		//Print out what section we are in
+		fprintf(fl, "\t.section .rodata.str1.1\n");
+
+		//Run through every string constant
+		for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
+			//Grab the constant out
+			local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
+
+			//Now print out every local string constant
+			fprintf(fl, ".LC%d:\n\t.string \"%s\"\n", constant->local_constant_id, constant->local_constant_value.string_value.string);
+		}
 	}
 
-	//Otherwise, we do have local constants, so we will run through and print ones that have a reference
-	//count that is more than 0
-	for(u_int16_t i = 0; i < record->local_constants.current_index; i++){
-		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(&(record->local_constants), i);
+	//Now print the nonstring constants
+	if(record->local_nonstring_constants.current_index != 0){
+		//NEEDED: printing out the section here - not done yet
+		//Run through all constants
+		for(u_int16_t i = 0; i < record->local_nonstring_constants.current_index; i++){
+			//Grab the constant out
+			local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
 
-		//If this has no references, we leave
-		if(constant->reference_count == 0){
-			continue;	
-		}
-
-		//Go based on what kind of local constant we have
-		switch(constant->local_constant_type){
-			/**
-			 * Local string constants are printed to the ".rodata.st1.1" section. .1 because
-			 * these are 1-byte aligned strings
-			 */
-			case LOCAL_CONSTANT_TYPE_STRING:
-				//Otherwise, we'll begin to print, starting with the constant name
-				fprintf(fl, "\t.section\t.rodata.str1.1\n.LC%d:\n", constant->local_constant_id);
-
-				//Now we print out the .string specifier, followed by the name
-				fprintf(fl, "\t.string \"%s\"\n", constant->local_constant_value.string_value.string);
-
-				break;
-				
-			case LOCAL_CONSTANT_TYPE_BYTES:
-				//Otherwise, we'll begin to print, starting with the constant name
-				fprintf(fl, ".LC%d:\n", constant->local_constant_id);
-
-				//Now print out the long value
-				fprintf(fl, "\t.long \"%ld\"\n", constant->local_constant_value.byte_value);
-				break;
+			//Otherwise, we'll begin to print, starting with the constant name
+			fprintf(fl, ".LC%d:\n\t.long %ld\n", constant->local_constant_id, constant->local_constant_value.byte_value);
 		}
 	}
 }
@@ -1923,16 +1910,26 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				free(temp->call_graph_node);
 			}
 
-			//If we have local constants, these will
-			//also need deallocation
-			if(temp->local_constants.internal_array != NULL){
+			//Deallocation for local constants
+			if(temp->local_string_constants.internal_array != NULL){
 				//Deallocate each local constant
-				for(u_int16_t i = 0; i < temp->local_constants.current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(&(temp->local_constants), i));
+				for(u_int16_t i = 0; i < temp->local_string_constants.current_index; i++){
+					local_constant_dealloc(dynamic_array_get_at(&(temp->local_string_constants), i));
 				}
 
 				//Then destroy the whole array
-				dynamic_array_dealloc(&(temp->local_constants));
+				dynamic_array_dealloc(&(temp->local_string_constants));
+			}
+
+			//Deallocation for local constants
+			if(temp->local_nonstring_constants.internal_array != NULL){
+				//Deallocate each local constant
+				for(u_int16_t i = 0; i < temp->local_nonstring_constants.current_index; i++){
+					local_constant_dealloc(dynamic_array_get_at(&(temp->local_nonstring_constants), i));
+				}
+
+				//Then destroy the whole array
+				dynamic_array_dealloc(&(temp->local_nonstring_constants));
 			}
 
 			//Dealloate the function type
