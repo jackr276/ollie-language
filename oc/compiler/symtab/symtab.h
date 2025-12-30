@@ -118,9 +118,9 @@ struct symtab_function_record_t{
 	u_int8_t assigned_registers[K_COLORS_GEN_USE];
 	//The name of the function
 	dynamic_string_t func_name;
-	//The local constants array. Not all functions 
-	//have this populated
-	dynamic_array_t local_constants;
+	//Functions have dynamic arrays for string/nonstring constants
+	dynamic_array_t local_string_constants;
+	dynamic_array_t local_nonstring_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The hash that we have

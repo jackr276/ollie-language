@@ -1275,14 +1275,31 @@ local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_stri
  * Add a local constant to a function
  */
 void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant){
-	//If we have no local constants, then we'll need to allocate
-	//the array
-	if(function->local_constants.internal_array == NULL){
-		function->local_constants = dynamic_array_alloc();
-	}
+	//Go based on what the possible values are
+	switch(constant->local_constant_type){
+		case LOCAL_CONSTANT_TYPE_STRING:
+			//If we have no local constants, then we'll need to allocate
+			//the array
+			if(function->local_string_constants.internal_array == NULL){
+				function->local_string_constants = dynamic_array_alloc();
+			}
 
-	//And add the function in
-	dynamic_array_add(&(function->local_constants), constant);
+			//And add the function in
+			dynamic_array_add(&(function->local_string_constants), constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_BYTES:
+			//If we have no local constants, then we'll need to allocate
+			//the array
+			if(function->local_nonstring_constants.internal_array == NULL){
+				function->local_nonstring_constants = dynamic_array_alloc();
+			}
+
+			//And add the function in
+			dynamic_array_add(&(function->local_nonstring_constants), constant);
+			break;
+	}
 }
 
 
@@ -1525,9 +1542,13 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 
 		//Go based on what kind of local constant we have
 		switch(constant->local_constant_type){
+			/**
+			 * Local string constants are printed to the ".rodata.st1.1" section. .1 because
+			 * these are 1-byte aligned strings
+			 */
 			case LOCAL_CONSTANT_TYPE_STRING:
 				//Otherwise, we'll begin to print, starting with the constant name
-				fprintf(fl, ".LC%d:\n", constant->local_constant_id);
+				fprintf(fl, "\t.section\t.rodata.str1.1\n.LC%d:\n", constant->local_constant_id);
 
 				//Now we print out the .string specifier, followed by the name
 				fprintf(fl, "\t.string \"%s\"\n", constant->local_constant_value.string_value.string);
