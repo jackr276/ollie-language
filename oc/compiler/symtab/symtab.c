@@ -1,5 +1,7 @@
 /**
- * The implementation of the symbol table
+ * Author: Jack Robbins
+ *
+ * The implementation of the symbol table. All hashing is done via the FNV-1a algorithm
 */
 
 #include "symtab.h"
@@ -9,7 +11,39 @@
 #include <sys/types.h>
 #include "../ast/ast.h"
 #include "../call_graph/call_graph.h"
+//For error printing
+#include "../utils/queue/min_priority_queue.h"
 #include "../utils/constants.h"
+
+//The starting offset basis for FNV-1a64
+#define OFFSET_BASIS 14695981039346656037ULL
+
+//The FNV prime for 64 bit hashes
+#define FNV_PRIME 1099511628211ULL
+
+//The finalizer constants for the avalance finalizer
+#define FINALIZER_CONSTANT_1 0xff51afd7ed558ccdULL
+#define FINALIZER_CONSTANT_2 0xc4ceb9fe1a85ec53ULL
+
+//Define a list of salts that can be used for mutable types
+static const u_int64_t mutability_salts[] = {
+	0xA3B1956359A1F3D1ULL,
+	0xC9E3779B97F4A7C1ULL,
+	0x123456789ABCDEF0ULL,
+	0xF0E1D2C3B4A59687ULL,
+    0x0FEDCBA987654321ULL,
+    0x9E3779B97F4A7C15ULL,
+    0x6A09E667F3BCC908ULL,
+    0xBB67AE8584CAA73BULL,
+    0x3C6EF372FE94F82BULL,
+    0xA54FF53A5F1D36F1ULL,
+    0x510E527FADE682D1ULL,
+    0x9B05688C2B3E6C1FULL,
+    0x1F83D9ABFB41BD6BULL,
+    0x5BE0CD19137E2179ULL,
+    0x8F1BBCDC68C4CFAFULL,
+    0xCBB41EF6F7F651C1ULL
+};
 
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
@@ -164,51 +198,148 @@ void finalize_type_scope(type_symtab_t* symtab){
 /**
  * Hash a name before entry/search into the hash table
  *
- * Universal hashing algorithm:
- * 	Start with an initial small prime
- * 	key <- small_prime
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
  *
  * 	for each hashable value:
- * 		key <- (key * prime) ^ (value * other prime)
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
  * 		
  * 	key % keyspace
  *
  * 	return key
 */
-static u_int16_t hash(char* name){
-	u_int32_t key = 37;
-	
+static u_int64_t hash_variable(char* name){
+	//Char pointer for the name
 	char* cursor = name;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
 	//Cut it down to our keyspace
-	return key % KEYSPACE;
+	return hash & (VARIABLE_KEYSPACE - 1);
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+*/
+static u_int64_t hash_constant(char* name){
+	//Char pointer for the name
+	char* cursor = name;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
+	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
+	//Cut it down to our keyspace
+	return hash & (CONSTANT_KEYSPACE - 1);
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+*/
+static u_int64_t hash_function(char* name){
+	//Char pointer for the name
+	char* cursor = name;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
+	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
+	//Cut it down to our keyspace
+	return hash & (FUNCTION_KEYSPACE - 1);
 }
 
 
 /**
  * A helper function that will hash the name of a type
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
  */
-static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
-	u_int32_t key = 37;
-	
+static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
+	//Char pointer for the name
 	char* cursor = type_name;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
 	//If this is mutable, we will keep going by adding
@@ -216,55 +347,78 @@ static u_int16_t hash_type_name(char* type_name, mutability_type_t mutability){
 	//onto the hash. This should(in most cases) make the hash
 	//entirely different from the non-mutable version
 	if(mutability == MUTABLE){
-		//Update the key
-		key = (key * a) ^ ((*type_name) * b);
-		//Make it so that we have the '`' character, one
-		//that is not recognized at all be the lexer. This will
-		//ensure that we can never get a false positive
-		key = (key * a) ^ ('`' * b);
+		//To make the hashes different, we will pick from one of
+		//3 salts based on the first character in the type name
+		hash ^= mutability_salts[*type_name % 16];
+		hash *= FNV_PRIME;
 	}
 
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
 	//Cut it down to our keyspace
-	return key % KEYSPACE;
+	return hash & (TYPE_KEYSPACE - 1);
 }
 
 
 /**
  * A helper function that will hash the name of an array type
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
  */
-static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
-	u_int32_t key = 37;
-	
+static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
+	//Char pointer for the name
 	char* cursor = type_name;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
 	//This is an array, we'll add the bounds in to further
 	//stop collisions
-	key += num_members;
+	hash ^= num_members;
+	hash *= FNV_PRIME;
 
 	//If this is mutable, we will keep going by adding
 	//a duplicated version of the type's first character
 	//onto the hash. This should(in most cases) make the hash
 	//entirely different from the non-mutable version
 	if(mutability == MUTABLE){
-		//Update the key
-		key = (key * a) ^ ((*type_name) * b);
-		//Make it so that we have the '`' character, one
-		//that is not recognized at all be the lexer. This will
-		//ensure that we can never get a false positive
-		key = (key * a) ^ ('`' * b);
+		//To make the hashes different, we will pick from one of
+		//3 salts based on the first character in the type name
+		hash ^= mutability_salts[*type_name % 16];
+		hash *= FNV_PRIME;
 	}
 
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
 	//Cut it down to our keyspace
-	return key % KEYSPACE;
+	return hash & (TYPE_KEYSPACE - 1);
 }
 
 
@@ -272,39 +426,40 @@ static u_int16_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
  * For arrays, type hashing will include their values
  *
  * For *mutable types*, the type hasher concatenates a
- * "mut" onto the end to make the hash *different* from
+ * "`" onto the end to make the hash *different* from
  * the non-mutable version. This should allow for a faster lookup
  *
- * Hash a name before entry/search into the hash table
- *
- * Universal hashing algorithm:
- * 	Start with an initial small prime
- * 	key <- small_prime
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
  *
  * 	for each hashable value:
- * 		key <- (key * prime) ^ (value * other prime)
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
  * 		
  * 	key % keyspace
  *
  * 	return key
 */
-static u_int16_t hash_type(generic_type_t* type){
-	u_int32_t key = 37;
-	
-	char* cursor = type->type_name.string;
-	//Two primes(this should be good enough for us)
-	u_int32_t a = 54059;
-	u_int32_t b = 76963;
+static u_int64_t hash_type(generic_type_t* type){
+	//Pointer to the type name
+	char* type_name = type->type_name.string;
+
+	//Char pointer for the name that will change
+	char* cursor = type_name;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
 
 	//Iterate through the cursor here
 	for(; *cursor != '\0'; cursor++){
-		//Sum this up for our key
-		key = (key * a) ^ (*cursor * b);
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
 	}
 
 	//If this is an array, we'll add the bounds in
 	if(type->type_class == TYPE_CLASS_ARRAY){
-		key += type->internal_values.num_members;
+		hash ^= type->internal_values.num_members;
+		hash *= FNV_PRIME;
 	}
 
 	//If this is mutable, we will keep going by adding
@@ -312,19 +467,22 @@ static u_int16_t hash_type(generic_type_t* type){
 	//onto the hash. This should(in most cases) make the hash
 	//entirely different from the non-mutable version
 	if(type->mutability == MUTABLE){
-		//Extract the first character
-		char first_character = *(type->type_name.string);
-
-		//Update the key
-		key = (key * a) ^ (first_character * b);
-		//Make it so that we have the '`' character, one
-		//that is not recognized at all be the lexer. This will
-		//ensure that we can never get a false positive
-		key = (key * a) ^ ('`' * b);
+		//To make the hashes different, we will pick from one of
+		//3 salts based on the first character in the type name
+		hash ^= mutability_salts[*type_name % 16];
+		hash *= FNV_PRIME;
 	}
 
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
 	//Cut it down to our keyspace
-	return key % KEYSPACE;
+	return hash & (TYPE_KEYSPACE - 1);
 }
 
 
@@ -338,7 +496,7 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t name){
 	//Store the name
 	record->var_name = name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash(name.string);
+	record->hash = hash_variable(name.string);
 	//The current generation is always 1 at first
 	record->current_generation = 1;
 
@@ -513,7 +671,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	//Copy the name over
 	record->func_name = name;
 	//Hash it and store it to avoid to repeated hashing
-	record->hash = hash(name.string);
+	record->hash = hash_function(name.string);
 
 	//Store the line number
 	record->line_number = line_number;
@@ -557,7 +715,7 @@ symtab_constant_record_t* create_constant_record(dynamic_string_t name){
 	symtab_constant_record_t* record = calloc(1, sizeof(symtab_constant_record_t));
 	
 	//Hash the name and store it
-	record->hash = hash(name.string);
+	record->hash = hash_constant(name.string);
 	//Store the name
 	record->name = name;
 	//Everything else will be handled by caller, just give this back
@@ -895,7 +1053,7 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
  */
 symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name){
 	//Let's grab it's hash
-	u_int16_t h = hash(name); 
+	u_int64_t h = hash_function(name); 
 
 	//Grab whatever record is at that hash
 	symtab_function_record_t* record_cursor = symtab->records[h];
@@ -922,7 +1080,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
  */
 symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name){
 	//First we'll grab the hash
-	u_int16_t h = hash(name);
+	u_int64_t h = hash_constant(name);
 
 	//Grab whatever record is at that hash
 	symtab_constant_record_t* cursor = symtab->records[h];
@@ -953,7 +1111,7 @@ symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name
  */
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name){
 	//Grab the hash
-	u_int16_t h = hash(name);
+	u_int64_t h = hash_variable(name);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_variable_sheaf_t* cursor = symtab->current;
@@ -988,7 +1146,7 @@ symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name)
  */
 symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab, char* name){
 	//Grab the hash
-	u_int16_t h = hash(name);
+	u_int64_t h = hash_variable(name);
 
 	//A cursor for records iterating
 	symtab_variable_record_t* records_cursor;
@@ -1017,7 +1175,7 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
  */
 symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab, char* name){
 	//Grab the hash
-	u_int16_t h = hash(name);
+	u_int64_t h = hash_variable(name);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_variable_sheaf_t* cursor;
@@ -1056,7 +1214,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
  */
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability){
 	//Grab the hash
-	u_int16_t h = hash_type_name(name, mutability);
+	u_int64_t h = hash_type_name(name, mutability);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_type_sheaf_t* cursor = symtab->current;
@@ -1139,7 +1297,7 @@ symtab_type_record_t* lookup_pointer_type(type_symtab_t* symtab, generic_type_t*
 	strcat(type_name, "*");
 
 	//Now get the hash
-	u_int16_t hash = hash_type_name(type_name, mutability);
+	u_int64_t hash = hash_type_name(type_name, mutability);
 
 	//Grab the current lexical scope. We will search here and down
 	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
@@ -1185,7 +1343,7 @@ symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_
 	strcat(type_name, "&");
 
 	//Now get the hash
-	u_int16_t hash = hash_type_name(type_name, mutability);
+	u_int64_t hash = hash_type_name(type_name, mutability);
 
 	//Grab the current lexical scope. We will search here and down
 	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
@@ -1231,7 +1389,7 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 	strcat(type_name, "[]");
 
 	//Now get the hash. We need to be using a special helper for this
-	u_int16_t hash = hash_array_type_name(type_name, num_members, mutability);
+	u_int64_t hash = hash_array_type_name(type_name, num_members, mutability);
 
 	//Grab the current lexical scope. We will search here and down
 	symtab_type_sheaf_t* sheaf_cursor = symtab->current;
@@ -1286,7 +1444,7 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
 	}
 
 	//Grab the hash
-	u_int16_t h = hash_type(type);
+	u_int64_t h = hash_type(type);
 
 	//Define the cursor so we don't mess with the original reference
 	symtab_type_sheaf_t* cursor = symtab->current;
@@ -1334,7 +1492,7 @@ void print_function_record(symtab_function_record_t* record){
 
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->func_name.string);
-	printf("Hash: %d,\n", record->hash);
+	printf("Hash: %ld,\n", record->hash);
 	printf("}\n");
 }
 
@@ -1380,7 +1538,7 @@ void print_variable_record(symtab_variable_record_t* record){
 
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->var_name.string);
-	printf("Hash: %d,\n", record->hash);
+	printf("Hash: %ld,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("}\n");
 }
@@ -1397,7 +1555,7 @@ void print_type_record(symtab_type_record_t* record){
 
 	printf("Record: {\n");
 	printf("Name: %s,\n", record->type->type_name.string);
-	printf("Hash: %d,\n", record->hash);
+	printf("Hash: %ld,\n", record->hash);
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("}\n");
 }
@@ -1562,12 +1720,34 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 	//For temporary holding
 	symtab_function_record_t* record;
 
+	//Create a min priority queue for ordering error messages
+	min_priority_queue_t queue = min_priority_queue_alloc();
+
 	//Run through all keyspace records
-	for(u_int16_t i = 0; i < KEYSPACE; i++){
+	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
 		record = symtab->records[i];
 
 		//We could have chaining here, so run through just in case
 		while(record != NULL){
+			//If one of these 3 error conditions is true, we will print a warning
+			if((record->called == 0 && record->defined == 0)
+				|| (record->called == 0 && record->defined == 1)
+				|| (record->called == 1 && record->defined == 0)){
+
+				//Enqueue using the line number as priority
+				min_priority_queue_enqueue(&queue, record, record->line_number);
+			}
+
+			//Advance record up
+			record = record->next;
+		}
+
+		//Now that we have everything loaded into a queue by line number, we will go through
+		//and print each individual error
+		while(min_priority_queue_is_empty(&queue) == FALSE){
+			//Get it off of the queue
+			record = min_priority_queue_dequeue(&queue);
+		
 			if(record->called == 0 && record->defined == 0){
 				//Generate a warning here
 				(*num_warnings)++;
@@ -1576,6 +1756,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				print_warning(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
+
 			} else if(record->called == 0 && record->defined == 1){
 				//Generate a warning here
 				(*num_warnings)++;
@@ -1595,11 +1776,11 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				print_function_name(record);
 
 			}
-
-			//Advance record up
-			record = record->next;
 		}
 	}
+
+	//Destroy the queue
+	min_priority_queue_dealloc(&queue);
 }
 
 
@@ -1613,51 +1794,69 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 	//For record holding
 	symtab_variable_record_t* record;
 
+	//Create a min priority queue for ordering error messages
+	min_priority_queue_t queue = min_priority_queue_alloc();
+
 	//So long as we have a sheaf
 	for(u_int16_t i = 0; i < symtab->sheafs.current_index; i++){
 		//Grab the actual sheaf out
 		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll run through every variable in here
-		for(u_int32_t i = 0; i < KEYSPACE; i++){
+		for(u_int32_t i = 0; i < VARIABLE_KEYSPACE; i++){
 			record = sheaf->records[i];
 
-			//This will happen alot
-			if(record == NULL){
-				continue;
-			}
+			//So long as the record is not NULL(we need to account for collisions)
+			while(record != NULL){
+				//If it's a label or struct, don't bother with it
+				switch(record->membership){
+					case LABEL_VARIABLE:
+					case STRUCT_MEMBER:
+						record = record->next;
+						continue;
+					default:
+						break;
+				}
 
-			//If it's a label or struct, don't bother with it
-			switch(record->membership){
-				case LABEL_VARIABLE:
-				case STRUCT_MEMBER:
-					continue;
-				default:
-					break;
-			}
+				//Only put it into the queue if it meets one of 2 warning conditions
+				if((record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE)
+					|| (record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE)){
+					//Add it into the priority queue. The priority goes by line number
+					min_priority_queue_enqueue(&queue, record, record->line_number);
+				}
 
-			//Let's now analyze this record
-			
-			//We have a non initialized variable
-			if(record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE){
-				sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
-				print_warning(info, record->line_number);
-				print_variable_name(record);
-				(*num_warnings)++;
-				//Go to the next iteration
-				continue;
+				//Push it up
+				record = record->next;
 			}
-
-			//If it's mutable but never mutated
-			if(record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE){
-				sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
-				print_warning(info, record->line_number);
-				print_variable_name(record);
-				(*num_warnings)++;
-			}
-
 		}
 	}
+
+	//Now that we've loaded up the priority queue, we will go through and print out appropriate error messages
+	while(min_priority_queue_is_empty(&queue) == FALSE){
+		//Dequeue the value
+		record = min_priority_queue_dequeue(&queue);
+
+		//We have a non initialized variable
+		if(record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE){
+			sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
+			print_warning(info, record->line_number);
+			print_variable_name(record);
+			(*num_warnings)++;
+			//Go to the next iteration
+			continue;
+		}
+
+		//If it's mutable but never mutated
+		if(record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE){
+			sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
+			print_warning(info, record->line_number);
+			print_variable_name(record);
+			(*num_warnings)++;
+		}
+	}
+
+	//Destroy the queue
+	min_priority_queue_dealloc(&queue);
 }
 
 
@@ -1670,7 +1869,7 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 	symtab_function_record_t* temp;
 
 	//Run through and free all function records
-	for(u_int16_t i = 0; i < KEYSPACE; i++){
+	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
 		record = symtab->records[i];
 
 		//We could have chaining here, so run through just in case
@@ -1736,7 +1935,7 @@ void variable_symtab_dealloc(variable_symtab_t* symtab){
 		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll free all non-null records
-		for(u_int16_t j = 0; j < KEYSPACE; j++){
+		for(u_int16_t j = 0; j < VARIABLE_KEYSPACE; j++){
 			record = cursor->records[j];
 
 			//We could have chaining here, so run through just in case
@@ -1771,7 +1970,7 @@ void type_symtab_dealloc(type_symtab_t* symtab){
 		cursor = dynamic_array_get_at(&(symtab->sheafs), i);
 
 		//Now we'll free all non-null records
-		for(u_int16_t j = 0; j < KEYSPACE; j++){
+		for(u_int16_t j = 0; j < TYPE_KEYSPACE; j++){
 			record = cursor->records[j];
 
 			//We could have chaining here, so run through just in case
@@ -1804,7 +2003,7 @@ void constants_symtab_dealloc(constants_symtab_t* symtab){
 	symtab_constant_record_t* temp;
 
 	//Run through every single record. If it isn't null, we free it
-	for(u_int16_t i = 0; i < KEYSPACE; i++){
+	for(u_int16_t i = 0; i < CONSTANT_KEYSPACE; i++){
 		//Grab the record here
 		cursor = symtab->records[i];
 

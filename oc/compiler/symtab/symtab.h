@@ -17,10 +17,18 @@
 //Every function record has one of these
 #include "../stack_data_area/stack_data_area.h"
 
+//Variables and types have a new sheaf added upon every new lexical scope. As such,
+//we don't need enormous sizes to hold all of them
+#define VARIABLE_KEYSPACE 128
+//Type keyspace is made larger to accomodate more basic type classes, aliases & variants
+#define TYPE_KEYSPACE 256
 
-//We define that each lexical scope can have 5000 symbols at most
-//Chosen because it's a prime not too close to a power of 2
-#define KEYSPACE 997
+//Constants are also one per program
+#define CONSTANT_KEYSPACE 256 
+
+//There's only one function keyspace per program, so it can be a bit larger
+#define FUNCTION_KEYSPACE 512
+
 //The maximum number of function paramaters
 #define MAX_FUNCTION_PARAMS 6
 
@@ -95,6 +103,8 @@ struct symtab_function_record_t{
 	dynamic_array_t local_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
+	//The hash that we have
+	u_int64_t hash;
 	//The associated call graph node with this function
 	void* call_graph_node;
 	//In case of collisions, we can chain these records
@@ -105,8 +115,6 @@ struct symtab_function_record_t{
 	generic_type_t* return_type;
 	//The line number
 	u_int32_t line_number;
-	//The hash that we have
-	u_int16_t hash;
 	//Number of parameters
 	u_int8_t number_of_params;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
@@ -125,6 +133,8 @@ struct symtab_variable_record_t{
 	dynamic_string_t var_name;
 	//For SSA renaming
 	lightstack_t counter_stack;
+	//The hash of it
+	u_int64_t hash;
 	//What function was it declared in?
 	symtab_function_record_t* function_declared_in;
 	//What type is it?
@@ -142,8 +152,6 @@ struct symtab_variable_record_t{
 	int32_t enum_member_value;
 	//The current generation of the variable - FOR SSA in CFG
 	u_int16_t current_generation;
-	//The hash of it
-	u_int16_t hash;
 	//The lexical level of it
 	int16_t lexical_level;
 	//Current generation level(for SSA)
@@ -171,14 +179,14 @@ struct symtab_variable_record_t{
  * will keep references to all created types like structs, enums, etc
  */
 struct symtab_type_record_t{
+	//The hash of it
+	u_int64_t hash;
 	//The next hashtable record
 	symtab_type_record_t* next;
 	//What type is it?
 	generic_type_t* type;
 	//THe link number
 	u_int32_t line_number;
-	//The hash(special for types)
-	u_int16_t hash;
 	//The lexical level of it
 	int16_t lexical_level;
 };
@@ -191,14 +199,14 @@ struct symtab_type_record_t{
 struct symtab_constant_record_t{
 	//The name as a dynamic string
 	dynamic_string_t name;
+	//The hash of it
+	u_int64_t hash;
 	//We'll link directly to the constant node here
 	void* constant_node;
 	//For linked list functionality
 	symtab_constant_record_t* next;
 	//Line number of declaration
 	u_int32_t line_number;
-	//The hash for lookups
-	u_int16_t hash;
 };
 
 
@@ -209,7 +217,7 @@ struct symtab_variable_sheaf_t{
 	//Link to the prior level
 	symtab_variable_sheaf_t* previous_level;
 	//How many records(names) we can have
-	symtab_variable_record_t* records[KEYSPACE];
+	symtab_variable_record_t* records[VARIABLE_KEYSPACE];
 	//The level of this particular symtab
 	u_int8_t lexical_level;
 };
@@ -222,7 +230,7 @@ struct symtab_type_sheaf_t{
 	//Link to the prior level
 	symtab_type_sheaf_t* previous_level;
 	//The hash table for our records
-	symtab_type_record_t* records[KEYSPACE];
+	symtab_type_record_t* records[TYPE_KEYSPACE];
 	//The lexical level of this sheaf
 	u_int8_t lexical_level;
 };
@@ -261,7 +269,7 @@ struct type_symtab_t{
  */
 struct constants_symtab_t{
 	//How many records(names) we can have
-	symtab_constant_record_t* records[KEYSPACE];
+	symtab_constant_record_t* records[CONSTANT_KEYSPACE];
 };
 
 
@@ -271,7 +279,7 @@ struct constants_symtab_t{
  */
 struct function_symtab_t{
 	//How many records(names) we can have
-	symtab_function_record_t* records[KEYSPACE];
+	symtab_function_record_t* records[FUNCTION_KEYSPACE];
 	//The level of this particular symtab
 	u_int8_t current_lexical_scope;
 };
