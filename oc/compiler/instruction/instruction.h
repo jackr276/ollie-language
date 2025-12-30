@@ -146,14 +146,18 @@ struct three_addr_var_t{
 	generic_type_t* type;
 	//What live range is this variable associate with
 	live_range_t* associated_live_range;
-	//What is the stack region associated with this variable?
-	stack_region_t* stack_region;
+
+	union {
+		//What is the stack region associated with this variable?
+		stack_region_t* stack_region;
+		//What is the local constant associate with this variable
+		local_constant_t* local_constant;
+	} associated_memory_region;
+
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
 	//What's the temp var number
 	u_int32_t temp_var_number;
-	//The local constant id
-	u_int32_t local_constant_id;
 	//What's the reference count of this variable.
 	//This will be needed later on down the line in 
 	//the instruction selector

@@ -743,8 +743,8 @@ three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant)
 	//This is a special kind of variable that is a local constant variable
 	var->variable_type = VARIABLE_TYPE_LOCAL_CONSTANT;
 
-	//Store the .LC Id
-	var->local_constant_id = local_constant->local_constant_id;
+	//Store the local constant inside of the memory region slot
+	var->associated_memory_region.local_constant = local_constant;
 
 	//Store the type
 	var->type = local_constant->type;
@@ -785,7 +785,7 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	emitted_var->linked_var = var;
 
 	//Store the associate stack region(this is usually null)
-	emitted_var->stack_region = var->stack_region;
+	emitted_var->associated_memory_region.stack_region = var->stack_region;
 
 	//The membership is also copied
 	emitted_var->membership = var->membership;
@@ -829,7 +829,7 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	emitted_var->linked_var = var;
 
 	//Store the associate stack region(this is usually null)
-	emitted_var->stack_region = var->stack_region;
+	emitted_var->associated_memory_region.stack_region = var->stack_region;
 
 	//The membership is also copied
 	emitted_var->membership = var->membership;
@@ -867,7 +867,7 @@ three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_regio
 	emitted_var->temp_var_number = increment_and_get_temp_id();
 
 	//Store the associate stack region(this is usually null)
-	emitted_var->stack_region = region;
+	emitted_var->associated_memory_region.stack_region = region;
 
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);
@@ -1477,7 +1477,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 		case PRINTING_LIVE_RANGES:
 			//Handle this special case
 			if(variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
-				fprintf(fl, ".LC%d", variable->local_constant_id);
+				fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
 				break;
 			}
 
@@ -1487,7 +1487,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 		case PRINTING_REGISTERS:
 			//Handle this special case
 			if(variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
-				fprintf(fl, ".LC%d", variable->local_constant_id);
+				fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
 				break;
 			}
 
@@ -1531,7 +1531,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 					fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
 					break;
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
-					fprintf(fl, ".LC%d", variable->local_constant_id);
+					fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
 					break;
 				case VARIABLE_TYPE_MEMORY_ADDRESS:
 					if(variable->linked_var != NULL){

@@ -945,8 +945,9 @@ void delete_statement(instruction_t* stmt){
 
 	//If we have a string constant and we're doing this, we'll need to decrement the reference
 	//count by 1 because we are losing a reference to it
-	if(stmt->op1_const != NULL && stmt->op1_const->const_type == STR_CONST){
-		stmt->op1_const->local_constant->reference_count--;
+	if(stmt->op2 != NULL && stmt->op2->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
+		//Knock one off of the reference count
+		stmt->op2->associated_memory_region.local_constant->reference_count--;
 	}
 
 	//No matter what, we are reducing the number of statements in this block
@@ -4706,7 +4707,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
 		//Copy this over if there is one
-		left_hand_var->stack_region = final_op1->stack_region;
+		left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
 
 		//If this is not a temp var, then we can flag it as being assigned
 		add_assigned_variable(current_block, left_hand_var);
