@@ -76,6 +76,10 @@ typedef struct{
 	ollie_token_t operator;
 } cfg_result_package_t;
 
+/**
+ * Determine whether or not a given three address variable is eligible for SSA
+ */
+#define IS_SSA_VARIABLE_TYPE(variable) ((variable->variable_type == VARIABLE_TYPE_TEMP || variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT) ? FALSE : TRUE)
 
 //Are we emitting the dominance frontier or not?
 typedef enum{
@@ -2167,12 +2171,12 @@ static void rename_block(basic_block_t* entry){
 			case THREE_ADDR_CODE_FUNC_CALL:
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//If we have a non-temp variable, rename it
-				if(cursor->op1 != NULL && cursor->op1->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op1 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op1) == TRUE){
 					rhs_new_name(cursor->op1);
 				}
 
 				//Same goes for the assignee, except this one is the LHS
-				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->assignee != NULL && IS_SSA_VARIABLE_TYPE(cursor->assignee) == TRUE){
 					lhs_new_name(cursor->assignee);
 				}
 				
@@ -2187,7 +2191,7 @@ static void rename_block(basic_block_t* entry){
 					three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
 
 					//If it's not temporary, we rename
-					if(current_param->variable_type != VARIABLE_TYPE_TEMP){
+					if(IS_SSA_VARIABLE_TYPE(current_param) == TRUE){
 						rhs_new_name(current_param);
 					}
 				}
@@ -2203,17 +2207,17 @@ static void rename_block(basic_block_t* entry){
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				//If we have a non-temp variable, rename it
-				if(cursor->op1 != NULL && cursor->op1->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op1 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op1) == TRUE){
 					rhs_new_name(cursor->op1);
 				}
 
 				//If we have a non-temp variable, rename it
-				if(cursor->op2 != NULL && cursor->op2->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op2 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op2) == TRUE){
 					rhs_new_name(cursor->op2);
 				}
 
 				//UNIQUE CASE - rhs also gets a new name here
-				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->assignee != NULL && IS_SSA_VARIABLE_TYPE(cursor->assignee) == TRUE){
 					rhs_new_name(cursor->assignee);
 				}
 
@@ -2224,17 +2228,17 @@ static void rename_block(basic_block_t* entry){
 			//We'll exclude direct jump statements, these we don't care about
 			default:
 				//If we have a non-temp variable, rename it
-				if(cursor->op1 != NULL && cursor->op1->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op1 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op1) == TRUE){
 					rhs_new_name(cursor->op1);
 				}
 
 				//If we have a non-temp variable, rename it
-				if(cursor->op2 != NULL && cursor->op2->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op2 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op2) == TRUE){
 					rhs_new_name(cursor->op2);
 				}
 
 				//Same goes for the assignee, except this one is the LHS
-				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->assignee != NULL && IS_SSA_VARIABLE_TYPE(cursor->assignee) == TRUE){
 					lhs_new_name(cursor->assignee);
 				}
 
@@ -2313,7 +2317,7 @@ static void rename_block(basic_block_t* entry){
 			//Otherwise this does count
 			default:
 				//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->assignee != NULL && IS_SSA_VARIABLE_TYPE(cursor->assignee) == TRUE){
 					//Pop it off
 					lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
 				}
