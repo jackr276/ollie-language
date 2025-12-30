@@ -488,9 +488,9 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
 
 /**
- * Create a local constant
+ * Create a string local constant
  */
-local_constant_t* local_constant_alloc(dynamic_string_t* value);
+local_constant_t* string_local_constant_alloc(dynamic_string_t* value);
 
 /**
  * Add a local constant to a function

@@ -1250,15 +1250,18 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 /**
  * Create a local constant and return the pointer to it
  */
-local_constant_t* local_constant_alloc(dynamic_string_t* value){
+local_constant_t* string_local_constant_alloc(dynamic_string_t* value){
 	//Dynamically allocate it
 	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
 
 	//Copy the dynamic string in
-	local_const->value = clone_dynamic_string(value);
+	local_const->local_constant_value.string_value = clone_dynamic_string(value);
 
 	//Now we'll add the ID
 	local_const->local_constant_id = increment_and_get_local_constant_id();
+
+	//Store what type we have
+	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_STRING;
 
 	//And finally we'll add it back in
 	return local_const;
@@ -1517,11 +1520,25 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 			continue;	
 		}
 
-		//Otherwise, we'll begin to print, starting with the constant name
-		fprintf(fl, ".LC%d:\n", constant->local_constant_id);
+		//Go based on what kind of local constant we have
+		switch(constant->local_constant_type){
+			case LOCAL_CONSTANT_TYPE_STRING:
+				//Otherwise, we'll begin to print, starting with the constant name
+				fprintf(fl, ".LC%d:\n", constant->local_constant_id);
 
-		//Now we print out the .string specifier, followed by the name
-		fprintf(fl, "\t.string \"%s\"\n", constant->value.string);
+				//Now we print out the .string specifier, followed by the name
+				fprintf(fl, "\t.string \"%s\"\n", constant->local_constant_value.string_value.string);
+
+				break;
+				
+			case LOCAL_CONSTANT_TYPE_BYTES:
+				//Otherwise, we'll begin to print, starting with the constant name
+				fprintf(fl, ".LC%d:\n", constant->local_constant_id);
+
+				//Now print out the long value
+				fprintf(fl, "\t.long \"%ld\"\n", constant->local_constant_value.byte_value);
+				break;
+		}
 	}
 }
 
@@ -2028,8 +2045,17 @@ void constants_symtab_dealloc(constants_symtab_t* symtab){
  * Destroy a local constant
  */
 void local_constant_dealloc(local_constant_t* constant){
-	//First we'll deallocate the dynamic string
-	dynamic_string_dealloc(&(constant->value));
+	//Go based on the type
+	switch(constant->local_constant_type){
+		case LOCAL_CONSTANT_TYPE_STRING:
+			//First we'll deallocate the dynamic string
+			dynamic_string_dealloc(&(constant->local_constant_value.string_value));
+			break;
+
+		//If it's not a string then there's nothing to free
+		default:
+			break;
+	}
 
 	//Then we'll free the entire thing
 	free(constant);
