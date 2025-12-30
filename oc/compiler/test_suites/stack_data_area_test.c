@@ -148,7 +148,7 @@ int main(int argc, char** argv){
 		//Extract the variable
 		three_addr_var_t* variable = dynamic_array_get_at(&array_of_vars, i);
 		//Delete it
-		remove_region_from_stack(&(main_function->data_area), variable->stack_region);
+		remove_region_from_stack(&(main_function->data_area), variable->associated_memory_region.stack_region);
 		//Reprint the whole thing
 		print_stack_data_area(&(main_function->data_area));
 	}
