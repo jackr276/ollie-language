@@ -1533,6 +1533,9 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
 					fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
 					break;
+				case VARIABLE_TYPE_FUNCTION_ADDRESS:
+					fprintf(fl, "%s", variable->associated_memory_region.rip_relative_function->func_name.string);
+					break;
 				case VARIABLE_TYPE_MEMORY_ADDRESS:
 					if(variable->linked_var != NULL){
 						//Print out the normal version, plus the MEM<> wrapper
@@ -2296,15 +2299,6 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 		case CHAR_CONST:
 			fprintf(fl, "$%d", constant->constant_value.char_constant);
 			break;
-		case FLOAT_CONST:
-			fprintf(fl, "$%f", constant->constant_value.float_constant);
-			break;
-		case DOUBLE_CONST:
-			fprintf(fl, "$%f", constant->constant_value.double_constant);
-			break;
-		case FUNC_CONST:
-			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
-			break;
 		//To avoid compiler complaints
 		default:
 			printf("Fatal internal compiler error: unreachable immediate value type hit\n");
@@ -2342,15 +2336,6 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 			if(constant->constant_value.char_constant != 0){
 				fprintf(fl, "%d", constant->constant_value.char_constant);
 			}
-			break;
-		case FLOAT_CONST:
-			fprintf(fl, "%f", constant->constant_value.float_constant);
-			break;
-		case DOUBLE_CONST:
-			fprintf(fl, "%f", constant->constant_value.double_constant);
-			break;
-		case FUNC_CONST:
-			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
 		//To avoid compiler complaints
 		default:
@@ -3996,28 +3981,19 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 		case INT_CONST_FORCE_U:
 			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
 			break;
-		//These need to be emitted via the local constant(.LC) system, so any attempt to call this from here is
-		//an error
-		case DOUBLE_CONST:
-		case FLOAT_CONST:
-		case STR_CONST:
-			printf("Fatal internal compiler error: string, f32 and f64 constants may not be emitted directly\n");
-			exit(1);
 		case LONG_CONST:
 			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
 			break;
 		case LONG_CONST_FORCE_U:
 			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
 			break;
-
-			
-		//If we have a function constant, we'll add the function record in
-		//as a value
-		case FUNC_CONST:
-			//Store the function name
-			constant->constant_value.function_name = const_node->func_record;
-			break;
-
+		//These need to be emitted via the local constant(.LC) system, so any attempt to call this from here is
+		//an error
+		case DOUBLE_CONST:
+		case FLOAT_CONST:
+		case STR_CONST:
+			printf("Fatal internal compiler error: string, function pointer, f32 and f64 constants may not be emitted directly\n");
+			exit(1);
 		//Some very weird error here
 		default:
 			printf("Fatal internal compiler error: unrecognizable constant type found in constant\n");
