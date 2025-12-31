@@ -497,9 +497,14 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_string_t* value);
 
 /**
- * Create an F32 local constant
+ * Create an f32 local constant
  */
-local_constant_t* f32_local_constants_alloc(generic_type_t* f32_type, float value);
+local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value);
+
+/**
+ * Create an f64 local constant
+ */
+local_constant_t* f64_local_constant_alloc(generic_type_t* f32_type, double value);
 
 /**
  * Add a local constant to a function

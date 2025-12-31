@@ -1275,7 +1275,7 @@ local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_stri
 /**
  * Create an F32 local constant
  */
-local_constant_t* f32_local_constants_alloc(generic_type_t* f32_type, float value){
+local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value){
 	//Dynamically allocate it
 	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
 
@@ -1291,6 +1291,31 @@ local_constant_t* f32_local_constants_alloc(generic_type_t* f32_type, float valu
 
 	//Store what type we have
 	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_F32;
+
+	//And finally we'll add it back in
+	return local_const;
+}
+
+
+/**
+ * Create an F32 local constant
+ */
+local_constant_t* f64_local_constant_alloc(generic_type_t* f64_type, double value){
+	//Dynamically allocate it
+	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
+
+	//Store the type as well
+	local_const->type = f64_type;
+
+	//Copy the dynamic string in. We cannot print out floats directly, so we instead
+	//use the bits that make up the float and cast them to an i32 *without rounding*
+	local_const->local_constant_value.float_bit_equivalent = *((int64_t*)(&value));
+
+	//Now we'll add the ID
+	local_const->local_constant_id = increment_and_get_local_constant_id();
+
+	//Store what type we have
+	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_F64;
 
 	//And finally we'll add it back in
 	return local_const;
@@ -1785,6 +1810,9 @@ void print_constant_name(symtab_constant_record_t* record){
 			break;
 		case FLOAT_CONST:
 			printf("%f\n", const_node->constant_value.float_value);
+			break;
+		case DOUBLE_CONST:
+			printf("%fd\n", const_node->constant_value.float_value);
 			break;
 		//We should never get here
 		default:
