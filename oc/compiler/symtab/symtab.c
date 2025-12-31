@@ -1603,16 +1603,40 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 		}
 	}
 
-	//Now print the nonstring constants
-	if(record->local_nonstring_constants.current_index != 0){
-		//NEEDED: printing out the section here - not done yet
+	//Now print the f32 constants
+	if(record->local_f32_constants.current_index != 0){
+		//Print out that we are in the 4 byte prog-bits section
+		fprintf(fl, "\t.section .rodata.cst4,\"aM\",@progbits,4\n");
+
 		//Run through all constants
-		for(u_int16_t i = 0; i < record->local_nonstring_constants.current_index; i++){
+		for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
 			//Grab the constant out
-			local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
+			local_constant_t* constant = dynamic_array_get_at(&(record->local_f32_constants), i);
+
+			//Extract the floating point equivalent using the mask
+			int32_t float_equivalent = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
 
 			//Otherwise, we'll begin to print, starting with the constant name
-			fprintf(fl, ".LC%d:\n\t.long %ld\n", constant->local_constant_id, constant->local_constant_value.byte_value);
+			fprintf(fl, "\t.align 4\n.LC%d:\n\t.long %d\n", constant->local_constant_id, float_equivalent);
+		}
+	}
+
+	//Now print the f64 constants
+	if(record->local_f64_constants.current_index != 0){
+		//Print out that we are in the 8 byte prog-bits section
+		fprintf(fl, "\t.section .rodata.cst8,\"aM\",@progbits,8\n");
+
+		//Run through all constants
+		for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
+			//Grab the constant out
+			local_constant_t* constant = dynamic_array_get_at(&(record->local_f64_constants), i);
+
+			//These are in little-endian order. Lower 32 bits comes first, then the upper 32 bits
+			int32_t lower32 = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
+			int32_t upper32 = (constant->local_constant_value.float_bit_equivalent >> 32) & 0xFFFFFFFF;
+
+			//Otherwise, we'll begin to print, starting with the constant name
+			fprintf(fl, "\t.align 4\n.LC%d:\n\t.long %d\n\t.long %d\n", constant->local_constant_id, lower32, upper32);
 		}
 	}
 }
