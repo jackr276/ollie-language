@@ -4004,15 +4004,13 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 		case INT_CONST_FORCE_U:
 			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
 			break;
-		case FLOAT_CONST:
-			constant->constant_value.float_constant = const_node->constant_value.float_value;
-			break;
+		//These need to be emitted via the local constant(.LC) system, so any attempt to call this from here is
+		//an error
 		case DOUBLE_CONST:
-			constant->constant_value.double_constant = const_node->constant_value.double_value;
-			break;
+		case FLOAT_CONST:
 		case STR_CONST:
-			fprintf(stderr, "String constants may not be emitted directly\n");
-			exit(0);
+			printf("Fatal internal compiler error: string, f32 and f64 constants may not be emitted directly\n");
+			exit(1);
 		case LONG_CONST:
 			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
 			break;
@@ -4030,8 +4028,8 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 
 		//Some very weird error here
 		default:
-			fprintf(stderr, "Unrecognizable constant type found in constant\n");
-			exit(0);
+			printf("Fatal internal compiler error: unrecognizable constant type found in constant\n");
+			exit(1);
 	}
 	
 	//Once all that is done, we can leave
