@@ -1661,18 +1661,10 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 				fprintf(fl, "'%c'", constant->constant_value.char_constant);
 			}
 			break;
-		case FLOAT_CONST:
-			fprintf(fl, "%f", constant->constant_value.float_constant);
-			break;
-		case DOUBLE_CONST:
-			fprintf(fl, "%f", constant->constant_value.double_constant);
-			break;
-		case FUNC_CONST:
-			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
-			break;
 		//To stop compiler warnings
 		default:
-			break;
+			printf("Fatal Internal Compiler Error: Attempt to print unrecognized function type");
+			exit(1);
 	}
 }
 

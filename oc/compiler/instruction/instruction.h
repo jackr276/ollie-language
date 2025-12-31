@@ -55,7 +55,8 @@ typedef enum {
 	VARIABLE_TYPE_TEMP,
 	VARIABLE_TYPE_NON_TEMP,
 	VARIABLE_TYPE_MEMORY_ADDRESS,
-	VARIABLE_TYPE_LOCAL_CONSTANT
+	VARIABLE_TYPE_LOCAL_CONSTANT,
+	VARIABLE_TYPE_FUNCTION_ADDRESS, //For rip-relative function pointer loads
 } variable_type_t;
 
 
@@ -152,6 +153,7 @@ struct three_addr_var_t{
 		local_constant_t* local_constant;
 		//Rip relative function name for loading function pointers
 		symtab_function_record_t* rip_relative_function;
+
 	} associated_memory_region;
 
 	//What is the ssa generation level?
@@ -188,9 +190,9 @@ struct three_addr_var_t{
 struct three_addr_const_t{
 	//We hold the type info
 	generic_type_t* type;
+
 	//Store the constant value in a union
 	union {
-		symtab_function_record_t* function_name;
 		int64_t signed_long_constant;
 		u_int64_t unsigned_long_constant;
 		double double_constant;
@@ -199,6 +201,7 @@ struct three_addr_const_t{
 		u_int32_t unsigned_integer_constant;
 		char char_constant;
 	} constant_value;
+
 	//What kind of constant is it
 	ollie_token_t const_type;
 };
