@@ -21,6 +21,9 @@ static void print_assembly_block(FILE* fl, basic_block_t* block){
 		//First we print out the local constants that the block has
 		print_local_constants(fl, block->function_defined_in);
 
+		//Now print the .text signifer so that GAS knows that this goes into .text
+		fprintf(fl, "\t.text\n");
+
 		//If this is a public function, we'll print out the ".globl" so
 		//that it can be exposed to ld
 		if(block->function_defined_in->signature->internal_types.function_type->is_public == TRUE){
@@ -81,12 +84,9 @@ static void print_all_basic_blocks(FILE* fl, cfg_t* cfg){
 /**
  * Print the .text section by running through and printing all of our basic blocks in assembly
  */
-static void print_text_section(compiler_options_t* options, FILE* fl, cfg_t* cfg){
+static void print_start_section(compiler_options_t* options, FILE* fl, cfg_t* cfg){
 	//Declare the start of the new file to gas
 	fprintf(fl, "\t.file\t\"%s\"\n", options->file_name);
-
-	//Print the .text declaration part of the program
-	fprintf(fl, "\t.text\n");
 
 	//Now that we've printed the text section, we need to print all basic blocks
 	print_all_basic_blocks(fl, cfg);
@@ -122,7 +122,7 @@ u_int8_t output_generated_code(compiler_options_t* options, cfg_t* cfg){
 	}
 
 	//We'll first print the text segment of the program
-	print_text_section(options, output, cfg);
+	print_start_section(options, output, cfg);
 
 	//Handle all of the global vars first
 	print_all_global_variables(output, &(cfg->global_variables));
