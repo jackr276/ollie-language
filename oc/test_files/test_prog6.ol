@@ -48,7 +48,6 @@ fn tester() -> void{
  */
 pub fn main() -> i32{
 	let x:mut i32 = -2U;
-	let my_float:mut f32 = -0.23;
 	let aa:mut i32 = --3;
 	let my_val:mut i32 = x + -32;
 	let teste:mut i32 = TEST_INT;

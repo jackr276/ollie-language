@@ -140,8 +140,6 @@ struct live_range_t{
 struct three_addr_var_t{
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
-	//Link to the function record(NULL if not there)
-	symtab_function_record_t* linked_function;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//What live range is this variable associate with
@@ -152,6 +150,8 @@ struct three_addr_var_t{
 		stack_region_t* stack_region;
 		//What is the local constant associate with this variable
 		local_constant_t* local_constant;
+		//Rip relative function name for loading function pointers
+		symtab_function_record_t* rip_relative_function;
 	} associated_memory_region;
 
 	//What is the ssa generation level?
