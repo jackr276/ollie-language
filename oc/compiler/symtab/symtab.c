@@ -1340,15 +1340,28 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 
 			break;
 
-		case LOCAL_CONSTANT_TYPE_BYTES:
+		case LOCAL_CONSTANT_TYPE_F32:
 			//If we have no local constants, then we'll need to allocate
 			//the array
-			if(function->local_nonstring_constants.internal_array == NULL){
-				function->local_nonstring_constants = dynamic_array_alloc();
+			if(function->local_f32_constants.internal_array == NULL){
+				function->local_f32_constants = dynamic_array_alloc();
 			}
 
 			//And add the function in
-			dynamic_array_add(&(function->local_nonstring_constants), constant);
+			dynamic_array_add(&(function->local_f32_constants), constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_F64:
+			//If we have no local constants, then we'll need to allocate
+			//the array
+			if(function->local_f64_constants.internal_array == NULL){
+				function->local_f64_constants = dynamic_array_alloc();
+			}
+
+			//And add the function in
+			dynamic_array_add(&(function->local_f64_constants), constant);
+
 			break;
 	}
 }
@@ -1633,10 +1646,10 @@ void sweep_local_constants(symtab_function_record_t* record){
 		dynamic_array_delete(&(record->local_string_constants), to_be_deleted);
 	}
 
-	//Now do the exact same thing for non-strings. We can reuse the same array
-	for(u_int16_t i = 0; i < record->local_nonstring_constants.current_index; i++){
+	//Now do the exact same thing for f32's. We can reuse the same array
+	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(&(record->local_nonstring_constants), i);
+		local_constant_t* constant = dynamic_array_get_at(&(record->local_f32_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -1650,7 +1663,27 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_array_delete(&(record->local_nonstring_constants), to_be_deleted);
+		dynamic_array_delete(&(record->local_f32_constants), to_be_deleted);
+	}
+
+	//Now do the exact same thing for f64's. We can reuse the same array
+	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_array_get_at(&(record->local_f64_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_array_delete(&(record->local_f64_constants), to_be_deleted);
 	}
 
 	//Scrap this now that we're done with it
@@ -2028,15 +2061,26 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				dynamic_array_dealloc(&(temp->local_string_constants));
 			}
 
-			//Deallocation for local constants
-			if(temp->local_nonstring_constants.internal_array != NULL){
+			//Deallocation for local float constants
+			if(temp->local_f32_constants.internal_array != NULL){
 				//Deallocate each local constant
-				for(u_int16_t i = 0; i < temp->local_nonstring_constants.current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(&(temp->local_nonstring_constants), i));
+				for(u_int16_t i = 0; i < temp->local_f32_constants.current_index; i++){
+					local_constant_dealloc(dynamic_array_get_at(&(temp->local_f32_constants), i));
 				}
 
 				//Then destroy the whole array
-				dynamic_array_dealloc(&(temp->local_nonstring_constants));
+				dynamic_array_dealloc(&(temp->local_f32_constants));
+			}
+
+			//Deallocation for local float constants
+			if(temp->local_f64_constants.internal_array != NULL){
+				//Deallocate each local constant
+				for(u_int16_t i = 0; i < temp->local_f64_constants.current_index; i++){
+					local_constant_dealloc(dynamic_array_get_at(&(temp->local_f64_constants), i));
+				}
+
+				//Then destroy the whole array
+				dynamic_array_dealloc(&(temp->local_f64_constants));
 			}
 
 			//Dealloate the function type

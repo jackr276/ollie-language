@@ -122,7 +122,8 @@ struct symtab_function_record_t{
 	dynamic_string_t func_name;
 	//Functions have dynamic arrays for string/nonstring constants
 	dynamic_array_t local_string_constants;
-	dynamic_array_t local_nonstring_constants;
+	dynamic_array_t local_f32_constants;
+	dynamic_array_t local_f64_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The hash that we have
