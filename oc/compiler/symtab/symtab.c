@@ -1601,6 +1601,9 @@ void sweep_local_constants(symtab_function_record_t* record){
 		//Knock it out
 		dynamic_array_delete(&(record->local_nonstring_constants), to_be_deleted);
 	}
+
+	//Scrap this now that we're done with it
+	dynamic_array_dealloc(&marked_for_deletion);
 }
 
 

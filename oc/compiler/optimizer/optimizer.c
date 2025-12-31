@@ -204,9 +204,9 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 	}
 
 	//If this variable has a stack region, then we will be marking
-	//said stack region
-	if(variable->variable_type != VARIABLE_TYPE_LOCAL_CONSTANT
-		&& variable->associated_memory_region.stack_region != NULL){
+	//said stack region. We know that this discriminating union is a stack
+	//region because of the if-check above that rules out local constants
+	if(variable->associated_memory_region.stack_region != NULL){
 		mark_stack_region(variable->associated_memory_region.stack_region);
 	}
 
