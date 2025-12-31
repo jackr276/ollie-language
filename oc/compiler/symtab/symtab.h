@@ -73,17 +73,37 @@ typedef enum variable_membership_t {
 
 
 /**
+ * What kind of local constant do we have? Local constants
+ * can be strings or floating point numbers, which are represented
+ * by ".long"
+ */
+typedef enum {
+	LOCAL_CONSTANT_TYPE_STRING,
+	LOCAL_CONSTANT_TYPE_BYTES
+} local_constant_type_t;
+
+
+/**
  * A local constant(.LCx) is a value like a string that is intended to 
  * be used by a function. We define them separately because they have many less
  * fields than an actual basic block
  */
 struct local_constant_t{
-	//The actual string value of it
-	dynamic_string_t value;
+	//What is the type of the local constant?
+	generic_type_t* type;
+	//Holds the actual value
+	union {
+		//Local constants can be strings
+		dynamic_string_t string_value;
+		//They can also be bytes
+		u_int64_t byte_value;
+	} local_constant_value;
 	//And the ID of it
 	u_int16_t local_constant_id;
 	//The reference count of the local constant
 	u_int16_t reference_count;
+	//What is the type of it
+	local_constant_type_t local_constant_type;
 };
 
 
@@ -98,9 +118,9 @@ struct symtab_function_record_t{
 	u_int8_t assigned_registers[K_COLORS_GEN_USE];
 	//The name of the function
 	dynamic_string_t func_name;
-	//The local constants array. Not all functions 
-	//have this populated
-	dynamic_array_t local_constants;
+	//Functions have dynamic arrays for string/nonstring constants
+	dynamic_array_t local_string_constants;
+	dynamic_array_t local_nonstring_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The hash that we have
@@ -470,14 +490,20 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
 
 /**
- * Create a local constant
+ * Create a string local constant
  */
-local_constant_t* local_constant_alloc(dynamic_string_t* value);
+local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_string_t* value);
 
 /**
  * Add a local constant to a function
  */
 void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant);
+
+/**
+ * Part of optimizer's mark and sweep - remove any local constants
+ * with a reference count of 0
+ */
+void sweep_local_constants(symtab_function_record_t* record);
 
 /**
  * Check for and print out any unused functions

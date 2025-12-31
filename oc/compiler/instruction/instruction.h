@@ -54,7 +54,8 @@ typedef enum {
 typedef enum {
 	VARIABLE_TYPE_TEMP,
 	VARIABLE_TYPE_NON_TEMP,
-	VARIABLE_TYPE_MEMORY_ADDRESS
+	VARIABLE_TYPE_MEMORY_ADDRESS,
+	VARIABLE_TYPE_LOCAL_CONSTANT
 } variable_type_t;
 
 
@@ -145,8 +146,14 @@ struct three_addr_var_t{
 	generic_type_t* type;
 	//What live range is this variable associate with
 	live_range_t* associated_live_range;
-	//What is the stack region associated with this variable?
-	stack_region_t* stack_region;
+
+	union {
+		//What is the stack region associated with this variable?
+		stack_region_t* stack_region;
+		//What is the local constant associate with this variable
+		local_constant_t* local_constant;
+	} associated_memory_region;
+
 	//What is the ssa generation level?
 	u_int32_t ssa_generation;
 	//What's the temp var number
@@ -179,8 +186,6 @@ struct three_addr_var_t{
  * A three address constant always holds the value of the constant
  */
 struct three_addr_const_t{
-	//This is for string constants
-	local_constant_t* local_constant;
 	//We hold the type info
 	generic_type_t* type;
 	//Store the constant value in a union
@@ -403,6 +408,11 @@ u_int8_t is_constant_lea_compatible_power_of_2(three_addr_const_t* constant);
 three_addr_var_t* emit_temp_var(generic_type_t* type);
 
 /**
+ * Emit a local constant temp var
+ */
+three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant);
+
+/**
  * Create and return a temporary variable from a live range
 */
 three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
@@ -443,10 +453,10 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var);
 three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 
 /**
- * Emit a three_addr_const_t value that is a local constant(.LCx) reference. This helper function
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
  * will also help us add the string constant to the function as a local function reference
  */
-three_addr_const_t* emit_string_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
+three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
 
 /**
  * Emit a constant directly based on whatever the type given is
@@ -495,9 +505,9 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2, u_int64_t type_size);
 
 /**
- * Emit a lea statement that is used for string calculation(rip relative)
+ * Emit a lea statement that is used for rip relative calculations
  */
-instruction_t* emit_lea_rip_relative_string_constants(three_addr_var_t* assignee, three_addr_var_t* string_variable, three_addr_var_t* instruction_pointer);
+instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_addr_var_t* local_constant_variable, three_addr_var_t* instruction_pointer);
 
 /**
  * Emit an indirect jump calculation that includes a block label in three address code form

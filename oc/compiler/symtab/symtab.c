@@ -1250,15 +1250,21 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 /**
  * Create a local constant and return the pointer to it
  */
-local_constant_t* local_constant_alloc(dynamic_string_t* value){
+local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_string_t* value){
 	//Dynamically allocate it
 	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
 
+	//Store the type as well
+	local_const->type = type;
+
 	//Copy the dynamic string in
-	local_const->value = clone_dynamic_string(value);
+	local_const->local_constant_value.string_value = clone_dynamic_string(value);
 
 	//Now we'll add the ID
 	local_const->local_constant_id = increment_and_get_local_constant_id();
+
+	//Store what type we have
+	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_STRING;
 
 	//And finally we'll add it back in
 	return local_const;
@@ -1269,14 +1275,31 @@ local_constant_t* local_constant_alloc(dynamic_string_t* value){
  * Add a local constant to a function
  */
 void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant){
-	//If we have no local constants, then we'll need to allocate
-	//the array
-	if(function->local_constants.internal_array == NULL){
-		function->local_constants = dynamic_array_alloc();
-	}
+	//Go based on what the possible values are
+	switch(constant->local_constant_type){
+		case LOCAL_CONSTANT_TYPE_STRING:
+			//If we have no local constants, then we'll need to allocate
+			//the array
+			if(function->local_string_constants.internal_array == NULL){
+				function->local_string_constants = dynamic_array_alloc();
+			}
 
-	//And add the function in
-	dynamic_array_add(&(function->local_constants), constant);
+			//And add the function in
+			dynamic_array_add(&(function->local_string_constants), constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_BYTES:
+			//If we have no local constants, then we'll need to allocate
+			//the array
+			if(function->local_nonstring_constants.internal_array == NULL){
+				function->local_nonstring_constants = dynamic_array_alloc();
+			}
+
+			//And add the function in
+			dynamic_array_add(&(function->local_nonstring_constants), constant);
+			break;
+	}
 }
 
 
@@ -1501,28 +1524,86 @@ void print_function_record(symtab_function_record_t* record){
  * Print the local constants(.LCx) that are inside of a function
  */
 void print_local_constants(FILE* fl, symtab_function_record_t* record){
-	//This means that we have no local constants(which is a very common case), so we leave
-	if(record->local_constants.internal_array == NULL || record->local_constants.current_index == 0){
-		return;
-	}
+	//Let's first print the function's string constants
+	if(record->local_string_constants.current_index != 0){
+		//Print out what section we are in
+		fprintf(fl, "\t.section .rodata.str1.1\n");
 
-	//Otherwise, we do have local constants, so we will run through and print ones that have a reference
-	//count that is more than 0
-	for(u_int16_t i = 0; i < record->local_constants.current_index; i++){
-		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(&(record->local_constants), i);
+		//Run through every string constant
+		for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
+			//Grab the constant out
+			local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
 
-		//If this has no references, we leave
-		if(constant->reference_count == 0){
-			continue;	
+			//Now print out every local string constant
+			fprintf(fl, ".LC%d:\n\t.string \"%s\"\n", constant->local_constant_id, constant->local_constant_value.string_value.string);
 		}
-
-		//Otherwise, we'll begin to print, starting with the constant name
-		fprintf(fl, ".LC%d:\n", constant->local_constant_id);
-
-		//Now we print out the .string specifier, followed by the name
-		fprintf(fl, "\t.string \"%s\"\n", constant->value.string);
 	}
+
+	//Now print the nonstring constants
+	if(record->local_nonstring_constants.current_index != 0){
+		//NEEDED: printing out the section here - not done yet
+		//Run through all constants
+		for(u_int16_t i = 0; i < record->local_nonstring_constants.current_index; i++){
+			//Grab the constant out
+			local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
+
+			//Otherwise, we'll begin to print, starting with the constant name
+			fprintf(fl, ".LC%d:\n\t.long %ld\n", constant->local_constant_id, constant->local_constant_value.byte_value);
+		}
+	}
+}
+
+
+/**
+ * Part of optimizer's mark and sweep - remove any local constants
+ * with a reference count of 0
+ */
+void sweep_local_constants(symtab_function_record_t* record){
+	//An array that marks given constants for deletion
+	dynamic_array_t marked_for_deletion = dynamic_array_alloc();
+
+	//Run through every string constant
+	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_array_delete(&(record->local_string_constants), to_be_deleted);
+	}
+
+	//Now do the exact same thing for non-strings. We can reuse the same array
+	for(u_int16_t i = 0; i < record->local_nonstring_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_array_get_at(&(record->local_nonstring_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_array_delete(&(record->local_nonstring_constants), to_be_deleted);
+	}
+
+	//Scrap this now that we're done with it
+	dynamic_array_dealloc(&marked_for_deletion);
 }
 
 
@@ -1882,16 +1963,26 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				free(temp->call_graph_node);
 			}
 
-			//If we have local constants, these will
-			//also need deallocation
-			if(temp->local_constants.internal_array != NULL){
+			//Deallocation for local constants
+			if(temp->local_string_constants.internal_array != NULL){
 				//Deallocate each local constant
-				for(u_int16_t i = 0; i < temp->local_constants.current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(&(temp->local_constants), i));
+				for(u_int16_t i = 0; i < temp->local_string_constants.current_index; i++){
+					local_constant_dealloc(dynamic_array_get_at(&(temp->local_string_constants), i));
 				}
 
 				//Then destroy the whole array
-				dynamic_array_dealloc(&(temp->local_constants));
+				dynamic_array_dealloc(&(temp->local_string_constants));
+			}
+
+			//Deallocation for local constants
+			if(temp->local_nonstring_constants.internal_array != NULL){
+				//Deallocate each local constant
+				for(u_int16_t i = 0; i < temp->local_nonstring_constants.current_index; i++){
+					local_constant_dealloc(dynamic_array_get_at(&(temp->local_nonstring_constants), i));
+				}
+
+				//Then destroy the whole array
+				dynamic_array_dealloc(&(temp->local_nonstring_constants));
 			}
 
 			//Dealloate the function type
@@ -2028,8 +2119,17 @@ void constants_symtab_dealloc(constants_symtab_t* symtab){
  * Destroy a local constant
  */
 void local_constant_dealloc(local_constant_t* constant){
-	//First we'll deallocate the dynamic string
-	dynamic_string_dealloc(&(constant->value));
+	//Go based on the type
+	switch(constant->local_constant_type){
+		case LOCAL_CONSTANT_TYPE_STRING:
+			//First we'll deallocate the dynamic string
+			dynamic_string_dealloc(&(constant->local_constant_value.string_value));
+			break;
+
+		//If it's not a string then there's nothing to free
+		default:
+			break;
+	}
 
 	//Then we'll free the entire thing
 	free(constant);

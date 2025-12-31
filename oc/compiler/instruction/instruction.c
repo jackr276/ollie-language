@@ -730,6 +730,32 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 }
 
 
+/**
+ * Emit a local constant temp var
+ */
+three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant){
+	//Let's first create the temporary variable
+	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
+
+	//Add here for memory management
+	dynamic_array_add(&emitted_vars, var);
+
+	//This is a special kind of variable that is a local constant variable
+	var->variable_type = VARIABLE_TYPE_LOCAL_CONSTANT;
+
+	//Store the local constant inside of the memory region slot
+	var->associated_memory_region.local_constant = local_constant;
+
+	//Store the type
+	var->type = local_constant->type;
+
+	//The size is going to be the size of an address(8 bytes)
+	var->variable_size = QUAD_WORD;
+
+	//And give it back
+	return var;
+}
+
 
 /**
  * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
@@ -759,7 +785,7 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	emitted_var->linked_var = var;
 
 	//Store the associate stack region(this is usually null)
-	emitted_var->stack_region = var->stack_region;
+	emitted_var->associated_memory_region.stack_region = var->stack_region;
 
 	//The membership is also copied
 	emitted_var->membership = var->membership;
@@ -803,7 +829,7 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	emitted_var->linked_var = var;
 
 	//Store the associate stack region(this is usually null)
-	emitted_var->stack_region = var->stack_region;
+	emitted_var->associated_memory_region.stack_region = var->stack_region;
 
 	//The membership is also copied
 	emitted_var->membership = var->membership;
@@ -841,7 +867,7 @@ three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_regio
 	emitted_var->temp_var_number = increment_and_get_temp_id();
 
 	//Store the associate stack region(this is usually null)
-	emitted_var->stack_region = region;
+	emitted_var->associated_memory_region.stack_region = region;
 
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);
@@ -1080,7 +1106,7 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 /**
  * Emit a lea statement that is used for string calculation(rip relative)
  */
-instruction_t* emit_lea_rip_relative_string_constants(three_addr_var_t* assignee, three_addr_var_t* string_variable, three_addr_var_t* instruction_pointer){
+instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_addr_var_t* local_constant, three_addr_var_t* instruction_pointer){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -1088,7 +1114,7 @@ instruction_t* emit_lea_rip_relative_string_constants(three_addr_var_t* assignee
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->assignee = assignee;
 	stmt->op1 = instruction_pointer;
-	stmt->op2 = string_variable;
+	stmt->op2 = local_constant;
 
 	//This is a rip-relative lea
 	stmt->lea_statement_type = OIR_LEA_TYPE_RIP_RELATIVE;
@@ -1449,10 +1475,22 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 	//Go based on what printing mode we're after
 	switch(mode){
 		case PRINTING_LIVE_RANGES:
+			//Handle this special case
+			if(variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
+				fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
+				break;
+			}
+
 			fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
 			break;
 
 		case PRINTING_REGISTERS:
+			//Handle this special case
+			if(variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
+				fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
+				break;
+			}
+
 			//Special edge case
 			if(variable->associated_live_range->reg == NO_REG){
 				fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
@@ -1491,6 +1529,9 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 				case VARIABLE_TYPE_NON_TEMP:
 					//Print out the SSA generation along with the variable
 					fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
+					break;
+				case VARIABLE_TYPE_LOCAL_CONSTANT:
+					fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
 					break;
 				case VARIABLE_TYPE_MEMORY_ADDRESS:
 					if(variable->linked_var != NULL){
@@ -1619,11 +1660,6 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 			} else {
 				fprintf(fl, "'%c'", constant->constant_value.char_constant);
 			}
-			break;
-		//We do not print out string constants directly. Instead, we print
-		//out the local constant ID that is associated with them
-		case STR_CONST:
-			fprintf(fl, ".LC%d", constant->local_constant->local_constant_id);
 			break;
 		case FLOAT_CONST:
 			fprintf(fl, "%f", constant->constant_value.float_constant);
@@ -2277,14 +2313,10 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
-		//String constants are a special case because they are represented by
-		//local constants, not immediate values
-		case STR_CONST:
-			fprintf(fl, ".LC%d", constant->local_constant->local_constant_id);
-			break;
 		//To avoid compiler complaints
 		default:
-			break;
+			printf("Fatal internal compiler error: unreachable immediate value type hit\n");
+			exit(1);
 	}
 }
 
@@ -2328,15 +2360,10 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 		case FUNC_CONST:
 			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
-		//String constants are a special case because they are represented by
-		//local constants, not immediate values
-		case STR_CONST:
-			fprintf(fl, ".LC%d", constant->local_constant->local_constant_id);
-			break;
-
 		//To avoid compiler complaints
 		default:
-			break;
+			printf("Fatal internal compiler error: unreachable immediate value type hit\n");
+			exit(1);
 	}
 }
 
@@ -2366,8 +2393,17 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 * Global var address calculation
 		 */
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE:
+			//There are different ways that this can go
+			switch(instruction->rip_offset_variable->variable_type){
+				case VARIABLE_TYPE_LOCAL_CONSTANT:
+					fprintf(fl, ".LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
+					break;
+				default:
+					fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
+					break;
+			}
+
 			//Print the actual string name of the variable - no SSA and no registers
-			fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
@@ -2380,8 +2416,15 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 		 */
 		case ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET:
 			print_immediate_value_no_prefix(fl, instruction->offset);
-			//Print the actual string name of the variable - no SSA and no registers
-			fprintf(fl, "+%s", instruction->rip_offset_variable->linked_var->var_name.string);
+			//There are different ways that this can go
+			switch(instruction->rip_offset_variable->variable_type){
+				case VARIABLE_TYPE_LOCAL_CONSTANT:
+					fprintf(fl, "+.LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
+					break;
+				default:
+					fprintf(fl, "+%s", instruction->rip_offset_variable->linked_var->var_name.string);
+					break;
+			}
 			fprintf(fl, "(");
 			//This will be the instruction pointer
 			print_variable(fl, instruction->address_calc_reg1, mode);
@@ -3999,31 +4042,21 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 /**
  * Emit a three_addr_const_t value that is a local constant(.LCx) reference
  */
-three_addr_const_t* emit_string_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
-	//Let's create the local constant first
-	local_constant_t* local_constant = local_constant_alloc(&(const_node->string_value));
+three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
 
 	//Once this has been made, we can add it to the function
 	add_local_constant_to_function(function, local_constant);
 
-	//Let's allocate it first
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_consts, constant);
-
-	//Now we'll assign the appropriate values
-	constant->const_type = const_node->constant_type; 
-	constant->type = const_node->inferred_type;
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
 
 	//Increment the reference count
 	(local_constant->reference_count)++;
 
-	//Add this value in
-	constant->local_constant = local_constant;
-
 	//And give this back
-	return constant;
+	return local_constant_variable;
 }
 
 

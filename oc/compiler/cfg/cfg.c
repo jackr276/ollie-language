@@ -76,6 +76,10 @@ typedef struct{
 	ollie_token_t operator;
 } cfg_result_package_t;
 
+/**
+ * Determine whether or not a given three address variable is eligible for SSA
+ */
+#define IS_SSA_VARIABLE_TYPE(variable) ((variable->variable_type == VARIABLE_TYPE_TEMP || variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT) ? FALSE : TRUE)
 
 //Are we emitting the dominance frontier or not?
 typedef enum{
@@ -945,8 +949,9 @@ void delete_statement(instruction_t* stmt){
 
 	//If we have a string constant and we're doing this, we'll need to decrement the reference
 	//count by 1 because we are losing a reference to it
-	if(stmt->op1_const != NULL && stmt->op1_const->const_type == STR_CONST){
-		stmt->op1_const->local_constant->reference_count--;
+	if(stmt->op2 != NULL && stmt->op2->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
+		//Knock one off of the reference count
+		stmt->op2->associated_memory_region.local_constant->reference_count--;
 	}
 
 	//No matter what, we are reducing the number of statements in this block
@@ -2166,12 +2171,12 @@ static void rename_block(basic_block_t* entry){
 			case THREE_ADDR_CODE_FUNC_CALL:
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//If we have a non-temp variable, rename it
-				if(cursor->op1 != NULL && cursor->op1->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op1 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op1) == TRUE){
 					rhs_new_name(cursor->op1);
 				}
 
 				//Same goes for the assignee, except this one is the LHS
-				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->assignee != NULL && IS_SSA_VARIABLE_TYPE(cursor->assignee) == TRUE){
 					lhs_new_name(cursor->assignee);
 				}
 				
@@ -2186,7 +2191,7 @@ static void rename_block(basic_block_t* entry){
 					three_addr_var_t* current_param = dynamic_array_get_at(&func_params, k);
 
 					//If it's not temporary, we rename
-					if(current_param->variable_type != VARIABLE_TYPE_TEMP){
+					if(IS_SSA_VARIABLE_TYPE(current_param) == TRUE){
 						rhs_new_name(current_param);
 					}
 				}
@@ -2202,17 +2207,17 @@ static void rename_block(basic_block_t* entry){
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				//If we have a non-temp variable, rename it
-				if(cursor->op1 != NULL && cursor->op1->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op1 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op1) == TRUE){
 					rhs_new_name(cursor->op1);
 				}
 
 				//If we have a non-temp variable, rename it
-				if(cursor->op2 != NULL && cursor->op2->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op2 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op2) == TRUE){
 					rhs_new_name(cursor->op2);
 				}
 
 				//UNIQUE CASE - rhs also gets a new name here
-				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->assignee != NULL && IS_SSA_VARIABLE_TYPE(cursor->assignee) == TRUE){
 					rhs_new_name(cursor->assignee);
 				}
 
@@ -2223,17 +2228,17 @@ static void rename_block(basic_block_t* entry){
 			//We'll exclude direct jump statements, these we don't care about
 			default:
 				//If we have a non-temp variable, rename it
-				if(cursor->op1 != NULL && cursor->op1->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op1 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op1) == TRUE){
 					rhs_new_name(cursor->op1);
 				}
 
 				//If we have a non-temp variable, rename it
-				if(cursor->op2 != NULL && cursor->op2->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->op2 != NULL && IS_SSA_VARIABLE_TYPE(cursor->op2) == TRUE){
 					rhs_new_name(cursor->op2);
 				}
 
 				//Same goes for the assignee, except this one is the LHS
-				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->assignee != NULL && IS_SSA_VARIABLE_TYPE(cursor->assignee) == TRUE){
 					lhs_new_name(cursor->assignee);
 				}
 
@@ -2312,7 +2317,7 @@ static void rename_block(basic_block_t* entry){
 			//Otherwise this does count
 			default:
 				//If we see a statement that has an assignee that is not temporary, we'll unwind(pop) his stack
-				if(cursor->assignee != NULL && cursor->assignee->variable_type != VARIABLE_TYPE_TEMP){
+				if(cursor->assignee != NULL && IS_SSA_VARIABLE_TYPE(cursor->assignee) == TRUE){
 					//Pop it off
 					lightstack_pop(&(cursor->assignee->linked_var->counter_stack));
 				}
@@ -2743,8 +2748,9 @@ void emit_indirect_jump(basic_block_t* basic_block, three_addr_var_t* dest_addr,
  * Emit the abstract machine code for a constant to variable assignment. 
  */
 static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, generic_ast_node_t* constant_node, u_int8_t is_branch_ending){
-	//First we'll emit the constant
+	//Placeholders for constant/var values
 	three_addr_const_t* const_val;
+	three_addr_var_t* local_constant_val;
 	//Holder for the constant assignment
 	instruction_t* const_assignment;
 
@@ -2752,10 +2758,10 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	switch(constant_node->constant_type){
 		case STR_CONST:
 			//Here's our constant value
-			const_val = emit_string_constant(basic_block->function_defined_in, constant_node);
+			local_constant_val = emit_string_local_constant(current_function, constant_node);
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			const_assignment = emit_binary_operation_with_const_instruction(emit_temp_var(constant_node->inferred_type), instruction_pointer_var, PLUS, const_val);
+			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
 			break;
 
 		case FUNC_CONST:
@@ -4705,7 +4711,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
 		//Copy this over if there is one
-		left_hand_var->stack_region = final_op1->stack_region;
+		left_hand_var->associated_memory_region.stack_region = final_op1->associated_memory_region.stack_region;
 
 		//If this is not a temp var, then we can flag it as being assigned
 		add_assigned_variable(current_block, left_hand_var);

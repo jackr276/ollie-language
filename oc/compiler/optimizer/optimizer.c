@@ -195,10 +195,19 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 		return;
 	}
 
+	//There is no point in trying to mark a variable like this, we will
+	//never find the definition since they exist by default
+	if(variable == cfg->stack_pointer 
+		|| variable == cfg->instruction_pointer
+		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
+		return;
+	}
+
 	//If this variable has a stack region, then we will be marking
-	//said stack region
-	if(variable->stack_region != NULL){
-		mark_stack_region(variable->stack_region);
+	//said stack region. We know that this discriminating union is a stack
+	//region because of the if-check above that rules out local constants
+	if(variable->associated_memory_region.stack_region != NULL){
+		mark_stack_region(variable->associated_memory_region.stack_region);
 	}
 
 	//Run through everything here
@@ -211,63 +220,69 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 			continue;
 		}
 
-		//If this does assign the variable, we'll look through it
-		if(variable->variable_type != VARIABLE_TYPE_TEMP){
-			//Let's find where we assign it
-			instruction_t* stmt = block->exit_statement;
+		//This is always where we start
+		instruction_t* stmt = block->exit_statement;
 
-			//So long as this isn't NULL
-			while(stmt != NULL){
-				//If it's marked we're out of here
-				if(stmt->mark == TRUE || stmt->assignee == NULL){
+		switch(variable->variable_type){
+			case VARIABLE_TYPE_NON_TEMP:
+			case VARIABLE_TYPE_MEMORY_ADDRESS:
+				stmt = block->exit_statement;
+
+				//So long as this isn't NULL
+				while(stmt != NULL){
+					//If it's marked we're out of here
+					if(stmt->mark == TRUE || stmt->assignee == NULL){
+						stmt = stmt->previous_statement;
+						continue;
+					}
+
+					//Is the assignee our variable AND it's unmarked?
+					if(stmt->assignee->linked_var == variable->linked_var
+						&& stmt->assignee->ssa_generation == variable->ssa_generation){
+						//Add this in
+						dynamic_array_add(worklist, stmt);
+						//Mark it
+						stmt->mark = TRUE;
+						//Mark it
+						block->contains_mark = TRUE;
+						return;
+					}
+
+					//Advance the statement
 					stmt = stmt->previous_statement;
-					continue;
 				}
 
-				//Is the assignee our variable AND it's unmarked?
-				if(stmt->assignee->linked_var == variable->linked_var
-					&& stmt->assignee->ssa_generation == variable->ssa_generation){
-					//Add this in
-					dynamic_array_add(worklist, stmt);
-					//Mark it
-					stmt->mark = TRUE;
-					//Mark it
-					block->contains_mark = TRUE;
-					return;
-				}
+				break;
 
-				//Advance the statement
-				stmt = stmt->previous_statement;
-			}
+			case VARIABLE_TYPE_TEMP:
+				//So long as this isn't NULL
+				while(stmt != NULL){
+					//If this is the case, we'll just go onto the next one
+					if(stmt->mark == TRUE || stmt->assignee == NULL){
+						stmt = stmt->previous_statement;
+						continue;
+					}
 
-		//If it's a temp var, the search is not so easy. We'll need to crawl through
-		//each statement and see if the assignee has the same temp number
-		} else {
-			//Let's find where we assign it
-			instruction_t* stmt = block->exit_statement;
+					//Is the assignee our variable AND it's unmarked?
+					if(stmt->assignee->temp_var_number == variable->temp_var_number){
+						//Add this in
+						dynamic_array_add(worklist, stmt);
+						//Mark it
+						stmt->mark = TRUE;
+						//Mark the block
+						block->contains_mark = TRUE;
+						return;
+					}
 
-			//So long as this isn't NULL
-			while(stmt != NULL){
-				//If this is the case, we'll just go onto the next one
-				if(stmt->mark == TRUE || stmt->assignee == NULL){
+					//Advance the statement
 					stmt = stmt->previous_statement;
-					continue;
 				}
 
-				//Is the assignee our variable AND it's unmarked?
-				if(stmt->assignee->temp_var_number == variable->temp_var_number){
-					//Add this in
-					dynamic_array_add(worklist, stmt);
-					//Mark it
-					stmt->mark = TRUE;
-					//Mark the block
-					block->contains_mark = TRUE;
-					return;
-				}
+				break;
 
-				//Advance the statement
-				stmt = stmt->previous_statement;
-			}
+			default:
+				printf("Fatal internal compiler error: attempting to mark invalid variable type\n");
+				exit(1);
 		}
 	}
 }
@@ -808,7 +823,7 @@ static void sweep(cfg_t* cfg){
 						//Flag it as null
 						block->jump_table = NULL;
 					}
-
+					
 					//Advance the statement
 					stmt = stmt->next_statement;
 					//Delete the statement, now that we know it is not a jump
@@ -833,6 +848,9 @@ static void sweep(cfg_t* cfg){
 		//Invoke the stack sweeper. This function will go through an remove any stack regions
 		//that have been flagged as unimportant
 		sweep_stack_data_area(stack);
+
+		//Now we will sweep the local constants out of here
+		sweep_local_constants(function_entry->function_defined_in);
 	}
 }
 
