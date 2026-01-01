@@ -76,6 +76,8 @@ struct global_variable_t{
 		dynamic_array_t array_initializer_values;
 	} initializer_value;
 
+	//Store the type as well
+	generic_type_t* variable_type;
 	//What is this variable's reference count?
 	u_int16_t reference_count;
 	//Store the initializer type
@@ -195,11 +197,16 @@ struct three_addr_const_t{
 	union {
 		int64_t signed_long_constant;
 		u_int64_t unsigned_long_constant;
-		double double_constant;
-		float float_constant;
 		int32_t signed_integer_constant;
 		u_int32_t unsigned_integer_constant;
 		char char_constant;
+		/**
+		 * We should note that these will only be used inside of a global
+		 * variable context. If a user is regularly using a float or double
+		 * constant, it would be loaded in via the Local Constant(.LC) subsystem
+		 */
+		double double_constant;
+		float float_constant;
 	} constant_value;
 
 	//What kind of constant is it
@@ -454,6 +461,13 @@ three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generi
  * Emit a variable copied from another variable
  */
 three_addr_var_t* emit_var_copy(three_addr_var_t* var);
+
+/**
+ * Emit a constant for the express purpose of being used in a global variable. Such
+ * a constant does not need to abide by the same rules that non-global constants
+ * need to because it is already in the ELF text and not trapped in the assembly
+ */
+three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node);
 
 /**
  * Create and return a constant three address var

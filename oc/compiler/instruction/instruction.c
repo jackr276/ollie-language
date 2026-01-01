@@ -54,6 +54,8 @@ global_variable_t* create_global_variable(symtab_variable_record_t* variable, th
 
 	//Copy these over
 	var->variable = variable;
+	//It never hurts to have a quick way to reference this
+	var->variable_type = variable->type_defined_as;
 	var->initializer_value.constant_value = value;
 
 	//Give the var back
@@ -3986,6 +3988,16 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 
 	//And give it back
 	return inc_stmt;
+}
+
+
+/**
+ * Emit a constant for the express purpose of being used in a global variable. Such
+ * a constant does not need to abide by the same rules that non-global constants
+ * need to because it is already in the ELF text and not trapped in the assembly
+ */
+three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node){
+
 }
 
 
