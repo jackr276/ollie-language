@@ -15,6 +15,38 @@
 #include "../utils/dynamic_string/dynamic_string.h"
 #include "../utils/constants.h"
 
+
+//======================= Utility macros ===================
+/**
+ * Let's determine if a value is a positive power of 2.
+ * Here's how this will work. In binary, powers of 2 look like:
+ * 0010
+ * 0100
+ * 1000
+ * ....
+ *
+ * In other words, they have exactly 1 on bit that is not in the LSB position
+ *
+ * Here's an example: 5 = 0101, so 5-1 = 0100
+ *
+ * 0101 & (0100) = 0100 which is 4, not 0
+ *
+ * How about 8?
+ * 8 is 1000
+ * 8 - 1 = 0111
+ *
+ * 1000 & 0111 = 0, so 8 is a power of 2
+ *
+ * Therefore, the formula we will use is value & (value - 1) == 0
+ */
+#define IS_SIGNED_POWER_OF_2(value)\
+	(((value > 0) && ((value & (value - 1)) == 0)) ? TRUE : FALSE)
+
+#define IS_UNSIGNED_POWER_OF_2(value)\
+	(((value & (value - 1)) == 0) ? TRUE : FALSE)
+
+//======================= Utility macros ===================
+
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
 
@@ -60,75 +92,6 @@ global_variable_t* create_global_variable(symtab_variable_record_t* variable, th
 
 	//Give the var back
 	return var;
-}
-
-
-/**
- * Let's determine if a value is a positive power of 2.
- * Here's how this will work. In binary, powers of 2 look like:
- * 0010
- * 0100
- * 1000
- * ....
- *
- * In other words, they have exactly 1 on bit that is not in the LSB position
- *
- * Here's an example: 5 = 0101, so 5-1 = 0100
- *
- * 0101 & (0100) = 0100 which is 4, not 0
- *
- * How about 8?
- * 8 is 1000
- * 8 - 1 = 0111
- *
- * 1000 & 0111 = 0, so 8 is a power of 2
- *
- * Therefore, the formula we will use is value & (value - 1) == 0
- */
-static u_int8_t is_signed_power_of_2(int64_t value){
-	//If it's negative or 0, we're done here
-	if(value <= 0){
-		return FALSE;
-	}
-
-	//Using the bitwise formula described above
-	if((value & (value - 1)) == 0){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
-}
-
-
-/**
- * Let's determine if a value is a positive power of 2.
- * Here's how this will work. In binary, powers of 2 look like:
- * 0010
- * 0100
- * 1000
- * ....
- *
- * In other words, they have exactly 1 on bit that is not in the LSB position
- *
- * Here's an example: 5 = 0101, so 5-1 = 0100
- *
- * 0101 & (0100) = 0100 which is 4, not 0
- *
- * How about 8?
- * 8 is 1000
- * 8 - 1 = 0111
- *
- * 1000 & 0111 = 0, so 8 is a power of 2
- *
- * Therefore, the formula we will use is value & (value - 1) == 0
- */
-static u_int8_t is_unsigned_power_of_2(u_int64_t value){
-	//Using the bitwise formula described above
-	if((value & (value - 1)) == 0){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
 }
 
 
@@ -570,20 +533,20 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant){
 u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
 	switch(constant->const_type){
 		case INT_CONST:
-			return is_signed_power_of_2(constant->constant_value.signed_integer_constant);
+			return IS_SIGNED_POWER_OF_2(constant->constant_value.signed_integer_constant);
 
 		case INT_CONST_FORCE_U:
-			return is_unsigned_power_of_2(constant->constant_value.unsigned_integer_constant);
+			return IS_UNSIGNED_POWER_OF_2(constant->constant_value.unsigned_integer_constant);
 
 		case LONG_CONST:
-			return is_signed_power_of_2(constant->constant_value.signed_long_constant);
+			return IS_SIGNED_POWER_OF_2(constant->constant_value.signed_long_constant);
 
 		case LONG_CONST_FORCE_U:
-			return is_unsigned_power_of_2(constant->constant_value.unsigned_long_constant);
+			return IS_UNSIGNED_POWER_OF_2(constant->constant_value.unsigned_long_constant);
 
 		//Chars are always unsigned
 		case CHAR_CONST:
-			return is_unsigned_power_of_2(constant->constant_value.char_constant);
+			return IS_UNSIGNED_POWER_OF_2(constant->constant_value.char_constant);
 
 		//By default just return false
 		default:
