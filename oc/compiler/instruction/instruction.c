@@ -1549,34 +1549,40 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
  * in a global variable context
  */
 static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_variable_constant){
-	//Go based on the the type. Types differ in both sizes and ways that we will print them,
-	//so this is necessary
-	switch(global_variable_constant->const_type){
-		case CHAR_CONST:
-			fprintf(fl, ".byte %d", global_variable_constant->constant_value.char_constant);
-			break;
-		case SHORT_CONST:
-			fprintf(fl, ".value %d", global_variable_constant->constant_value.signed_short_constant);
-			break;
-		case SHORT_CONST_FORCE_U:
-			fprintf(fl, ".value %d", global_variable_constant->constant_value.unsigned_short_constant);
-			break;
-		case INT_CONST_FORCE_U:
-			fprintf(fl, ".long %d", global_variable_constant->constant_value.unsigned_integer_constant);
-			break;
-		case INT_CONST:
-			fprintf(fl, ".long %d", global_variable_constant->constant_value.signed_integer_constant);
-			break;
-		case LONG_CONST:
-			fprintf(fl, ".quad %ld", global_variable_constant->constant_value.signed_long_constant);
-			break;
-		case LONG_CONST_FORCE_U:
-			fprintf(fl, ".quad %ld", global_variable_constant->constant_value.unsigned_long_constant);
-			break;
+	//For any float constant printing
+	int32_t lower_32_bits;
+	int32_t upper_32_bits;
 
-		case FLOAT_CONST:
-		case DOUBLE_CONST:
-
+	//Go based on what type we're defined as
+	variable_size_t assembler_type = get_type_size(global_variable_constant->type);
+	
+	//Go based on the register type, not anything else. We will always print the signed version
+	//because at the end of the day we're just trying to write down the bit values, nothing else
+	switch(assembler_type){
+		case BYTE:
+			fprintf(fl, "\t.byte %d\n", global_variable_constant->constant_value.char_constant);
+			break;
+		case WORD:
+			fprintf(fl, "\t.value %d\n", global_variable_constant->constant_value.signed_short_constant);
+			break;
+		case DOUBLE_WORD:
+			fprintf(fl, "\t.long %d\n", global_variable_constant->constant_value.signed_integer_constant);
+			break;
+		case QUAD_WORD:
+			fprintf(fl, "\t.quad %ld\n", global_variable_constant->constant_value.signed_long_constant);
+			break;
+		case SINGLE_PRECISION:
+			//Cast to an int, then dereference. we want the bytes, not an estimation
+			lower_32_bits = *((int32_t*)(&(global_variable_constant->constant_value.float_constant)));
+			fprintf(fl,  "\t.long %d\n", lower_32_bits);
+			break;
+		case DOUBLE_PRECISION:
+			//Grab the lower 32 bits out first
+			lower_32_bits = *((int64_t*)(&(global_variable_constant->constant_value.double_constant))) & 0xFFFFFFFF;
+			//Then the upper 32
+			upper_32_bits = (*((int64_t*)(&(global_variable_constant->constant_value.double_constant))) >> 32) & 0xFFFFFFFF;
+			fprintf(fl,  "\t.long %d\n\t.long %d\n", lower_32_bits, upper_32_bits);
+			break;
 		//Catch-all should anything go wrong
 		default:
 			printf("Fatal internal compiler error: unrecognized global variable type encountered\n");
@@ -1627,7 +1633,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 
 		//Now fianlly we'll print the value out
 		fprintf(fl, "%s:\n", name);
-		
+
 		//Go based on what kind of initializer we have
 		switch(variable->initializer_type){
 			//If we have no initializer, we make everything go to zero
