@@ -70,6 +70,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					constant_node->constant_value.signed_int_value = constant_node->constant_value.char_value;
 					break;
 
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.char_value;
+					break;
+
 				case I64:
 					constant_node->constant_type = LONG_CONST;
 					constant_node->constant_value.signed_long_value = constant_node->constant_value.char_value;
@@ -78,6 +83,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 				case U64:
 					constant_node->constant_type = LONG_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.char_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.char_value;
 					break;
 
 				default:
@@ -103,6 +113,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					constant_node->constant_value.signed_int_value = constant_node->constant_value.signed_short_value;
 					break;
 
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.signed_short_value;
+					break;
+
 				case I64:
 					constant_node->constant_type = LONG_CONST;
 					constant_node->constant_value.signed_long_value = constant_node->constant_value.signed_short_value;
@@ -111,6 +126,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 				case U64:
 					constant_node->constant_type = LONG_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.signed_short_value;
 					break;
 
 				default:
@@ -136,6 +156,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_short_value;
 					break;
 
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
 				case I64:
 					constant_node->constant_type = LONG_CONST;
 					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_short_value;
@@ -144,6 +169,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 				case U64:
 					constant_node->constant_type = LONG_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.unsigned_short_value;
 					break;
 
 				default:
@@ -159,6 +189,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_int_value;
 					break;
 
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
 				case I64:
 					constant_node->constant_type = LONG_CONST;
 					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_int_value;
@@ -167,6 +202,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 				case U64:
 					constant_node->constant_type = LONG_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.unsigned_int_value;
 					break;
 
 				default:
@@ -182,6 +222,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_int_value;
 					break;
 
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.signed_int_value;
+					break;
+
 				case I64:
 					constant_node->constant_type = LONG_CONST;
 					constant_node->constant_value.signed_long_value = constant_node->constant_value.signed_int_value;
@@ -190,6 +235,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 				case U64:
 					constant_node->constant_type = LONG_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.signed_int_value;
 					break;
 
 				default:
@@ -238,6 +288,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_long_value;
 					break;
 
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
 				default:
 					break;
 			}
@@ -249,6 +304,11 @@ void coerce_constant(generic_ast_node_t* constant_node){
 				case U64:
 					constant_node->constant_type = LONG_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.signed_long_value;
 					break;
 
 				default:
