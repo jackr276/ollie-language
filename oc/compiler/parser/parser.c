@@ -2787,7 +2787,11 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//These types are now inferenced
 	right_hand_unary->inferred_type = type_spec;
 
-	//Once we get here, we no longer need the type specifier
+	//If we are casting a constant node, we should perform all needed
+	//type coercion now
+	if(right_hand_unary->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		coerce_constant(right_hand_unary);
+	}
 
 	//Finally, we're all set to go here, so we can return the root reference
 	return right_hand_unary;
