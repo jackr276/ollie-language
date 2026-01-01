@@ -89,7 +89,6 @@ typedef enum {
 	DOUBLE_CONST,
 	STR_CONST,
 	CHAR_CONST,
-	HEX_CONST,
 	L_PAREN,
 	R_PAREN,
 	L_CURLY,

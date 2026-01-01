@@ -120,6 +120,35 @@ void coerce_constant(generic_ast_node_t* constant_node){
 			break;
 
 		case SHORT_CONST_FORCE_U:
+			switch(inferred_type->basic_type_token){
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				default:
+					break;
+			}
 
 			break;
 
@@ -169,6 +198,10 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 			break;
 
+		case FLOAT_CONST:
+			//TODO
+			break;
+
 		case LONG_CONST_FORCE_U:
 			switch(inferred_type->basic_type_token){
 				case I64:
@@ -196,17 +229,10 @@ void coerce_constant(generic_ast_node_t* constant_node){
 			break;
 
 
-		//
-		//
-		//
-		//
-		//TODO FLOAT & DOUBLE SUPPORT ARE NEEDED
-		// SIGNED UNSIGNED 16 bit ALSO NEEDED
-		//
-		//
-		//
-		//
-		//
+		case DOUBLE_CONST:
+			//TODO
+			break;
+
 
 		//This should never happen
 		default:
