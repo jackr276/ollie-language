@@ -352,7 +352,12 @@ void coerce_constant(generic_ast_node_t* constant_node){
 u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
-		//Negate these accordingly
+		case SHORT_CONST:
+			return constant_node->constant_value.signed_short_value == 0 ? TRUE : FALSE;
+			
+		case SHORT_CONST_FORCE_U:
+			return constant_node->constant_value.unsigned_short_value == 0 ? TRUE : FALSE;
+
 		case INT_CONST_FORCE_U:
 			return constant_node->constant_value.unsigned_int_value == 0 ? TRUE : FALSE;
 			
@@ -388,7 +393,12 @@ u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node){
 void negate_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
-		//Negate these accordingly
+		case SHORT_CONST:
+			constant_node->constant_value.signed_short_value *= -1;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_short_value *= -1;
+			break;
 		case INT_CONST_FORCE_U:
 			constant_node->constant_value.unsigned_int_value *= -1;
 			break;
@@ -423,7 +433,12 @@ void negate_constant_value(generic_ast_node_t* constant_node){
 void decrement_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
-		//Negate these accordingly
+		case SHORT_CONST:
+			constant_node->constant_value.signed_short_value--;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_short_value--;
+			break;
 		case INT_CONST_FORCE_U:
 			constant_node->constant_value.unsigned_int_value--;
 			break;
@@ -458,7 +473,12 @@ void decrement_constant_value(generic_ast_node_t* constant_node){
 void increment_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
-		//Negate these accordingly
+		case SHORT_CONST:
+			constant_node->constant_value.signed_short_value++;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_short_value++;
+			break;
 		case INT_CONST_FORCE_U:
 			constant_node->constant_value.unsigned_int_value++;
 			break;
@@ -493,7 +513,12 @@ void increment_constant_value(generic_ast_node_t* constant_node){
 void logical_not_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
-		//Negate these accordingly
+		case SHORT_CONST:
+			constant_node->constant_value.signed_short_value = !(constant_node->constant_value.signed_short_value);
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_short_value = !(constant_node->constant_value.unsigned_short_value);
+			break;
 		case INT_CONST_FORCE_U:
 			constant_node->constant_value.unsigned_int_value = !(constant_node->constant_value.unsigned_int_value);
 			break;
@@ -502,6 +527,12 @@ void logical_not_constant_value(generic_ast_node_t* constant_node){
 			break;
 		case LONG_CONST_FORCE_U:
 			constant_node->constant_value.unsigned_long_value = !(constant_node->constant_value.unsigned_long_value);
+			break;
+		case FLOAT_CONST:
+			constant_node->constant_value.float_value = !(constant_node->constant_value.float_value);
+			break;
+		case DOUBLE_CONST:
+			constant_node->constant_value.double_value = !(constant_node->constant_value.double_value);
 			break;
 		case LONG_CONST:
 			constant_node->constant_value.signed_long_value = !(constant_node->constant_value.signed_long_value);
@@ -522,7 +553,12 @@ void logical_not_constant_value(generic_ast_node_t* constant_node){
 void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
-		//Negate these accordingly
+		case SHORT_CONST:
+			constant_node->constant_value.signed_short_value = ~(constant_node->constant_value.signed_short_value);
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_short_value = ~(constant_node->constant_value.unsigned_short_value);
+			break;
 		case INT_CONST_FORCE_U:
 			constant_node->constant_value.unsigned_int_value = ~(constant_node->constant_value.unsigned_int_value);
 			break;
