@@ -3997,7 +3997,53 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
  * need to because it is already in the ELF text and not trapped in the assembly
  */
 three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node){
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
+	//Add into here for memory management
+	dynamic_array_add(&emitted_consts, constant);
+
+	//Now we'll assign the appropriate values
+	constant->const_type = const_node->constant_type; 
+	constant->type = const_node->inferred_type;
+
+	//Based on the type we'll make assignments. It'll be said again here - this is the only
+	//time that double/float constants can be emitted directly without the use of the .LC system
+	switch(constant->const_type){
+		case CHAR_CONST:
+			constant->constant_value.char_constant = const_node->constant_value.char_value;
+			break;
+		case INT_CONST:
+			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
+			break;
+		case INT_CONST_FORCE_U:
+			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
+			break;
+		case LONG_CONST:
+			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
+			break;
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
+			break;
+		case DOUBLE_CONST:
+			constant->constant_value.double_constant = const_node->constant_value.double_value;
+			break;
+		case FLOAT_CONST:
+			constant->constant_value.float_constant = const_node->constant_value.float_value;
+			break;
+		//These need to be support at some point - but they are currently not supported
+		case STR_CONST:
+		case FUNC_CONST:
+			printf("Fatal internal compiler error: string and function pointer constants are not yet supported in a global context\n");
+			exit(1);
+		//Some very weird error here
+		default:
+			printf("Fatal internal compiler error: unrecognizable constant type found in constant\n");
+			exit(1);
+	}
+	
+	//Once all that is done, we can leave
+	return constant;
 }
 
 
