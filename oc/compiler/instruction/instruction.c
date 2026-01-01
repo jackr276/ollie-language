@@ -4019,6 +4019,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 		case DOUBLE_CONST:
 		case FLOAT_CONST:
 		case STR_CONST:
+		case FUNC_CONST:
 			printf("Fatal internal compiler error: string, function pointer, f32 and f64 constants may not be emitted directly\n");
 			exit(1);
 		//Some very weird error here
@@ -4050,15 +4051,6 @@ three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function,
 
 	//And give this back
 	return local_constant_variable;
-}
-
-
-/**
- * Emit a function pointer variable. This variable is designed to be used exclusively with the rip-relative
- * addressing modes that are required for function pointers
- */
-three_addr_var_t* emit_function_pointer_variable(symtab_function_record_t* function){
-
 }
 
 

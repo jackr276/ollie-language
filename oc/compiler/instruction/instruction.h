@@ -467,12 +467,6 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
 
 /**
- * Emit a function pointer variable. This variable is designed to be used exclusively with the rip-relative
- * addressing modes that are required for function pointers
- */
-three_addr_var_t* emit_function_pointer_variable(symtab_function_record_t* function);
-
-/**
  * Emit a constant directly based on whatever the type given is
  */
 three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type);

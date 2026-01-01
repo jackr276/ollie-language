@@ -2751,6 +2751,7 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	//Placeholders for constant/var values
 	three_addr_const_t* const_val;
 	three_addr_var_t* local_constant_val;
+	three_addr_var_t* function_pointer_variable;
 	//Holder for the constant assignment
 	instruction_t* const_assignment;
 
@@ -2772,13 +2773,13 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			//TODO
 			break;
 
-		//TODO THIS NEEDS TO BE CHANGED
+		//Special case here - we need to emit a variable for the function pointer itself
 		case FUNC_CONST:
-			//Emit the constant value
-			const_val = emit_constant(constant_node);
+			//Emit the variable first
+			function_pointer_variable = emit_function_pointer_temp_var(constant_node->func_record);
 
-			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			const_assignment = emit_binary_operation_with_const_instruction(emit_temp_var(constant_node->inferred_type), instruction_pointer_var, PLUS, const_val);
+			//Now emit the rip-relative assignment used to load the address
+			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), function_pointer_variable, instruction_pointer_var);
 			break;
 			
 		//The most commmon case
