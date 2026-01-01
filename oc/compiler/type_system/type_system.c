@@ -13,17 +13,6 @@
 #include "../utils/constants.h"
 
 /**
- * Round down to the nearest power of 2. We will
- * only be calling this function is we have powers more than
- * 16
- *
- * x = 001011011
- */
-#define ROUND_DOWN_TO_NEAREST_POWER_OF_2(original_value) { \
-}\
-
-
-/**
  * Is this a stack memory region variable or not? Stack memory
  * regions or memory chunks are: arrays, structs and unions
  */
@@ -97,12 +86,11 @@ u_int32_t get_data_section_alignment(generic_type_t* type){
 		//If the type size is 16 or less(small arrays/structs), then
 		//we just use that
 		if(type->type_size <= 16){
-			return 16;
+			return type->type_size;
 		}
 
-		//Otherwise we'll need to do some bit math here
-		u_int32_t type_size = type->type_size;
-
+		//Other than this, we'll just align by 32 as other alignments may get too large
+		return 32;
 	}
 
 	//Otherwise, we just return the type size

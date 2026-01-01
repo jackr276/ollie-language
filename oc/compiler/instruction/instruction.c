@@ -1599,7 +1599,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		//
 		//
 		//
-		fprintf(fl, "\t.align %d\n", get_base_alignment_type(variable->variable->type_defined_as)->type_size);
+		fprintf(fl, "\t.align %d\n", get_data_section_alignment(variable->variable->type_defined_as));
 		
 		//Now print out our type, it's always @Object
 		fprintf(fl, "\t.type %s, @object\n", name);
