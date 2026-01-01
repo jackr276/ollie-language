@@ -1553,23 +1553,29 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 	int32_t lower_32_bits;
 	int32_t upper_32_bits;
 
-	//Go based on what type we're defined as
-	variable_size_t assembler_type = get_type_size(global_variable_constant->type);
-	
 	//Go based on the register type, not anything else. We will always print the signed version
 	//because at the end of the day we're just trying to write down the bit values, nothing else
-	switch(assembler_type){
-		case BYTE:
+	switch(global_variable_constant->const_type){
+		case CHAR_CONST:
 			fprintf(fl, "\t.byte %d\n", global_variable_constant->constant_value.char_constant);
 			break;
-		case WORD:
+		case SHORT_CONST:
 			fprintf(fl, "\t.value %d\n", global_variable_constant->constant_value.signed_short_constant);
 			break;
-		case DOUBLE_WORD:
+		case SHORT_CONST_FORCE_U:
+			fprintf(fl, "\t.value %d\n", global_variable_constant->constant_value.unsigned_short_constant);
+			break;
+		case INT_CONST:
 			fprintf(fl, "\t.long %d\n", global_variable_constant->constant_value.signed_integer_constant);
 			break;
-		case QUAD_WORD:
+		case INT_CONST_FORCE_U:
+			fprintf(fl, "\t.long %d\n", global_variable_constant->constant_value.unsigned_integer_constant);
+			break;
+		case LONG_CONST:
 			fprintf(fl, "\t.quad %ld\n", global_variable_constant->constant_value.signed_long_constant);
+			break;
+		case LONG_CONST_FORCE_U:
+			fprintf(fl, "\t.quad %ld\n", global_variable_constant->constant_value.unsigned_long_constant);
 			break;
 		case SINGLE_PRECISION:
 			//Cast to an int, then dereference. we want the bytes, not an estimation

@@ -9297,6 +9297,13 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//If it is a constant node, we just force the type to be the array type
 			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
 				initializer_node->inferred_type = final_type;
+
+				//If this is a global type, we need to coerce the
+				//actual internal constant to match it. This is especially
+				//true for types like floats/doubles
+				if(is_global == TRUE){
+					coerce_constant(initializer_node);
+				}
 			}
 			
 			//Give back the return type
