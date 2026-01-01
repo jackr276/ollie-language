@@ -89,6 +89,11 @@ u_int32_t get_data_section_alignment(generic_type_t* type){
 			return type->type_size;
 		}
 
+		//Anything less than 32 align by 16
+		if(type->type_size < 32){
+			return 16;
+		}
+
 		//Other than this, we'll just align by 32 as other alignments may get too large
 		return 32;
 	}
