@@ -198,8 +198,37 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 			break;
 
+		//Floats can be coerced into being ints(signed/unsigned), longs(signed/unsigned) and double
 		case FLOAT_CONST:
-			//TODO
+			switch(inferred_type->basic_type_token){
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.float_value;
+					break;
+				case U32:
+					constant_node->constant_type = INT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.float_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.float_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.float_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.float_value;
+					break;
+
+				default:
+					break;
+			}
+
 			break;
 
 		case LONG_CONST_FORCE_U:
@@ -229,10 +258,24 @@ void coerce_constant(generic_ast_node_t* constant_node){
 			break;
 
 
+		//Doubles can only ever be coerced to a long due to the 64-bit nature
 		case DOUBLE_CONST:
-			//TODO
-			break;
+			switch(inferred_type->basic_type_token){
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.double_value;
+					break;
+					
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.double_value;
+					break;
 
+				default:
+					break;
+			}
+
+			break;
 
 		//This should never happen
 		default:

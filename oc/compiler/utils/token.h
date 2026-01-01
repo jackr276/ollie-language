@@ -78,6 +78,7 @@ typedef enum {
 	IDENT,
 	POUND, /* # */
 	FUNC_CONST,
+	HEX_CONST,
 	INT_CONST,
 	//Forced to unsigned
 	INT_CONST_FORCE_U,

@@ -1577,12 +1577,12 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 		case LONG_CONST_FORCE_U:
 			fprintf(fl, "\t.quad %ld\n", global_variable_constant->constant_value.unsigned_long_constant);
 			break;
-		case SINGLE_PRECISION:
+		case FLOAT_CONST:
 			//Cast to an int, then dereference. we want the bytes, not an estimation
 			lower_32_bits = *((int32_t*)(&(global_variable_constant->constant_value.float_constant)));
 			fprintf(fl,  "\t.long %d\n", lower_32_bits);
 			break;
-		case DOUBLE_PRECISION:
+		case DOUBLE_CONST:
 			//Grab the lower 32 bits out first
 			lower_32_bits = *((int64_t*)(&(global_variable_constant->constant_value.double_constant))) & 0xFFFFFFFF;
 			//Then the upper 32
