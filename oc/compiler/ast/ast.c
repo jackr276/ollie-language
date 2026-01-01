@@ -149,7 +149,7 @@ void coerce_constant(generic_ast_node_t* constant_node){
 		//
 		//
 		//TODO FLOAT & DOUBLE SUPPORT ARE NEEDED
-		//
+		// SIGNED UNSIGNED 16 bit ALSO NEEDED
 		//
 		//
 		//

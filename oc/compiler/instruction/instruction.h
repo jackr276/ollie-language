@@ -199,6 +199,8 @@ struct three_addr_const_t{
 		u_int64_t unsigned_long_constant;
 		int32_t signed_integer_constant;
 		u_int32_t unsigned_integer_constant;
+		int16_t signed_short_constant;
+		u_int16_t unsigned_short_constant;
 		char char_constant;
 		/**
 		 * We should note that these will only be used inside of a global

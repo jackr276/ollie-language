@@ -1548,10 +1548,34 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
  * Specialized printing based on what kind of constant is printed out
  * in a global variable context
  */
-static void print_global_variable_constant(three_addr_const_t* global_variable_constant){
+static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_variable_constant){
 	//Go based on the the type. Types differ in both sizes and ways that we will print them,
 	//so this is necessary
 	switch(global_variable_constant->const_type){
+		case CHAR_CONST:
+			fprintf(fl, ".byte %d", global_variable_constant->constant_value.char_constant);
+			break;
+		case SHORT_CONST:
+			fprintf(fl, ".value %d", global_variable_constant->constant_value.signed_short_constant);
+			break;
+		case SHORT_CONST_FORCE_U:
+			fprintf(fl, ".value %d", global_variable_constant->constant_value.unsigned_short_constant);
+			break;
+		case INT_CONST_FORCE_U:
+			fprintf(fl, ".long %d", global_variable_constant->constant_value.unsigned_integer_constant);
+			break;
+		case INT_CONST:
+			fprintf(fl, ".long %d", global_variable_constant->constant_value.signed_integer_constant);
+			break;
+		case LONG_CONST:
+			fprintf(fl, ".quad %ld", global_variable_constant->constant_value.signed_long_constant);
+			break;
+		case LONG_CONST_FORCE_U:
+			fprintf(fl, ".quad %ld", global_variable_constant->constant_value.unsigned_long_constant);
+			break;
+
+		case FLOAT_CONST:
+		case DOUBLE_CONST:
 
 		//Catch-all should anything go wrong
 		default:
@@ -1593,12 +1617,6 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		}
 
 		//Now print out the alignment
-		//
-		//
-		//TODO THIS IS WRONG
-		//
-		//
-		//
 		fprintf(fl, "\t.align %d\n", get_data_section_alignment(variable->variable->type_defined_as));
 		
 		//Now print out our type, it's always @Object
@@ -1620,7 +1638,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 			//For a constant, we print the value out as a .long
 			case GLOBAL_VAR_INITIALIZER_CONSTANT:
 				//We'll add some special handling here - some constants take special treatment
-				print_global_variable_constant(variable->initializer_value.constant_value);
+				print_global_variable_constant(fl, variable->initializer_value.constant_value);
 				break;
 
 			//For an array, we loop through and print them all as constants in order
@@ -1634,7 +1652,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 					three_addr_const_t* constant_value = dynamic_array_get_at(&array_initializer_values, i);
 
 					//Emit the constant value here
-					print_global_variable_constant(constant_value);
+					print_global_variable_constant(fl, constant_value);
 				}
 
 				break;
@@ -1660,6 +1678,12 @@ void print_live_range(FILE* fl, live_range_t* live_range){
  */
 static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
+		case SHORT_CONST:
+			fprintf(fl, "%d", constant->constant_value.signed_short_constant);
+			break;
+		case SHORT_CONST_FORCE_U:
+			fprintf(fl, "%d", constant->constant_value.unsigned_short_constant);
+			break;
 		case INT_CONST:
 			fprintf(fl, "%d", constant->constant_value.signed_integer_constant);
 			break;
@@ -2300,6 +2324,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
  */
 static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
+		case SHORT_CONST:
+			fprintf(fl, "$%d", constant->constant_value.signed_short_constant);
+			break;
+		case SHORT_CONST_FORCE_U:
+			fprintf(fl, "$%d", constant->constant_value.unsigned_short_constant);
+			break;
 		case INT_CONST:
 			fprintf(fl, "$%d", constant->constant_value.signed_integer_constant);
 			break;
@@ -2328,6 +2358,16 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
  */
 static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
+		case SHORT_CONST:
+			if(constant->constant_value.signed_short_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.signed_short_constant);
+			}
+			break;
+		case SHORT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_short_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.unsigned_short_constant);
+			}
+			break;
 		case INT_CONST:
 			if(constant->constant_value.signed_integer_constant != 0){
 				fprintf(fl, "%d", constant->constant_value.signed_integer_constant);
@@ -4006,6 +4046,12 @@ three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node
 		case INT_CONST_FORCE_U:
 			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
 			break;
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
+			break;
 		case LONG_CONST:
 			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
 			break;
@@ -4052,6 +4098,12 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	switch(constant->const_type){
 		case CHAR_CONST:
 			constant->constant_value.char_constant = const_node->constant_value.char_value;
+			break;
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
 			break;
 		case INT_CONST:
 			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
