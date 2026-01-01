@@ -55,7 +55,8 @@ typedef enum {
 	VARIABLE_TYPE_TEMP,
 	VARIABLE_TYPE_NON_TEMP,
 	VARIABLE_TYPE_MEMORY_ADDRESS,
-	VARIABLE_TYPE_LOCAL_CONSTANT
+	VARIABLE_TYPE_LOCAL_CONSTANT,
+	VARIABLE_TYPE_FUNCTION_ADDRESS, //For rip-relative function pointer loads
 } variable_type_t;
 
 
@@ -140,8 +141,6 @@ struct live_range_t{
 struct three_addr_var_t{
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
-	//Link to the function record(NULL if not there)
-	symtab_function_record_t* linked_function;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//What live range is this variable associate with
@@ -152,6 +151,9 @@ struct three_addr_var_t{
 		stack_region_t* stack_region;
 		//What is the local constant associate with this variable
 		local_constant_t* local_constant;
+		//Rip relative function name for loading function pointers
+		symtab_function_record_t* rip_relative_function;
+
 	} associated_memory_region;
 
 	//What is the ssa generation level?
@@ -188,9 +190,9 @@ struct three_addr_var_t{
 struct three_addr_const_t{
 	//We hold the type info
 	generic_type_t* type;
+
 	//Store the constant value in a union
 	union {
-		symtab_function_record_t* function_name;
 		int64_t signed_long_constant;
 		u_int64_t unsigned_long_constant;
 		double double_constant;
@@ -199,6 +201,7 @@ struct three_addr_const_t{
 		u_int32_t unsigned_integer_constant;
 		char char_constant;
 	} constant_value;
+
 	//What kind of constant is it
 	ollie_token_t const_type;
 };
@@ -413,6 +416,11 @@ three_addr_var_t* emit_temp_var(generic_type_t* type);
 three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant);
 
 /**
+ * Emit a function pointer temp var
+ */
+three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* function_record);
+
+/**
  * Create and return a temporary variable from a live range
 */
 three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
@@ -457,6 +465,18 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
  * will also help us add the string constant to the function as a local function reference
  */
 three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f32 constant to the function as a local function reference
+ */
+three_addr_var_t* emit_f32_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f64 constant to the function as a local function reference
+ */
+three_addr_var_t* emit_f64_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
 
 /**
  * Emit a constant directly based on whatever the type given is

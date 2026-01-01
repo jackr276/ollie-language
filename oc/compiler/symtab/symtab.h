@@ -79,7 +79,8 @@ typedef enum variable_membership_t {
  */
 typedef enum {
 	LOCAL_CONSTANT_TYPE_STRING,
-	LOCAL_CONSTANT_TYPE_BYTES
+	LOCAL_CONSTANT_TYPE_F32,
+	LOCAL_CONSTANT_TYPE_F64,
 } local_constant_type_t;
 
 
@@ -95,8 +96,9 @@ struct local_constant_t{
 	union {
 		//Local constants can be strings
 		dynamic_string_t string_value;
-		//They can also be bytes
-		u_int64_t byte_value;
+		//In the case where we have f32/f64, we store the *bit equivalent*
+		//i32/i64 value inside of here and print that out
+		u_int64_t float_bit_equivalent;
 	} local_constant_value;
 	//And the ID of it
 	u_int16_t local_constant_id;
@@ -120,7 +122,8 @@ struct symtab_function_record_t{
 	dynamic_string_t func_name;
 	//Functions have dynamic arrays for string/nonstring constants
 	dynamic_array_t local_string_constants;
-	dynamic_array_t local_nonstring_constants;
+	dynamic_array_t local_f32_constants;
+	dynamic_array_t local_f64_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The hash that we have
@@ -493,6 +496,16 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
  * Create a string local constant
  */
 local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_string_t* value);
+
+/**
+ * Create an f32 local constant
+ */
+local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value);
+
+/**
+ * Create an f64 local constant
+ */
+local_constant_t* f64_local_constant_alloc(generic_type_t* f32_type, double value);
 
 /**
  * Add a local constant to a function

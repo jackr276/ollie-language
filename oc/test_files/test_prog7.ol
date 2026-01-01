@@ -71,8 +71,6 @@ pub fn main() -> i32{
 	
 	let y:i32 = 32;
 
-	let f:f32 = 23.2;
-
 	//Empty case statement testing
 	switch(x){
 		case 3 ->

@@ -1309,6 +1309,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 		case INT_CONST:
 		case STR_CONST:
 		case FLOAT_CONST:
+		case DOUBLE_CONST:
 		case CHAR_CONST:
 		case LONG_CONST:
 		case HEX_CONST:

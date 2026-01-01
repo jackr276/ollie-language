@@ -758,6 +758,33 @@ three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant)
 
 
 /**
+ * Emit a function pointer temp var
+ */
+three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* function_record){
+	//Let's first create the temporary variable
+	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
+
+	//Add here for memory management
+	dynamic_array_add(&emitted_vars, var);
+
+	//This is a special kind of variable that is a local constant variable
+	var->variable_type = VARIABLE_TYPE_FUNCTION_ADDRESS;
+
+	//Store the local constant inside of the memory region slot
+	var->associated_memory_region.rip_relative_function = function_record;
+
+	//The type is the signature
+	var->type = function_record->signature;
+
+	//The size is going to be the size of an address(8 bytes)
+	var->variable_size = QUAD_WORD;
+
+	//And give it back
+	return var;
+}
+
+
+/**
  * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
  * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
  * that they share is the overall variable that they're linked back to, which stores their type information,
@@ -1533,6 +1560,9 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
 					fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
 					break;
+				case VARIABLE_TYPE_FUNCTION_ADDRESS:
+					fprintf(fl, "%s", variable->associated_memory_region.rip_relative_function->func_name.string);
+					break;
 				case VARIABLE_TYPE_MEMORY_ADDRESS:
 					if(variable->linked_var != NULL){
 						//Print out the normal version, plus the MEM<> wrapper
@@ -1661,18 +1691,10 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 				fprintf(fl, "'%c'", constant->constant_value.char_constant);
 			}
 			break;
-		case FLOAT_CONST:
-			fprintf(fl, "%f", constant->constant_value.float_constant);
-			break;
-		case DOUBLE_CONST:
-			fprintf(fl, "%f", constant->constant_value.double_constant);
-			break;
-		case FUNC_CONST:
-			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
-			break;
 		//To stop compiler warnings
 		default:
-			break;
+			printf("Fatal Internal Compiler Error: Attempt to print unrecognized function type");
+			exit(1);
 	}
 }
 
@@ -2304,15 +2326,6 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 		case CHAR_CONST:
 			fprintf(fl, "$%d", constant->constant_value.char_constant);
 			break;
-		case FLOAT_CONST:
-			fprintf(fl, "$%f", constant->constant_value.float_constant);
-			break;
-		case DOUBLE_CONST:
-			fprintf(fl, "$%f", constant->constant_value.double_constant);
-			break;
-		case FUNC_CONST:
-			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
-			break;
 		//To avoid compiler complaints
 		default:
 			printf("Fatal internal compiler error: unreachable immediate value type hit\n");
@@ -2350,15 +2363,6 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 			if(constant->constant_value.char_constant != 0){
 				fprintf(fl, "%d", constant->constant_value.char_constant);
 			}
-			break;
-		case FLOAT_CONST:
-			fprintf(fl, "%f", constant->constant_value.float_constant);
-			break;
-		case DOUBLE_CONST:
-			fprintf(fl, "%f", constant->constant_value.double_constant);
-			break;
-		case FUNC_CONST:
-			fprintf(fl, "%s", constant->constant_value.function_name->func_name.string);
 			break;
 		//To avoid compiler complaints
 		default:
@@ -2398,6 +2402,9 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
 					fprintf(fl, ".LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
 					break;
+				case VARIABLE_TYPE_FUNCTION_ADDRESS:
+					fprintf(fl, "%s", instruction->rip_offset_variable->associated_memory_region.rip_relative_function->func_name.string);
+					break;
 				default:
 					fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
 					break;
@@ -2420,6 +2427,9 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			switch(instruction->rip_offset_variable->variable_type){
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
 					fprintf(fl, "+.LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
+					break;
+				case VARIABLE_TYPE_FUNCTION_ADDRESS:
+					fprintf(fl, "%s", instruction->rip_offset_variable->associated_memory_region.rip_relative_function->func_name.string);
 					break;
 				default:
 					fprintf(fl, "+%s", instruction->rip_offset_variable->linked_var->var_name.string);
@@ -4004,34 +4014,24 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 		case INT_CONST_FORCE_U:
 			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
 			break;
-		case FLOAT_CONST:
-			constant->constant_value.float_constant = const_node->constant_value.float_value;
-			break;
-		case DOUBLE_CONST:
-			constant->constant_value.double_constant = const_node->constant_value.double_value;
-			break;
-		case STR_CONST:
-			fprintf(stderr, "String constants may not be emitted directly\n");
-			exit(0);
 		case LONG_CONST:
 			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
 			break;
 		case LONG_CONST_FORCE_U:
 			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
 			break;
-
-			
-		//If we have a function constant, we'll add the function record in
-		//as a value
+		//These need to be emitted via the local constant(.LC) system, so any attempt to call this from here is
+		//an error
+		case DOUBLE_CONST:
+		case FLOAT_CONST:
+		case STR_CONST:
 		case FUNC_CONST:
-			//Store the function name
-			constant->constant_value.function_name = const_node->func_record;
-			break;
-
+			printf("Fatal internal compiler error: string, function pointer, f32 and f64 constants may not be emitted directly\n");
+			exit(1);
 		//Some very weird error here
 		default:
-			fprintf(stderr, "Unrecognizable constant type found in constant\n");
-			exit(0);
+			printf("Fatal internal compiler error: unrecognizable constant type found in constant\n");
+			exit(1);
 	}
 	
 	//Once all that is done, we can leave
@@ -4045,6 +4045,50 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
 	//Let's create the local constant first.
 	local_constant_t* local_constant = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_function(function, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//Increment the reference count
+	(local_constant->reference_count)++;
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f32 constant to the function as a local function reference
+ */
+three_addr_var_t* emit_f32_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = f32_local_constant_alloc(const_node->inferred_type, const_node->constant_value.float_value);
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_function(function, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//Increment the reference count
+	(local_constant->reference_count)++;
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f64 constant to the function as a local function reference
+ */
+three_addr_var_t* emit_f64_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = f64_local_constant_alloc(const_node->inferred_type, const_node->constant_value.double_value);
 
 	//Once this has been made, we can add it to the function
 	add_local_constant_to_function(function, local_constant);

@@ -79,7 +79,7 @@ typedef struct{
 /**
  * Determine whether or not a given three address variable is eligible for SSA
  */
-#define IS_SSA_VARIABLE_TYPE(variable) ((variable->variable_type == VARIABLE_TYPE_TEMP || variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT) ? FALSE : TRUE)
+#define IS_SSA_VARIABLE_TYPE(variable) ((variable->variable_type == VARIABLE_TYPE_NON_TEMP || variable->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS) ? TRUE : FALSE)
 
 //Are we emitting the dominance frontier or not?
 typedef enum{
@@ -2751,10 +2751,16 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	//Placeholders for constant/var values
 	three_addr_const_t* const_val;
 	three_addr_var_t* local_constant_val;
+	three_addr_var_t* function_pointer_variable;
 	//Holder for the constant assignment
 	instruction_t* const_assignment;
 
-	//There are several constant types that require special treatment
+	/**
+	 * Constants that are: strings, f32, f64, and function pointers require
+	 * special attention here since they use rip-relative addressing/local constants
+	 * to work. All other constants do not require this special treatment and are
+	 * handled in the catch-all default bucket
+	 */
 	switch(constant_node->constant_type){
 		case STR_CONST:
 			//Here's our constant value
@@ -2764,12 +2770,31 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
 			break;
 
-		case FUNC_CONST:
-			//Emit the constant value
-			const_val = emit_constant(constant_node);
+		//For float constants, we need to emit the local constant equivalent via the helper
+		case FLOAT_CONST:
+			//Here's our constant value
+			local_constant_val = emit_f32_local_constant(current_function, constant_node);
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			const_assignment = emit_binary_operation_with_const_instruction(emit_temp_var(constant_node->inferred_type), instruction_pointer_var, PLUS, const_val);
+			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
+			break;
+
+		//For double constants, we need to emit the local constant equivalent via the helper
+		case DOUBLE_CONST:
+			//Here's our constant value
+			local_constant_val = emit_f64_local_constant(current_function, constant_node);
+
+			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
+			break;
+
+		//Special case here - we need to emit a variable for the function pointer itself
+		case FUNC_CONST:
+			//Emit the variable first
+			function_pointer_variable = emit_function_pointer_temp_var(constant_node->func_record);
+
+			//Now emit the rip-relative assignment used to load the address
+			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), function_pointer_variable, instruction_pointer_var);
 			break;
 			
 		//The most commmon case
