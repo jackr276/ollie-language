@@ -1582,6 +1582,23 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 
 
 /**
+ * Specialized printing based on what kind of constant is printed out
+ * in a global variable context
+ */
+static void print_global_variable_constant(three_addr_const_t* global_variable_constant){
+	//Go based on the the type. Types differ in both sizes and ways that we will print them,
+	//so this is necessary
+	switch(global_variable_constant->const_type){
+
+		//Catch-all should anything go wrong
+		default:
+			printf("Fatal internal compiler error: unrecognized global variable type encountered\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Print all given global variables who's use count is not 0
  */
 void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
@@ -1613,6 +1630,12 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		}
 
 		//Now print out the alignment
+		//
+		//
+		//TODO THIS IS WRONG
+		//
+		//
+		//
 		fprintf(fl, "\t.align %d\n", get_base_alignment_type(variable->variable->type_defined_as)->type_size);
 		
 		//Now print out our type, it's always @Object
@@ -1633,7 +1656,8 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 				
 			//For a constant, we print the value out as a .long
 			case GLOBAL_VAR_INITIALIZER_CONSTANT:
-				fprintf(fl, "\t.long %ld\n", variable->initializer_value.constant_value->constant_value.signed_long_constant);
+				//We'll add some special handling here - some constants take special treatment
+				print_global_variable_constant(variable->initializer_value.constant_value);
 				break;
 
 			//For an array, we loop through and print them all as constants in order
@@ -1647,7 +1671,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 					three_addr_const_t* constant_value = dynamic_array_get_at(&array_initializer_values, i);
 
 					//Emit the constant value here
-					fprintf(fl, "\t.long %ld\n", constant_value->constant_value.signed_long_constant);
+					print_global_variable_constant(constant_value);
 				}
 
 				break;
