@@ -2730,13 +2730,13 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	generic_type_t* being_casted_type = dealias_type(right_hand_unary->inferred_type);
 
 	//You can never cast a "void" to anything
-	if(is_void_type(being_casted_type) == TRUE){
+	if(IS_VOID_TYPE(being_casted_type) == TRUE){
 		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Likewise, you can never cast anything to void
-	if(is_void_type(casting_to_type) == TRUE){
+	if(IS_VOID_TYPE(casting_to_type) == TRUE){
 		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -4878,8 +4878,8 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	immutable_function_type->internal_types.function_type->return_type = return_type;
 
 	//Mark whether or not it's void as well
-	mutable_function_type->internal_types.function_type->returns_void = is_void_type(return_type);
-	immutable_function_type->internal_types.function_type->returns_void = is_void_type(return_type);
+	mutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
+	immutable_function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
 
 	//Otherwise this did work, so now we need to see the AS keyword. Ollie forces the user to use AS to avoid the
 	//confusing syntactical mess that C function pointer declarations have
@@ -9388,7 +9388,7 @@ static generic_ast_node_t* let_statement(FILE* fl, u_int8_t is_global){
 	}
 	
 	//One thing here, we aren't allowed to see void
-	if(is_void_type(type_spec) == TRUE){
+	if(IS_VOID_TYPE(type_spec) == TRUE){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
@@ -10521,7 +10521,7 @@ static generic_ast_node_t* function_definition(FILE* fl){
 	function_record->return_type = type;
 
 	//Record whether or not it's a void type
-	function_record->signature->internal_types.function_type->returns_void = is_void_type(type);
+	function_record->signature->internal_types.function_type->returns_void = IS_VOID_TYPE(type);
 
 	//Store the return type as well
 	function_record->signature->internal_types.function_type->return_type = type;

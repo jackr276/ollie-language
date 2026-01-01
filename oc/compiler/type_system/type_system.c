@@ -57,20 +57,6 @@ u_int8_t is_memory_address_type(generic_type_t* type){
 
 
 /**
- * Does assigning from source to destination require a converting move
- */
-u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_type_t* source_type){
-	//Very simple rule(for now), just compare the sizes
-	if(destination_type->type_size > source_type->type_size){
-		return TRUE;
-	}
-
-	//Otherwise it's fine
-	return FALSE;
-}
-
-
-/**
  * What is the value that this needs to be aligned by?
  *
  * For arrays -> we align so that the base address is a multiple of the member type
@@ -172,22 +158,6 @@ u_int8_t is_type_32_bit_int(generic_type_t* type){
 		default:
 			return FALSE;
 	}
-}
-
-
-/**
- * Simple helper to check if a type is void
- */
-u_int8_t is_void_type(generic_type_t* type){
-	if(type->type_class != TYPE_CLASS_BASIC){
-		return FALSE;
-	}
-
-	if(type->basic_type_token != VOID){
-		return FALSE;
-	}
-
-	return TRUE;
 }
 
 
