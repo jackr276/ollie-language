@@ -2402,6 +2402,9 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
 					fprintf(fl, ".LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
 					break;
+				case VARIABLE_TYPE_FUNCTION_ADDRESS:
+					fprintf(fl, "%s", instruction->rip_offset_variable->associated_memory_region.rip_relative_function->func_name.string);
+					break;
 				default:
 					fprintf(fl, "%s", instruction->rip_offset_variable->linked_var->var_name.string);
 					break;
@@ -2424,6 +2427,9 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 			switch(instruction->rip_offset_variable->variable_type){
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
 					fprintf(fl, "+.LC%d", instruction->rip_offset_variable->associated_memory_region.local_constant->local_constant_id);
+					break;
+				case VARIABLE_TYPE_FUNCTION_ADDRESS:
+					fprintf(fl, "%s", instruction->rip_offset_variable->associated_memory_region.rip_relative_function->func_name.string);
 					break;
 				default:
 					fprintf(fl, "+%s", instruction->rip_offset_variable->linked_var->var_name.string);

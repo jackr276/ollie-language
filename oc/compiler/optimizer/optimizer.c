@@ -199,7 +199,8 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 	//never find the definition since they exist by default
 	if(variable == cfg->stack_pointer 
 		|| variable == cfg->instruction_pointer
-		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
+		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT
+		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS){
 		return;
 	}
 

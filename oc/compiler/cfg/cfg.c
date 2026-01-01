@@ -79,7 +79,7 @@ typedef struct{
 /**
  * Determine whether or not a given three address variable is eligible for SSA
  */
-#define IS_SSA_VARIABLE_TYPE(variable) ((variable->variable_type == VARIABLE_TYPE_TEMP || variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT) ? FALSE : TRUE)
+#define IS_SSA_VARIABLE_TYPE(variable) ((variable->variable_type == VARIABLE_TYPE_NON_TEMP || variable->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS) ? TRUE : FALSE)
 
 //Are we emitting the dominance frontier or not?
 typedef enum{
