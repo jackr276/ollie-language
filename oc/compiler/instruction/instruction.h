@@ -473,6 +473,12 @@ three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function,
 three_addr_var_t* emit_f32_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
 
 /**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f64 constant to the function as a local function reference
+ */
+three_addr_var_t* emit_f64_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
+
+/**
  * Emit a constant directly based on whatever the type given is
  */
 three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type);

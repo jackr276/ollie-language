@@ -2767,7 +2767,11 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 		//For float constants, we need to emit the local constant equivalent via the helper
 		case FLOAT_CONST:
-			//TODO
+			//Here's our constant value
+			local_constant_val = emit_f32_local_constant(current_function, constant_node);
+
+			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
 			break;
 
 		//For double constants, we need to emit the local constant equivalent via the helper
