@@ -27,7 +27,11 @@ void initialize_ast_system(){
  * we've done some constant operations inside of the parser that may require us to update the internal
  * constant type. 
  *
- * It is assumed that the caller has already set the "inferred type" to be what we're coercing to
+ * It is assumed that the caller has already set the "inferred type" to be what we're coercing to.
+ *
+ * Do note that the inferred type will always be *the same size or larger* than the given constant type
+ * that is already in the system. This is why, as the constant types get larger, the options to coerce to
+ * get smaller
  */
 void coerce_constant(generic_ast_node_t* constant_node){
 	//We have an inferred type here
@@ -44,6 +48,81 @@ void coerce_constant(generic_ast_node_t* constant_node){
 		//Now in here, we'll go based on the basic type of what our inferred
 		//type is and perform a move operation(just reassignment) to have the appropriate
 		//expansion
+		case CHAR_CONST:
+			switch(inferred_type->basic_type_token){
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.char_value;
+					break;
+					
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.char_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.char_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.char_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.char_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.char_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case SHORT_CONST:
+			switch(inferred_type->basic_type_token){
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				default:
+					break;
+			}
+		
+			break;
+
+		case SHORT_CONST_FORCE_U:
+
+			break;
+
 		case INT_CONST_FORCE_U:
 			switch(inferred_type->basic_type_token){
 				case I32:
@@ -116,33 +195,6 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 			break;
 
-		case CHAR_CONST:
-			switch(inferred_type->basic_type_token){
-				case U32:
-					constant_node->constant_type = INT_CONST;
-					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.char_value;
-					break;
-
-				case I32:
-					constant_node->constant_type = INT_CONST;
-					constant_node->constant_value.signed_int_value = constant_node->constant_value.char_value;
-					break;
-
-				case I64:
-					constant_node->constant_type = LONG_CONST;
-					constant_node->constant_value.signed_long_value = constant_node->constant_value.char_value;
-					break;
-
-				case U64:
-					constant_node->constant_type = LONG_CONST_FORCE_U;
-					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.char_value;
-					break;
-
-				default:
-					break;
-			}
-
-			break;
 
 		//
 		//
