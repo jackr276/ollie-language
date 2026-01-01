@@ -416,6 +416,11 @@ three_addr_var_t* emit_temp_var(generic_type_t* type);
 three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant);
 
 /**
+ * Emit a function pointer temp var
+ */
+three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* function_record);
+
+/**
  * Create and return a temporary variable from a live range
 */
 three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
@@ -460,6 +465,12 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
  * will also help us add the string constant to the function as a local function reference
  */
 three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
+
+/**
+ * Emit a function pointer variable. This variable is designed to be used exclusively with the rip-relative
+ * addressing modes that are required for function pointers
+ */
+three_addr_var_t* emit_function_pointer_variable(symtab_function_record_t* function);
 
 /**
  * Emit a constant directly based on whatever the type given is

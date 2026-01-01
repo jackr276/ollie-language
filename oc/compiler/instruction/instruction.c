@@ -758,6 +758,33 @@ three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant)
 
 
 /**
+ * Emit a function pointer temp var
+ */
+three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* function_record){
+	//Let's first create the temporary variable
+	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
+
+	//Add here for memory management
+	dynamic_array_add(&emitted_vars, var);
+
+	//This is a special kind of variable that is a local constant variable
+	var->variable_type = VARIABLE_TYPE_FUNCTION_ADDRESS;
+
+	//Store the local constant inside of the memory region slot
+	var->associated_memory_region.rip_relative_function = function_record;
+
+	//The type is the signature
+	var->type = function_record->signature;
+
+	//The size is going to be the size of an address(8 bytes)
+	var->variable_size = QUAD_WORD;
+
+	//And give it back
+	return var;
+}
+
+
+/**
  * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
  * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
  * that they share is the overall variable that they're linked back to, which stores their type information,
@@ -4023,6 +4050,15 @@ three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function,
 
 	//And give this back
 	return local_constant_variable;
+}
+
+
+/**
+ * Emit a function pointer variable. This variable is designed to be used exclusively with the rip-relative
+ * addressing modes that are required for function pointers
+ */
+three_addr_var_t* emit_function_pointer_variable(symtab_function_record_t* function){
+
 }
 
 
