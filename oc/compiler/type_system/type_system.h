@@ -182,6 +182,14 @@ u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_t
 generic_type_t* get_base_alignment_type(generic_type_t* type);
 
 /**
+ * Get the alignment that will be used in the .data section for
+ * a global variable. For basic types, their type size is simply used.
+ * For all non_basic types, their alignment is rounded down to the nearest
+ * whole power of 2(for example, 48 would become 32 aligned, etc.)
+ */
+u_int32_t get_data_section_alignment(generic_type_t* type);
+
+/**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
  * the instruction selector
  */

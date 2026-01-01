@@ -13,6 +13,17 @@
 #include "../utils/constants.h"
 
 /**
+ * Round down to the nearest power of 2. We will
+ * only be calling this function is we have powers more than
+ * 16
+ *
+ * x = 001011011
+ */
+#define ROUND_DOWN_TO_NEAREST_POWER_OF_2(original_value) { \
+}\
+
+
+/**
  * Is this a stack memory region variable or not? Stack memory
  * regions or memory chunks are: arrays, structs and unions
  */
@@ -82,6 +93,34 @@ generic_type_t* get_base_alignment_type(generic_type_t* type){
 		default:
 			return type;
 	}
+}
+
+
+/**
+ * Get the alignment that will be used in the .data section for
+ * a global variable. For basic types, their type size is simply used.
+ * For all non_basic types, their alignment is rounded down to the nearest
+ * whole power of 2(for example, 48 would become 32 aligned, etc.)
+ *
+ * 00010011011
+ */
+u_int32_t get_data_section_alignment(generic_type_t* type){
+	//For any non-basic type, we will need to use 
+	//the nearest power of 2 as the alignment
+	if(type->type_class != TYPE_CLASS_BASIC){
+		//If the type size is 16 or less(small arrays/structs), then
+		//we just use that
+		if(type->type_size <= 16){
+			return 16;
+		}
+
+		//Otherwise we'll need to do some bit math here
+		u_int32_t type_size = type->type_size;
+
+	}
+
+	//Otherwise, we just return the type size
+	return type->type_size;
 }
 
 
