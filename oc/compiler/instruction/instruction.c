@@ -4061,6 +4061,28 @@ three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function,
 
 
 /**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f32 constant to the function as a local function reference
+ */
+three_addr_var_t* emit_f32_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = f32_local_constant_alloc(const_node->inferred_type, const_node->constant_value.float_value);
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_function(function, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//Increment the reference count
+	(local_constant->reference_count)++;
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
  * Emit a return statement. The returnee variable may or may not be null
  */
 instruction_t* emit_ret_instruction(three_addr_var_t* returnee){
