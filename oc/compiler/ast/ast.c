@@ -144,6 +144,18 @@ void coerce_constant(generic_ast_node_t* constant_node){
 
 			break;
 
+		//
+		//
+		//
+		//
+		//TODO FLOAT & DOUBLE SUPPORT ARE NEEDED
+		//
+		//
+		//
+		//
+		//
+		//
+
 		//This should never happen
 		default:
 			printf("Fatal internal compiler error: Unsupported constant type found in coercer.\n");
