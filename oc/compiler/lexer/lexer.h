@@ -35,15 +35,18 @@ struct lexitem_t{
 	ollie_token_t tok;
 };
 
+//======================== Public utility macros ========================
 /**
- * Reset the entire file for reprocessing
+ * Reset the file pointer to go back to the start
  */
-void reset_file(FILE* fl);
+#define RESET_FILE(fl) fseek(fl, 0, SEEK_SET)
 
 /**
  * Get the current file pointer position
  */
-int64_t get_current_file_position(FILE* fl);
+#define GET_CURRENT_FILE_POSITION(fl) ftell(fl)
+
+//======================== Public utility macros ========================
 
 /**
  * Reconsume the tokens starting from a given seek

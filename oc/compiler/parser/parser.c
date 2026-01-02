@@ -5387,7 +5387,7 @@ static u_int8_t union_member(FILE* fl, generic_type_t* mutable_union_type, gener
 	 */
 
 	//Where did we start consuming from
-	int64_t type_start = get_current_file_position(fl);
+	int64_t type_start = GET_CURRENT_FILE_POSITION(fl);
 
 	//Now we need to see a valid type-specifier
 	generic_type_t* mutable_type = union_type_specifier(fl, MUTABLE);
