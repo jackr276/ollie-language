@@ -628,6 +628,82 @@ void multiply_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_nod
 
 			break;
 
+		case SHORT_CONST:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					constant_node1->constant_value.signed_short_value *= constant_node2->constant_value.double_value;
+					break;
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_short_value *= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_short_value *= constant_node2->constant_value.signed_long_value;
+					break;
+				case FLOAT_CONST:
+					constant_node1->constant_value.signed_short_value *= constant_node2->constant_value.float_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_short_value *= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_short_value *= constant_node2->constant_value.signed_int_value;
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.signed_short_value *= constant_node2->constant_value.signed_short_value;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_short_value *= constant_node2->constant_value.unsigned_short_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_short_value *= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					constant_node1->constant_value.unsigned_short_value *= constant_node2->constant_value.double_value;
+					break;
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_short_value *= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_short_value *= constant_node2->constant_value.signed_long_value;
+					break;
+				case FLOAT_CONST:
+					constant_node1->constant_value.unsigned_short_value *= constant_node2->constant_value.float_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_short_value *= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_short_value *= constant_node2->constant_value.signed_int_value;
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.unsigned_short_value *= constant_node2->constant_value.signed_short_value;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_short_value *= constant_node2->constant_value.unsigned_short_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_short_value *= constant_node2->constant_value.char_value;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+
+			break;
+
 		case INT_CONST_FORCE_U:
 			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
