@@ -420,19 +420,19 @@ static u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_node_t* 
  *
  * All of these will have types that are immutable because we don't expect to be changing them
  */
-static generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value){
+static generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value, u_int32_t max_size){
 	//The case where we can use a u8
-	if(value >> 8 == 0){
+	if(max_size <= 8 || value >> 8 == 0){
 		return immut_u8;
 	}
 
 	//We'll use u16
-	if(value >> 16 == 0){
+	if(max_size <= 16 || value >> 16 == 0){
 		return immut_u16;
 	}
 
 	//We'll use u32
-	if(value >> 32 == 0){
+	if(max_size <= 32 || value >> 32 == 0){
 		return immut_u32;
 	}
 
@@ -452,19 +452,19 @@ static generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_i
  * 	Anything else -> 64 bits
  *
  */
-static generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value){
+static generic_type_t* determine_required_minimum_signed_integer_type_size(int64_t value, u_int32_t max_size){
 	//The case where we can use an i8
-	if(value >> 8 == 0 || value >> 8 == -1){
+	if(max_size <= 8 || value >> 8 == 0 || value >> 8 == -1){
 		return immut_i8;
 	}
 
 	//We'll use an i16
-	if(value >> 16 == 0 || value >> 16 == -1){
+	if(max_size <= 16 || value >> 16 == 0 || value >> 16 == -1){
 		return immut_i16;
 	}
 
 	//We'll use an i32
-	if(value >> 32 == 0 || value >> 32 == -1){
+	if(max_size <= 32 || value >> 32 == 0 || value >> 32 == -1){
 		return immut_i32;
 	}
 
@@ -640,6 +640,33 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 
 	//We'll go based on what kind of constant that we have
 	switch(lookahead.tok){
+		//Regular signed short value 
+		case SHORT_CONST:
+			//Mark what it is
+			constant_node->constant_type = SHORT_CONST;
+
+			//Store the integer value
+			constant_node->constant_value.signed_short_value = atoi(lookahead.lexeme.string);
+
+			//Use the helper rule to determine what size int we should initially have
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_short_value, 16);
+
+			break;
+
+		//Regular unsigned short value 
+		case SHORT_CONST_FORCE_U:
+			//Mark what it is
+			constant_node->constant_type = SHORT_CONST_FORCE_U;
+
+			//Store the integer value
+			constant_node->constant_value.signed_short_value = atoi(lookahead.lexeme.string);
+
+			//Use the helper rule to determine what size int we should initially have
+			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_short_value, 16);
+
+			break;
+
+
 		//Regular signed int
 		case INT_CONST:
 			//Mark what it is
@@ -649,7 +676,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_value.signed_int_value = atoi(lookahead.lexeme.string);
 
 			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value);
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value, 32);
 
 			break;
 
@@ -661,7 +688,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_value.unsigned_int_value = atoi(lookahead.lexeme.string);
 
 			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_int_value); 
+			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_int_value, 32);
 			break;
 
 		//Hex constants are really just integers
@@ -672,7 +699,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->constant_value.signed_int_value = strtol(lookahead.lexeme.string, NULL, 0);
 
 			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value); 
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value, 32);
 
 			break;
 
@@ -684,8 +711,8 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Store the value we've been given
 			constant_node->constant_value.signed_long_value = atol(lookahead.lexeme.string);
 
-			//This is a signed i64
-			constant_node->inferred_type = immut_i64;
+			//Get the size up to 64 bits
+			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_long_value, 64);
 
 			break;
 
@@ -697,8 +724,7 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			//Store the value we've been given
 			constant_node->constant_value.unsigned_long_value = atol(lookahead.lexeme.string);
 
-			//By default, int constants are of type s_int64 
-			constant_node->inferred_type = immut_u64;
+			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_long_value, 64);
 
 			break;
 
@@ -1106,12 +1132,12 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 	//This will be an int const
-	const_node->constant_type = INT_CONST;
+	const_node->constant_type = INT_CONST_FORCE_U;
 	//Store the actual value of the type size
 	const_node->constant_value.unsigned_int_value = return_type->type_size;
 	//Grab and store type info
 	//This will always end up as a generic signed int
-	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(return_type->type_size);
+	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(return_type->type_size, 32);
 	//We cannot assign to this
 	const_node->is_assignable = FALSE;
 	//Store this too
@@ -1176,12 +1202,12 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	//Add the line number
 	const_node->line_number = parser_line_num;
 	//Add the constant
-	const_node->constant_type = INT_CONST;
+	const_node->constant_type = INT_CONST_FORCE_U;
 	//Store the actual value
 	const_node->constant_value.unsigned_int_value = type_size;
 	//Grab and store type info
 	//These will be generic signed ints
-	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(type_size);
+	const_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(type_size, 32);
 
 	//Finally we'll return this constant node
 	return const_node;
@@ -5881,7 +5907,7 @@ static u_int8_t enum_definer(FILE* fl){
 	//Now, based on our largest value, we need to determine the bit-width needed for this
 	//field. Does it need to be stored internally as a u8, u16, u32, or u64?
 	//This will *always* be the immutable version of the type
-	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value);
+	generic_type_t* type_needed = determine_required_minimum_unsigned_integer_type_size(largest_value, 64);
 
 	//Store this in the enum
 	mutable_enum_type->internal_values.enum_integer_type = type_needed;
