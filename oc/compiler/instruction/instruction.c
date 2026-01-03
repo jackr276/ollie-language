@@ -483,6 +483,13 @@ u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 			}
 			return FALSE;
 
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_short_constant == 0){
+				return TRUE;
+			}
+			return FALSE;
+
 		case CHAR_CONST:
 			if(constant->constant_value.char_constant == 0){
 				return TRUE;
@@ -515,6 +522,13 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant){
 			}
 			return FALSE;
 
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_short_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
 		case CHAR_CONST:
 			if(constant->constant_value.char_constant == 1){
 				return TRUE;
@@ -532,6 +546,12 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant){
  */
 u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
 	switch(constant->const_type){
+		case SHORT_CONST:
+			return IS_SIGNED_POWER_OF_2(constant->constant_value.signed_short_constant);
+			
+		case SHORT_CONST_FORCE_U:
+			return IS_UNSIGNED_POWER_OF_2(constant->constant_value.unsigned_short_constant);
+
 		case INT_CONST:
 			return IS_SIGNED_POWER_OF_2(constant->constant_value.signed_integer_constant);
 
@@ -567,6 +587,14 @@ u_int8_t is_constant_lea_compatible_power_of_2(three_addr_const_t* constant){
 
 	//Extraction
 	switch(constant->const_type){
+		case SHORT_CONST:
+			constant_value_expanded = constant->constant_value.signed_short_constant; 
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			constant_value_expanded = constant->constant_value.unsigned_short_constant; 
+			break;
+
 		case INT_CONST:
 			constant_value_expanded = constant->constant_value.signed_integer_constant; 
 			break;
