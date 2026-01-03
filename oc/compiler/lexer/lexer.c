@@ -769,6 +769,13 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 					lex_item.lexeme = lexeme;
 					lex_item.tok = LONG_CONST;
 					return lex_item;
+				
+				//The 's' or 'S' tells us that we're forcing to short
+				} else if(ch == 's' || ch == 'S'){
+					lex_item.line_num = line_num;
+					lex_item.lexeme = lexeme;
+					lex_item.tok = LONG_CONST;
+					return lex_item;
 
 				} else if (ch == 'u' || ch == 'U'){
 					//We are forcing this to be unsigned
@@ -778,6 +785,11 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 					//If this is an l, it's a long
 					if(ch2 == 'l' || ch2 == 'L'){
 						lex_item.tok = LONG_CONST_FORCE_U;
+
+					//Forcing an unsigned short constant
+					} else if(ch2 == 's' || ch2 == 'S'){
+						lex_item.tok = SHORT_CONST_FORCE_U;
+
 					} else {
 						//Put it back
 						PUT_BACK_CHAR(fl);
