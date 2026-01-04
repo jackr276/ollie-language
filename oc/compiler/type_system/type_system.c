@@ -560,17 +560,16 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
 			switch(true_source_type->type_class){
-				//We don't care about mutability here - we'll
-				//be copying the u64 so the value there is actually irrelevant, it's not a pointer
-				//that we're copying over
+				//We can assign any integer type to a pointer
 				case TYPE_CLASS_BASIC:
-					//This needs to be a u64, otherwise it's invalid
-					if(true_source_type->basic_type_token == U64){
-						//We will keep this as the pointer
-						return destination_type;
-					//Any other basic type will not work here
-					} else {
-						return NULL;
+					//Anything besides float and void work
+					switch(true_source_type->basic_type_token){
+						case F32:
+						case F64:
+						case VOID:
+							return NULL;
+						default:
+							return destination_type;
 					}
 
 				//Check if they're assignable
@@ -618,9 +617,11 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					//If this itself is a void pointer, then we're good
 					if(true_source_type->internal_values.is_void_pointer == TRUE){
 						return destination_type;
+
 					//This is also fine, we just give the destination type back
 					} else if(destination_type->internal_values.is_void_pointer == TRUE){
 						return destination_type;
+
 					//Let's see if what they point to is the exact same
 					} else {
 						/**
