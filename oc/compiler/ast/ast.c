@@ -6,6 +6,7 @@
 //Link to AST
 #include "ast.h"
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -3366,8 +3367,6 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 }
 
 
-//TODO NEEDS A DIFFERENT KIND OF FLOAT SUPPORT
-
 /**
  * Emit the != comparison of two given constant nodes. The result will be stored in the first argument
  *
@@ -3381,17 +3380,29 @@ void not_equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_n
 		case INT_CONST_FORCE_U:
 			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != constant_node2->constant_value.double_value;
+					break;
 				case LONG_CONST_FORCE_U:
-					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_long_value;
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != constant_node2->constant_value.unsigned_long_value;
 					break;
 				case LONG_CONST:
-					 constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					 constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != (u_int64_t)(constant_node2->constant_value.signed_long_value);
 					break;
 				case INT_CONST_FORCE_U:
 					 constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != constant_node2->constant_value.unsigned_int_value;
 					break;
+				case FLOAT_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != constant_node2->constant_value.float_value;
+					break;
 				case INT_CONST:
 					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != (u_int32_t)(constant_node2->constant_value.signed_short_value);
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != constant_node2->constant_value.unsigned_short_value;
 					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value != (u_int8_t)(constant_node2->constant_value.char_value);
@@ -3407,17 +3418,29 @@ void not_equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_n
 		case INT_CONST:
 			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != constant_node2->constant_value.double_value;
+					break;
 				case LONG_CONST_FORCE_U:
-					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_long_value;
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != (int64_t)(constant_node2->constant_value.unsigned_long_value);
 					break;
 				case LONG_CONST:
-					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					 constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != constant_node2->constant_value.signed_long_value;
 					break;
 				case INT_CONST_FORCE_U:
-					constant_node1->constant_value.signed_int_value = (u_int32_t)(constant_node1->constant_value.signed_int_value) != constant_node2->constant_value.unsigned_int_value;
+					 constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != (int32_t)(constant_node2->constant_value.unsigned_int_value);
+					break;
+				case FLOAT_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != constant_node2->constant_value.float_value;
 					break;
 				case INT_CONST:
-					constant_node1->constant_value.signed_int_value =  constant_node1->constant_value.signed_int_value != constant_node2->constant_value.signed_int_value;
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != constant_node2->constant_value.signed_int_value;
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != constant_node2->constant_value.signed_short_value;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != (int32_t)(constant_node2->constant_value.unsigned_short_value);
 					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value != constant_node2->constant_value.char_value;
@@ -3433,17 +3456,29 @@ void not_equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_n
 		case LONG_CONST_FORCE_U:
 			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.double_value;
+					break;
 				case LONG_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_long_value;
 					break;
 				case LONG_CONST:
-					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					 constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int64_t)(constant_node2->constant_value.signed_long_value);
 					break;
 				case INT_CONST_FORCE_U:
-					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_int_value;
+					 constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_int_value;
+					break;
+				case FLOAT_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.float_value;
 					break;
 				case INT_CONST:
 					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int32_t)(constant_node2->constant_value.signed_short_value);
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != constant_node2->constant_value.unsigned_short_value;
 					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value != (u_int8_t)(constant_node2->constant_value.char_value);
@@ -3459,17 +3494,29 @@ void not_equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_n
 		case LONG_CONST:
 			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.double_value;
+					break;
 				case LONG_CONST_FORCE_U:
-					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) != constant_node2->constant_value.unsigned_long_value;
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != (int64_t)(constant_node2->constant_value.unsigned_long_value);
 					break;
 				case LONG_CONST:
-					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.signed_long_value;
+					 constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.signed_long_value;
 					break;
 				case INT_CONST_FORCE_U:
-					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) != constant_node2->constant_value.unsigned_int_value;
+					 constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != (int32_t)(constant_node2->constant_value.unsigned_int_value);
+					break;
+				case FLOAT_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.float_value;
 					break;
 				case INT_CONST:
 					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.signed_int_value;
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.signed_short_value;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != (int32_t)(constant_node2->constant_value.unsigned_short_value);
 					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.char_value;
@@ -3485,20 +3532,32 @@ void not_equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_n
 		case CHAR_CONST:
 			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.double_value;
+					break;
 				case LONG_CONST_FORCE_U:
-					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) != constant_node2->constant_value.unsigned_long_value;
+					constant_node1->constant_value.char_value = constant_node1->constant_value.signed_long_value != (int64_t)(constant_node2->constant_value.unsigned_long_value);
 					break;
 				case LONG_CONST:
-					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value != constant_node2->constant_value.signed_long_value;
+					 constant_node1->constant_value.char_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.signed_long_value;
 					break;
 				case INT_CONST_FORCE_U:
-					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) != constant_node2->constant_value.unsigned_int_value;
+					 constant_node1->constant_value.char_value = constant_node1->constant_value.signed_long_value != (int32_t)(constant_node2->constant_value.unsigned_int_value);
+					break;
+				case FLOAT_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.float_value;
 					break;
 				case INT_CONST:
-					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value != constant_node2->constant_value.signed_int_value;
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.signed_int_value;
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.signed_short_value;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != (int32_t)(constant_node2->constant_value.unsigned_short_value);
 					break;
 				case CHAR_CONST:
-					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value != constant_node2->constant_value.char_value;
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value != constant_node2->constant_value.char_value;
 					break;
 				//This should never happen
 				default:
