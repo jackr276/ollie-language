@@ -586,6 +586,15 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						}
 					}
 
+					/**
+					 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+					 * memory regions of the same size
+					 */
+					if(get_type_size(destination_type->internal_types.points_to) != get_type_size(true_source_type->internal_types.member_type)){
+						return NULL;
+					}
+
 					//If this works, return the destination type
 					if(types_assignable(destination_type->internal_types.points_to, true_source_type->internal_types.member_type) != NULL){
 						return destination_type;
