@@ -26,6 +26,17 @@
 #define FINALIZER_CONSTANT_1 0xff51afd7ed558ccdULL
 #define FINALIZER_CONSTANT_2 0xc4ceb9fe1a85ec53ULL
 
+/**
+ * Print a generic warning for the symtab system
+ */
+#define PRINT_WARNING(info, line_number) \
+	fprintf(stdout, "\n[LINE %d: COMPILER WARNING]: %s\n", line_number, info)
+
+/**
+ * Atomically increment and return the local constant id
+ */
+#define INCREMENT_AND_GET_LOCAL_CONSTANT_ID local_constant_id++
+
 //Define a list of salts that can be used for mutable types
 static const u_int64_t mutability_salts[] = {
 	0xA3B1956359A1F3D1ULL,
@@ -48,24 +59,6 @@ static const u_int64_t mutability_salts[] = {
 
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
-
-
-/**
- * Atomically increment and return the local constant id
- */
-static u_int32_t increment_and_get_local_constant_id(){
-	return local_constant_id++;
-}
-
-
-/**
- * Print a generic warning for the type system. This is used when variables/functions are 
- * defined and not used
- */
-static void print_warning(char* info, u_int16_t line_number){
-	fprintf(stdout, "\n[LINE %d: COMPILER WARNING]: %s\n", line_number, info);
-}
-
 
 /**
  * Dynamically allocate a function symtab
@@ -1262,7 +1255,7 @@ local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_stri
 	local_const->local_constant_value.string_value = clone_dynamic_string(value);
 
 	//Now we'll add the ID
-	local_const->local_constant_id = increment_and_get_local_constant_id();
+	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
 
 	//Store what type we have
 	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_STRING;
@@ -1287,7 +1280,7 @@ local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value
 	local_const->local_constant_value.float_bit_equivalent = *((int32_t*)(&value));
 
 	//Now we'll add the ID
-	local_const->local_constant_id = increment_and_get_local_constant_id();
+	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
 
 	//Store what type we have
 	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_F32;
@@ -1312,7 +1305,7 @@ local_constant_t* f64_local_constant_alloc(generic_type_t* f64_type, double valu
 	local_const->local_constant_value.float_bit_equivalent = *((int64_t*)(&value));
 
 	//Now we'll add the ID
-	local_const->local_constant_id = increment_and_get_local_constant_id();
+	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
 
 	//Store what type we have
 	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_F64;
@@ -1945,7 +1938,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				(*num_warnings)++;
 
 				sprintf(info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
-				print_warning(info, record->line_number);
+				PRINT_WARNING(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
 
@@ -1954,7 +1947,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				(*num_warnings)++;
 
 				sprintf(info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
-				print_warning(info, record->line_number);
+				PRINT_WARNING(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
 
@@ -1963,7 +1956,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				(*num_warnings)++;
 
 				sprintf(info, "Function \"%s\" is called but never explicitly defined. First declared here:", record->func_name.string);
-				print_warning(info, record->line_number);
+				PRINT_WARNING(info, record->line_number);
 				//Also print where the function was defined
 				print_function_name(record);
 
@@ -2031,7 +2024,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 		//We have a non initialized variable
 		if(record->initialized == FALSE && is_memory_address_type(record->type_defined_as) == FALSE){
 			sprintf(info, "Variable \"%s\" may never be initialized. First defined here:", record->var_name.string);
-			print_warning(info, record->line_number);
+			PRINT_WARNING(info, record->line_number);
 			print_variable_name(record);
 			(*num_warnings)++;
 			//Go to the next iteration
@@ -2041,7 +2034,7 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 		//If it's mutable but never mutated
 		if(record->type_defined_as->mutability == MUTABLE && record->mutated == FALSE){
 			sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", record->var_name.string);
-			print_warning(info, record->line_number);
+			PRINT_WARNING(info, record->line_number);
 			print_variable_name(record);
 			(*num_warnings)++;
 		}

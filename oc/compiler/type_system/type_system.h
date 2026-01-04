@@ -62,6 +62,22 @@ typedef enum type_class_t {
 	TYPE_CLASS_ALIAS /* Alias types */
 } type_class_t;
 
+//========================= Utility Macros ============================
+/**
+ * Determine whether a converting move is required between the source and
+ * destination types. A converting move is only required when the destination
+ * type is larger than the source
+ */
+#define IS_CONVERTING_MOVE_REQUIRED(destination_type, source_type) \
+	((destination_type->type_size > source_type->type_size) ? TRUE : FALSE)
+
+/**
+ * Determine whether a type is or is not a void type
+ */
+#define IS_VOID_TYPE(type) \
+	((type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID) ? TRUE : FALSE)
+//========================= Utility Macros ============================
+
 
 /**
  * A lot of times we need optionality in a type system. The generic type provides this.
@@ -171,15 +187,18 @@ u_int8_t is_memory_region(generic_type_t* type);
 u_int8_t is_memory_address_type(generic_type_t* type);
 
 /**
- * Does assigning from source to destination require a converting move
- */
-u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_type_t* source_type);
-
-/**
  * Get the type that we need to align for. On structs, it's the largest
  * primitive member and on arrays, it's the member size
  */
 generic_type_t* get_base_alignment_type(generic_type_t* type);
+
+/**
+ * Get the alignment that will be used in the .data section for
+ * a global variable. For basic types, their type size is simply used.
+ * For all non_basic types, their alignment is rounded down to the nearest
+ * whole power of 2(for example, 48 would become 32 aligned, etc.)
+ */
+u_int32_t get_data_section_alignment(generic_type_t* type);
 
 /**
  * Is a type an unsigned 64 bit type? This is used for type conversions in 
@@ -216,11 +235,6 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type);
  * Do we need an expanding move to convert between two types?
  */
 u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_type_t* source_type);
-
-/**
- * Simple helper to check if a function is void
- */
-u_int8_t is_void_type(generic_type_t* type);
 
 /**
  * Determine the compatibility of two types and coerce appropraitely. The double pointer

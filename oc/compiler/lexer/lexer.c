@@ -61,20 +61,39 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
+//=============================== Private Utility Macros ================================
+/**
+ * Grab the next char in the stream
+ */
+#define GET_NEXT_CHAR(fl) fgetc(fl)
+
+
+/**
+ * Put back the char and update the token char num appropriately
+ */
+#define PUT_BACK_CHAR(fl) fseek(fl, -1, SEEK_CUR)
+//=============================== Private Utility Macros ================================
+
 
 /**
  * Helper that will determine if we have whitespace(ws) 
  */
-static u_int8_t is_ws(char ch, u_int32_t* line_num, u_int32_t* parser_line_num){
-	u_int8_t is_ws = ch == ' ' || ch == '\n' || ch == '\t';
-	
-	//Count if we have a higher line number
-	if(ch == '\n'){
-		(*line_num)++;
-		(*parser_line_num)++;
-	}
+static u_int8_t is_whitespace(char ch, u_int32_t* line_num, u_int32_t* parser_line_num){
+	switch(ch){
+		//Unique case - we'll bump our line number counts
+		case '\n':
+			(*line_num)++;
+			(*parser_line_num)++;
+			return TRUE;
 
-	return is_ws;
+		case ' ':
+		case '\t':
+			return TRUE;
+
+		//Anything else just fall right out
+		default:
+			return FALSE;
+	}
 }
 
 
@@ -113,23 +132,6 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int16_t line_n
 
 	//Give back the lexer item
 	return lex_item;
-}
-
-
-/**
- * Grab the next char in the stream
- */
-static char get_next_char(FILE* fl){
-	char ch = fgetc(fl);
-	return ch;
-}
-
-
-/**
- * Put back the char and update the token char num appropriately
- */
-static void put_back_char(FILE* fl){
-	fseek(fl, -1, SEEK_CUR);
 }
 
 
@@ -175,7 +177,7 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 	}
 
 	//So long as we don't see a backslash, we keep going
-	ch = get_next_char(fl);
+	ch = GET_NEXT_CHAR(fl);
 
 	//So long as we don't see this move along, adding ch into 
 	//our lexeme
@@ -184,7 +186,7 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 		dynamic_string_add_char_to_back(&asm_string, ch);
 
 		//Refresh the char
-		ch = get_next_char(fl);
+		ch = GET_NEXT_CHAR(fl);
 	}
 	
 	//Store the asm string as the lexeme
@@ -236,12 +238,12 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 	lex_item.lexeme = lexeme;
 
 	//We'll run through character by character until we hit EOF
-	while((ch = get_next_char(fl)) != EOF){
+	while((ch = GET_NEXT_CHAR(fl)) != EOF){
 		//Switch on the current state
 		switch(current_state){
 			case IN_START:
 				//If we see whitespace we just get out
-				if(is_ws(ch, &line_num, parser_line_num)){
+				if(is_whitespace(ch, &line_num, parser_line_num) == TRUE){
 					continue;
 				}
 
@@ -250,7 +252,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 					//We could be seeing a comment here
 					case '/':
 						//Grab the next char, if we see a '*' then we're in a comment
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 							
 						//If we're here we have a comment
 						if(ch2 == '*'){
@@ -268,7 +270,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 	
 						} else {
 							//"Put back" the char
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 
 							//Prepare the token and return it
 							lex_item.tok = F_SLASH;
@@ -277,7 +279,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						}
 
 					case '+':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 						
 						//We could see++
 						if(ch2 == '+'){
@@ -294,7 +296,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 							return lex_item;
 						} else {
 							//"Put back" the char
-							put_back_char(fl);	
+							PUT_BACK_CHAR(fl);	
 							lex_item.tok = PLUS;
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -313,7 +315,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						return lex_item;
 
 					case '-':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 
 						if(ch2 == '-'){
 							//Prepare and return
@@ -363,28 +365,28 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						//Otherwise we didn't find anything here
 						} else {
 							//"Put back" the char
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = MINUS;
 							lex_item.line_num = line_num;
 							return lex_item;
 						}
 
 					case '*':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 
 						if(ch2 == '='){
 							lex_item.tok = STAREQ;
 							lex_item.line_num = line_num;
 							return lex_item;
 						} else {
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = STAR;
 							lex_item.line_num = line_num;
 							return lex_item;
 						}
 
 					case '=':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 						
 						//If we get this then it's +=
 						if(ch2 == '='){
@@ -402,7 +404,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 
 						} else {
 							//"Put back" the char
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 
 							lex_item.tok = EQUALS;
 							lex_item.line_num = line_num;
@@ -410,7 +412,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						}
 
 					case '&':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 
 						if(ch2 == '&'){
 							//Prepare and return
@@ -426,14 +428,14 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 							return lex_item;
 
 						} else {
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = SINGLE_AND;
 							lex_item.line_num = line_num;
 							return lex_item;
 						}
 
 					case '|':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 						//If we get this then it's +=
 						if(ch2 == '|'){
 							//Prepare and return
@@ -448,7 +450,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 							return lex_item;
 						} else {
 							//"Put back" the char
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = SINGLE_OR;
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -460,7 +462,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						return lex_item;
 
 					case '%':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 
 						//We could see %=
 						if(ch2 == '='){
@@ -474,7 +476,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						}
 
 					case ':':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 
 						//We have a ":="
 						if(ch2 == '='){
@@ -484,7 +486,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 							return lex_item;
 						} else {
 							//Put it back
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = COLON;
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -501,7 +503,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						return lex_item;
 
 					case '^':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 
 						if(ch2 == '='){
 							lex_item.tok = XOREQ;
@@ -509,7 +511,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 							return lex_item;
 
 						} else {
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = CARROT;
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -542,7 +544,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 
 					case '.':
 						//Let's see what we have here
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 						if(ch2 >= '0' && ch2 <= '9'){
 							//Allocate the string
 							lexeme = dynamic_string_alloc();
@@ -556,7 +558,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 
 						} else {
 							//Put back ch2
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = DOT;
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -575,7 +577,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						return lex_item;
 
 					case '!':
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 						if(ch2 == '='){
 							//Prepare and return
 							lex_item.tok = NOT_EQUALS;
@@ -583,7 +585,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 							return lex_item;
 						} else {
 							//Put it back
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = L_NOT;
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -600,7 +602,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 					//Beginning of a char const
 					case '\'':
 						//Grab the next char
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 
 						//Allocate the lexeme here
 						lexeme = dynamic_string_alloc();
@@ -609,7 +611,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 						dynamic_string_add_char_to_back(&lexeme, ch2);
 
 						//Now we must see another single quote
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 
 						//If this is the case, then we've messed up
 						if(ch2 != '\''){
@@ -627,9 +629,9 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 
 					case '<':
 						//Grab the next char
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 						if(ch2 == '<'){
-							ch3 = get_next_char(fl);
+							ch3 = GET_NEXT_CHAR(fl);
 
 							if(ch3 == '='){
 								lex_item.tok = LSHIFTEQ;
@@ -637,7 +639,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 								return lex_item;
 
 							} else {
-								put_back_char(fl);
+								PUT_BACK_CHAR(fl);
 								lex_item.tok = L_SHIFT;
 								lex_item.line_num = line_num;
 								return lex_item;
@@ -648,7 +650,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 							lex_item.line_num = line_num;
 							return lex_item;
 						} else {
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = L_THAN;
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -657,16 +659,16 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 
 					case '>':
 						//Grab the next char
-						ch2 = get_next_char(fl);
+						ch2 = GET_NEXT_CHAR(fl);
 						if(ch2 == '>'){
-							ch3 = get_next_char(fl);
+							ch3 = GET_NEXT_CHAR(fl);
 							if(ch3 == '='){
 								lex_item.tok = RSHIFTEQ;
 								lex_item.line_num = line_num;
 								return lex_item;
 
 							} else {
-								put_back_char(fl);
+								PUT_BACK_CHAR(fl);
 								lex_item.tok = R_SHIFT;
 								lex_item.line_num = line_num;
 								return lex_item;
@@ -677,7 +679,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 							lex_item.line_num = line_num;
 							return lex_item;
 						} else {
-							put_back_char(fl);
+							PUT_BACK_CHAR(fl);
 							lex_item.tok = G_THAN;
 							lex_item.line_num = line_num;
 							return lex_item;
@@ -718,7 +720,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 				} else {
 					//If we get here, we need to get out of the thing
 					//We'll put this back as we went too far
-					put_back_char(fl);
+					PUT_BACK_CHAR(fl);
 					//Return if we have ident or keyword
 					return identifier_or_keyword(lexeme, line_num);
 				}
@@ -767,18 +769,30 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 					lex_item.lexeme = lexeme;
 					lex_item.tok = LONG_CONST;
 					return lex_item;
+				
+				//The 's' or 'S' tells us that we're forcing to short
+				} else if(ch == 's' || ch == 'S'){
+					lex_item.line_num = line_num;
+					lex_item.lexeme = lexeme;
+					lex_item.tok = LONG_CONST;
+					return lex_item;
 
 				} else if (ch == 'u' || ch == 'U'){
 					//We are forcing this to be unsigned
 					//We can still see "l", so let's check
-					ch2 = get_next_char(fl);
+					ch2 = GET_NEXT_CHAR(fl);
 
 					//If this is an l, it's a long
 					if(ch2 == 'l' || ch2 == 'L'){
 						lex_item.tok = LONG_CONST_FORCE_U;
+
+					//Forcing an unsigned short constant
+					} else if(ch2 == 's' || ch2 == 'S'){
+						lex_item.tok = SHORT_CONST_FORCE_U;
+
 					} else {
 						//Put it back
-						put_back_char(fl);
+						PUT_BACK_CHAR(fl);
 						lex_item.tok = INT_CONST_FORCE_U;
 					}
 
@@ -791,7 +805,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 				} else {
 					//Otherwise we're out
 					//"Put back" the char
-					put_back_char(fl);
+					PUT_BACK_CHAR(fl);
 
 					//Populate and return
 					if(seen_hex == TRUE){
@@ -824,7 +838,7 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 
 				} else {
 					//Put back the char
-					put_back_char(fl);
+					PUT_BACK_CHAR(fl);
 					
 					//We'll give this back now
 					lex_item.tok = FLOAT_CONST;
@@ -845,13 +859,13 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 					lex_item.line_num = line_num;
 					return lex_item;
 				//Escape char
-				} else if (ch == '\\'){ //TODO LOOK AT ME
+				} else if (ch == '\\'){
 					//Consume the next character, whatever it is
-					is_ws(fgetc(fl), &line_num, parser_line_num);
+					is_whitespace(fgetc(fl), &line_num, parser_line_num);
 				} else {
 					//Otherwise we'll just keep adding here
 					//Just for line counting
-					is_ws(ch, &line_num, parser_line_num);
+					is_whitespace(ch, &line_num, parser_line_num);
 					dynamic_string_add_char_to_back(&lexeme, ch);
 				}
 
@@ -861,19 +875,19 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 			case IN_MULTI_COMMENT:
 				//Are we at the start of an escape sequence?
 				if(ch == '*'){
-					ch2 = get_next_char(fl);
+					ch2 = GET_NEXT_CHAR(fl);
 					if(ch2 == '/'){
 						//We are now out of the comment
 						current_state = IN_START;
 						//Reset the char count
 						break;
 					} else {
-						put_back_char(fl);
+						PUT_BACK_CHAR(fl);
 						break;
 					}
 				}
 				//Otherwise just check for whitespace
-				is_ws(ch, &line_num, parser_line_num);
+				is_whitespace(ch, &line_num, parser_line_num);
 				break;
 
 			//If we're in a single line comment
@@ -1024,23 +1038,4 @@ void initialize_lexer(){
 void deinitialize_lexer(){
 	//Deallocate the lexstack
 	lex_stack_dealloc(&pushed_back_tokens);
-}
-
-
-/**
- * Resetting the file allows us to start fresh from
- * the top
-*/
-void reset_file(FILE* fl){
-	//Reset the file pointer
-	fseek(fl, 0, SEEK_SET);
-	//Now we've reset
-}
-
-
-/**
- * Get the current file pointer position
- */
-int64_t get_current_file_position(FILE* fl){
-	return ftell(fl);
 }

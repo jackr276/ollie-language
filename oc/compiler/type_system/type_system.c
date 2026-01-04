@@ -46,20 +46,6 @@ u_int8_t is_memory_address_type(generic_type_t* type){
 
 
 /**
- * Does assigning from source to destination require a converting move
- */
-u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_type_t* source_type){
-	//Very simple rule(for now), just compare the sizes
-	if(destination_type->type_size > source_type->type_size){
-		return TRUE;
-	}
-
-	//Otherwise it's fine
-	return FALSE;
-}
-
-
-/**
  * What is the value that this needs to be aligned by?
  *
  * For arrays -> we align so that the base address is a multiple of the member type
@@ -82,6 +68,38 @@ generic_type_t* get_base_alignment_type(generic_type_t* type){
 		default:
 			return type;
 	}
+}
+
+
+/**
+ * Get the alignment that will be used in the .data section for
+ * a global variable. For basic types, their type size is simply used.
+ * For all non_basic types, their alignment is rounded down to the nearest
+ * whole power of 2(for example, 48 would become 32 aligned, etc.)
+ *
+ * 00010011011
+ */
+u_int32_t get_data_section_alignment(generic_type_t* type){
+	//For any non-basic type, we will need to use 
+	//the nearest power of 2 as the alignment
+	if(type->type_class != TYPE_CLASS_BASIC){
+		//If the type size is 16 or less(small arrays/structs), then
+		//we just use that
+		if(type->type_size <= 16){
+			return type->type_size;
+		}
+
+		//Anything less than 32 align by 16
+		if(type->type_size < 32){
+			return 16;
+		}
+
+		//Other than this, we'll just align by 32 as other alignments may get too large
+		return 32;
+	}
+
+	//Otherwise, we just return the type size
+	return type->type_size;
 }
 
 
@@ -133,22 +151,6 @@ u_int8_t is_type_32_bit_int(generic_type_t* type){
 		default:
 			return FALSE;
 	}
-}
-
-
-/**
- * Simple helper to check if a type is void
- */
-u_int8_t is_void_type(generic_type_t* type){
-	if(type->type_class != TYPE_CLASS_BASIC){
-		return FALSE;
-	}
-
-	if(type->basic_type_token != VOID){
-		return FALSE;
-	}
-
-	return TRUE;
 }
 
 

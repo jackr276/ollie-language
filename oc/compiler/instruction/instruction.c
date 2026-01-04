@@ -15,6 +15,38 @@
 #include "../utils/dynamic_string/dynamic_string.h"
 #include "../utils/constants.h"
 
+
+//======================= Utility macros ===================
+/**
+ * Let's determine if a value is a positive power of 2.
+ * Here's how this will work. In binary, powers of 2 look like:
+ * 0010
+ * 0100
+ * 1000
+ * ....
+ *
+ * In other words, they have exactly 1 on bit that is not in the LSB position
+ *
+ * Here's an example: 5 = 0101, so 5-1 = 0100
+ *
+ * 0101 & (0100) = 0100 which is 4, not 0
+ *
+ * How about 8?
+ * 8 is 1000
+ * 8 - 1 = 0111
+ *
+ * 1000 & 0111 = 0, so 8 is a power of 2
+ *
+ * Therefore, the formula we will use is value & (value - 1) == 0
+ */
+#define IS_SIGNED_POWER_OF_2(value)\
+	(((value > 0) && ((value & (value - 1)) == 0)) ? TRUE : FALSE)
+
+#define IS_UNSIGNED_POWER_OF_2(value)\
+	(((value & (value - 1)) == 0) ? TRUE : FALSE)
+
+//======================= Utility macros ===================
+
 //The atomically increasing temp name id
 static int32_t current_temp_id = 0;
 
@@ -54,79 +86,12 @@ global_variable_t* create_global_variable(symtab_variable_record_t* variable, th
 
 	//Copy these over
 	var->variable = variable;
+	//It never hurts to have a quick way to reference this
+	var->variable_type = variable->type_defined_as;
 	var->initializer_value.constant_value = value;
 
 	//Give the var back
 	return var;
-}
-
-
-/**
- * Let's determine if a value is a positive power of 2.
- * Here's how this will work. In binary, powers of 2 look like:
- * 0010
- * 0100
- * 1000
- * ....
- *
- * In other words, they have exactly 1 on bit that is not in the LSB position
- *
- * Here's an example: 5 = 0101, so 5-1 = 0100
- *
- * 0101 & (0100) = 0100 which is 4, not 0
- *
- * How about 8?
- * 8 is 1000
- * 8 - 1 = 0111
- *
- * 1000 & 0111 = 0, so 8 is a power of 2
- *
- * Therefore, the formula we will use is value & (value - 1) == 0
- */
-static u_int8_t is_signed_power_of_2(int64_t value){
-	//If it's negative or 0, we're done here
-	if(value <= 0){
-		return FALSE;
-	}
-
-	//Using the bitwise formula described above
-	if((value & (value - 1)) == 0){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
-}
-
-
-/**
- * Let's determine if a value is a positive power of 2.
- * Here's how this will work. In binary, powers of 2 look like:
- * 0010
- * 0100
- * 1000
- * ....
- *
- * In other words, they have exactly 1 on bit that is not in the LSB position
- *
- * Here's an example: 5 = 0101, so 5-1 = 0100
- *
- * 0101 & (0100) = 0100 which is 4, not 0
- *
- * How about 8?
- * 8 is 1000
- * 8 - 1 = 0111
- *
- * 1000 & 0111 = 0, so 8 is a power of 2
- *
- * Therefore, the formula we will use is value & (value - 1) == 0
- */
-static u_int8_t is_unsigned_power_of_2(u_int64_t value){
-	//Using the bitwise formula described above
-	if((value & (value - 1)) == 0){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
 }
 
 
@@ -518,6 +483,13 @@ u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 			}
 			return FALSE;
 
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_short_constant == 0){
+				return TRUE;
+			}
+			return FALSE;
+
 		case CHAR_CONST:
 			if(constant->constant_value.char_constant == 0){
 				return TRUE;
@@ -550,6 +522,13 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant){
 			}
 			return FALSE;
 
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_short_constant == 1){
+				return TRUE;
+			}
+			return FALSE;
+
 		case CHAR_CONST:
 			if(constant->constant_value.char_constant == 1){
 				return TRUE;
@@ -567,21 +546,27 @@ u_int8_t is_constant_value_one(three_addr_const_t* constant){
  */
 u_int8_t is_constant_power_of_2(three_addr_const_t* constant){
 	switch(constant->const_type){
+		case SHORT_CONST:
+			return IS_SIGNED_POWER_OF_2(constant->constant_value.signed_short_constant);
+			
+		case SHORT_CONST_FORCE_U:
+			return IS_UNSIGNED_POWER_OF_2(constant->constant_value.unsigned_short_constant);
+
 		case INT_CONST:
-			return is_signed_power_of_2(constant->constant_value.signed_integer_constant);
+			return IS_SIGNED_POWER_OF_2(constant->constant_value.signed_integer_constant);
 
 		case INT_CONST_FORCE_U:
-			return is_unsigned_power_of_2(constant->constant_value.unsigned_integer_constant);
+			return IS_UNSIGNED_POWER_OF_2(constant->constant_value.unsigned_integer_constant);
 
 		case LONG_CONST:
-			return is_signed_power_of_2(constant->constant_value.signed_long_constant);
+			return IS_SIGNED_POWER_OF_2(constant->constant_value.signed_long_constant);
 
 		case LONG_CONST_FORCE_U:
-			return is_unsigned_power_of_2(constant->constant_value.unsigned_long_constant);
+			return IS_UNSIGNED_POWER_OF_2(constant->constant_value.unsigned_long_constant);
 
 		//Chars are always unsigned
 		case CHAR_CONST:
-			return is_unsigned_power_of_2(constant->constant_value.char_constant);
+			return IS_UNSIGNED_POWER_OF_2(constant->constant_value.char_constant);
 
 		//By default just return false
 		default:
@@ -602,6 +587,14 @@ u_int8_t is_constant_lea_compatible_power_of_2(three_addr_const_t* constant){
 
 	//Extraction
 	switch(constant->const_type){
+		case SHORT_CONST:
+			constant_value_expanded = constant->constant_value.signed_short_constant; 
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			constant_value_expanded = constant->constant_value.unsigned_short_constant; 
+			break;
+
 		case INT_CONST:
 			constant_value_expanded = constant->constant_value.signed_integer_constant; 
 			break;
@@ -1580,6 +1573,59 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 
 
 /**
+ * Specialized printing based on what kind of constant is printed out
+ * in a global variable context
+ */
+static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_variable_constant){
+	//For any float constant printing
+	int32_t lower_32_bits;
+	int32_t upper_32_bits;
+
+	//Go based on the register type, not anything else. We will always print the signed version
+	//because at the end of the day we're just trying to write down the bit values, nothing else
+	switch(global_variable_constant->const_type){
+		case CHAR_CONST:
+			fprintf(fl, "\t.byte %d\n", global_variable_constant->constant_value.char_constant);
+			break;
+		case SHORT_CONST:
+			fprintf(fl, "\t.value %d\n", global_variable_constant->constant_value.signed_short_constant);
+			break;
+		case SHORT_CONST_FORCE_U:
+			fprintf(fl, "\t.value %d\n", global_variable_constant->constant_value.unsigned_short_constant);
+			break;
+		case INT_CONST:
+			fprintf(fl, "\t.long %d\n", global_variable_constant->constant_value.signed_integer_constant);
+			break;
+		case INT_CONST_FORCE_U:
+			fprintf(fl, "\t.long %d\n", global_variable_constant->constant_value.unsigned_integer_constant);
+			break;
+		case LONG_CONST:
+			fprintf(fl, "\t.quad %ld\n", global_variable_constant->constant_value.signed_long_constant);
+			break;
+		case LONG_CONST_FORCE_U:
+			fprintf(fl, "\t.quad %ld\n", global_variable_constant->constant_value.unsigned_long_constant);
+			break;
+		case FLOAT_CONST:
+			//Cast to an int, then dereference. we want the bytes, not an estimation
+			lower_32_bits = *((int32_t*)(&(global_variable_constant->constant_value.float_constant)));
+			fprintf(fl,  "\t.long %d\n", lower_32_bits);
+			break;
+		case DOUBLE_CONST:
+			//Grab the lower 32 bits out first
+			lower_32_bits = *((int64_t*)(&(global_variable_constant->constant_value.double_constant))) & 0xFFFFFFFF;
+			//Then the upper 32
+			upper_32_bits = (*((int64_t*)(&(global_variable_constant->constant_value.double_constant))) >> 32) & 0xFFFFFFFF;
+			fprintf(fl,  "\t.long %d\n\t.long %d\n", lower_32_bits, upper_32_bits);
+			break;
+		//Catch-all should anything go wrong
+		default:
+			printf("Fatal internal compiler error: unrecognized global variable type encountered\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Print all given global variables who's use count is not 0
  */
 void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
@@ -1611,7 +1657,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		}
 
 		//Now print out the alignment
-		fprintf(fl, "\t.align %d\n", get_base_alignment_type(variable->variable->type_defined_as)->type_size);
+		fprintf(fl, "\t.align %d\n", get_data_section_alignment(variable->variable->type_defined_as));
 		
 		//Now print out our type, it's always @Object
 		fprintf(fl, "\t.type %s, @object\n", name);
@@ -1621,7 +1667,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 
 		//Now fianlly we'll print the value out
 		fprintf(fl, "%s:\n", name);
-		
+
 		//Go based on what kind of initializer we have
 		switch(variable->initializer_type){
 			//If we have no initializer, we make everything go to zero
@@ -1631,7 +1677,8 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 				
 			//For a constant, we print the value out as a .long
 			case GLOBAL_VAR_INITIALIZER_CONSTANT:
-				fprintf(fl, "\t.long %ld\n", variable->initializer_value.constant_value->constant_value.signed_long_constant);
+				//We'll add some special handling here - some constants take special treatment
+				print_global_variable_constant(fl, variable->initializer_value.constant_value);
 				break;
 
 			//For an array, we loop through and print them all as constants in order
@@ -1645,7 +1692,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 					three_addr_const_t* constant_value = dynamic_array_get_at(&array_initializer_values, i);
 
 					//Emit the constant value here
-					fprintf(fl, "\t.long %ld\n", constant_value->constant_value.signed_long_constant);
+					print_global_variable_constant(fl, constant_value);
 				}
 
 				break;
@@ -1671,6 +1718,12 @@ void print_live_range(FILE* fl, live_range_t* live_range){
  */
 static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
+		case SHORT_CONST:
+			fprintf(fl, "%d", constant->constant_value.signed_short_constant);
+			break;
+		case SHORT_CONST_FORCE_U:
+			fprintf(fl, "%d", constant->constant_value.unsigned_short_constant);
+			break;
 		case INT_CONST:
 			fprintf(fl, "%d", constant->constant_value.signed_integer_constant);
 			break;
@@ -2311,6 +2364,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
  */
 static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
+		case SHORT_CONST:
+			fprintf(fl, "$%d", constant->constant_value.signed_short_constant);
+			break;
+		case SHORT_CONST_FORCE_U:
+			fprintf(fl, "$%d", constant->constant_value.unsigned_short_constant);
+			break;
 		case INT_CONST:
 			fprintf(fl, "$%d", constant->constant_value.signed_integer_constant);
 			break;
@@ -2339,6 +2398,16 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
  */
 static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
+		case SHORT_CONST:
+			if(constant->constant_value.signed_short_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.signed_short_constant);
+			}
+			break;
+		case SHORT_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_short_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.unsigned_short_constant);
+			}
+			break;
 		case INT_CONST:
 			if(constant->constant_value.signed_integer_constant != 0){
 				fprintf(fl, "%d", constant->constant_value.signed_integer_constant);
@@ -3990,6 +4059,68 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 
 
 /**
+ * Emit a constant for the express purpose of being used in a global variable. Such
+ * a constant does not need to abide by the same rules that non-global constants
+ * need to because it is already in the ELF text and not trapped in the assembly
+ */
+three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node){
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_consts, constant);
+
+	//Now we'll assign the appropriate values
+	constant->const_type = const_node->constant_type; 
+	constant->type = const_node->inferred_type;
+
+	//Based on the type we'll make assignments. It'll be said again here - this is the only
+	//time that double/float constants can be emitted directly without the use of the .LC system
+	switch(constant->const_type){
+		case CHAR_CONST:
+			constant->constant_value.char_constant = const_node->constant_value.char_value;
+			break;
+		case INT_CONST:
+			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
+			break;
+		case INT_CONST_FORCE_U:
+			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
+			break;
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
+			break;
+		case LONG_CONST:
+			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
+			break;
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
+			break;
+		case DOUBLE_CONST:
+			constant->constant_value.double_constant = const_node->constant_value.double_value;
+			break;
+		case FLOAT_CONST:
+			constant->constant_value.float_constant = const_node->constant_value.float_value;
+			break;
+		//These need to be support at some point - but they are currently not supported
+		case STR_CONST:
+		case FUNC_CONST:
+			printf("Fatal internal compiler error: string and function pointer constants are not yet supported in a global context\n");
+			exit(1);
+		//Some very weird error here
+		default:
+			printf("Fatal internal compiler error: unrecognizable constant type found in constant\n");
+			exit(1);
+	}
+	
+	//Once all that is done, we can leave
+	return constant;
+}
+
+
+/**
  * Create and return a constant three address var
  */
 three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
@@ -4007,6 +4138,12 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	switch(constant->const_type){
 		case CHAR_CONST:
 			constant->constant_value.char_constant = const_node->constant_value.char_value;
+			break;
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
 			break;
 		case INT_CONST:
 			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
@@ -4963,6 +5100,24 @@ three_addr_const_t* sum_constant_with_raw_int64_value(three_addr_const_t* consta
 three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant){
 	//Go based on the first one's type
 	switch(constant->const_type){
+		case SHORT_CONST:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.signed_short_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			//Reassign
+			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_short_constant;
+
+			//Multiply
+			constant->constant_value.signed_long_constant *= raw_constant;
+
+			break;
+
 		case INT_CONST_FORCE_U:
 			//Reassign
 			constant->constant_value.signed_long_constant = constant->constant_value.unsigned_integer_constant;
@@ -5032,16 +5187,22 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
-					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.unsigned_long_constant;
+					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.unsigned_long_constant;
 					break;
 				case LONG_CONST:
-					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.signed_long_constant;
+					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.signed_long_constant;
 					break;
 				case INT_CONST_FORCE_U:
 					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.unsigned_integer_constant;
 					break;
 				case INT_CONST:
 					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.unsigned_short_constant;
 					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.char_constant;
@@ -5058,16 +5219,22 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
-					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.unsigned_long_constant;
+					constant1->constant_value.signed_integer_constant *= constant2->constant_value.unsigned_long_constant;
 					break;
 				case LONG_CONST:
-					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.signed_long_constant;
+					constant1->constant_value.signed_integer_constant *= constant2->constant_value.signed_long_constant;
 					break;
 				case INT_CONST_FORCE_U:
 					constant1->constant_value.signed_integer_constant *= constant2->constant_value.unsigned_integer_constant;
 					break;
 				case INT_CONST:
 					constant1->constant_value.signed_integer_constant *= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_integer_constant *= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant *= constant2->constant_value.unsigned_short_constant;
 					break;
 				case CHAR_CONST:
 					constant1->constant_value.signed_integer_constant *= constant2->constant_value.char_constant;
@@ -5095,6 +5262,12 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.signed_integer_constant;
 					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.unsigned_short_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.char_constant;
 					break;
@@ -5121,8 +5294,79 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.signed_long_constant *= constant2->constant_value.signed_integer_constant;
 					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_long_constant *= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant *= constant2->constant_value.unsigned_short_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.signed_long_constant *= constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case SHORT_CONST:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant *= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_short_constant *= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant *= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_short_constant *= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_short_constant *= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant *= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_short_constant *= constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+
+			break;
+			
+
+		case SHORT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.char_constant;
 					break;
 				//This should never happen
 				default:
@@ -5146,6 +5390,12 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 					break;
 				case INT_CONST:
 					constant1->constant_value.char_constant *= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.char_constant *= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.char_constant *= constant2->constant_value.unsigned_short_constant;
 					break;
 				case CHAR_CONST:
 					constant1->constant_value.char_constant *= constant2->constant_value.char_constant;
@@ -5178,16 +5428,22 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
-					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_long_constant;
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.unsigned_long_constant;
 					break;
 				case LONG_CONST:
-					constant1->constant_value.unsigned_long_constant += constant2->constant_value.signed_long_constant;
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.signed_long_constant;
 					break;
 				case INT_CONST_FORCE_U:
 					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.unsigned_integer_constant;
 					break;
 				case INT_CONST:
 					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.unsigned_short_constant;
 					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.char_constant;
@@ -5204,16 +5460,22 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
-					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_long_constant;
+					constant1->constant_value.signed_integer_constant += constant2->constant_value.unsigned_long_constant;
 					break;
 				case LONG_CONST:
-					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.signed_long_constant;
+					constant1->constant_value.signed_integer_constant += constant2->constant_value.signed_long_constant;
 					break;
 				case INT_CONST_FORCE_U:
 					constant1->constant_value.signed_integer_constant += constant2->constant_value.unsigned_integer_constant;
 					break;
 				case INT_CONST:
 					constant1->constant_value.signed_integer_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_integer_constant += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant += constant2->constant_value.unsigned_short_constant;
 					break;
 				case CHAR_CONST:
 					constant1->constant_value.signed_integer_constant += constant2->constant_value.char_constant;
@@ -5241,6 +5503,12 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case INT_CONST:
 					constant1->constant_value.unsigned_long_constant += constant2->constant_value.signed_integer_constant;
 					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_short_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_long_constant += constant2->constant_value.char_constant;
 					break;
@@ -5267,8 +5535,79 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case INT_CONST:
 					constant1->constant_value.signed_long_constant += constant2->constant_value.signed_integer_constant;
 					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_long_constant += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant += constant2->constant_value.unsigned_short_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.signed_long_constant += constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case SHORT_CONST:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant += constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_short_constant += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_short_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_short_constant += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant += constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_short_constant += constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+			
+
+		case SHORT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant += constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_short_constant += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_short_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_short_constant += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant += constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_short_constant += constant2->constant_value.char_constant;
 					break;
 				//This should never happen
 				default:
@@ -5292,6 +5631,12 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 					break;
 				case INT_CONST:
 					constant1->constant_value.char_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.char_constant += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.char_constant += constant2->constant_value.unsigned_short_constant;
 					break;
 				case CHAR_CONST:
 					constant1->constant_value.char_constant += constant2->constant_value.char_constant;
@@ -5324,16 +5669,22 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
-					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.unsigned_long_constant;
+					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.unsigned_long_constant;
 					break;
 				case LONG_CONST:
-					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.signed_long_constant;
+					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.signed_long_constant;
 					break;
 				case INT_CONST_FORCE_U:
 					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.unsigned_integer_constant;
 					break;
 				case INT_CONST:
 					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.unsigned_short_constant;
 					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.char_constant;
@@ -5350,16 +5701,22 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
-					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.unsigned_long_constant;
+					constant1->constant_value.signed_integer_constant -= constant2->constant_value.unsigned_long_constant;
 					break;
 				case LONG_CONST:
-					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.signed_long_constant;
+					constant1->constant_value.signed_integer_constant -= constant2->constant_value.signed_long_constant;
 					break;
 				case INT_CONST_FORCE_U:
 					constant1->constant_value.signed_integer_constant -= constant2->constant_value.unsigned_integer_constant;
 					break;
 				case INT_CONST:
 					constant1->constant_value.signed_integer_constant -= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_integer_constant -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant -= constant2->constant_value.unsigned_short_constant;
 					break;
 				case CHAR_CONST:
 					constant1->constant_value.signed_integer_constant -= constant2->constant_value.char_constant;
@@ -5387,6 +5744,12 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.signed_integer_constant;
 					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.unsigned_short_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.char_constant;
 					break;
@@ -5413,8 +5776,79 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.signed_long_constant -= constant2->constant_value.signed_integer_constant;
 					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_long_constant -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant -= constant2->constant_value.unsigned_short_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.signed_long_constant -= constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case SHORT_CONST:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant -= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_short_constant -= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant -= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_short_constant -= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_short_constant -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant -= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_short_constant -= constant2->constant_value.char_constant;
+					break;
+				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+
+			break;
+			
+
+		case SHORT_CONST_FORCE_U:
+			//Now go based on the second one's type
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.char_constant;
 					break;
 				//This should never happen
 				default:
@@ -5438,6 +5872,12 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 					break;
 				case INT_CONST:
 					constant1->constant_value.char_constant -= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.char_constant -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.char_constant -= constant2->constant_value.unsigned_short_constant;
 					break;
 				case CHAR_CONST:
 					constant1->constant_value.char_constant -= constant2->constant_value.char_constant;

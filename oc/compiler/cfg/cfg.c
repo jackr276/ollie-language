@@ -8230,7 +8230,7 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 			//This is really our base case
 			case AST_NODE_TYPE_CONSTANT:
 				//Emit the constant and get it into the array
-				dynamic_array_add(initializer_values, emit_constant(cursor));
+				dynamic_array_add(initializer_values, emit_global_variable_constant(cursor));
 				break;
 
 			default:
@@ -8285,7 +8285,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
 
 			//All we need to do here
-			global_variable->initializer_value.constant_value = emit_constant(initializer);
+			global_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
 
 			break;
 

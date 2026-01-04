@@ -5351,7 +5351,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				 * move in before the store instruction because x86 assembly does not allow us
 				 * to do *to memory* converting moves
 				 */
-				} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
+				} else if(IS_CONVERTING_MOVE_REQUIRED(destination_type, source_type) == TRUE) {
 					//Emit a temp var that is the destination's type
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
@@ -5415,7 +5415,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				 * move in before the store instruction because x86 assembly does not allow us
 				 * to do *to memory* converting moves
 				 */
-				} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
+				} else if(IS_CONVERTING_MOVE_REQUIRED(destination_type, source_type) == TRUE) {
 					//Emit a temp var that is the destination's type
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
