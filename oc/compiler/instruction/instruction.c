@@ -1487,6 +1487,24 @@ static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg)
 
 
 /**
+ * Print a single precision SSE register out
+ */
+void print_single_precision_sse_register(FILE *fl, sse_register_t reg){
+
+	//TODO
+}
+
+
+/**
+ * Print a double precision SSE register out
+ */
+void print_double_precision_sse_register(FILE *fl, sse_register_t reg){
+
+	//TODO
+}
+
+
+/**
  * Print a variable in name only. There are no spaces around the variable, and there
  * will be no newline inserted at all. This is meant solely for the use of the "print_three_addr_code_stmt"
  * and nothing more. This function is also designed to take into account the indirection aspected as well
@@ -1531,10 +1549,18 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 				case BYTE:
 					print_8_bit_register_name(fl, variable->associated_live_range->reg);
 					break;
-				default:
-					print_64_bit_register_name(fl, variable->associated_live_range->reg);
-					printf("DEFAULTED\n");
+
+				case SINGLE_PRECISION:
+					//TODO
 					break;
+
+				case DOUBLE_PRECISION:
+					//TODO
+					break;
+
+				default:
+					printf("Fatal internal compiler error: Undefined variable size detected during register printing\n");
+					exit(1);
 			}
 
 			break;
