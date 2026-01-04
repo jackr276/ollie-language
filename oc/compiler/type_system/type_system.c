@@ -1047,11 +1047,14 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
-
 				//Pointers are not compatible with floats in a comparison sense
-				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-					return NULL;
+				switch((*b)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
@@ -1074,11 +1077,14 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
-
 				//Pointers are not compatible with floats in a comparison sense
-				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-					return NULL;
+				switch((*a)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
@@ -1096,7 +1102,11 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			/**
 			 * We will not perform any signedness conversion on the two of these, since in the
 			 * end we will be using flags anyways. We will only perform the widening conversion
+			 * and a floating point coercion if needed
 			 */
+
+			//Do the floating point coercion
+			handle_floating_point_coercion(symtab, a, b);
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
@@ -1116,8 +1126,19 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		case R_SHIFT:
 		case SINGLE_AND:
 		case SINGLE_OR:
-		case L_BRACKET: //Array access
 		case CARROT:
+			//We always apply the signedness coercion first
+			basic_type_signedness_coercion(symtab, a, b);
+
+			//We already know that these are basic types only here. We can
+			//apply the standard widening type coercion
+			basic_type_widening_type_coercion(a, b);
+		
+			//Give this back once down
+			return *a;
+
+		//Array access is a different deal
+		case L_BRACKET:
 			//We always apply the signedness coercion first
 			basic_type_signedness_coercion(symtab, a, b);
 
@@ -1457,7 +1478,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 			ollie_token_t type_tok = type->basic_type_token;
 			
 			//If it's float or void, we're done
-			if(type_tok == F32 || type_tok == F64 || type_tok == VOID){
+			if(type_tok == VOID){
 				return FALSE;
 			}
 
