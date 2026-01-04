@@ -1126,19 +1126,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		case R_SHIFT:
 		case SINGLE_AND:
 		case SINGLE_OR:
+		case MOD:
 		case CARROT:
-			//We always apply the signedness coercion first
-			basic_type_signedness_coercion(symtab, a, b);
-
-			//We already know that these are basic types only here. We can
-			//apply the standard widening type coercion
-			basic_type_widening_type_coercion(a, b);
-		
-			//Give this back once down
-			return *a;
-
-		//Array access is a different deal
-		case L_BRACKET:
 			//We always apply the signedness coercion first
 			basic_type_signedness_coercion(symtab, a, b);
 
@@ -1157,15 +1146,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		 */
 		case F_SLASH:
 		case STAR:
-		case MOD:
-			//If a is a floating point, we apply the float conversion to b
-			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-				integer_to_floating_point(symtab, b);
-
-			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-				integer_to_floating_point(symtab, a);
-			}
+			//Floating point coercion
+			handle_floating_point_coercion(symtab, a, b);
 
 			//Perform any signedness correction that is needed
 			basic_type_signedness_coercion(symtab, a, b);
@@ -1239,14 +1221,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				return NULL;
 			}
 
-			//If a is a floating point, we apply the float conversion to b
-			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-				integer_to_floating_point(symtab, b);
-
-			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-				integer_to_floating_point(symtab, a);
-			}
+			//Floating point coercion handling
+			handle_floating_point_coercion(symtab, a, b);
 		
 			//Perform any signedness correction that is needed
 			basic_type_signedness_coercion(symtab, a, b);
@@ -1323,15 +1299,9 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				return NULL;
 			}
 
-			//If a is a floating point, we apply the float conversion to b
-			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-				integer_to_floating_point(symtab, b);
+			//Handle the floating point coercion
+			handle_floating_point_coercion(symtab, a, b);
 
-			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-				integer_to_floating_point(symtab, a);
-			}
-		
 			//Perform any signedness correction that is needed
 			basic_type_signedness_coercion(symtab, a, b);
 
@@ -1543,16 +1513,17 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 				return FALSE;
 			}
 
-			//Deconstruct this
-			basic_type = type->basic_type_token;
-
-			//Let's now check and make sure it's not a float or void
-			if(basic_type == VOID || basic_type == F32 || basic_type == F64){
-				return FALSE;
+			//Any kind of basic type except for floats works
+			switch(type->basic_type_token){
+				case VOID:
+				case F32:
+				case F64:
+					return FALSE;
+				default:
+					return TRUE;
 			}
 
-			//Otherwise if we make it all the way down here, this is fine
-			return TRUE;
+			break;
 
 		/**
 		 * The multiplication and division operators are valid for enums and all basic types with the exception of void
@@ -1587,32 +1558,23 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		 */
 		case DOUBLE_OR:
 		case DOUBLE_AND:
-			//Enumerated types are fine here
-			if(type->type_class == TYPE_CLASS_ENUMERATED){
-				return TRUE;
+			switch(type->type_class){
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID){
+						return FALSE;
+					}
+					
+					return TRUE;
+
+				default:
+					return FALSE;
 			}
 
-			//Pointers are also no issue
-			if(type->type_class == TYPE_CLASS_POINTER){
-				return TRUE;
-			}
-
-			//Otherwise if it's not a basic type by the time we get
-			//here then we're done
-			if(type->type_class != TYPE_CLASS_BASIC){
-				return FALSE;
-			}
-
-			//Deconstruct this
-			basic_type = type->basic_type_token;
-
-			//Let's now just make sure that it is not a void type
-			if(basic_type == VOID){
-				return FALSE;
-			}
-
-			//Otherwise if we make it all the way down here, this is fine
-			return TRUE;
+			break;
 
 		/**
 		 * Relational expressions are valid for floats, integers,
@@ -1629,13 +1591,29 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
 		case PLUS:
-			//This also doesn't work for void types
-			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
-				return FALSE;
+			switch(type->type_class){
+				//Basic types(minus void) work
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID){
+						return FALSE;
+					}
+
+					return TRUE;
+
+				//Enum types work
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+					
+				//Pointers work
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+
+				//Anything else doesn't
+				default:
+					return FALSE;
 			}
 
-			//Otherwise, everything else that we have should work fine
-			return TRUE;
+			break;
 
 		/**
 		 * Subtraction is valid for floats, integers and enumerated types
@@ -1645,18 +1623,28 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		 * 		int - int* is not good
 		 */
 		case MINUS:
-			//This also doesn't work for void types
-			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
-				return FALSE;
-			}
+			switch(type->type_class){
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID){
+						return FALSE;
+					}
 
-			//If it's a pointer and it's not on the left side, it's bad
-			if(type->type_class == TYPE_CLASS_POINTER && side != SIDE_TYPE_LEFT){
-				return FALSE;
-			}
+					return TRUE;
+					
+				//Enum types work
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
 
-			//Otherwise, everything else that we have should work fine
-			return TRUE;
+				case TYPE_CLASS_POINTER:
+					if(side != SIDE_TYPE_LEFT){
+						return FALSE;
+					}
+				
+					return TRUE;
+
+				default:
+					return FALSE;
+			}
 
 		default:
 			return FALSE;
