@@ -136,6 +136,40 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int32_
 
 
 /**
+ * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
+ * integers for constant coercion
+ */
+static inline void perform_constant_assignment_coercion(generic_ast_node_t* constant_node, generic_type_t* final_type){
+	//If we have a pointer, we'll just make this into an i64
+	if(final_type->type_class == TYPE_CLASS_POINTER){
+		//Set the final type here
+		constant_node->inferred_type = immut_i64;
+	} else {
+		//Set the final type here
+		constant_node->inferred_type = final_type;
+	}
+
+	//If we have a basic constant type like this, we need to perform coercion
+	switch(constant_node->constant_type){
+		case CHAR_CONST:
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+		case FLOAT_CONST:
+		case DOUBLE_CONST:
+			coerce_constant(constant_node);
+			break;
+		//Otherwise do nothing
+		default:
+			break;
+	}
+}
+
+
+/**
  * Determine whether or not a variable is able to be assigned to
  */
 static u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
@@ -1061,6 +1095,9 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
 		if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
 			current_param->inferred_type = final_type;
+
+			//Do coercion
+			perform_constant_assignment_coercion(current_param, final_type);
 		}
 
 		//We can now safely add this into the function call node as a child. In the function call node, 
@@ -1705,9 +1742,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If the expression is a constant, we force it to be the final type
+		//If we have a constant, we will perform coercion
 		if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//Force the constant value to be the final type
 			expr->inferred_type = final_type;
+
+			//Now do the coercion
+			perform_constant_assignment_coercion(expr, final_type);
 		}
 
 		//Otherwise the overall type is the final type
@@ -1783,6 +1824,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 				//If the expression is a constant, we force it to be the final type
 				if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
 					expr->inferred_type = final_type;
+
+					coerce_constant(expr);
 				}
 
 				//We'll also want to create a complete, distinct copy of the subtree here
@@ -2845,7 +2888,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//If we are casting a constant node, we should perform all needed
 	//type coercion now
 	if(right_hand_unary->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		coerce_constant(right_hand_unary);
+		perform_constant_assignment_coercion(right_hand_unary, type_spec);
 	}
 
 	//Finally, we're all set to go here, so we can return the root reference
@@ -7242,7 +7285,11 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If this is a constant, we'll force it to be whatever the new type is
 	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		//Set the type
 		expr_node->inferred_type = final_type;
+
+		//Coerce the constant
+		perform_constant_assignment_coercion(expr_node, final_type);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
@@ -9362,35 +9409,11 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 
 			//If we have a constant node, we need to perform any needed type coercion here
 			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				//If we have a pointer, we'll just make this into an i64
-				if(final_type->type_class == TYPE_CLASS_POINTER){
-					//Set the final type here
-					initializer_node->inferred_type = immut_i64;
-				} else {
-					//Set the final type here
-					initializer_node->inferred_type = final_type;
-				}
+				//Set the final type
+				initializer_node->inferred_type = final_type;
 
-				//If this is a global type, we need to coerce the
-				//actual internal constant to match it. This is especially
-				//true for types like floats/doubles
-				switch(initializer_node->constant_type){
-					//If we have a basic constant type like this, we need to perform coercion
-					case CHAR_CONST:
-					case SHORT_CONST:
-					case SHORT_CONST_FORCE_U:
-					case INT_CONST:
-					case INT_CONST_FORCE_U:
-					case LONG_CONST:
-					case LONG_CONST_FORCE_U:
-					case FLOAT_CONST:
-					case DOUBLE_CONST:
-						coerce_constant(initializer_node);
-						break;
-					//Do nothing
-					default:
-						break;
-				}
+				//Let the helper do whatever we need
+				perform_constant_assignment_coercion(initializer_node, final_type);
 			}
 			
 			//Give back the return type
