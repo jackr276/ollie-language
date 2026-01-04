@@ -104,7 +104,7 @@ typedef enum{
  * For our live ranges, we'll really only need the name and
  * the variables
  */
-struct live_range_t{
+struct live_range_t {
 	//Hold all the variables that it has
 	dynamic_array_t variables;
 	//And we'll hold an adjacency list for interference

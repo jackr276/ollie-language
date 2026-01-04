@@ -1491,6 +1491,7 @@ static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg)
  */
 void print_single_precision_sse_register(FILE* fl, sse_register_t reg){
 	switch(reg){
+		//Exclusively for debug purposes. Under normal operation, we shouldn't be hitting this
 		case NO_REG_SSE:
 			fprintf(fl, "NOREG Single Precision");
 			break;
@@ -1550,8 +1551,60 @@ void print_single_precision_sse_register(FILE* fl, sse_register_t reg){
  * Print a double precision SSE register out
  */
 void print_double_precision_sse_register(FILE* fl, sse_register_t reg){
-
-	//TODO
+	switch(reg){
+		//Exclusively for debug purposes. Under normal operation, we shouldn't be hitting this
+		case NO_REG_SSE:
+			fprintf(fl, "NOREG Doulbe Precision");
+			break;
+		case XMM0:
+			fprintf(fl, "%%XMM0");
+			break;
+		case XMM1:
+			fprintf(fl, "%%XMM1");
+			break;
+		case XMM2:
+			fprintf(fl, "%%XMM2");
+			break;
+		case XMM3:
+			fprintf(fl, "%%XMM3");
+			break;
+		case XMM4:
+			fprintf(fl, "%%XMM4");
+			break;
+		case XMM5:
+			fprintf(fl, "%%XMM5");
+			break;
+		case XMM6:
+			fprintf(fl, "%%XMM6");
+			break;
+		case XMM7:
+			fprintf(fl, "%%XMM7");
+			break;
+		case XMM8:
+			fprintf(fl, "%%XMM8");
+			break;
+		case XMM9:
+			fprintf(fl, "%%XMM9");
+			break;
+		case XMM10:
+			fprintf(fl, "%%XMM10");
+			break;
+		case XMM11:
+			fprintf(fl, "%%XMM11");
+			break;
+		case XMM12:
+			fprintf(fl, "%%XMM12");
+			break;
+		case XMM13:
+			fprintf(fl, "%%XMM13");
+			break;
+		case XMM14:
+			fprintf(fl, "%%XMM14");
+			break;
+		case XMM15:
+			fprintf(fl, "%%XMM15");
+			break;
+	}
 }
 
 
@@ -1600,15 +1653,14 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 				case BYTE:
 					print_8_bit_register_name(fl, variable->associated_live_range->reg);
 					break;
-
 				case SINGLE_PRECISION:
-					//TODO
+					//FIXME
+					print_single_precision_sse_register(fl, variable->associated_live_range->reg);
 					break;
-
 				case DOUBLE_PRECISION:
-					//TODO
+					//FIXME
+					print_double_precision_sse_register(fl, variable->associated_live_range->reg);
 					break;
-
 				default:
 					printf("Fatal internal compiler error: Undefined variable size detected during register printing\n");
 					exit(1);
