@@ -1551,6 +1551,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+	//For any eventual duplication
+	generic_ast_node_t* left_hand_duplicate;
 
 	//This will hold onto the assignment operator for us
 	ollie_token_t assignment_operator = BLANK;
@@ -1717,74 +1719,79 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If we don't have a pointer type here - this is the most common case
-		if(left_hand_type->type_class != TYPE_CLASS_POINTER){
-			/**
-			 * If we have something like this:
-			 * 				y(i32) += x(i64)
-			 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
-			 * 	As such, we need to check if the types are assignable first
-			 */
-			final_type = types_assignable(left_hand_type, right_hand_type);
+		//Go based on the first type to handle any special cases
+		switch(left_hand_type->type_class){
+			case TYPE_CLASS_POINTER:
+			case TYPE_CLASS_ARRAY:
+				//We'll also want to create a complete, distinct copy of the subtree here
+				left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
 
-			//If this fails, that means that we have an invalid operation
-			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
-				return print_and_return_error(info, parser_line_num);
-			}
+				//Let's first determine if they're compatible
+				final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(right_hand_type), binary_op);
 
-			//If the expression is a constant, we force it to be the final type
-			if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				expr->inferred_type = final_type;
-			}
+				//If this fails, that means that we have an invalid operation
+				if(final_type == NULL){
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(binary_op));
+					return print_and_return_error(info, parser_line_num);
+				}
+				
+				//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
+				generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(left_hand_duplicate, binary_op, expr, SIDE_TYPE_RIGHT);
 
-			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
+				//This is an overall child of the assignment expression
+				add_child_node(asn_expr_node, pointer_arithmetic);
 
-			//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
-			//don't want to mess with the actual type of the variable
-			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(expr->inferred_type), binary_op);
+				break;
 
-			//If this fails, that means that we have an invalid operation
-			if(final_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(assignment_operator));
-				return print_and_return_error(info, parser_line_num);
-			}
+			default:
+				/**
+				 * If we have something like this:
+				 * 				y(i32) += x(i64)
+				 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
+				 * 	As such, we need to check if the types are assignable first
+				 */
+				final_type = types_assignable(left_hand_type, right_hand_type);
 
-			//By the time that we get here, we know that all coercion has been completed
-			//We can now construct our final result
-			//Allocate the binary expression
-			generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
-			//Store the type and operator
-			binary_op_node->inferred_type = final_type;
-			binary_op_node->binary_operator = binary_op;
+				//If this fails, that means that we have an invalid operation
+				if(final_type == NULL){
+					generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
+					return print_and_return_error(info, parser_line_num);
+				}
 
-			//Now we'll add the duplicates in as children
-			add_child_node(binary_op_node, left_hand_duplicate);
-			add_child_node(binary_op_node, expr);
+				//If the expression is a constant, we force it to be the final type
+				if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+					expr->inferred_type = final_type;
+				}
 
-			//This is an overall child of the assignment expression
-			add_child_node(asn_expr_node, binary_op_node);
+				//We'll also want to create a complete, distinct copy of the subtree here
+				generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
 
-		//Otherwise we do have a pointer type
-		} else {
-			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
+				//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
+				//don't want to mess with the actual type of the variable
+				final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(expr->inferred_type), binary_op);
 
-			//Let's first determine if they're compatible
-			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(right_hand_type), binary_op);
+				//If this fails, that means that we have an invalid operation
+				if(final_type == NULL){
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(assignment_operator));
+					return print_and_return_error(info, parser_line_num);
+				}
 
-			//If this fails, that means that we have an invalid operation
-			if(final_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(binary_op));
-				return print_and_return_error(info, parser_line_num);
-			}
-			
-			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
-			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(left_hand_duplicate, binary_op, expr, SIDE_TYPE_RIGHT);
+				//By the time that we get here, we know that all coercion has been completed
+				//We can now construct our final result
+				//Allocate the binary expression
+				generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
+				//Store the type and operator
+				binary_op_node->inferred_type = final_type;
+				binary_op_node->binary_operator = binary_op;
 
-			//This is an overall child of the assignment expression
-			add_child_node(asn_expr_node, pointer_arithmetic);
+				//Now we'll add the duplicates in as children
+				add_child_node(binary_op_node, left_hand_duplicate);
+				add_child_node(binary_op_node, expr);
+
+				//This is an overall child of the assignment expression
+				add_child_node(asn_expr_node, binary_op_node);
+
+				break;
 		}
 
 		//And now we can return this
