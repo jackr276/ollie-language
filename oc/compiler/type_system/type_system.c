@@ -1591,7 +1591,6 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		case G_THAN_OR_EQ:
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
-		case PLUS:
 			switch(type->type_class){
 				//Basic types(minus void) work
 				case TYPE_CLASS_BASIC:
@@ -1624,6 +1623,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		 * 		int - int* is not good
 		 */
 		case MINUS:
+		case PLUS:
 			switch(type->type_class){
 				case TYPE_CLASS_BASIC:
 					if(type->basic_type_token == VOID){
@@ -1636,7 +1636,10 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 				case TYPE_CLASS_ENUMERATED:
 					return TRUE;
 
+				//Pointers work so long as we're on the
+				//left hand side
 				case TYPE_CLASS_POINTER:
+				case TYPE_CLASS_ARRAY:
 					if(side != SIDE_TYPE_LEFT){
 						return FALSE;
 					}
