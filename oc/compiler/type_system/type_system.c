@@ -867,7 +867,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 	 */
 	switch(op){
 		/**
-		 * Addition/subtraction is valid for integers and pointers. For 
+		 * Addition/subtraction is valid for floats, integers, pointers and arrays. For 
 		 * addition/subtraction with pointers, special detail is required and
 		 * we will actually not coerce in here specifically
 		 */
@@ -875,22 +875,42 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		case MINUS:
 			//If a is a pointer type
 			if((*a)->type_class == TYPE_CLASS_POINTER){
-				//It is invalid to add two pointers
-				if((*b)->type_class == TYPE_CLASS_POINTER){
-					//This is invalid
-					return NULL;
-				}
-
 				//If this is not a basic type, all other conversion is bad
 				if((*b)->type_class != TYPE_CLASS_BASIC){
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
+				//The only basic types that do not work here are floats and void
+				switch((*b)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
+				}
 
-				//Pointers are not compatible with floats in a comparison sense
-				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*b = lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
+
+				//Give back the pointer type as the result
+				return *a;
+
+			//If a is an array, then we need to do a similar check
+			} else if((*a)->type_class == TYPE_CLASS_ARRAY){
+				//If this is not a basic type, all other conversion is bad
+				if((*b)->type_class != TYPE_CLASS_BASIC){
 					return NULL;
+				}
+
+				//The only basic types that do not work here are floats and void
+				switch((*b)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
@@ -902,22 +922,42 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			
 			//If b is a pointer type. This is teh exact same scenario as a
 			if((*b)->type_class == TYPE_CLASS_POINTER){
-				//It is invalid to add two pointers
-				if((*a)->type_class == TYPE_CLASS_POINTER){
-					//This is invalid
-					return NULL;
-				}
-
 				//If this is not a basic type, all other conversion is bad
 				if((*a)->type_class != TYPE_CLASS_BASIC){
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
+				//The only basic types that do not work here are floats and void
+				switch((*a)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
+				}
 
-				//Pointers are not compatible with floats in a comparison sense
-				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*a = lookup_type_name_only(symtab, "u64", (*b)->mutability)->type;
+
+				//Give back the pointer type as the result
+				return *b;
+
+			//Very similar rules if b is also an array
+			} else if((*b)->type_class == TYPE_CLASS_ARRAY){
+				//If this is not a basic type, all other conversion is bad
+				if((*a)->type_class != TYPE_CLASS_BASIC){
 					return NULL;
+				}
+
+				//The only basic types that do not work here are floats and void
+				switch((*a)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
@@ -932,6 +972,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				return NULL;
 			}
 
+
+			//TODO THIS IS WRONG
 			//If a is a floating point, we apply the float conversion to b
 			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
 				integer_to_floating_point(symtab, b);
