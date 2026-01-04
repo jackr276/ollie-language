@@ -9335,6 +9335,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			if(final_type == NULL){
 				generate_types_assignable_failure_message(info, initializer_node->inferred_type, return_type);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				return NULL;
 			}
 
 			//Additional validation here - it is not possible to assign a reference
@@ -9359,15 +9360,36 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				}
 			}
 
-			//If it is a constant node, we just force the type to be the array type
+			//If we have a constant node, we need to perform any needed type coercion here
 			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				initializer_node->inferred_type = final_type;
+				//If we have a pointer, we'll just make this into an i64
+				if(final_type->type_class == TYPE_CLASS_POINTER){
+					//Set the final type here
+					initializer_node->inferred_type = immut_i64;
+				} else {
+					//Set the final type here
+					initializer_node->inferred_type = final_type;
+				}
 
 				//If this is a global type, we need to coerce the
 				//actual internal constant to match it. This is especially
 				//true for types like floats/doubles
-				if(is_global == TRUE){
-					coerce_constant(initializer_node);
+				switch(initializer_node->constant_type){
+					//If we have a basic constant type like this, we need to perform coercion
+					case CHAR_CONST:
+					case SHORT_CONST:
+					case SHORT_CONST_FORCE_U:
+					case INT_CONST:
+					case INT_CONST_FORCE_U:
+					case LONG_CONST:
+					case LONG_CONST_FORCE_U:
+					case FLOAT_CONST:
+					case DOUBLE_CONST:
+						coerce_constant(initializer_node);
+						break;
+					//Do nothing
+					default:
+						break;
 				}
 			}
 			

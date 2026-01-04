@@ -51,7 +51,6 @@ void coerce_constant(generic_ast_node_t* constant_node){
 		//expansion
 		case CHAR_CONST:
 			switch(inferred_type->basic_type_token){
-				//TODO i8?
 				case U16:
 					constant_node->constant_type = SHORT_CONST_FORCE_U;
 					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.char_value;
