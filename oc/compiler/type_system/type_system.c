@@ -351,6 +351,8 @@ static u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t*
  * 					  Any other pointer can be assigned a void pointer
  * 					  Beyond this, the "pointing_to" types have to match when dealiased
  * 5.) Basic Types: See the area below for these rules, there are many
+ * 		Floating point: floating points can be assigned to integer types so long as the sizes are compatible
+ * 		and vice versa. All of the internal conversion logic will happen in the instruction selector
  */
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type){
 	//Predeclare these for now
@@ -558,17 +560,16 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
 			switch(true_source_type->type_class){
-				//We don't care about mutability here - we'll
-				//be copying the u64 so the value there is actually irrelevant, it's not a pointer
-				//that we're copying over
+				//We can assign any integer type to a pointer
 				case TYPE_CLASS_BASIC:
-					//This needs to be a u64, otherwise it's invalid
-					if(true_source_type->basic_type_token == U64){
-						//We will keep this as the pointer
-						return destination_type;
-					//Any other basic type will not work here
-					} else {
-						return NULL;
+					//Anything besides float and void work
+					switch(true_source_type->basic_type_token){
+						case F32:
+						case F64:
+						case VOID:
+							return NULL;
+						default:
+							return destination_type;
 					}
 
 				//Check if they're assignable
@@ -582,6 +583,15 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						if(true_source_type->mutability != MUTABLE){
 							return NULL;
 						}
+					}
+
+					/**
+					 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+					 * memory regions of the same size
+					 */
+					if(get_type_size(destination_type->internal_types.points_to) != get_type_size(true_source_type->internal_types.member_type)){
+						return NULL;
 					}
 
 					//If this works, return the destination type
@@ -607,9 +617,11 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					//If this itself is a void pointer, then we're good
 					if(true_source_type->internal_values.is_void_pointer == TRUE){
 						return destination_type;
+
 					//This is also fine, we just give the destination type back
 					} else if(destination_type->internal_values.is_void_pointer == TRUE){
 						return destination_type;
+
 					//Let's see if what they point to is the exact same
 					} else {
 						/**
@@ -650,32 +662,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				case VOID:
 					return NULL;
 
-				//Float64's can only be assigned to other float64's
-				case F64:
-					//We must see another f64 or an f32(widening) here
-					if(true_source_type->type_class == TYPE_CLASS_BASIC
-						&& (true_source_type->basic_type_token == F64
-						|| true_source_type->basic_type_token == F32)){
-						return destination_type;
-
-					//Otherwise nothing here will work
-					} else {
-						return NULL;
-					}
-
-				case F32:
-					//We must see another an f32 here
-					if(true_source_type->type_class == TYPE_CLASS_BASIC
-						&& true_source_type->basic_type_token == F32){
-						return destination_type;
-
-					//Otherwise nothing here will work
-					} else {
-						return NULL;
-					}
-
 				//Once we get to this point, we know that we have something
-				//in this set for destination type: U64, I64, U32, I32, U16, I16, U8, I8, Char
+				//in this set for destination type: F64,F32, U64, I64, U32, I32, U16, I16, U8, I8, Char
 				//From here, we'll go based on the type size of the source type *if* the source
 				//type is also a basic type. 
 				default:
@@ -695,15 +683,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 					//Go based on what we have here
 					switch(source_basic_type){
-						//If we have these, we can't assign them to an int
-						case F32:
-						case F64:
 						case VOID:
 							return NULL;
 
-						//Otherwise, once we make it here we know that the source type is a basic type and
-						//and integer/char type. We can now just compare the sizes and if the destination is more
-						//than or equal to the source, we're good
+						//For basic types, so long as the source is not physically larger than the
+						//destination, ollie allows us to assign it. This is also true for going from
+						//floats to ints or ints to floats, but this will generate internal conversion
+						//logic
 						default:
 							if(true_source_type->type_size <= destination_type->type_size){
 								return destination_type;
@@ -749,7 +735,8 @@ static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generi
 			return lookup_type_name_only(symtab, "u64", type->mutability)->type;
 		//We should never get here
 		default:
-			return lookup_type_name_only(symtab, "u32", type->mutability)->type;
+			printf("Fatal internal compiler error: Invalid unsigned coercion detected\n");
+			exit(1);
 	}
 }
 
@@ -759,7 +746,7 @@ static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generi
  *
  * Signedness coercion *always* comes first before widening conversions
  */
-static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
+static inline void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
 	//Floats are never not signed, so this is useless for them
 	if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
 		return;
@@ -784,7 +771,7 @@ static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t
 /**
  * Apply standard coercion rules for basic types
  */
-static void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
+static inline void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
 	//Whomever has the largest size wins
 	if((*a)->type_size > (*b)->type_size){
 		//Set b to equal a
@@ -802,7 +789,7 @@ static void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t
  *
  * Go from an integer to a floating point number
  */
-static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a){
+static inline void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a){
 	//Go based on what we have as our basic type
 	switch((*a)->basic_type_token){
 		//These all decome f32's
@@ -819,8 +806,49 @@ static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a)
 		case U64:
 		case I64:
 			*a = lookup_type_name_only(symtab, "f64", (*a)->mutability)->type;
+
+		//This should never happen
 		default:
-			return;
+			printf("Fatal internal compiler error: attempt to coerce a non-integer to a floating point value\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Handle coercions from integers up to floating point numbers. This will only occur when one
+ * of the numbers is a floating point value. Note that it is entirely possible for neither
+ * a or b to be floats, in which case we take no action
+ */
+static inline void handle_floating_point_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
+	u_int8_t a_is_float = ((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64) ? TRUE : FALSE;
+	u_int8_t b_is_float = ((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64) ? TRUE : FALSE;
+
+	//They are both floating point values, so we don't need to
+	//do anything
+	if(a_is_float == TRUE && b_is_float == TRUE){
+		return;
+	}
+
+	//Likewise, they are both not floating point values,
+	//so we also don't need to do anything
+	if(a_is_float == TRUE && b_is_float == TRUE){
+		return;
+	}
+
+	//Once we get here, we know that there is a mismatch. If a is the float,
+	//then b is not, and vice versa
+
+	//Handle where a is a float, b is not
+	if(a_is_float == TRUE){
+		//Convert b to it's equivalent float value
+		integer_to_floating_point(symtab, b);
+	}
+
+	//Handle where b is a float, a is not
+	if(b_is_float == TRUE){
+		//Convert a to it's equivalent float value
+		integer_to_floating_point(symtab, a);
 	}
 }
 
@@ -834,8 +862,9 @@ static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a)
  * types appropriately for size/signedness constraints and return the type that they were both
  * coerced into
  *
- * CASES:
- * 	1.) Construct Types: Construct types are compatible if they are both the exact same type
+ * Floating point: If we are doing operations between floating points and integers, floating point will
+ * always dominate. This means that the integer value will itself be converted into a floating point value 
+ * for the duration of the operation
  */
 generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op){
 	//For convenience
@@ -882,7 +911,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 	 */
 	switch(op){
 		/**
-		 * Addition/subtraction is valid for integers and pointers. For 
+		 * Addition/subtraction is valid for floats, integers, pointers and arrays. For 
 		 * addition/subtraction with pointers, special detail is required and
 		 * we will actually not coerce in here specifically
 		 */
@@ -890,22 +919,42 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		case MINUS:
 			//If a is a pointer type
 			if((*a)->type_class == TYPE_CLASS_POINTER){
-				//It is invalid to add two pointers
-				if((*b)->type_class == TYPE_CLASS_POINTER){
-					//This is invalid
-					return NULL;
-				}
-
 				//If this is not a basic type, all other conversion is bad
 				if((*b)->type_class != TYPE_CLASS_BASIC){
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
+				//The only basic types that do not work here are floats and void
+				switch((*b)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
+				}
 
-				//Pointers are not compatible with floats in a comparison sense
-				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*b = lookup_type_name_only(symtab, "u64", (*a)->mutability)->type;
+
+				//Give back the pointer type as the result
+				return *a;
+
+			//If a is an array, then we need to do a similar check
+			} else if((*a)->type_class == TYPE_CLASS_ARRAY){
+				//If this is not a basic type, all other conversion is bad
+				if((*b)->type_class != TYPE_CLASS_BASIC){
 					return NULL;
+				}
+
+				//The only basic types that do not work here are floats and void
+				switch((*b)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
@@ -917,22 +966,42 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			
 			//If b is a pointer type. This is teh exact same scenario as a
 			if((*b)->type_class == TYPE_CLASS_POINTER){
-				//It is invalid to add two pointers
-				if((*a)->type_class == TYPE_CLASS_POINTER){
-					//This is invalid
-					return NULL;
-				}
-
 				//If this is not a basic type, all other conversion is bad
 				if((*a)->type_class != TYPE_CLASS_BASIC){
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
+				//The only basic types that do not work here are floats and void
+				switch((*a)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
+				}
 
-				//Pointers are not compatible with floats in a comparison sense
-				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
+				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
+				*a = lookup_type_name_only(symtab, "u64", (*b)->mutability)->type;
+
+				//Give back the pointer type as the result
+				return *b;
+
+			//Very similar rules if b is also an array
+			} else if((*b)->type_class == TYPE_CLASS_ARRAY){
+				//If this is not a basic type, all other conversion is bad
+				if((*a)->type_class != TYPE_CLASS_BASIC){
 					return NULL;
+				}
+
+				//The only basic types that do not work here are floats and void
+				switch((*a)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
@@ -947,14 +1016,11 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				return NULL;
 			}
 
-			//If a is a floating point, we apply the float conversion to b
-			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-				integer_to_floating_point(symtab, b);
-
-			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-				integer_to_floating_point(symtab, a);
-			}
+			//Floating point values are totally fine here,
+			//we just need to handle the coercion of them appropriately
+			//This helper rule will deal with any coercions from floats
+			//to ints
+			handle_floating_point_coercion(symtab, a, b);
 
 			//Perform any signedness correction that is needed
 			basic_type_signedness_coercion(symtab, a, b);
@@ -982,11 +1048,14 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
-
 				//Pointers are not compatible with floats in a comparison sense
-				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-					return NULL;
+				switch((*b)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
@@ -1009,11 +1078,14 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
-
 				//Pointers are not compatible with floats in a comparison sense
-				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-					return NULL;
+				switch((*a)->basic_type_token){
+					case F32:
+					case F64:
+					case VOID:
+						return NULL;
+					default:
+						break;
 				}
 
 				//If we get here, we know that B is valid for this. We will now expand it to be of type u64
@@ -1031,7 +1103,11 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 			/**
 			 * We will not perform any signedness conversion on the two of these, since in the
 			 * end we will be using flags anyways. We will only perform the widening conversion
+			 * and a floating point coercion if needed
 			 */
+
+			//Do the floating point coercion
+			handle_floating_point_coercion(symtab, a, b);
 
 			//We already know that these are basic types only here. We can
 			//apply the standard widening type coercion
@@ -1051,7 +1127,7 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		case R_SHIFT:
 		case SINGLE_AND:
 		case SINGLE_OR:
-		case L_BRACKET: //Array access
+		case MOD:
 		case CARROT:
 			//We always apply the signedness coercion first
 			basic_type_signedness_coercion(symtab, a, b);
@@ -1071,15 +1147,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 		 */
 		case F_SLASH:
 		case STAR:
-		case MOD:
-			//If a is a floating point, we apply the float conversion to b
-			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-				integer_to_floating_point(symtab, b);
-
-			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-				integer_to_floating_point(symtab, a);
-			}
+			//Floating point coercion
+			handle_floating_point_coercion(symtab, a, b);
 
 			//Perform any signedness correction that is needed
 			basic_type_signedness_coercion(symtab, a, b);
@@ -1153,14 +1222,8 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				return NULL;
 			}
 
-			//If a is a floating point, we apply the float conversion to b
-			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-				integer_to_floating_point(symtab, b);
-
-			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-				integer_to_floating_point(symtab, a);
-			}
+			//Floating point coercion handling
+			handle_floating_point_coercion(symtab, a, b);
 		
 			//Perform any signedness correction that is needed
 			basic_type_signedness_coercion(symtab, a, b);
@@ -1195,8 +1258,6 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
-
 				//Pointers are not compatible with floats in a comparison sense
 				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
 					return NULL;
@@ -1222,8 +1283,6 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
-
 				//Pointers are not compatible with floats in a comparison sense
 				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
 					return NULL;
@@ -1241,15 +1300,9 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				return NULL;
 			}
 
-			//If a is a floating point, we apply the float conversion to b
-			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-				integer_to_floating_point(symtab, b);
+			//Handle the floating point coercion
+			handle_floating_point_coercion(symtab, a, b);
 
-			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-				integer_to_floating_point(symtab, a);
-			}
-		
 			//Perform any signedness correction that is needed
 			basic_type_signedness_coercion(symtab, a, b);
 
@@ -1396,7 +1449,7 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 			ollie_token_t type_tok = type->basic_type_token;
 			
 			//If it's float or void, we're done
-			if(type_tok == F32 || type_tok == F64 || type_tok == VOID){
+			if(type_tok == VOID){
 				return FALSE;
 			}
 
@@ -1461,16 +1514,17 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 				return FALSE;
 			}
 
-			//Deconstruct this
-			basic_type = type->basic_type_token;
-
-			//Let's now check and make sure it's not a float or void
-			if(basic_type == VOID || basic_type == F32 || basic_type == F64){
-				return FALSE;
+			//Any kind of basic type except for floats works
+			switch(type->basic_type_token){
+				case VOID:
+				case F32:
+				case F64:
+					return FALSE;
+				default:
+					return TRUE;
 			}
 
-			//Otherwise if we make it all the way down here, this is fine
-			return TRUE;
+			break;
 
 		/**
 		 * The multiplication and division operators are valid for enums and all basic types with the exception of void
@@ -1505,32 +1559,23 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		 */
 		case DOUBLE_OR:
 		case DOUBLE_AND:
-			//Enumerated types are fine here
-			if(type->type_class == TYPE_CLASS_ENUMERATED){
-				return TRUE;
+			switch(type->type_class){
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID){
+						return FALSE;
+					}
+					
+					return TRUE;
+
+				default:
+					return FALSE;
 			}
 
-			//Pointers are also no issue
-			if(type->type_class == TYPE_CLASS_POINTER){
-				return TRUE;
-			}
-
-			//Otherwise if it's not a basic type by the time we get
-			//here then we're done
-			if(type->type_class != TYPE_CLASS_BASIC){
-				return FALSE;
-			}
-
-			//Deconstruct this
-			basic_type = type->basic_type_token;
-
-			//Let's now just make sure that it is not a void type
-			if(basic_type == VOID){
-				return FALSE;
-			}
-
-			//Otherwise if we make it all the way down here, this is fine
-			return TRUE;
+			break;
 
 		/**
 		 * Relational expressions are valid for floats, integers,
@@ -1546,14 +1591,29 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		case G_THAN_OR_EQ:
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
-		case PLUS:
-			//This also doesn't work for void types
-			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
-				return FALSE;
+			switch(type->type_class){
+				//Basic types(minus void) work
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID){
+						return FALSE;
+					}
+
+					return TRUE;
+
+				//Enum types work
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+					
+				//Pointers work
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+
+				//Anything else doesn't
+				default:
+					return FALSE;
 			}
 
-			//Otherwise, everything else that we have should work fine
-			return TRUE;
+			break;
 
 		/**
 		 * Subtraction is valid for floats, integers and enumerated types
@@ -1563,18 +1623,32 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		 * 		int - int* is not good
 		 */
 		case MINUS:
-			//This also doesn't work for void types
-			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
-				return FALSE;
-			}
+		case PLUS:
+			switch(type->type_class){
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID){
+						return FALSE;
+					}
 
-			//If it's a pointer and it's not on the left side, it's bad
-			if(type->type_class == TYPE_CLASS_POINTER && side != SIDE_TYPE_LEFT){
-				return FALSE;
-			}
+					return TRUE;
+					
+				//Enum types work
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
 
-			//Otherwise, everything else that we have should work fine
-			return TRUE;
+				//Pointers work so long as we're on the
+				//left hand side
+				case TYPE_CLASS_POINTER:
+				case TYPE_CLASS_ARRAY:
+					if(side != SIDE_TYPE_LEFT){
+						return FALSE;
+					}
+				
+					return TRUE;
+
+				default:
+					return FALSE;
+			}
 
 		default:
 			return FALSE;

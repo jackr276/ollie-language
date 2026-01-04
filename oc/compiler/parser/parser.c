@@ -136,6 +136,40 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int32_
 
 
 /**
+ * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
+ * integers for constant coercion
+ */
+static inline void perform_constant_assignment_coercion(generic_ast_node_t* constant_node, generic_type_t* final_type){
+	//If we have a pointer, we'll just make this into an i64
+	if(final_type->type_class == TYPE_CLASS_POINTER){
+		//Set the final type here
+		constant_node->inferred_type = immut_i64;
+	} else {
+		//Set the final type here
+		constant_node->inferred_type = final_type;
+	}
+
+	//If we have a basic constant type like this, we need to perform coercion
+	switch(constant_node->constant_type){
+		case CHAR_CONST:
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+		case FLOAT_CONST:
+		case DOUBLE_CONST:
+			coerce_constant(constant_node);
+			break;
+		//Otherwise do nothing
+		default:
+			break;
+	}
+}
+
+
+/**
  * Determine whether or not a variable is able to be assigned to
  */
 static u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
@@ -491,14 +525,36 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t
  *
  * Example:
  * int* + 1 -> int* + 4(an int is 4 bytes), and so on...
+ * Same goes for arrays
  */
 static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, ollie_token_t op, generic_ast_node_t* operand, side_type_t side){
-	//Grab the pointer type out
-	generic_type_t* pointer_type = pointer->inferred_type;
+	//Grab the pointer/array type out
+	generic_type_t* type = pointer->inferred_type;
 
 	//If this is a void pointer, we're done
-	if(pointer_type->internal_values.is_void_pointer == TRUE){
+	if(type->internal_values.is_void_pointer == TRUE){
 		return print_and_return_error("Void pointers cannot be added or subtracted to", parser_line_num);
+	}
+
+	//What do we multiply by?
+	int64_t multiplicand;	
+
+	//Go based on the type class here
+	switch(type->type_class){
+		//If it's a pointer, we multiply by whatever it points to
+		case TYPE_CLASS_POINTER:
+			multiplicand = type->internal_types.points_to->type_size;
+			break;
+
+		//If it's an array, we multiply by the size of the member type
+		case TYPE_CLASS_ARRAY:
+			multiplicand = type->internal_types.member_type->type_size;
+			break;
+		
+		//Should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
 	}
 
 	//An efficiency enhancement here - if the operand itself is a constant, we can just generate
@@ -512,7 +568,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 		coerce_constant(operand);
 
 		//Multiply it by the size
-		operand->constant_value.signed_long_value *= pointer_type->internal_types.points_to->type_size;
+		operand->constant_value.signed_long_value *= multiplicand;
 
 		//And we're done, just give back the value
 		return operand;
@@ -523,7 +579,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	//Mark the type too
 	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
-	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->internal_types.points_to->type_size;
+	constant_multiplicand->constant_value.signed_long_value = multiplicand;
 	//This one's type is always an immutable i64
 	constant_multiplicand->inferred_type = immut_i64; 
 
@@ -1039,6 +1095,9 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
 		if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
 			current_param->inferred_type = final_type;
+
+			//Do coercion
+			perform_constant_assignment_coercion(current_param, final_type);
 		}
 
 		//We can now safely add this into the function call node as a child. In the function call node, 
@@ -1551,6 +1610,8 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	u_int16_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
+	//For any eventual duplication
+	generic_ast_node_t* left_hand_duplicate;
 
 	//This will hold onto the assignment operator for us
 	ollie_token_t assignment_operator = BLANK;
@@ -1681,9 +1742,13 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If the expression is a constant, we force it to be the final type
+		//If we have a constant, we will perform coercion
 		if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			//Force the constant value to be the final type
 			expr->inferred_type = final_type;
+
+			//Now do the coercion
+			perform_constant_assignment_coercion(expr, final_type);
 		}
 
 		//Otherwise the overall type is the final type
@@ -1717,74 +1782,81 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//If we don't have a pointer type here - this is the most common case
-		if(left_hand_type->type_class != TYPE_CLASS_POINTER){
-			/**
-			 * If we have something like this:
-			 * 				y(i32) += x(i64)
-			 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
-			 * 	As such, we need to check if the types are assignable first
-			 */
-			final_type = types_assignable(left_hand_type, right_hand_type);
+		//Go based on the first type to handle any special cases
+		switch(left_hand_type->type_class){
+			case TYPE_CLASS_POINTER:
+			case TYPE_CLASS_ARRAY:
+				//We'll also want to create a complete, distinct copy of the subtree here
+				left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
 
-			//If this fails, that means that we have an invalid operation
-			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
-				return print_and_return_error(info, parser_line_num);
-			}
+				//Let's first determine if they're compatible
+				final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(right_hand_type), binary_op);
 
-			//If the expression is a constant, we force it to be the final type
-			if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				expr->inferred_type = final_type;
-			}
+				//If this fails, that means that we have an invalid operation
+				if(final_type == NULL){
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(binary_op));
+					return print_and_return_error(info, parser_line_num);
+				}
+				
+				//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
+				generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(left_hand_duplicate, binary_op, expr, SIDE_TYPE_RIGHT);
 
-			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
+				//This is an overall child of the assignment expression
+				add_child_node(asn_expr_node, pointer_arithmetic);
 
-			//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
-			//don't want to mess with the actual type of the variable
-			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(expr->inferred_type), binary_op);
+				break;
 
-			//If this fails, that means that we have an invalid operation
-			if(final_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(assignment_operator));
-				return print_and_return_error(info, parser_line_num);
-			}
+			default:
+				/**
+				 * If we have something like this:
+				 * 				y(i32) += x(i64)
+				 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
+				 * 	As such, we need to check if the types are assignable first
+				 */
+				final_type = types_assignable(left_hand_type, right_hand_type);
 
-			//By the time that we get here, we know that all coercion has been completed
-			//We can now construct our final result
-			//Allocate the binary expression
-			generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
-			//Store the type and operator
-			binary_op_node->inferred_type = final_type;
-			binary_op_node->binary_operator = binary_op;
+				//If this fails, that means that we have an invalid operation
+				if(final_type == NULL){
+					generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
+					return print_and_return_error(info, parser_line_num);
+				}
 
-			//Now we'll add the duplicates in as children
-			add_child_node(binary_op_node, left_hand_duplicate);
-			add_child_node(binary_op_node, expr);
+				//If the expression is a constant, we force it to be the final type
+				if(expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+					expr->inferred_type = final_type;
 
-			//This is an overall child of the assignment expression
-			add_child_node(asn_expr_node, binary_op_node);
+					coerce_constant(expr);
+				}
 
-		//Otherwise we do have a pointer type
-		} else {
-			//We'll also want to create a complete, distinct copy of the subtree here
-			generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
+				//We'll also want to create a complete, distinct copy of the subtree here
+				generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
 
-			//Let's first determine if they're compatible
-			final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(right_hand_type), binary_op);
+				//Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
+				//don't want to mess with the actual type of the variable
+				final_type = determine_compatibility_and_coerce(type_symtab, &(left_hand_duplicate->inferred_type), &(expr->inferred_type), binary_op);
 
-			//If this fails, that means that we have an invalid operation
-			if(final_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(binary_op));
-				return print_and_return_error(info, parser_line_num);
-			}
-			
-			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
-			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(left_hand_duplicate, binary_op, expr, SIDE_TYPE_RIGHT);
+				//If this fails, that means that we have an invalid operation
+				if(final_type == NULL){
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_to_string(assignment_operator));
+					return print_and_return_error(info, parser_line_num);
+				}
 
-			//This is an overall child of the assignment expression
-			add_child_node(asn_expr_node, pointer_arithmetic);
+				//By the time that we get here, we know that all coercion has been completed
+				//We can now construct our final result
+				//Allocate the binary expression
+				generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
+				//Store the type and operator
+				binary_op_node->inferred_type = final_type;
+				binary_op_node->binary_operator = binary_op;
+
+				//Now we'll add the duplicates in as children
+				add_child_node(binary_op_node, left_hand_duplicate);
+				add_child_node(binary_op_node, expr);
+
+				//This is an overall child of the assignment expression
+				add_child_node(asn_expr_node, binary_op_node);
+
+				break;
 		}
 
 		//And now we can return this
@@ -2816,7 +2888,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//If we are casting a constant node, we should perform all needed
 	//type coercion now
 	if(right_hand_unary->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		coerce_constant(right_hand_unary);
+		perform_constant_assignment_coercion(right_hand_unary, type_spec);
 	}
 
 	//Finally, we're all set to go here, so we can return the root reference
@@ -3094,35 +3166,41 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We have a pointer here in the temp holder, and we're trying to add/subtract something to it
-		if(temp_holder->inferred_type->type_class != TYPE_CLASS_POINTER){
-			//Use the type compatibility function to determine compatibility and apply necessary coercions
-			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		//Go based on what kind of type we have here
+		switch(temp_holder->inferred_type->type_class){
+			case TYPE_CLASS_POINTER:
+			case TYPE_CLASS_ARRAY:
+				//Let's first determine if they're compatible
+				return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-			//If this fails, that means that we have an invalid operation
-			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
-				return print_and_return_error(info, parser_line_num);
-			}
+				//If this fails, that means that we have an invalid operation
+				if(return_type == NULL){
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
+					return print_and_return_error(info, parser_line_num);
+				}
 
-		} else {
-			//Let's first determine if they're compatible
-			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+				//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
+				generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child, side);
 
-			//If this fails, that means that we have an invalid operation
-			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
-				return print_and_return_error(info, parser_line_num);
-			}
+				//Copy the variable over here for later use
+				variable = temp_holder->variable;
 
-			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
-			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child, side);
+				//Once we're done here, the right child is the pointer arithmetic
+				right_child = pointer_arithmetic;
+				
+				break;
+				
+			default:
+				//Use the type compatibility function to determine compatibility and apply necessary coercions
+				return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-			//Copy the variable over here for later use
-			variable = temp_holder->variable;
+				//If this fails, that means that we have an invalid operation
+				if(return_type == NULL){
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
+					return print_and_return_error(info, parser_line_num);
+				}
 
-			//Once we're done here, the right child is the pointer arithmetic
-			right_child = pointer_arithmetic;
+				break;
 		}
 
 		/**
@@ -7207,7 +7285,11 @@ static generic_ast_node_t* return_statement(FILE* fl){
 
 	//If this is a constant, we'll force it to be whatever the new type is
 	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		//Set the type
 		expr_node->inferred_type = final_type;
+
+		//Coerce the constant
+		perform_constant_assignment_coercion(expr_node, final_type);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
@@ -9300,6 +9382,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			if(final_type == NULL){
 				generate_types_assignable_failure_message(info, initializer_node->inferred_type, return_type);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				return NULL;
 			}
 
 			//Additional validation here - it is not possible to assign a reference
@@ -9324,16 +9407,13 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				}
 			}
 
-			//If it is a constant node, we just force the type to be the array type
+			//If we have a constant node, we need to perform any needed type coercion here
 			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				//Set the final type
 				initializer_node->inferred_type = final_type;
 
-				//If this is a global type, we need to coerce the
-				//actual internal constant to match it. This is especially
-				//true for types like floats/doubles
-				if(is_global == TRUE){
-					coerce_constant(initializer_node);
-				}
+				//Let the helper do whatever we need
+				perform_constant_assignment_coercion(initializer_node, final_type);
 			}
 			
 			//Give back the return type
