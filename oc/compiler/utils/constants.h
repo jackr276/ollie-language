@@ -27,6 +27,9 @@
 //The number of colors that we have for general use registers
 #define K_COLORS_GEN_USE 15
 
+//The number of colors that we have for XMM floating point registers
+#define K_COLORS_SSE 16
+
 //A load and a store generate 2 instructions when we load
 //from the stack
 #define LOAD_COST 2
