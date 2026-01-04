@@ -734,7 +734,8 @@ static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generi
 			return lookup_type_name_only(symtab, "u64", type->mutability)->type;
 		//We should never get here
 		default:
-			return lookup_type_name_only(symtab, "u32", type->mutability)->type;
+			printf("Fatal internal compiler error: Invalid unsigned coercion detected\n");
+			exit(1);
 	}
 }
 
@@ -744,7 +745,7 @@ static generic_type_t* convert_to_unsigned_version(type_symtab_t* symtab, generi
  *
  * Signedness coercion *always* comes first before widening conversions
  */
-static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
+static inline void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
 	//Floats are never not signed, so this is useless for them
 	if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
 		return;
@@ -769,7 +770,7 @@ static void basic_type_signedness_coercion(type_symtab_t* symtab, generic_type_t
 /**
  * Apply standard coercion rules for basic types
  */
-static void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
+static inline void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t** b){
 	//Whomever has the largest size wins
 	if((*a)->type_size > (*b)->type_size){
 		//Set b to equal a
@@ -787,7 +788,7 @@ static void basic_type_widening_type_coercion(generic_type_t** a, generic_type_t
  *
  * Go from an integer to a floating point number
  */
-static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a){
+static inline void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a){
 	//Go based on what we have as our basic type
 	switch((*a)->basic_type_token){
 		//These all decome f32's
@@ -804,8 +805,49 @@ static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a)
 		case U64:
 		case I64:
 			*a = lookup_type_name_only(symtab, "f64", (*a)->mutability)->type;
+
+		//This should never happen
 		default:
-			return;
+			printf("Fatal internal compiler error: attempt to coerce a non-integer to a floating point value\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Handle coercions from integers up to floating point numbers. This will only occur when one
+ * of the numbers is a floating point value. Note that it is entirely possible for neither
+ * a or b to be floats, in which case we take no action
+ */
+static inline void handle_floating_point_coercion(type_symtab_t* symtab, generic_type_t** a, generic_type_t** b){
+	u_int8_t a_is_float = ((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64) ? TRUE : FALSE;
+	u_int8_t b_is_float = ((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64) ? TRUE : FALSE;
+
+	//They are both floating point values, so we don't need to
+	//do anything
+	if(a_is_float == TRUE && b_is_float == TRUE){
+		return;
+	}
+
+	//Likewise, they are both not floating point values,
+	//so we also don't need to do anything
+	if(a_is_float == TRUE && b_is_float == TRUE){
+		return;
+	}
+
+	//Once we get here, we know that there is a mismatch. If a is the float,
+	//then b is not, and vice versa
+
+	//Handle where a is a float, b is not
+	if(a_is_float == TRUE){
+		//Convert b to it's equivalent float value
+		integer_to_floating_point(symtab, b);
+	}
+
+	//Handle where b is a float, a is not
+	if(b_is_float == TRUE){
+		//Convert a to it's equivalent float value
+		integer_to_floating_point(symtab, a);
 	}
 }
 
@@ -819,8 +861,9 @@ static void integer_to_floating_point(type_symtab_t* symtab, generic_type_t** a)
  * types appropriately for size/signedness constraints and return the type that they were both
  * coerced into
  *
- * CASES:
- * 	1.) Construct Types: Construct types are compatible if they are both the exact same type
+ * Floating point: If we are doing operations between floating points and integers, floating point will
+ * always dominate. This means that the integer value will itself be converted into a floating point value 
+ * for the duration of the operation
  */
 generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t** a, generic_type_t** b, ollie_token_t op){
 	//For convenience
@@ -972,16 +1015,11 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				return NULL;
 			}
 
-
-			//TODO THIS IS WRONG
-			//If a is a floating point, we apply the float conversion to b
-			if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
-				integer_to_floating_point(symtab, b);
-
-			//If b is a floating point, we apply the float conversion to b
-			} else if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
-				integer_to_floating_point(symtab, a);
-			}
+			//Floating point values are totally fine here,
+			//we just need to handle the coercion of them appropriately
+			//This helper rule will deal with any coercions from floats
+			//to ints
+			handle_floating_point_coercion(symtab, a, b);
 
 			//Perform any signedness correction that is needed
 			basic_type_signedness_coercion(symtab, a, b);
@@ -1222,8 +1260,6 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 					return NULL;
 				}
 
-				//Now once we get here, we know that we have a basic type
-
 				//Pointers are not compatible with floats in a comparison sense
 				if((*b)->basic_type_token == F32 || (*b)->basic_type_token == F64){
 					return NULL;
@@ -1248,8 +1284,6 @@ generic_type_t* determine_compatibility_and_coerce(void* symtab, generic_type_t*
 				if((*a)->type_class != TYPE_CLASS_BASIC){
 					return NULL;
 				}
-
-				//Now once we get here, we know that we have a basic type
 
 				//Pointers are not compatible with floats in a comparison sense
 				if((*a)->basic_type_token == F32 || (*a)->basic_type_token == F64){
