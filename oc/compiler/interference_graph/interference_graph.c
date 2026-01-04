@@ -138,7 +138,7 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 	 * If the target has a register and the source has no/the same register, no
 	 * action is needed
 	 */
-	if(target->reg == NO_REG){
+	if(target->reg == NO_REG_GEN_PURPOSE){
 		target->reg = coalescee->reg;
 	}
 

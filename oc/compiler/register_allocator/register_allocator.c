@@ -1934,12 +1934,12 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 	 */
 	switch(source->reg){
 		//If the source has no reg, this will work
-		case NO_REG:
+		case NO_REG_GEN_PURPOSE:
 			//If the destination has a register, we need
 			//to check if any *neighbors* of the source
 			//are colored the same. If they are, that would
 			//lead to interference
-			if(destination->reg != NO_REG){
+			if(destination->reg != NO_REG_GEN_PURPOSE){
 				//Whatever this is is our answer
 				return does_neighbor_precoloring_interference_exist(source, destination->reg);
 			}
@@ -1963,7 +1963,7 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 
 			//Even if the destination has no register, it's neighbors 
 			//could. We'll use the helper to get our answer
-			if(destination->reg == NO_REG){
+			if(destination->reg == NO_REG_GEN_PURPOSE){
 				return does_neighbor_precoloring_interference_exist(destination, source->reg);
 			}
 
@@ -1980,7 +1980,7 @@ static u_int8_t does_register_allocation_interference_exist(live_range_t* source
 		default:
 			//Even if the destination has no register, it's neighbors 
 			//could. We'll use the helper to get our answer
-			if(destination->reg == NO_REG){
+			if(destination->reg == NO_REG_GEN_PURPOSE){
 				return does_neighbor_precoloring_interference_exist(destination, source->reg);
 			}
 
@@ -2209,7 +2209,7 @@ static u_int8_t perform_live_range_coalescence(basic_block_t* function_entry_blo
  */
 static u_int8_t allocate_register(live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
-	if(live_range->reg != NO_REG){
+	if(live_range->reg != NO_REG_GEN_PURPOSE){
 		//Flag this as used in the function
 		if(live_range->assignment_count > 0){
 			live_range->function_defined_in->assigned_registers[live_range->reg - 1] = TRUE;
@@ -2232,7 +2232,7 @@ static u_int8_t allocate_register(live_range_t* live_range){
 
 		//Get whatever register this neighbor has. If it's not the "no_reg" value, 
 		//we'll store it in the array
-		if(neighbor->reg != NO_REG && neighbor->reg <= K_COLORS_GEN_USE){
+		if(neighbor->reg != NO_REG_GEN_PURPOSE && neighbor->reg <= K_COLORS_GEN_USE){
 			//Flag it as used
 			registers[neighbor->reg - 1] = TRUE;
 		}
@@ -2712,7 +2712,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//need to account for that
 	live_range_t* destination_lr = NULL;
 	//By default it's NO_REG, we will assign if it exists below
-	general_purpose_register_t destination_lr_reg = NO_REG;
+	general_purpose_register_t destination_lr_reg = NO_REG_GEN_PURPOSE;
 	
 	//Assign if it's not null
 	if(instruction->destination_register != NULL){
@@ -2796,7 +2796,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 	//Get the destination LR. Remember that this is nullable
 	live_range_t* destination_lr = NULL;
 	//We'll reassign if it exists
-	general_purpose_register_t destination_reg = NO_REG;
+	general_purpose_register_t destination_reg = NO_REG_GEN_PURPOSE;
 
 	//Extract if not null
 	if(instruction->destination_register != NULL){

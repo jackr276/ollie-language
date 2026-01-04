@@ -1228,7 +1228,7 @@ instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* rel
 static void print_8_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
-		case NO_REG:
+		case NO_REG_GEN_PURPOSE:
 			fprintf(fl, "NOREG8");
 			break;
 		case RAX:
@@ -1296,7 +1296,7 @@ static void print_8_bit_register_name(FILE* fl, general_purpose_register_t reg){
 static void print_16_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
-		case NO_REG:
+		case NO_REG_GEN_PURPOSE:
 			fprintf(fl, "NOREG16");
 			break;
 		case RAX:
@@ -1363,7 +1363,7 @@ static void print_16_bit_register_name(FILE* fl, general_purpose_register_t reg)
 static void print_32_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
-		case NO_REG:
+		case NO_REG_GEN_PURPOSE:
 			fprintf(fl, "NOREG32");
 			break;
 		case RAX:
@@ -1428,7 +1428,7 @@ static void print_32_bit_register_name(FILE* fl, general_purpose_register_t reg)
 static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
-		case NO_REG:
+		case NO_REG_GEN_PURPOSE:
 			fprintf(fl, "NOREG64");
 			break;
 		case RAX:
@@ -1512,7 +1512,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 			}
 
 			//Special edge case
-			if(variable->associated_live_range->reg == NO_REG){
+			if(variable->associated_live_range->reg == NO_REG_GEN_PURPOSE){
 				fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
 				break;
 			}
