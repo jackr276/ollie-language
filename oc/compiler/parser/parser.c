@@ -491,14 +491,36 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t
  *
  * Example:
  * int* + 1 -> int* + 4(an int is 4 bytes), and so on...
+ * Same goes for arrays
  */
 static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* pointer, ollie_token_t op, generic_ast_node_t* operand, side_type_t side){
-	//Grab the pointer type out
-	generic_type_t* pointer_type = pointer->inferred_type;
+	//Grab the pointer/array type out
+	generic_type_t* type = pointer->inferred_type;
 
 	//If this is a void pointer, we're done
-	if(pointer_type->internal_values.is_void_pointer == TRUE){
+	if(type->internal_values.is_void_pointer == TRUE){
 		return print_and_return_error("Void pointers cannot be added or subtracted to", parser_line_num);
+	}
+
+	//What do we multiply by?
+	int64_t multiplicand;	
+
+	//Go based on the type class here
+	switch(type->type_class){
+		//If it's a pointer, we multiply by whatever it points to
+		case TYPE_CLASS_POINTER:
+			multiplicand = type->internal_types.points_to->type_size;
+			break;
+
+		//If it's an array, we multiply by the size of the member type
+		case TYPE_CLASS_ARRAY:
+			multiplicand = type->internal_types.member_type->type_size;
+			break;
+		
+		//Should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
 	}
 
 	//An efficiency enhancement here - if the operand itself is a constant, we can just generate
@@ -512,7 +534,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 		coerce_constant(operand);
 
 		//Multiply it by the size
-		operand->constant_value.signed_long_value *= pointer_type->internal_types.points_to->type_size;
+		operand->constant_value.signed_long_value *= multiplicand;
 
 		//And we're done, just give back the value
 		return operand;
@@ -523,7 +545,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
 	//Mark the type too
 	constant_multiplicand->constant_type = LONG_CONST;
 	//Store the size in here
-	constant_multiplicand->constant_value.unsigned_long_value = pointer_type->internal_types.points_to->type_size;
+	constant_multiplicand->constant_value.signed_long_value = multiplicand;
 	//This one's type is always an immutable i64
 	constant_multiplicand->inferred_type = immut_i64; 
 
@@ -3101,35 +3123,41 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//We have a pointer here in the temp holder, and we're trying to add/subtract something to it
-		if(temp_holder->inferred_type->type_class != TYPE_CLASS_POINTER){
-			//Use the type compatibility function to determine compatibility and apply necessary coercions
-			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+		//Go based on what kind of type we have here
+		switch(temp_holder->inferred_type->type_class){
+			case TYPE_CLASS_POINTER:
+			case TYPE_CLASS_ARRAY:
+				//Let's first determine if they're compatible
+				return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-			//If this fails, that means that we have an invalid operation
-			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
-				return print_and_return_error(info, parser_line_num);
-			}
+				//If this fails, that means that we have an invalid operation
+				if(return_type == NULL){
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
+					return print_and_return_error(info, parser_line_num);
+				}
 
-		} else {
-			//Let's first determine if they're compatible
-			return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
+				//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
+				generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child, side);
 
-			//If this fails, that means that we have an invalid operation
-			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
-				return print_and_return_error(info, parser_line_num);
-			}
+				//Copy the variable over here for later use
+				variable = temp_holder->variable;
 
-			//We'll now generate the appropriate pointer arithmetic here where the right child is adjusted appropriately
-			generic_ast_node_t* pointer_arithmetic = generate_pointer_arithmetic(temp_holder, op.tok, right_child, side);
+				//Once we're done here, the right child is the pointer arithmetic
+				right_child = pointer_arithmetic;
+				
+				break;
+				
+			default:
+				//Use the type compatibility function to determine compatibility and apply necessary coercions
+				return_type = determine_compatibility_and_coerce(type_symtab, &(temp_holder->inferred_type), &(right_child->inferred_type), op.tok);
 
-			//Copy the variable over here for later use
-			variable = temp_holder->variable;
+				//If this fails, that means that we have an invalid operation
+				if(return_type == NULL){
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_to_string(op.tok));
+					return print_and_return_error(info, parser_line_num);
+				}
 
-			//Once we're done here, the right child is the pointer arithmetic
-			right_child = pointer_arithmetic;
+				break;
 		}
 
 		/**
