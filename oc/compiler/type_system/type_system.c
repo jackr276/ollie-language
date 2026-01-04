@@ -351,6 +351,8 @@ static u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t*
  * 					  Any other pointer can be assigned a void pointer
  * 					  Beyond this, the "pointing_to" types have to match when dealiased
  * 5.) Basic Types: See the area below for these rules, there are many
+ * 		Floating point: floating points can be assigned to integer types so long as the sizes are compatible
+ * 		and vice versa. All of the internal conversion logic will happen in the instruction selector
  */
 generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_t* source_type){
 	//Predeclare these for now
@@ -650,32 +652,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				case VOID:
 					return NULL;
 
-				//Float64's can only be assigned to other float64's
-				case F64:
-					//We must see another f64 or an f32(widening) here
-					if(true_source_type->type_class == TYPE_CLASS_BASIC
-						&& (true_source_type->basic_type_token == F64
-						|| true_source_type->basic_type_token == F32)){
-						return destination_type;
-
-					//Otherwise nothing here will work
-					} else {
-						return NULL;
-					}
-
-				case F32:
-					//We must see another an f32 here
-					if(true_source_type->type_class == TYPE_CLASS_BASIC
-						&& true_source_type->basic_type_token == F32){
-						return destination_type;
-
-					//Otherwise nothing here will work
-					} else {
-						return NULL;
-					}
-
 				//Once we get to this point, we know that we have something
-				//in this set for destination type: U64, I64, U32, I32, U16, I16, U8, I8, Char
+				//in this set for destination type: F64,F32, U64, I64, U32, I32, U16, I16, U8, I8, Char
 				//From here, we'll go based on the type size of the source type *if* the source
 				//type is also a basic type. 
 				default:
@@ -695,15 +673,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 					//Go based on what we have here
 					switch(source_basic_type){
-						//If we have these, we can't assign them to an int
-						case F32:
-						case F64:
 						case VOID:
 							return NULL;
 
-						//Otherwise, once we make it here we know that the source type is a basic type and
-						//and integer/char type. We can now just compare the sizes and if the destination is more
-						//than or equal to the source, we're good
+						//For basic types, so long as the source is not physically larger than the
+						//destination, ollie allows us to assign it. This is also true for going from
+						//floats to ints or ints to floats, but this will generate internal conversion
+						//logic
 						default:
 							if(true_source_type->type_size <= destination_type->type_size){
 								return destination_type;
