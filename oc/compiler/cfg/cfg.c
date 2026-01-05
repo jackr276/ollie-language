@@ -5758,9 +5758,9 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
-	//If it ends in a return statement, there is no point in continuing this
-	if(compound_stmt_end->exit_statement != NULL
-		&& compound_stmt_end->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+	//If the block is empty *or* it doesn't end in a return, we need a jump
+	if(compound_stmt_end->exit_statement == NULL
+		|| compound_stmt_end->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 		//We also need an uncoditional jump right to the update block
 		emit_jump(compound_stmt_end, for_stmt_update_block);
 	}
@@ -5951,9 +5951,9 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
-	//If it's not a return statement, we can add all of these in
-	if(compound_stmt_end->exit_statement != NULL
-		&& compound_stmt_end->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+	//If the block is empty *or* it doesn't end in a return, we need a jump
+	if(compound_stmt_end->exit_statement == NULL
+		|| compound_stmt_end->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 		//The compound statement end will jump right back up to the entry block
 		emit_jump(compound_stmt_end, while_statement_entry_block);
 	}
@@ -6024,9 +6024,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Extract this for convenience
 	basic_block_t* if_compound_stmt_end = if_compound_statement_results.final_block;
 
-	//If this is not a return block, we will add these
-	if(if_compound_stmt_end->exit_statement != NULL
-		&& if_compound_stmt_end->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+	//If the block is empty *or* it doesn't end in a return, we add a jump
+	if(if_compound_stmt_end->exit_statement == NULL
+		|| if_compound_stmt_end->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 		//The successor to the if-stmt end path is the if statement end block
 		emit_jump(if_compound_stmt_end, exit_block);
 	}
@@ -6106,9 +6106,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//Now we'll find the end of this statement
 		basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
 
-		//If this is not a return block, we will add these
-		if(else_if_compound_stmt_exit->exit_statement != NULL
-			&& else_if_compound_stmt_exit->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+		//If the block is empty *or* it doesn't end in a return, we need the jump
+		if(else_if_compound_stmt_exit->exit_statement == NULL
+			|| else_if_compound_stmt_exit->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 			//The successor to the if-stmt end path is the if statement end block
 			emit_jump(else_if_compound_stmt_exit, exit_block);
 		}
@@ -6146,9 +6146,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			//More bookeeping based on the exit type
 			basic_block_t* else_compound_statement_exit = else_compound_statement_values.final_block;
 
-			//If this is not a return block, we will add these
-			if(else_compound_statement_exit->exit_statement != NULL
-				&& else_compound_statement_exit->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+			//If the block is empty *or* it doesn't end in a return, we need the jump
+			if(else_compound_statement_exit->exit_statement == NULL
+				|| else_compound_statement_exit->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 				//The successor to the if-stmt end path is the if statement end block
 				emit_jump(else_compound_statement_exit, exit_block);
 			}
@@ -6751,9 +6751,9 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		//Now we'll drill down to the bottom to prime the next pass
 		current_block = case_default_results.final_block;
 
-		//If we don't have a return terminal type, we can add the ending block as a successor
-		if(current_block->exit_statement != NULL
-			&& current_block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+		//If the block is empty *or* it doesn't end in a return, add the jump
+		if(current_block->exit_statement == NULL
+			|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 			//We will always emit a direct jump from this block to the ending block
 			emit_jump(current_block, ending_block);
 		}
