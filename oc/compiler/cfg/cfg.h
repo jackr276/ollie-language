@@ -25,22 +25,6 @@ typedef struct cfg_statement_holder_t cfg_statement_holder_t;
 
 
 /**
- * A general block type that is used for readability. It is
- * important to note that block type is not always used. Instead,
- * it is used to mark important blocks like break statements, return statements,
- * etc, that would have an impact on control flow
- */
-typedef enum {
-	BLOCK_TERM_TYPE_NORMAL, //THe block ends normally, no indirection of any kind
-	BLOCK_TERM_TYPE_BREAK, //Ends in a break statement
-	BLOCK_TERM_TYPE_CONTINUE, //Ends in a continue statement
-	BLOCK_TERM_TYPE_RET, //The block ends in a return statement
-	BLOCK_TERM_TYPE_USER_DEFINED_JUMP, //The block ends in a direct user defined nonconditional jump
-	BLOCK_TERM_TYPE_LOOP_END, //This block is the end of a loop
-} block_terminal_type_t;
-
-
-/**
  * What is the general type of the block. Again most
  * blocks are normal, but there are exceptions
  */
@@ -148,8 +132,6 @@ struct basic_block_t{
 	u_int32_t estimated_execution_frequency;
 	//What is the general classification of this block
 	block_type_t block_type;
-	//How does the block terminate? This is important for CFG drilling
-	block_terminal_type_t block_terminal_type;
 	//Does this block contain a marked record?
 	u_int8_t contains_mark;
 	//Was this block visited by traverser?

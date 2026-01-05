@@ -2727,6 +2727,9 @@ static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_
  * registers are being used by the function being called. As such, we can be precise about what
  * we push/pop onto and off of the stack and have for a more efficient saving regime. This is not
  * possible for indirect function calls, which is the reason for the distinction
+ *
+ * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
+ * sees fit. As such, the burden for saving all of these falls onto the caller here
  */
 static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* instruction){
 	//If we get here we know that we have a call instruction. Let's
@@ -2817,6 +2820,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
  * For an indirect call, we can not know for certain what registers are and are not used
  * inside of the function. As such, we'll need to save any/all caller saved registers that are in use
  * at the time that the function is called
+ *
+ * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
+ * sees fit. As such, the burden for saving all of these falls onto the caller here
  */
 static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t* instruction){
 	//Get the destination LR. Remember that this is nullable
@@ -2940,6 +2946,9 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 /**
  * This function handles all callee saving logic for each function that we have on top off emitting
  * the stack allocation and deallocation statements that we need for each function
+ *
+ * NOTE: since all SSE registers are caller-saved, we actually don't need to worry about any SSE registers here because
+ * they will all be handled by the caller anyway
  */
 static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
 	//Keep a reference to the original entry instruction that we had before
