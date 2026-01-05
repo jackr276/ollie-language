@@ -2741,7 +2741,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 /**
  * Handle a simple register to register or immediate to register move
  */
-static void print_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static void print_general_purpose_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
 	switch(instruction->instruction_type){
 		case MOVQ:
@@ -2817,7 +2817,7 @@ static void print_register_to_register_move(FILE* fl, instruction_t* instruction
  * Handle a complex register(or immediate) to memory move with a complex
  * address offset calculation
  */
-static void print_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
 	switch(instruction->instruction_type){
 		case MOVQ:
@@ -2889,7 +2889,7 @@ static void print_register_to_memory_move(FILE* fl, instruction_t* instruction, 
 /**
  * Handle a complex memory to register move with a complex address offset calculation
  */
-static void print_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
 	switch(instruction->instruction_type){
 		case MOVQ:
@@ -3910,15 +3910,15 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			 */
 			switch(instruction->memory_access_type){
 				case NO_MEMORY_ACCESS:
-					print_register_to_register_move(fl, instruction, mode);
+					print_general_purpose_register_to_register_move(fl, instruction, mode);
 					break;
 
 				case WRITE_TO_MEMORY:
-					print_register_to_memory_move(fl, instruction, mode);
+					print_general_purpose_register_to_memory_move(fl, instruction, mode);
 					break;
 
 				case READ_FROM_MEMORY:
-					print_memory_to_register_move(fl, instruction, mode);
+					print_general_purpose_memory_to_register_move(fl, instruction, mode);
 					break;
 			}
 

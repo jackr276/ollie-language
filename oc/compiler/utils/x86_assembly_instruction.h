@@ -176,6 +176,16 @@ typedef enum{
 	SETA, //Set > unsigned
 	SETBE, //Set <= unsigned
 	SETB, //Set < unsigned
+	// ============= Begin specialized floating point instructions ==============
+	MOVSS, //Move f32 -> f32
+	MOVSD, //Move f64 -> f64
+	ADDSD, //Add scalar f64
+	SUBSD, //Subtract scalar f64
+	ADDSS, //Add scalar f32
+	SUBSS, //Subtract scalar f32
+	PXOR, //Packed bitwise exclusive or
+	CVTSS2SD, //Convert scalar f32 to scalar f64
+	
 } instruction_type_t;
 
 
