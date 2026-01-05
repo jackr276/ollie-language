@@ -3657,9 +3657,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 	temp_assignment->is_branch_ending = is_branch_ending;
 
-	//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
-	temp_assignment->cannot_be_combined = TRUE;
-
 	//This counts as a use for the assignee
 	add_used_variable(current_block, assignee);
 
@@ -3856,9 +3853,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 						//Throw it in the block
 						add_statement(current_block, temp_assignment);
-
-						//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
-						temp_assignment->cannot_be_combined = TRUE;
 
 						//Now the new assignee equals this new temp that we have
 						assignee = temp_assignment->assignee;

@@ -1050,7 +1050,8 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 
 	//We'll reset the assigned registers array here because we have not assigned any registers at this
 	//point
-	memset(function_entry_block->function_defined_in->assigned_registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+	memset(function_entry_block->function_defined_in->assigned_registers_gen_purpose, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+	memset(function_entry_block->function_defined_in->assigned_registers_sse, 0, sizeof(u_int8_t) * K_COLORS_SSE);
 
 	//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
 	do{
@@ -2136,8 +2137,7 @@ static u_int8_t perform_block_level_coalescence(basic_block_t* block, interferen
 	//Now run through all of these
 	while(instruction != NULL){
 		//If it's not a pure copy *or* it's marked as non-combinable, just move along
-		if(is_instruction_pure_copy(instruction) == FALSE
-			|| instruction->cannot_be_combined == TRUE){
+		if(is_instruction_pure_copy(instruction) == FALSE){
 			instruction = instruction->next_statement;
 			continue;
 		}
@@ -2238,7 +2238,7 @@ static u_int8_t allocate_register_gen_purpose(live_range_t* live_range){
 	if(live_range->reg.gen_purpose != NO_REG_GEN_PURPOSE){
 		//Flag this as used in the function
 		if(live_range->assignment_count > 0){
-			live_range->function_defined_in->assigned_registers[live_range->reg.gen_purpose - 1] = TRUE;
+			live_range->function_defined_in->assigned_registers_gen_purpose[live_range->reg.gen_purpose - 1] = TRUE;
 		}
 
 		return TRUE;
@@ -2282,7 +2282,7 @@ static u_int8_t allocate_register_gen_purpose(live_range_t* live_range){
 
 		//Flag this as used in the function
 		if(live_range->assignment_count > 0){
-			live_range->function_defined_in->assigned_registers[i] = TRUE;
+			live_range->function_defined_in->assigned_registers_gen_purpose[i] = TRUE;
 		}
 
 		//Return true here
@@ -2782,7 +2782,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		 * register because the callee will also assign it, so whatever
 		 * value it has that we're relying on would not survive the call
 		 */
-		if(callee->assigned_registers[reg - 1] == TRUE){
+		if(callee->assigned_registers_gen_purpose[reg - 1] == TRUE){
 			//Emit a direct push with this live range's register
 			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
 
@@ -2962,7 +2962,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//We don't use this register, so move on
-		if(function->assigned_registers[i] == FALSE){
+		if(function->assigned_registers_gen_purpose[i] == FALSE){
 			continue;
 		}
 
@@ -3031,7 +3031,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		//Run through all the registers backwards
 		for(int16_t j = K_COLORS_GEN_USE - 1; j >= 0; j--){
 			//If we haven't used this register, then skip it
-			if(function->assigned_registers[j] == FALSE){
+			if(function->assigned_registers_gen_purpose[j] == FALSE){
 				continue;
 			}
 

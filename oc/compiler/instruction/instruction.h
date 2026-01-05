@@ -295,8 +295,6 @@ struct instruction_t{
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;
-	//Cannot be coalesced
-	u_int8_t cannot_be_combined;
 	//Is this a regular or inverse branch
 	u_int8_t inverse_branch;
 	//If it's a branch statment, then we'll use this
