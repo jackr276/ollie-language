@@ -1009,7 +1009,7 @@ instruction_t* emit_direct_register_push_instruction(general_purpose_register_t 
 	instruction->instruction_type = PUSH_DIRECT;
 
 	//Now we'll set the register
-	instruction->push_or_pop_reg = reg;
+	instruction->push_or_pop_reg.gen_purpose = reg;
 
 	//Now give it back
 	return instruction;
@@ -1048,7 +1048,7 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
 	instruction->instruction_type = POP_DIRECT;
 
 	//Now we'll set the register
-	instruction->push_or_pop_reg = reg;
+	instruction->push_or_pop_reg.gen_purpose = reg;
 
 	//Now give it back
 	return instruction;
@@ -3793,7 +3793,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case PUSH_DIRECT:
 			fprintf(fl, "push ");
 			//We have to print a register here, there's no choice
-			print_64_bit_register_name(fl, instruction->push_or_pop_reg);
+			print_64_bit_register_name(fl, instruction->push_or_pop_reg.gen_purpose);
 			fprintf(fl, "\n");
 			break;
 
@@ -3806,7 +3806,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case POP_DIRECT:
 			fprintf(fl, "pop ");
 			//We have to print a register here, there's no choice
-			print_64_bit_register_name(fl, instruction->push_or_pop_reg);
+			print_64_bit_register_name(fl, instruction->push_or_pop_reg.gen_purpose);
 			fprintf(fl, "\n");
 			break;
 

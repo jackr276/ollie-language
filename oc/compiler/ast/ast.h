@@ -1,6 +1,7 @@
 /**
+ * Author: Jack Robbins
+ *
  * The abstract syntax tree is what will be generated through the very first run of the compiler.
- * It is currently close-to-source, but will eventually expand to be more low-level
 */
 
 #ifndef AST_H

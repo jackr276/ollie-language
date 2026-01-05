@@ -62,6 +62,17 @@ typedef enum {
 
 
 /**
+ * What kind of live range is this? Live ranges can either
+ * be part of the normal general purpose class of variables
+ * or the SSE(floating point usually) class of variables
+ */
+typedef enum {
+	LIVE_RANGE_CLASS_GEN_PURPOSE,
+	LIVE_RANGE_CLASS_SSE
+} live_range_class_t;
+
+
+/**
  * A global variable stores the variable itself
  * and it stores the value, if it has one
  */
@@ -132,7 +143,10 @@ struct live_range_t {
 	//Was this live range spilled?
 	u_int8_t was_spilled;
 	//What register is this live range in?
-	general_purpose_register_t reg; 
+	union {
+		general_purpose_register_t gen_purpose;
+		sse_register_t sse_reg;
+	} reg;
 };
 
 
@@ -178,8 +192,6 @@ struct three_addr_var_t{
 	u_int8_t parameter_number;
 	//What is the size of this variable
 	variable_size_t variable_size;
-	//What register is this in?
-	general_purpose_register_t variable_register;
 	//What membership do we have if any
 	variable_membership_t membership;
 	//What type of variable is this
@@ -294,7 +306,10 @@ struct instruction_t{
 	//Do we have a read, write, or no attempt to access memory(default)
 	memory_access_type_t memory_access_type;
 	//The register that we're popping or pushing
-	general_purpose_register_t push_or_pop_reg;
+	union{
+		general_purpose_register_t gen_purpose;
+		sse_register_t sse_register;
+	} push_or_pop_reg;
 };
 
 /**

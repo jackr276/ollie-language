@@ -1,4 +1,6 @@
 /**
+ * Author: Jack Robbins
+ * 
  * The implementation file for all CFG related operations
  *
  * The CFG will translate the higher level code into something referred to as 

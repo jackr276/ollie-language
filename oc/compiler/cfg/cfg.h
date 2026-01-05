@@ -1,4 +1,6 @@
 /**
+ * Author: Jack Robbins
+ *
  * A header file that references everything we should need for the control-flow-graph
 */
 
