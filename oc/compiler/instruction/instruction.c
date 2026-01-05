@@ -1633,37 +1633,60 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 				break;
 			}
 
-			//Special edge case
-			if(variable->associated_live_range->reg == NO_REG_GEN_PURPOSE){
-				fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
-				break;
-			}
-			
-			//Switch based on the variable's size to print out the register
-			switch(variable->variable_size){
-				case QUAD_WORD:
-					print_64_bit_register_name(fl, variable->associated_live_range->reg);
+			//Once we get to this, we need to based on the live range class. There
+			//are 2 different classes - SSE and general purpose
+			switch(variable->associated_live_range->live_range_class){
+				case LIVE_RANGE_CLASS_GEN_PURPOSE:
+					//Special edge case
+					if(variable->associated_live_range->reg.gen_purpose == NO_REG_GEN_PURPOSE){
+						fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
+						break;
+					}
+					
+					//Switch based on the variable's size to print out the register
+					switch(variable->variable_size){
+						case QUAD_WORD:
+							print_64_bit_register_name(fl, variable->associated_live_range->reg.gen_purpose);
+							break;
+						case DOUBLE_WORD:
+							print_32_bit_register_name(fl, variable->associated_live_range->reg.gen_purpose);
+							break;
+						case WORD:
+							print_16_bit_register_name(fl, variable->associated_live_range->reg.gen_purpose);
+							break;
+						case BYTE:
+							print_8_bit_register_name(fl, variable->associated_live_range->reg.gen_purpose);
+							break;
+						default:
+							printf("Fatal internal compiler error: unknown/invalid general purpose variable size encountered\n");
+							exit(1);
+					}
+
 					break;
-				case DOUBLE_WORD:
-					print_32_bit_register_name(fl, variable->associated_live_range->reg);
+
+				//SSE registers only have the option for single
+				//or double precision
+				case LIVE_RANGE_CLASS_SSE:
+					//Special edge case
+					if(variable->associated_live_range->reg.sse_reg == NO_REG_SSE){
+						fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
+						break;
+					}
+
+					//There are only 2 potential correct sizes here
+					switch(variable->variable_size){
+						case SINGLE_PRECISION:
+							print_single_precision_sse_register(fl, variable->associated_live_range->reg.sse_reg);
+							break;
+						case DOUBLE_PRECISION:
+							print_double_precision_sse_register(fl, variable->associated_live_range->reg.sse_reg);
+							break;
+						default:
+							printf("Fatal internal compiler error: unknown/invalid SSE variable size encountered\n");
+							exit(1);
+					}
+
 					break;
-				case WORD:
-					print_16_bit_register_name(fl, variable->associated_live_range->reg);
-					break;
-				case BYTE:
-					print_8_bit_register_name(fl, variable->associated_live_range->reg);
-					break;
-				case SINGLE_PRECISION:
-					//FIXME
-					print_single_precision_sse_register(fl, variable->associated_live_range->reg);
-					break;
-				case DOUBLE_PRECISION:
-					//FIXME
-					print_double_precision_sse_register(fl, variable->associated_live_range->reg);
-					break;
-				default:
-					printf("Fatal internal compiler error: Undefined variable size detected during register printing\n");
-					exit(1);
 			}
 
 			break;

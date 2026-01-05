@@ -142,6 +142,8 @@ struct live_range_t {
 	u_int8_t is_precolored;
 	//Was this live range spilled?
 	u_int8_t was_spilled;
+	//What class of live range is this?
+	live_range_class_t live_range_class;
 	//What register is this live range in?
 	union {
 		general_purpose_register_t gen_purpose;
