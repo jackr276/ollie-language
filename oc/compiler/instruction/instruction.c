@@ -1009,7 +1009,7 @@ instruction_t* emit_direct_register_push_instruction(general_purpose_register_t 
 	instruction->instruction_type = PUSH_DIRECT;
 
 	//Now we'll set the register
-	instruction->push_or_pop_reg = reg;
+	instruction->push_or_pop_reg.gen_purpose = reg;
 
 	//Now give it back
 	return instruction;
@@ -1048,7 +1048,7 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
 	instruction->instruction_type = POP_DIRECT;
 
 	//Now we'll set the register
-	instruction->push_or_pop_reg = reg;
+	instruction->push_or_pop_reg.gen_purpose = reg;
 
 	//Now give it back
 	return instruction;
@@ -1228,7 +1228,7 @@ instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* rel
 static void print_8_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
-		case NO_REG:
+		case NO_REG_GEN_PURPOSE:
 			fprintf(fl, "NOREG8");
 			break;
 		case RAX:
@@ -1296,7 +1296,7 @@ static void print_8_bit_register_name(FILE* fl, general_purpose_register_t reg){
 static void print_16_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
-		case NO_REG:
+		case NO_REG_GEN_PURPOSE:
 			fprintf(fl, "NOREG16");
 			break;
 		case RAX:
@@ -1363,7 +1363,7 @@ static void print_16_bit_register_name(FILE* fl, general_purpose_register_t reg)
 static void print_32_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
-		case NO_REG:
+		case NO_REG_GEN_PURPOSE:
 			fprintf(fl, "NOREG32");
 			break;
 		case RAX:
@@ -1428,7 +1428,7 @@ static void print_32_bit_register_name(FILE* fl, general_purpose_register_t reg)
 static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg){
 	//One large switch based on what it is
 	switch (reg) {
-		case NO_REG:
+		case NO_REG_GEN_PURPOSE:
 			fprintf(fl, "NOREG64");
 			break;
 		case RAX:
@@ -1487,6 +1487,128 @@ static void print_64_bit_register_name(FILE* fl, general_purpose_register_t reg)
 
 
 /**
+ * Print a single precision SSE register out
+ */
+void print_single_precision_sse_register(FILE* fl, sse_register_t reg){
+	switch(reg){
+		//Exclusively for debug purposes. Under normal operation, we shouldn't be hitting this
+		case NO_REG_SSE:
+			fprintf(fl, "NOREG Single Precision");
+			break;
+		case XMM0:
+			fprintf(fl, "%%XMM0");
+			break;
+		case XMM1:
+			fprintf(fl, "%%XMM1");
+			break;
+		case XMM2:
+			fprintf(fl, "%%XMM2");
+			break;
+		case XMM3:
+			fprintf(fl, "%%XMM3");
+			break;
+		case XMM4:
+			fprintf(fl, "%%XMM4");
+			break;
+		case XMM5:
+			fprintf(fl, "%%XMM5");
+			break;
+		case XMM6:
+			fprintf(fl, "%%XMM6");
+			break;
+		case XMM7:
+			fprintf(fl, "%%XMM7");
+			break;
+		case XMM8:
+			fprintf(fl, "%%XMM8");
+			break;
+		case XMM9:
+			fprintf(fl, "%%XMM9");
+			break;
+		case XMM10:
+			fprintf(fl, "%%XMM10");
+			break;
+		case XMM11:
+			fprintf(fl, "%%XMM11");
+			break;
+		case XMM12:
+			fprintf(fl, "%%XMM12");
+			break;
+		case XMM13:
+			fprintf(fl, "%%XMM13");
+			break;
+		case XMM14:
+			fprintf(fl, "%%XMM14");
+			break;
+		case XMM15:
+			fprintf(fl, "%%XMM15");
+			break;
+	}
+}
+
+
+/**
+ * Print a double precision SSE register out
+ */
+void print_double_precision_sse_register(FILE* fl, sse_register_t reg){
+	switch(reg){
+		//Exclusively for debug purposes. Under normal operation, we shouldn't be hitting this
+		case NO_REG_SSE:
+			fprintf(fl, "NOREG Doulbe Precision");
+			break;
+		case XMM0:
+			fprintf(fl, "%%XMM0");
+			break;
+		case XMM1:
+			fprintf(fl, "%%XMM1");
+			break;
+		case XMM2:
+			fprintf(fl, "%%XMM2");
+			break;
+		case XMM3:
+			fprintf(fl, "%%XMM3");
+			break;
+		case XMM4:
+			fprintf(fl, "%%XMM4");
+			break;
+		case XMM5:
+			fprintf(fl, "%%XMM5");
+			break;
+		case XMM6:
+			fprintf(fl, "%%XMM6");
+			break;
+		case XMM7:
+			fprintf(fl, "%%XMM7");
+			break;
+		case XMM8:
+			fprintf(fl, "%%XMM8");
+			break;
+		case XMM9:
+			fprintf(fl, "%%XMM9");
+			break;
+		case XMM10:
+			fprintf(fl, "%%XMM10");
+			break;
+		case XMM11:
+			fprintf(fl, "%%XMM11");
+			break;
+		case XMM12:
+			fprintf(fl, "%%XMM12");
+			break;
+		case XMM13:
+			fprintf(fl, "%%XMM13");
+			break;
+		case XMM14:
+			fprintf(fl, "%%XMM14");
+			break;
+		case XMM15:
+			fprintf(fl, "%%XMM15");
+			break;
+	}
+}
+
+
+/**
  * Print a variable in name only. There are no spaces around the variable, and there
  * will be no newline inserted at all. This is meant solely for the use of the "print_three_addr_code_stmt"
  * and nothing more. This function is also designed to take into account the indirection aspected as well
@@ -1511,29 +1633,59 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 				break;
 			}
 
-			//Special edge case
-			if(variable->associated_live_range->reg == NO_REG){
-				fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
-				break;
-			}
-			
-			//Switch based on the variable's size to print out the register
-			switch(variable->variable_size){
-				case QUAD_WORD:
-					print_64_bit_register_name(fl, variable->associated_live_range->reg);
+			//Once we get to this, we need to based on the live range class. There
+			//are 2 different classes - SSE and general purpose
+			switch(variable->associated_live_range->live_range_class){
+				case LIVE_RANGE_CLASS_GEN_PURPOSE:
+					//Special edge case
+					if(variable->associated_live_range->reg.gen_purpose == NO_REG_GEN_PURPOSE){
+						fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
+						break;
+					}
+					
+					//Switch based on the variable's size to print out the register
+					switch(variable->variable_size){
+						case QUAD_WORD:
+							print_64_bit_register_name(fl, variable->associated_live_range->reg.gen_purpose);
+							break;
+						case DOUBLE_WORD:
+							print_32_bit_register_name(fl, variable->associated_live_range->reg.gen_purpose);
+							break;
+						case WORD:
+							print_16_bit_register_name(fl, variable->associated_live_range->reg.gen_purpose);
+							break;
+						case BYTE:
+							print_8_bit_register_name(fl, variable->associated_live_range->reg.gen_purpose);
+							break;
+						default:
+							printf("Fatal internal compiler error: unknown/invalid general purpose variable size encountered\n");
+							exit(1);
+					}
+
 					break;
-				case DOUBLE_WORD:
-					print_32_bit_register_name(fl, variable->associated_live_range->reg);
-					break;
-				case WORD:
-					print_16_bit_register_name(fl, variable->associated_live_range->reg);
-					break;
-				case BYTE:
-					print_8_bit_register_name(fl, variable->associated_live_range->reg);
-					break;
-				default:
-					print_64_bit_register_name(fl, variable->associated_live_range->reg);
-					printf("DEFAULTED\n");
+
+				//SSE registers only have the option for single
+				//or double precision
+				case LIVE_RANGE_CLASS_SSE:
+					//Special edge case
+					if(variable->associated_live_range->reg.sse_reg == NO_REG_SSE){
+						fprintf(fl, "LR%d", variable->associated_live_range->live_range_id);
+						break;
+					}
+
+					//There are only 2 potential correct sizes here
+					switch(variable->variable_size){
+						case SINGLE_PRECISION:
+							print_single_precision_sse_register(fl, variable->associated_live_range->reg.sse_reg);
+							break;
+						case DOUBLE_PRECISION:
+							print_double_precision_sse_register(fl, variable->associated_live_range->reg.sse_reg);
+							break;
+						default:
+							printf("Fatal internal compiler error: unknown/invalid SSE variable size encountered\n");
+							exit(1);
+					}
+
 					break;
 			}
 
@@ -3664,7 +3816,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case PUSH_DIRECT:
 			fprintf(fl, "push ");
 			//We have to print a register here, there's no choice
-			print_64_bit_register_name(fl, instruction->push_or_pop_reg);
+			print_64_bit_register_name(fl, instruction->push_or_pop_reg.gen_purpose);
 			fprintf(fl, "\n");
 			break;
 
@@ -3677,7 +3829,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case POP_DIRECT:
 			fprintf(fl, "pop ");
 			//We have to print a register here, there's no choice
-			print_64_bit_register_name(fl, instruction->push_or_pop_reg);
+			print_64_bit_register_name(fl, instruction->push_or_pop_reg.gen_purpose);
 			fprintf(fl, "\n");
 			break;
 

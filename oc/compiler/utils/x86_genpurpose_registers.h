@@ -5,14 +5,14 @@
 */
 
 //Include guards
-#ifndef X86_GENPUPROSE_REGISTERS_H
-#define X86_GENPUPROSE_REGISTERS_H
+#ifndef X86_GENPURPOSE_REGISTERS_H
+#define X86_GENPURPOSE_REGISTERS_H
 
 /**
  * Define the standard x86-64 register table
  */
 typedef enum{
-	NO_REG = 0, //Default is that there's no register used
+	NO_REG_GEN_PURPOSE = 0, //Default is that there's no register used
 	RAX,
 	RCX,
 	RDX,
@@ -33,4 +33,4 @@ typedef enum{
 	RIP, //Instruction pointer
 } general_purpose_register_t;
 
-#endif /* X86_GENPUPROSE_REGISTERS_H */
+#endif /* X86_GENPURPOSE_REGISTERS_H */

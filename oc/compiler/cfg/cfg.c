@@ -1,4 +1,6 @@
 /**
+ * Author: Jack Robbins
+ * 
  * The implementation file for all CFG related operations
  *
  * The CFG will translate the higher level code into something referred to as 
@@ -80,6 +82,13 @@ typedef struct{
  * Determine whether or not a given three address variable is eligible for SSA
  */
 #define IS_SSA_VARIABLE_TYPE(variable) ((variable->variable_type == VARIABLE_TYPE_NON_TEMP || variable->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS) ? TRUE : FALSE)
+
+/**
+ * Determine whether a given block needs to have a jump appended to it
+ * If the block is empty *or* it doesn't end in a return, we need a jump
+ */
+#define DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(block) (((block->exit_statement == NULL)\
+		|| (block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT)) ? TRUE : FALSE)
 
 //Are we emitting the dominance frontier or not?
 typedef enum{
@@ -193,8 +202,6 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	//Put the block ID in
 	created->block_id = increment_and_get();
 
-	//Our sane defaults here - normal termination and normal type
-	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
 
@@ -225,8 +232,6 @@ basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	//Put the block ID in
 	created->block_id = increment_and_get();
 
-	//Our sane defaults here - normal termination and normal type
-	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
 
@@ -259,8 +264,6 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
 	//Put the block ID in
 	created->block_id = increment_and_get();
 
-	//Our sane defaults here - normal termination and normal type
-	created->block_terminal_type = BLOCK_TERM_TYPE_NORMAL;
 	//We'll mark this to indicate that this is a labeled block
 	created->block_type = BLOCK_TYPE_LABEL;
 
@@ -3655,9 +3658,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
 	temp_assignment->is_branch_ending = is_branch_ending;
 
-	//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
-	temp_assignment->cannot_be_combined = TRUE;
-
 	//This counts as a use for the assignee
 	add_used_variable(current_block, assignee);
 
@@ -3854,9 +3854,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 						//Throw it in the block
 						add_statement(current_block, temp_assignment);
-
-						//IMPORTANT - we cannot coalesce this because it would wipe out the uniqueness that we have for our decrementing
-						temp_assignment->cannot_be_combined = TRUE;
 
 						//Now the new assignee equals this new temp that we have
 						assignee = temp_assignment->assignee;
@@ -5582,8 +5579,6 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		a->block_type = b->block_type;
 	}
 
-	a->block_terminal_type = b->block_terminal_type;
-
 	//If b has a jump table, we'll need to add this in as well
 	a->jump_table = b->jump_table;
 	b->jump_table = NULL;
@@ -5767,14 +5762,10 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	 */
 	emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
 
-	//This is a loop ending block
-	condition_block->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
-
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
-	//If it ends in a return statement, there is no point in continuing this
-	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+	if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(compound_stmt_end) == TRUE){
 		//We also need an uncoditional jump right to the update block
 		emit_jump(compound_stmt_end, for_stmt_update_block);
 	}
@@ -5844,7 +5835,8 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If we get this, we can't go forward. Just give it back
-	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_RET){
+	if(compound_stmt_end->exit_statement != NULL
+		&& compound_stmt_end->exit_statement->statement_type == THREE_ADDR_CODE_RET_STMT){
 		//Since we have a return block here, we know that everything else is unreachable
 		result_package.final_block = compound_stmt_end;
 		//And give it back
@@ -5874,11 +5866,6 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 * 	exit
 	 */
 	emit_branch(compound_stmt_end, do_while_stmt_entry_block, do_while_stmt_exit_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
-
-	//Set the termination type of this block
-	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-		compound_stmt_end->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
-	}
 
 	//Now that we're done here, pop the break/continue stacks to remove these blocks
 	pop(&continue_stack);
@@ -5969,15 +5956,10 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
-	//If it's not a return statement, we can add all of these in
-	if(compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+	//If the block is empty *or* it doesn't end in a return, we need a jump
+	if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(compound_stmt_end) == TRUE){
 		//The compound statement end will jump right back up to the entry block
 		emit_jump(compound_stmt_end, while_statement_entry_block);
-	}
-
-	//Set the termination type of this block
-	if(compound_stmt_end->block_terminal_type == BLOCK_TERM_TYPE_NORMAL){
-		compound_stmt_end->block_terminal_type = BLOCK_TERM_TYPE_LOOP_END;
 	}
 
 	//Now that we're done, pop these both off their respective stacks
@@ -6046,8 +6028,8 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Extract this for convenience
 	basic_block_t* if_compound_stmt_end = if_compound_statement_results.final_block;
 
-	//If this is not a return block, we will add these
-	if(if_compound_stmt_end->block_terminal_type != BLOCK_TERM_TYPE_RET){
+	//If the block is empty *or* it doesn't end in a return, we add a jump
+	if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(if_compound_stmt_end) == TRUE){
 		//The successor to the if-stmt end path is the if statement end block
 		emit_jump(if_compound_stmt_end, exit_block);
 	}
@@ -6127,8 +6109,8 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//Now we'll find the end of this statement
 		basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
 
-		//If this is not a return block, we will add these
-		if(else_if_compound_stmt_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
+		//If the block is empty *or* it doesn't end in a return, we need the jump
+		if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(else_if_compound_stmt_exit) == TRUE){
 			//The successor to the if-stmt end path is the if statement end block
 			emit_jump(else_if_compound_stmt_exit, exit_block);
 		}
@@ -6166,8 +6148,8 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			//More bookeeping based on the exit type
 			basic_block_t* else_compound_statement_exit = else_compound_statement_values.final_block;
 
-			//If this is not a return block, we will add these
-			if(else_compound_statement_exit->block_terminal_type != BLOCK_TERM_TYPE_RET){
+			//If the block is empty *or* it doesn't end in a return, we need the jump
+			if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(else_compound_statement_exit) == TRUE){
 				//The successor to the if-stmt end path is the if statement end block
 				emit_jump(else_compound_statement_exit, exit_block);
 			}
@@ -6770,8 +6752,8 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		//Now we'll drill down to the bottom to prime the next pass
 		current_block = case_default_results.final_block;
 
-		//If we don't have a return terminal type, we can add the ending block as a successor
-		if(current_block->block_terminal_type != BLOCK_TERM_TYPE_RET){
+		//If the block is empty *or* it doesn't end in a return, add the jump
+		if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(current_block) == TRUE){
 			//We will always emit a direct jump from this block to the ending block
 			emit_jump(current_block, ending_block);
 		}
@@ -6972,9 +6954,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//A successor to this block is the exit block
 				add_successor(current_block, function_exit_block);
 
-				//The current block will now be marked as a return statement
-				current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
-
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
 					print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
@@ -7074,9 +7053,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//There are two options here. We could see a regular continue or a conditional
 				//continue. If the child is null, then it is a regular continue
 				if(ast_cursor->first_child == NULL){
-					//Mark this for later
-					current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
-
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
 
@@ -7139,9 +7115,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//There are two options here: We could have a conditional break
 				//or a normal break. If there is no child node, we have a normal break
 				if(ast_cursor->first_child == NULL){
-					//Mark this for later
-					current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
-
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
 
@@ -7485,9 +7458,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//A successor to this block is the exit block
 				add_successor(current_block, function_exit_block);
 
-				//The current block will now be marked as a return statement
-				current_block->block_terminal_type = BLOCK_TERM_TYPE_RET;
-
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
 					print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
@@ -7587,9 +7557,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//There are two options here. We could see a regular continue or a conditional
 				//continue. If the child is null, then it is a regular continue
 				if(ast_cursor->first_child == NULL){
-					//Mark this for later
-					current_block->block_terminal_type = BLOCK_TERM_TYPE_CONTINUE;
-
 					//Peek the continue block off of the stack
 					basic_block_t* continuing_to = peek(&continue_stack);
 
@@ -7651,9 +7618,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//There are two options here: We could have a conditional break
 				//or a normal break. If there is no child node, we have a normal break
 				if(ast_cursor->first_child == NULL){
-					//Mark this for later
-					current_block->block_terminal_type = BLOCK_TERM_TYPE_BREAK;
-
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
 
@@ -7942,7 +7906,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
 		//If the exit statement is not a return statement, we need to know what's happening here
-		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+		if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(block) == TRUE){
 			//If this isn't void, then we need to throw a warning
 			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
 				|| function_defined_in->return_type->basic_type_token != VOID)

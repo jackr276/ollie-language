@@ -111,19 +111,43 @@ static void remove_useless_moves(basic_block_t* function_entry_block){
 				live_range_t* destination_live_range = current_instruction->destination_register->associated_live_range;
 				live_range_t* source_live_range = current_instruction->source_register->associated_live_range;
 
-				//We have a pure copy, so we can delete
-				if(source_live_range->reg == destination_live_range->reg){
-					instruction_t* holder = current_instruction;
+				//Go based on what live range class we have here
+				switch(source_live_range->live_range_class){
+					case LIVE_RANGE_CLASS_GEN_PURPOSE:
+						//We have a pure copy, so we can delete
+						if(source_live_range->reg.gen_purpose == destination_live_range->reg.gen_purpose){
+							instruction_t* holder = current_instruction;
 
-					//Push this one up
-					current_instruction = current_instruction->next_statement;
+							//Push this one up
+							current_instruction = current_instruction->next_statement;
 
-					//Delete the holder
-					delete_statement(holder);
+							//Delete the holder
+							delete_statement(holder);
 
-				//Otherwise just push it up
-				} else {
-					current_instruction = current_instruction->next_statement;
+						//Otherwise just push it up
+						} else {
+							current_instruction = current_instruction->next_statement;
+						}
+
+						break;
+
+					case LIVE_RANGE_CLASS_SSE:
+						//We have a pure copy, so we can delete
+						if(source_live_range->reg.gen_purpose == destination_live_range->reg.gen_purpose){
+							instruction_t* holder = current_instruction;
+
+							//Push this one up
+							current_instruction = current_instruction->next_statement;
+
+							//Delete the holder
+							delete_statement(holder);
+
+						//Otherwise just push it up
+						} else {
+							current_instruction = current_instruction->next_statement;
+						}
+
+						break;
 				}
 
 			//Otherwise push it up

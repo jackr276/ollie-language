@@ -437,7 +437,7 @@ static instruction_window_t initialize_instruction_window(basic_block_t* head){
  *
  * The "seed" is always the first instruction, it's what we use to set the rest up
  */
-static void reconstruct_window(instruction_window_t* window, instruction_t* seed){
+static inline void reconstruct_window(instruction_window_t* window, instruction_t* seed){
 	//Instruction 1 is always the seed
 	window->instruction1 = seed;
 
@@ -460,7 +460,7 @@ static void reconstruct_window(instruction_window_t* window, instruction_t* seed
  * Advance the window up by 1 instruction. This means that the lowest instruction slides
  * out of our window, and the one next to the highest instruction slides into it
  */
-static instruction_window_t* slide_window(instruction_window_t* window){
+static inline instruction_window_t* slide_window(instruction_window_t* window){
 	//Instruction1 becomes instruction 2
 	window->instruction1 = window->instruction2;
 	//Instruction2 becomes instruction3

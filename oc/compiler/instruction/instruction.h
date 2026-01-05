@@ -18,6 +18,7 @@
 #include "../utils/ollie_intermediary_representation.h"
 #include "../utils/x86_assembly_instruction.h"
 #include "../utils/x86_genpurpose_registers.h"
+#include "../utils/x86_sse_registers.h"
 #include "../utils/stack_management_structs.h"
 #include <stdint.h>
 #include <sys/types.h>
@@ -58,6 +59,17 @@ typedef enum {
 	VARIABLE_TYPE_LOCAL_CONSTANT,
 	VARIABLE_TYPE_FUNCTION_ADDRESS, //For rip-relative function pointer loads
 } variable_type_t;
+
+
+/**
+ * What kind of live range is this? Live ranges can either
+ * be part of the normal general purpose class of variables
+ * or the SSE(floating point usually) class of variables
+ */
+typedef enum {
+	LIVE_RANGE_CLASS_GEN_PURPOSE,
+	LIVE_RANGE_CLASS_SSE
+} live_range_class_t;
 
 
 /**
@@ -103,7 +115,7 @@ typedef enum{
  * For our live ranges, we'll really only need the name and
  * the variables
  */
-struct live_range_t{
+struct live_range_t {
 	//Hold all the variables that it has
 	dynamic_array_t variables;
 	//And we'll hold an adjacency list for interference
@@ -130,8 +142,13 @@ struct live_range_t{
 	u_int8_t is_precolored;
 	//Was this live range spilled?
 	u_int8_t was_spilled;
+	//What class of live range is this?
+	live_range_class_t live_range_class;
 	//What register is this live range in?
-	general_purpose_register_t reg; 
+	union {
+		general_purpose_register_t gen_purpose;
+		sse_register_t sse_reg;
+	} reg;
 };
 
 
@@ -177,8 +194,6 @@ struct three_addr_var_t{
 	u_int8_t parameter_number;
 	//What is the size of this variable
 	variable_size_t variable_size;
-	//What register is this in?
-	general_purpose_register_t variable_register;
 	//What membership do we have if any
 	variable_membership_t membership;
 	//What type of variable is this
@@ -280,8 +295,6 @@ struct instruction_t{
 	//Is this operation a "branch-ending" operation. This would encompass
 	//things like if statement decisions and loop conditions
 	u_int8_t is_branch_ending;
-	//Cannot be coalesced
-	u_int8_t cannot_be_combined;
 	//Is this a regular or inverse branch
 	u_int8_t inverse_branch;
 	//If it's a branch statment, then we'll use this
@@ -293,7 +306,10 @@ struct instruction_t{
 	//Do we have a read, write, or no attempt to access memory(default)
 	memory_access_type_t memory_access_type;
 	//The register that we're popping or pushing
-	general_purpose_register_t push_or_pop_reg;
+	union{
+		general_purpose_register_t gen_purpose;
+		sse_register_t sse_register;
+	} push_or_pop_reg;
 };
 
 /**

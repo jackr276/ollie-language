@@ -42,8 +42,8 @@ typedef enum{
 	WORD,
 	DOUBLE_WORD,
 	QUAD_WORD,
-	SINGLE_PRECISION,
-	DOUBLE_PRECISION //For floats
+	SINGLE_PRECISION, //F32
+	DOUBLE_PRECISION  //F64
 } variable_size_t;
 
 
