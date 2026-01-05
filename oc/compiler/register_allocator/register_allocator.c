@@ -79,9 +79,14 @@ static inline live_range_class_t get_live_range_class_for_variable(three_addr_va
 		case DOUBLE_WORD:
 		case QUAD_WORD:
 			return LIVE_RANGE_CLASS_GEN_PURPOSE;
+
 		case SINGLE_PRECISION:
 		case DOUBLE_PRECISION:
 			return LIVE_RANGE_CLASS_SSE;
+
+		default:
+			printf("Fatal internal compiler error: undefined variable size given for live range class determination\n");
+			exit(1);
 	}
 }
 
@@ -2337,7 +2342,7 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 		three_addr_var_t* dummy = emit_temp_var(target_source->type);
 
 		//Once we have the dummy, we can create the new LR
-		*currently_spilled = live_range_alloc(target->function);
+		*currently_spilled = live_range_alloc(target->function, spill_range->live_range_class);
 
 		//Flag that this was once spilled
 		(*currently_spilled)->was_spilled = TRUE;
@@ -2678,12 +2683,12 @@ static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_
 		 * means we should be able to allocate no issue
 		 */
 		if(range->degree < K_COLORS_GEN_USE){
-			allocate_register(range);
+			allocate_register_gen_purpose(range);
 
 		//Otherwise, we may still be able to allocate here
 		} else {
 			//We must still attempt to allocate it
-			u_int8_t can_allocate = allocate_register(range);
+			u_int8_t can_allocate = allocate_register_gen_purpose(range);
 			
 			//However if this is false, we need to perform a spill
 			if(can_allocate == FALSE){
@@ -2739,7 +2744,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	if(instruction->destination_register != NULL){
 		destination_lr = instruction->destination_register->associated_live_range;
 		//Save the register as well now that we know it exists
-		destination_lr_reg = destination_lr->reg;
+		destination_lr_reg = destination_lr->reg.gen_purpose;
 	}
 
 	//Start off with this as the last instruction
@@ -2759,7 +2764,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
 		//And remove its register
-		general_purpose_register_t reg = lr->reg;
+		general_purpose_register_t reg = lr->reg.gen_purpose;
 
 		//If it's not caller-saved, it's irrelevant to us
 		if(is_register_caller_saved(reg) == FALSE){
@@ -2823,7 +2828,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 	if(instruction->destination_register != NULL){
 		destination_lr = instruction->destination_register->associated_live_range;
 		//Extract this too if not null
-		destination_reg = destination_lr->reg;
+		destination_reg = destination_lr->reg.gen_purpose;
 	}
 
 	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
@@ -2844,7 +2849,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
 		//Extract its register too
-		general_purpose_register_t reg = lr->reg;
+		general_purpose_register_t reg = lr->reg.gen_purpose;
 
 		//It's not caller saved, so it's irrelevant
 		if(is_register_caller_saved(reg) == FALSE){

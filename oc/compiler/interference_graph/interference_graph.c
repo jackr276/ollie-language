@@ -43,7 +43,7 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 	}
 
 	//Stack pointer - this never interferes with anything
-	if(a->reg == RSP || b->reg == RSP){
+	if(a->reg.gen_purpose == RSP || b->reg.gen_purpose == RSP){
 		return;
 	}
 
@@ -138,7 +138,7 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 	 * If the target has a register and the source has no/the same register, no
 	 * action is needed
 	 */
-	if(target->reg == NO_REG_GEN_PURPOSE){
+	if(target->reg.gen_purpose == NO_REG_GEN_PURPOSE){
 		target->reg = coalescee->reg;
 	}
 
