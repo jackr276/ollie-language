@@ -183,9 +183,11 @@ typedef enum{
 	SUBSD, //Subtract scalar f64
 	ADDSS, //Add scalar f32
 	SUBSS, //Subtract scalar f32
-	PXOR, //Packed bitwise exclusive or
 	CVTSS2SD, //Convert scalar f32 to scalar f64
-	
+	PXOR, //Packed logical exclusive or
+	PAND, //Packed logical and
+	PANDN, //Packed logical and not
+	POR, //Packed logical or
 } instruction_type_t;
 
 

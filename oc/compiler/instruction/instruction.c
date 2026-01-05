@@ -4080,6 +4080,30 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+		// ============================ Begin floating point area ==============================
+		// The instructions below operate either exclusively with xmm registers or with a mix
+		// of xmm and general purpose registers
+		case MOVSD:
+		case MOVSS:
+			//TODO
+			break;
+
+		case PAND:
+			//TODO
+			break;
+
+		case PANDN:
+			//TODO
+			break;
+
+		case POR:
+			//TODO
+			break;
+		
+		case PXOR:
+			//TODO
+			break;
+
 		//Show a default error message. This is for the Dev's use only
 		default:
 			fprintf(fl, "Not yet selected. Statement code is: %d\n", instruction->statement_type);
