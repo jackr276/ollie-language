@@ -68,6 +68,25 @@ static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges,
 
 
 /**
+ * Get the live range class for a given variable, whether the variable is general purpose
+ * or SSE
+ */
+static inline live_range_class_t get_live_range_class_for_variable(three_addr_var_t* variable){
+	//All determined by the variable size
+	switch (variable->variable_size) {
+		case BYTE:
+		case WORD:
+		case DOUBLE_WORD:
+		case QUAD_WORD:
+			return LIVE_RANGE_CLASS_GEN_PURPOSE;
+		case SINGLE_PRECISION:
+		case DOUBLE_PRECISION:
+			return LIVE_RANGE_CLASS_SSE;
+	}
+}
+
+
+/**
  * Developer utility function to validate the priority queue implementation
  */
 static void print_live_range_array(dynamic_array_t* live_ranges){
@@ -99,7 +118,7 @@ static u_int32_t increment_and_get_live_range_id(){
 /**
  * Create a live range
  */
-static live_range_t* live_range_alloc(symtab_function_record_t* function_defined_in){
+static live_range_t* live_range_alloc(symtab_function_record_t* function_defined_in, live_range_class_t live_range_class){
 	//Calloc it
 	live_range_t* live_range = calloc(1, sizeof(live_range_t));
 
@@ -111,6 +130,9 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
 
 	//Store what function this came from
 	live_range->function_defined_in = function_defined_in;
+
+	//What category of live range(gen purpose or SSE) is this
+	live_range->live_range_class = live_range_class;
 
 	//Create the neighbors array as well
 	live_range->neighbors = dynamic_array_alloc();
