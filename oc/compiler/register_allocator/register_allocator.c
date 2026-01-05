@@ -24,7 +24,8 @@
 u_int32_t live_range_id = 0;
 
 //The array that holds all of our parameter passing
-const general_purpose_register_t parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
+const general_purpose_register_t gen_purpose_parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
+const sse_register_t sse_parameter_registers[] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5};
 
 //Avoid need to rearrange
 static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* live_ranges);
@@ -1618,7 +1619,7 @@ static u_int8_t precolor_instruction_gen_purpose(basic_block_t* function_entry, 
 	if(instruction->destination_register != NULL
 		&& instruction->destination_register->associated_live_range->function_parameter_order > 0){
 		//Extract the register
-		general_purpose_register_t reg = parameter_registers[instruction->destination_register->associated_live_range->function_parameter_order - 1];
+		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->destination_register->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
 		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, reg);
@@ -1633,7 +1634,7 @@ static u_int8_t precolor_instruction_gen_purpose(basic_block_t* function_entry, 
 	if(instruction->source_register != NULL
 		&& instruction->source_register->associated_live_range->function_parameter_order > 0){
 		//Extract the register
-		general_purpose_register_t reg = parameter_registers[instruction->source_register->associated_live_range->function_parameter_order - 1];
+		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->source_register->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
 		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register->associated_live_range, reg);
@@ -1648,7 +1649,7 @@ static u_int8_t precolor_instruction_gen_purpose(basic_block_t* function_entry, 
 	if(instruction->source_register2 != NULL
 		&& instruction->source_register2->associated_live_range->function_parameter_order > 0){
 		//Extract the register
-		general_purpose_register_t reg = parameter_registers[instruction->source_register2->associated_live_range->function_parameter_order - 1];
+		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->source_register2->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
 		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register2->associated_live_range, reg);
@@ -1663,7 +1664,7 @@ static u_int8_t precolor_instruction_gen_purpose(basic_block_t* function_entry, 
 	if(instruction->address_calc_reg1 != NULL
 		&& instruction->address_calc_reg1->associated_live_range->function_parameter_order > 0){
 		//Extract the register
-		general_purpose_register_t reg = parameter_registers[instruction->address_calc_reg1->associated_live_range->function_parameter_order - 1];
+		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->address_calc_reg1->associated_live_range->function_parameter_order - 1];
 
 		//Let the helper deal with it
 		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->address_calc_reg1->associated_live_range, reg);
@@ -1678,7 +1679,7 @@ static u_int8_t precolor_instruction_gen_purpose(basic_block_t* function_entry, 
 	if(instruction->address_calc_reg2 != NULL
 		&& instruction->address_calc_reg2->associated_live_range->function_parameter_order > 0){
 		//Extract the register
-		general_purpose_register_t reg = parameter_registers[instruction->address_calc_reg2->associated_live_range->function_parameter_order - 1];
+		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->address_calc_reg2->associated_live_range->function_parameter_order - 1];
 		
 		//Let the helper deal with it
 		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->address_calc_reg2->associated_live_range, reg);
@@ -1858,7 +1859,7 @@ static u_int8_t precolor_instruction_gen_purpose(basic_block_t* function_entry, 
 				live_range_t* param_live_range = param->associated_live_range;
 
 				//And we'll use the function param list to precolor appropriately
-				colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, param_live_range, parameter_registers[i]);
+				colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, param_live_range, gen_purpose_parameter_registers[i]);
 
 				//We had to spill here - jump out
 				if(colorable == FALSE){
