@@ -4,6 +4,7 @@
 */
 
 
+SABOTAGED
 
 pub fn add_floats_direct() -> f32 {
 	let x:f32 = 3.33;

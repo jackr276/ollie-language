@@ -57,6 +57,15 @@ typedef struct symtab_constant_record_t symtab_constant_record_t;
 //The definition of a local constant(.LCx) block
 typedef struct local_constant_t local_constant_t;
 
+//================================ Utility Macros ============================
+/**
+ * Determine whether a given variable is a function parameter itself or is
+ * just the alias of one
+ */
+#define IS_ORIGINAL_FUNCTION_PARAMETER(parameter)\
+	((parameter->alias == NULL) ? TRUE : FALSE)
+//================================ Utility Macros ============================
+
 
 /**
  * What is the membership that a variable has?

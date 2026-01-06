@@ -152,8 +152,22 @@ static inline u_int8_t is_source_register_clean(three_addr_var_t* source_registe
 	switch(source_register->membership){
 		//These are considered dirty - require a full movement instruction
 		case RETURNED_VARIABLE:
-		case FUNCTION_PARAMETER:
 			return FALSE;
+		case FUNCTION_PARAMETER:
+			//No linked var - must be clean
+			if(source_register->linked_var == NULL){
+				return TRUE;
+			}
+
+			//If this itself is the original parameter, then it's dirty
+			if(IS_ORIGINAL_FUNCTION_PARAMETER(source_register->linked_var) == TRUE){
+				return FALSE;
+			}
+
+			//Otherwise this is just the alias of that function parameter - so there is nothing
+			//to clean up
+			return TRUE;
+
 		//Everything else - nothing to worry about
 		default:
 			return TRUE;
@@ -3345,7 +3359,9 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 			//just that
 			instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
 
+			printf("\n\n\n\n\n\n\n\n\n\n");
 			print_instruction(stdout, pxor_instruction, PRINTING_VAR_IN_INSTRUCTION);
+			printf("\n\n\n\n\n\n\n\n\n\n");
 
 			//Get this in right before the given
 			insert_instruction_before_given(pxor_instruction, instruction);

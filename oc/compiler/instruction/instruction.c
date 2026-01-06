@@ -1519,52 +1519,52 @@ void print_single_precision_sse_register(FILE* fl, sse_register_t reg){
 			fprintf(fl, "NOREG Single Precision");
 			break;
 		case XMM0:
-			fprintf(fl, "%%XMM0");
+			fprintf(fl, "%%xmm0");
 			break;
 		case XMM1:
-			fprintf(fl, "%%XMM1");
+			fprintf(fl, "%%xmm1");
 			break;
 		case XMM2:
-			fprintf(fl, "%%XMM2");
+			fprintf(fl, "%%xmm2");
 			break;
 		case XMM3:
-			fprintf(fl, "%%XMM3");
+			fprintf(fl, "%%xmm3");
 			break;
 		case XMM4:
-			fprintf(fl, "%%XMM4");
+			fprintf(fl, "%%xmm4");
 			break;
 		case XMM5:
-			fprintf(fl, "%%XMM5");
+			fprintf(fl, "%%xmm5");
 			break;
 		case XMM6:
-			fprintf(fl, "%%XMM6");
+			fprintf(fl, "%%xmm6");
 			break;
 		case XMM7:
-			fprintf(fl, "%%XMM7");
+			fprintf(fl, "%%xmm7");
 			break;
 		case XMM8:
-			fprintf(fl, "%%XMM8");
+			fprintf(fl, "%%xmm8");
 			break;
 		case XMM9:
-			fprintf(fl, "%%XMM9");
+			fprintf(fl, "%%xmm9");
 			break;
 		case XMM10:
-			fprintf(fl, "%%XMM10");
+			fprintf(fl, "%%xmm10");
 			break;
 		case XMM11:
-			fprintf(fl, "%%XMM11");
+			fprintf(fl, "%%xmm11");
 			break;
 		case XMM12:
-			fprintf(fl, "%%XMM12");
+			fprintf(fl, "%%xmm12");
 			break;
 		case XMM13:
-			fprintf(fl, "%%XMM13");
+			fprintf(fl, "%%xmm13");
 			break;
 		case XMM14:
-			fprintf(fl, "%%XMM14");
+			fprintf(fl, "%%xmm14");
 			break;
 		case XMM15:
-			fprintf(fl, "%%XMM15");
+			fprintf(fl, "%%xmm15");
 			break;
 	}
 }
@@ -1580,52 +1580,52 @@ void print_double_precision_sse_register(FILE* fl, sse_register_t reg){
 			fprintf(fl, "NOREG Doulbe Precision");
 			break;
 		case XMM0:
-			fprintf(fl, "%%XMM0");
+			fprintf(fl, "%%xmm0");
 			break;
 		case XMM1:
-			fprintf(fl, "%%XMM1");
+			fprintf(fl, "%%xmm1");
 			break;
 		case XMM2:
-			fprintf(fl, "%%XMM2");
+			fprintf(fl, "%%xmm2");
 			break;
 		case XMM3:
-			fprintf(fl, "%%XMM3");
+			fprintf(fl, "%%xmm3");
 			break;
 		case XMM4:
-			fprintf(fl, "%%XMM4");
+			fprintf(fl, "%%xmm4");
 			break;
 		case XMM5:
-			fprintf(fl, "%%XMM5");
+			fprintf(fl, "%%xmm5");
 			break;
 		case XMM6:
-			fprintf(fl, "%%XMM6");
+			fprintf(fl, "%%xmm6");
 			break;
 		case XMM7:
-			fprintf(fl, "%%XMM7");
+			fprintf(fl, "%%xmm7");
 			break;
 		case XMM8:
-			fprintf(fl, "%%XMM8");
+			fprintf(fl, "%%xmm8");
 			break;
 		case XMM9:
-			fprintf(fl, "%%XMM9");
+			fprintf(fl, "%%xmm9");
 			break;
 		case XMM10:
-			fprintf(fl, "%%XMM10");
+			fprintf(fl, "%%xmm10");
 			break;
 		case XMM11:
-			fprintf(fl, "%%XMM11");
+			fprintf(fl, "%%xmm11");
 			break;
 		case XMM12:
-			fprintf(fl, "%%XMM12");
+			fprintf(fl, "%%xmm12");
 			break;
 		case XMM13:
-			fprintf(fl, "%%XMM13");
+			fprintf(fl, "%%xmm13");
 			break;
 		case XMM14:
-			fprintf(fl, "%%XMM14");
+			fprintf(fl, "%%xmm14");
 			break;
 		case XMM15:
-			fprintf(fl, "%%XMM15");
+			fprintf(fl, "%%xmm15");
 			break;
 	}
 }
