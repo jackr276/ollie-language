@@ -2976,9 +2976,45 @@ static void simplify(cfg_t* cfg){
 
 
 /**
+ * Select a register movement SSE instruction based on source and destination sizes
+ *
+ * We need to know if the source is a known "clean" SSE value. SSE values are not known
+ * to be clean unless we've made them ourselves in the function, so for example,
+ * a register parameter in an XMM register would be assumed dirty. This affects whether
+ * we use instructions like movss or movaps for floating point values
+ */
+static instruction_type_t select_sse_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t source_clean){
+	//If these are a match, we don't have any
+	//kind of converting move here
+	if(destination_size == source_size){
+		switch(destination_size){
+			case SINGLE_PRECISION:
+				if(source_clean == TRUE){
+					return MOVSS;
+				} else {
+					return MOVAPS;
+				}
+
+			case DOUBLE_PRECISION:
+				if(source_clean == TRUE){
+					return MOVSD;
+				} else {
+					return MOVAPD;
+				}
+
+			default:
+				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+				exit(1);
+		}
+	}
+
+}
+
+
+/**
  * Select a register movement instruction based on the source and destination sizes
  */
-static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
+static instruction_type_t select_general_purpose_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
 	//If these are the exact same, then all we need to do is
 	//select a generic move here
 	if(destination_size == source_size){
@@ -3134,7 +3170,7 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	}
 
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
+	instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -3177,7 +3213,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	instruction->source_register = instruction->op1;
 
 	//Use the helper to get the right sized move instruction
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
+	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
 }
 
 
@@ -3509,6 +3545,10 @@ static instruction_type_t select_add_instruction(variable_size_t size){
 			return ADDL;
 		case QUAD_WORD:
 			return ADDQ;
+		case SINGLE_PRECISION:
+			return ADDSS;
+		case DOUBLE_PRECISION:
+			return ADDSD;
 		default:
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
 			exit(1);
@@ -3552,6 +3592,10 @@ static instruction_type_t select_sub_instruction(variable_size_t size){
 			return SUBL;
 		case QUAD_WORD:
 			return SUBQ;
+		case SINGLE_PRECISION:
+			return SUBSS;
+		case DOUBLE_PRECISION:
+			return SUBSD;
 		default:
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
 			exit(1);
@@ -5305,7 +5349,7 @@ static instruction_t* emit_move_instruction_directly(three_addr_var_t* destinati
 	generic_type_t* source_type = source_register->type;
 
 	//Now we will decide what the move instruction is
-	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+	move_instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
 
 	//Give back the pointer
 	return move_instruction;
@@ -5462,7 +5506,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	}
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is
-	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+	store_instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
 }
 
 
@@ -5516,7 +5560,7 @@ static void handle_load_instruction(instruction_t* instruction){
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
 	//Let the helper select for us
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
+	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -5594,7 +5638,7 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
 	//Let the helper decide for us
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
+	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -5673,7 +5717,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
 	//Let the helper decide for us
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
+	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is a read from memory type
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -5878,7 +5922,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 				variable_offset_load->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
 			}
 
-			//This one will have an addressing type of registers and offset
+		//This one will have an addressing type of registers and offset
 			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 			//The lea is now useless so get rid of it
@@ -5978,7 +6022,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 	
 	//NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
 	//Let the helper decide for us
-	variable_offset_load->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
+	variable_offset_load->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
 	//This is a read from memory type
 	variable_offset_load->memory_access_type = READ_FROM_MEMORY;
 	//Handle the destination assignment
