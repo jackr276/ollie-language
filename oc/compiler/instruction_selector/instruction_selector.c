@@ -3054,9 +3054,33 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 		//have this but it is possible in our paradigm
 
 		case DOUBLE_WORD:
+			switch(destination_size){
+				case SINGLE_PRECISION:
+					return CVTSI2SSL;
+
+				case DOUBLE_PRECISION:
+					return CVTSI2SDL;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					exit(1);
+			}
+
 			break;
 
 		case QUAD_WORD:
+			switch(destination_size){
+				case SINGLE_PRECISION:
+					return CVTSI2SSQ;
+
+				case DOUBLE_PRECISION:
+					return CVTSI2SDQ;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					exit(1);
+			}
+
 			break;
 
 		default:

@@ -232,9 +232,9 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type);
 u_int8_t is_type_valid_for_conditional(generic_type_t* type);
 
 /**
- * Do we need an expanding move to convert between two types?
+ * Do we need a converting move to convert between two types?
  */
-u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_type_t* source_type);
+u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_type_t* source_type);
 
 /**
  * Determine the compatibility of two types and coerce appropraitely. The double pointer
