@@ -4110,24 +4110,59 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 
 		case SUBSS:
+			fprintf(fl, "subss ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
+			break;
+
 		case SUBSD:
-			//TODO
+			fprintf(fl, "subsd ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
 			break;
 
 		case PAND:
-			//TODO
+			fprintf(fl, "pand ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
 			break;
 
 		case PANDN:
-			//TODO
+			fprintf(fl, "pandn ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
 			break;
 
 		case POR:
-			//TODO
+			fprintf(fl, "por ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
 			break;
 		
+		//PXOR is largely used as a zeroer/dependency breaker in FP operations
+		//to fully 0 out the entire register. A property of any xor is the x ^ x = 0
 		case PXOR:
-			//TODO
+			fprintf(fl, "pxor ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
 			break;
 
 		//Show a default error message. This is for the Dev's use only

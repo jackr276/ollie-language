@@ -2992,6 +2992,13 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 				return MOVL;
 			case QUAD_WORD:
 				return MOVQ;
+			//TODO - FUNCTION PARAM WEIRDNESS HERE for MOVSS vs. MOVAPS
+			case SINGLE_PRECISION:
+				break;
+
+			//TODO - FUNCTION PARAM WEIRDNESS HERE for MOVSD vs. MOVAPD
+			case DOUBLE_PRECISION:
+				break;
 			default:
 				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
 				exit(1);
