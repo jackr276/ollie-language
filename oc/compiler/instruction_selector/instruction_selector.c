@@ -3359,10 +3359,6 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 			//just that
 			instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
 
-			printf("\n\n\n\n\n\n\n\n\n\n");
-			print_instruction(stdout, pxor_instruction, PRINTING_VAR_IN_INSTRUCTION);
-			printf("\n\n\n\n\n\n\n\n\n\n");
-
 			//Get this in right before the given
 			insert_instruction_before_given(pxor_instruction, instruction);
 		}
