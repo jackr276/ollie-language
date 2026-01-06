@@ -2982,12 +2982,16 @@ static void simplify(cfg_t* cfg){
  * to be clean unless we've made them ourselves in the function, so for example,
  * a register parameter in an XMM register would be assumed dirty. This affects whether
  * we use instructions like movss or movaps for floating point values
+ *
+ * Additionally, for any converting move instructions, we will need to have zeroing logic
+ * placed in front of the instruction *if* the destination is an XMM register to maintain
+ * this "clean" register idea
  */
 static instruction_type_t select_sse_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t source_clean){
 	//If these are a match, we don't have any
 	//kind of converting move here
 	if(destination_size == source_size){
-		switch(destination_size){
+		switch(destination_size) {
 			case SINGLE_PRECISION:
 				if(source_clean == TRUE){
 					return MOVSS;
@@ -3008,6 +3012,57 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 		}
 	}
 
+	//We know that we have a difference, so go based on the source size
+	switch(source_size){
+		case SINGLE_PRECISION:
+			switch(destination_size){
+				case DOUBLE_PRECISION:
+					return CVTSS2SD;
+
+				case DOUBLE_WORD:
+					return CVTTSS2SIL;
+
+				case QUAD_WORD:
+					return CVTTSS2SIQ;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					exit(1);
+			}
+
+			break;
+
+		case DOUBLE_PRECISION:
+			switch(destination_size){
+				case SINGLE_PRECISION:
+					return CVTSD2SS;
+
+				case DOUBLE_WORD:
+					return CVTTSD2SIL;
+
+				case QUAD_WORD:
+					return CVTTSD2SIQ;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					exit(1);
+			}
+
+			break;
+
+		//TODO - handling for smaller sources - we don't currently
+		//have this but it is possible in our paradigm
+
+		case DOUBLE_WORD:
+			break;
+
+		case QUAD_WORD:
+			break;
+
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
+	}
 }
 
 
@@ -3028,13 +3083,6 @@ static instruction_type_t select_general_purpose_move_instruction(variable_size_
 				return MOVL;
 			case QUAD_WORD:
 				return MOVQ;
-			//TODO - FUNCTION PARAM WEIRDNESS HERE for MOVSS vs. MOVAPS
-			case SINGLE_PRECISION:
-				break;
-
-			//TODO - FUNCTION PARAM WEIRDNESS HERE for MOVSD vs. MOVAPD
-			case DOUBLE_PRECISION:
-				break;
 			default:
 				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
 				exit(1);
