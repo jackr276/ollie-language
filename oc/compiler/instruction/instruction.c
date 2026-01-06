@@ -1019,6 +1019,27 @@ instruction_t* emit_direct_register_push_instruction(general_purpose_register_t 
 
 
 /**
+ * Emit a PXOR instruction that's already been instruction selected. This is intended to
+ * be used by the instruction selector when we need to insert pxor functions for clearing
+ * SSE registers
+ */
+instruction_t* emit_direct_pxor_instruction(three_addr_var_t* target){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = PXOR;
+
+	//The source and destination are the exact same
+	instruction->destination_register = target;
+	instruction->source_register = target;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */

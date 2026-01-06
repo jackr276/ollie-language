@@ -4,7 +4,13 @@
 */
 
 
-SABOTAGED
+
+pub fn add_floats_direct() -> f32 {
+	let x:f32 = 3.33;
+	let y:f32 = 7.33;
+
+	ret x + y;
+}
 
 
 pub fn add_floats(x:f32) -> f32 {

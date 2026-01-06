@@ -148,8 +148,8 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
  * that are entirely local. The only examples of "unclean" variables would be function
  * parameters & values that we're returning
  */
-static inline u_int8_t is_source_register_clean(instruction_t* instruction){
-	switch(instruction->source_register->membership){
+static inline u_int8_t is_source_register_clean(three_addr_var_t* source_register){
+	switch(source_register->membership){
 		//These are considered dirty - require a full movement instruction
 		case RETURNED_VARIABLE:
 		case FUNCTION_PARAMETER:
@@ -3334,14 +3334,18 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 		 */
 
 		//Use the floating point selector here
-		instruction->instruction_type = select_sse_move_instruction(destination_size, source_size, is_source_register_clean(instruction));
+		instruction->instruction_type = select_sse_move_instruction(destination_size, source_size, is_source_register_clean(instruction->op1));
 
 		/**
 		 * If we have a conversion instruction that has an SSE destination, we need to emit
 		 * a special "pxor" statement beforehand to completely wipe out said register
 		 */
 		if(is_conversion_with_sse_declaration(instruction->instruction_type) == TRUE){
-			instruction_t* pxor_instruction = emit_direct_pxor_instruction(target);
+			//We need to completely zero out the destination register here, so we will emit a pxor to do
+			//just that
+			instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+
+			print_instruction(stdout, pxor_instruction, PRINTING_VAR_IN_INSTRUCTION);
 
 			//Get this in right before the given
 			insert_instruction_before_given(pxor_instruction, instruction);
