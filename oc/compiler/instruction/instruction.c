@@ -3028,7 +3028,7 @@ static void print_sse_register_to_register_move(FILE* fl, instruction_t* instruc
 
 /**
  * Handle a complex register(or immediate) to memory move with a complex
- * address offset calculation
+ * address offset calculation for SSE instructions
  */
 static void print_sse_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
@@ -3092,6 +3092,69 @@ static void print_sse_register_to_memory_move(FILE* fl, instruction_t* instructi
 	fprintf(fl, ", ");
 	//Let this handle it now
 	print_addressing_mode_expression(fl, instruction, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Handle a complex memory to register move with a complex address offset calculation for SSE
+ * instructions
+ */
+static void print_sse_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//What we need to print out here
+	switch(instruction->instruction_type){
+		case MOVSS:
+			fprintf(fl, "movss ");
+			break;
+		case MOVSD:
+			fprintf(fl, "movsd ");
+			break;
+		case MOVAPS:
+			fprintf(fl, "movaps ");
+			break;
+		case MOVAPD:
+			fprintf(fl, "movapd ");
+			break;
+		case CVTSS2SD:
+			fprintf(fl, "cvtss2sd ");
+			break;
+		case CVTSD2SS:
+			fprintf(fl, "cvtsd2ss ");
+			break;
+		case CVTTSD2SIL:
+			fprintf(fl, "cvttsd2sil ");
+			break;
+		case CVTTSD2SIQ:
+			fprintf(fl, "cvttsd2siq ");
+			break;
+		case CVTTSS2SIL:
+			fprintf(fl, "cvttss2sil ");
+			break;
+		case CVTTSS2SIQ:
+			fprintf(fl, "cvttss2siq ");
+			break;
+		case CVTSI2SSL:
+			fprintf(fl, "cvtsi2ssl ");
+			break;
+		case CVTSI2SSQ:
+			fprintf(fl, "cvtsi2ssq ");
+			break;
+		case CVTSI2SDL:
+			fprintf(fl, "cvtsi2sdl ");
+			break;
+		case CVTSI2SDQ:
+			fprintf(fl, "cvtsi2sdq ");
+			break;
+		//We should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
+	}
+	
+	//The address mode expression comes firsj
+	print_addressing_mode_expression(fl, instruction, mode);
+	fprintf(fl, ", ");
+	print_variable(fl, instruction->destination_register, mode);
 	fprintf(fl, "\n");
 }
 
@@ -4258,7 +4321,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 					break;
 
 				case READ_FROM_MEMORY:
-					//
+					print_sse_memory_to_register_move(fl, instruction, mode);
 					break;
 			}
 
