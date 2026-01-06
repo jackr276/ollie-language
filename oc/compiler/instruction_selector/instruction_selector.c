@@ -142,6 +142,19 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 
 /**
+ * Is the source register for a given move instruction "clean" or not. Clean means
+ * that we know where it comes from *and* we know where it's going. For example, 
+ * temporary variables that are not returned are known to be clean, as well as variables
+ * that are entirely local. The only examples of "unclean" variables would be function
+ * parameters & values that we're returning
+ */
+static inline u_int8_t is_source_register_clean(instruction_t* instruction){
+	//TODO
+
+}
+
+
+/**
  * The first step in our instruction selector is to get the instructions stored in
  * a straight line in the exact way that we want them to be. This is done with a breadth-first
  * search traversal of the simplified CFG that has been optimized. 
@@ -3266,26 +3279,46 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	variable_size_t destination_size = get_type_size(assignee->type);
 	variable_size_t source_size = get_type_size(op1->type);
 
-	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-	//zero pad when 32 bit moves happen
-	if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
-		//Emit a variable copy of the source
-		op1 = emit_var_copy(op1);
+	//If we have *at least one* floating point instruction, we need to use the specialized selector rule. Otherwise
+	//we use the generic rules
+	if(IS_FLOATING_POINT(assignee->type) == FALSE 
+		&& IS_FLOATING_POINT(op1->type) == FALSE){
+		//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+		//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+		//zero pad when 32 bit moves happen
+		if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
+			//Emit a variable copy of the source
+			op1 = emit_var_copy(op1);
 
-		//Reassign it's type to be the desired type
-		op1->type = assignee->type;
+			//Reassign it's type to be the desired type
+			op1->type = assignee->type;
 
-		//Select the size appropriately after the type is reassigned
-		op1->variable_size = get_type_size(op1->type);
+			//Select the size appropriately after the type is reassigned
+			op1->variable_size = get_type_size(op1->type);
+		}
+
+		//Use the helper to get the right sized move instruction
+		instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
+
+	//Handle floating point move
+	} else {
+		/**
+		 * An important concept for floating point movements is whether we have a "clean" source or not. Clean
+		 * source values mean that the entire register has been wiped. This will determine whether or not we use certain
+		 * types of move instructions and/or insert given clear instructions
+		 */
+
+
+		//Use the floating point selector here
+		instruction->instruction_type = select_sse_move_instruction(destination_size, source_size, source_clean);
+
+
 	}
+
 
 	//Set the sources and destinations
 	instruction->destination_register = instruction->assignee;
 	instruction->source_register = instruction->op1;
-
-	//Use the helper to get the right sized move instruction
-	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
 }
 
 
@@ -5408,7 +5441,7 @@ static void handle_test_instruction(instruction_t* instruction){
  *
  * This bypasses all register allocation entirely
  */
-static instruction_t* emit_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
+static instruction_t* emit_general_purpose_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
 	//First allocate it
 	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
 
@@ -5479,7 +5512,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
 					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_move_instruction_directly(new_source, store_instruction->op1);
+					instruction_t* converting_move = emit_general_purpose_move_instruction_directly(new_source, store_instruction->op1);
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
@@ -5543,7 +5576,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
 					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_move_instruction_directly(new_source, store_instruction->op2);
+					instruction_t* converting_move = emit_general_purpose_move_instruction_directly(new_source, store_instruction->op2);
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
@@ -6724,7 +6757,6 @@ static void select_instruction_patterns(instruction_window_t* window){
 	//Switch on whatever we have currently
 	switch (instruction->statement_type) {
 		case THREE_ADDR_CODE_ASSN_STMT:
-			//TODO need to differentiate for floats/non-floats
 			handle_register_movement_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
