@@ -4094,19 +4094,63 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case CVTTSD2SIQ:
 		case CVTSD2SS:
 		case CVTSS2SD:
-			//TODO
+			/**
+			 * Now we go based on what kind of memory
+			 * access we're doing here. This will determine
+			 * the final output of our move
+			 */
+			switch(instruction->memory_access_type){
+				case NO_MEMORY_ACCESS:
+					//
+					break;
+
+				case WRITE_TO_MEMORY:
+					//
+					break;
+
+				case READ_FROM_MEMORY:
+					//
+					break;
+			}
+
 			break;
 
 		//These instructions will never be used to put stuff into memory,
 		//so we don't need to account for that case here
 		case MOVAPD:
+			fprintf(fl, "movapd ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
+			break;
+
 		case MOVAPS:
-			//TODO
+			fprintf(fl, "movaps ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
 			break;
 
 		case ADDSS:
+			fprintf(fl, "addss ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
+			break;
+
 		case ADDSD:
-			//TODO
+			fprintf(fl, "addsd ");
+			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
+			fprintf(fl, "\n");
+
 			break;
 
 		case SUBSS:
