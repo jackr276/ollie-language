@@ -191,10 +191,10 @@ typedef enum{
 	CVTTSD2SIQ, //Convert scalar f64 to i64 with truncation
 	CVTTSS2SIL, //Convert scalar f32 to i32 with truncation
 	CVTTSS2SIQ, //Convert scalar f32 to i64 with truncation
-	CTSI2SSL, //Convert scalar i32 to f32	
-	CTSI2SSQ, //Convert scalar i64 to f32
-	CTSI2SDL, //Convert scalar i32 to f64	
-	CTSI2SDQ, //Convert scalar i64 to f64
+	CVTSI2SSL, //Convert scalar i32 to f32	
+	CVTSI2SSQ, //Convert scalar i64 to f32
+	CVTSI2SDL, //Convert scalar i32 to f64	
+	CVTSI2SDQ, //Convert scalar i64 to f64
 	PXOR, //Packed logical exclusive or
 	PAND, //Packed logical and
 	PANDN, //Packed logical and not

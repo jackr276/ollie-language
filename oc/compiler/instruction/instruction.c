@@ -2959,16 +2959,48 @@ static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_
 static void print_sse_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
 	switch(instruction->instruction_type){
-		//
-		//
-		//
-		//TODO
-		//
-		//
-		//
-		//
-		//
-
+		case MOVSS:
+			fprintf(fl, "movss ");
+			break;
+		case MOVSD:
+			fprintf(fl, "movsd ");
+			break;
+		case MOVAPS:
+			fprintf(fl, "movaps ");
+			break;
+		case MOVAPD:
+			fprintf(fl, "movapd ");
+			break;
+		case CVTSS2SD:
+			fprintf(fl, "cvtss2sd ");
+			break;
+		case CVTSD2SS:
+			fprintf(fl, "cvtsd2ss ");
+			break;
+		case CVTTSD2SIL:
+			fprintf(fl, "cvttsd2sil ");
+			break;
+		case CVTTSD2SIQ:
+			fprintf(fl, "cvttsd2siq ");
+			break;
+		case CVTTSS2SIL:
+			fprintf(fl, "cvttss2sil ");
+			break;
+		case CVTTSS2SIQ:
+			fprintf(fl, "cvttss2siq ");
+			break;
+		case CVTSI2SSL:
+			fprintf(fl, "cvtsi2ssl ");
+			break;
+		case CVTSI2SSQ:
+			fprintf(fl, "cvtsi2ssq ");
+			break;
+		case CVTSI2SDL:
+			fprintf(fl, "cvtsi2sdl ");
+			break;
+		case CVTSI2SDQ:
+			fprintf(fl, "cvtsi2sdq ");
+			break;
 		//We should never hit this
 		default:
 			printf("Fatal internal compiler error: unreachable path hit\n");
@@ -4129,6 +4161,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		// The instructions below operate either exclusively with xmm registers or with a mix
 		// of xmm and general purpose registers or memory operations. These handle basic movement
 		// and conversion
+		case MOVAPD:
+		case MOVAPS:
 		case MOVSD:
 		case MOVSS:
 		case CVTTSS2SIL:
@@ -4155,26 +4189,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 					//
 					break;
 			}
-
-			break;
-
-		//These instructions will never be used to put stuff into memory,
-		//so we don't need to account for that case here
-		case MOVAPD:
-			fprintf(fl, "movapd ");
-			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
-			fprintf(fl, "\n");
-
-			break;
-
-		case MOVAPS:
-			fprintf(fl, "movaps ");
-			print_variable(fl, instruction->source_register, PRINTING_REGISTERS);
-			fprintf(fl, ", ");
-			print_variable(fl, instruction->destination_register, PRINTING_REGISTERS);
-			fprintf(fl, "\n");
 
 			break;
 
