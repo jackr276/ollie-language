@@ -648,9 +648,11 @@ u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 		case MOVL:
 		case MOVW:
 		case MOVQ:
+		//Movsd and movss are true copy operations for floating point values
+		case MOVSD:
+		case MOVSS:
 			//If there's a source register we're good
 			if(instruction->source_register != NULL
-				//It's only a copy if we're not accessing memory
 				&& instruction->memory_access_type == NO_MEMORY_ACCESS){
 				return TRUE;
 			}
@@ -4082,9 +4084,33 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 		// ============================ Begin floating point area ==============================
 		// The instructions below operate either exclusively with xmm registers or with a mix
-		// of xmm and general purpose registers
+		// of xmm and general purpose registers or memory operations. These handle basic movement
+		// and conversion
 		case MOVSD:
 		case MOVSS:
+		case CVTTSS2SIL:
+		case CVTTSS2SIQ:
+		case CVTTSD2SIL:
+		case CVTTSD2SIQ:
+		case CVTSD2SS:
+		case CVTSS2SD:
+			//TODO
+			break;
+
+		//These instructions will never be used to put stuff into memory,
+		//so we don't need to account for that case here
+		case MOVAPD:
+		case MOVAPS:
+			//TODO
+			break;
+
+		case ADDSS:
+		case ADDSD:
+			//TODO
+			break;
+
+		case SUBSS:
+		case SUBSD:
 			//TODO
 			break;
 

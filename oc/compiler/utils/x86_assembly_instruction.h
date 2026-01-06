@@ -179,11 +179,18 @@ typedef enum{
 	// ============= Begin specialized floating point instructions ==============
 	MOVSS, //Move f32 -> f32
 	MOVSD, //Move f64 -> f64
+	MOVAPS, //Move aligned packed f32 -> used if we need to clear out the whole thing
+	MOVAPD, //Move aligned packed f64 -> used if we need to clear out the whole thing
 	ADDSD, //Add scalar f64
 	SUBSD, //Subtract scalar f64
 	ADDSS, //Add scalar f32
 	SUBSS, //Subtract scalar f32
 	CVTSS2SD, //Convert scalar f32 to scalar f64
+	CVTSD2SS, //Convert scalar f64 to scalar f32
+	CVTTSD2SIL, //Convert scalar f64 to i32 with truncation
+	CVTTSD2SIQ, //Convert scalar f64 to i64 with truncation
+	CVTTSS2SIL, //Convert scalar f32 to i32 with truncation
+	CVTTSS2SIQ, //Convert scalar f32 to i64 with truncation
 	PXOR, //Packed logical exclusive or
 	PAND, //Packed logical and
 	PANDN, //Packed logical and not
