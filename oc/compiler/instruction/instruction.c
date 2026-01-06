@@ -2954,6 +2954,49 @@ static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_
 
 
 /**
+ * Handle a simple register to register or immediate to register move using SSE instructions
+ */
+static void print_sse_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//What we need to print out here
+	switch(instruction->instruction_type){
+		//
+		//
+		//
+		//TODO
+		//
+		//
+		//
+		//
+		//
+
+		//We should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
+	}
+
+	//Print the appropriate variable here. There are no immediate values
+	//that may be produced by SSE, but we'll keep the optionality here
+	if(instruction->source_register != NULL){
+		print_variable(fl, instruction->source_register, mode);
+	} else {
+		print_immediate_value(fl, instruction->source_immediate);
+	}
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Finally we print the destination
+	print_variable(fl, instruction->destination_register, mode);
+
+	//A final newline is needed for all instructions
+	fprintf(fl, "\n");
+}
+
+
+
+
+/**
  * Print out an inc instruction
  */
 static void print_inc_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
