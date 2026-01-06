@@ -149,8 +149,33 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
  * parameters & values that we're returning
  */
 static inline u_int8_t is_source_register_clean(instruction_t* instruction){
-	//TODO
+	switch(instruction->source_register->membership){
+		//These are considered dirty - require a full movement instruction
+		case RETURNED_VARIABLE:
+		case FUNCTION_PARAMETER:
+			return FALSE;
+		//Everything else - nothing to worry about
+		default:
+			return TRUE;
+	}
+}
 
+
+/**
+ * Is the given instruction a conversion instruction with an SSE destination register?
+ *
+ * Examples are statements like CVTSI2SDL, which take an i32 and turn it into an f64 
+ */
+static inline u_int8_t is_conversion_with_sse_declaration(instruction_type_t instruction_type){
+	switch(instruction_type){
+		case CVTSI2SDL:
+		case CVTSI2SDQ:
+		case CVTSI2SSL:
+		case CVTSI2SSQ:
+			return TRUE;
+		default:
+			return FALSE;
+	}
 }
 
 
@@ -3308,13 +3333,20 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 		 * types of move instructions and/or insert given clear instructions
 		 */
 
-
 		//Use the floating point selector here
-		instruction->instruction_type = select_sse_move_instruction(destination_size, source_size, source_clean);
+		instruction->instruction_type = select_sse_move_instruction(destination_size, source_size, is_source_register_clean(instruction));
 
+		/**
+		 * If we have a conversion instruction that has an SSE destination, we need to emit
+		 * a special "pxor" statement beforehand to completely wipe out said register
+		 */
+		if(is_conversion_with_sse_declaration(instruction->instruction_type) == TRUE){
+			instruction_t* pxor_instruction = emit_direct_pxor_instruction(target);
 
+			//Get this in right before the given
+			insert_instruction_before_given(pxor_instruction, instruction);
+		}
 	}
-
 
 	//Set the sources and destinations
 	instruction->destination_register = instruction->assignee;
