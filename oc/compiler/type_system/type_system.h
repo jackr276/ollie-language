@@ -76,6 +76,12 @@ typedef enum type_class_t {
  */
 #define IS_VOID_TYPE(type) \
 	((type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID) ? TRUE : FALSE)
+
+/**
+ * Determine whether a type is or is not floating point
+ */
+#define IS_FLOATING_POINT(type)\
+	((type->type_class == TYPE_CLASS_BASIC && ((type->basic_type_token == F32) || (type->basic_type_token == F64))) ? TRUE : FALSE)
 //========================= Utility Macros ============================
 
 
