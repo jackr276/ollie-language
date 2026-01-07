@@ -4578,13 +4578,22 @@ static void handle_division_instruction(instruction_window_t* window){
 
 
 /**
- * Handle an SSE division instruction. By the time we
- * get here, we already know that we're dealing with
- * an SSE operation. This instruction will generate
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
  */
 static void handle_sse_division_instruction(instruction_window_t* window){
+	//TODO
+}
 
+
+/**
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
+ * converting moves if such moves are required
+ */
+static void handle_sse_multiplication_instruction(instruction_window_t* window){
+	//TODO
 }
 
 
@@ -6802,11 +6811,13 @@ static void select_instruction_patterns(instruction_window_t* window){
 				//Likely the most common case - it's not a float
 				if(IS_FLOATING_POINT(window->instruction1->assignee->type) == FALSE){
 					handle_division_instruction(window);
+
 				//Otherwise we have a floating point division here so we need
 				//to handle it appropriately
 				} else {
 					handle_sse_division_instruction(window);
 				}
+
 				return;
 
 			//Handle modulus
@@ -6817,13 +6828,21 @@ static void select_instruction_patterns(instruction_window_t* window){
 
 			//If we have a multiplication *and* it's unsigned, we go here
 			case STAR:
-				//TODO FLOAT VERSION NEEDED
-				//Only do this if we're signed
-				if(is_type_signed(window->instruction1->assignee->type) == FALSE){
-					//Let the helper deal with it
-					handle_unsigned_multiplication_instruction(window);
-					return;
+				//Likely the most common case - it's not a float
+				if(IS_FLOATING_POINT(window->instruction1->assignee->type) == FALSE){
+					//Only do this if we're unsigned
+					if(is_type_signed(window->instruction1->assignee->type) == FALSE){
+						//Let the helper deal with it
+						handle_unsigned_multiplication_instruction(window);
+						return;
+					}
+
+				//Otherwise we have a floating point multiplication here so we need
+				//to handle it appropriately
+				} else {
+					handle_sse_multiplication_instruction(window);
 				}
+
 				break;
 
 			default:
