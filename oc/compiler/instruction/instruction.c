@@ -648,9 +648,11 @@ u_int8_t is_instruction_pure_copy(instruction_t* instruction){
 		case MOVL:
 		case MOVW:
 		case MOVQ:
+		//Movsd and movss are true copy operations for floating point values
+		case MOVSD:
+		case MOVSS:
 			//If there's a source register we're good
 			if(instruction->source_register != NULL
-				//It's only a copy if we're not accessing memory
 				&& instruction->memory_access_type == NO_MEMORY_ACCESS){
 				return TRUE;
 			}
@@ -1010,6 +1012,27 @@ instruction_t* emit_direct_register_push_instruction(general_purpose_register_t 
 
 	//Now we'll set the register
 	instruction->push_or_pop_reg.gen_purpose = reg;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a PXOR instruction that's already been instruction selected. This is intended to
+ * be used by the instruction selector when we need to insert pxor functions for clearing
+ * SSE registers
+ */
+instruction_t* emit_direct_pxor_instruction(three_addr_var_t* target){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = PXOR;
+
+	//The source and destination are the exact same
+	instruction->destination_register = target;
+	instruction->source_register = target;
 
 	//Now give it back
 	return instruction;
@@ -1496,52 +1519,52 @@ void print_single_precision_sse_register(FILE* fl, sse_register_t reg){
 			fprintf(fl, "NOREG Single Precision");
 			break;
 		case XMM0:
-			fprintf(fl, "%%XMM0");
+			fprintf(fl, "%%xmm0");
 			break;
 		case XMM1:
-			fprintf(fl, "%%XMM1");
+			fprintf(fl, "%%xmm1");
 			break;
 		case XMM2:
-			fprintf(fl, "%%XMM2");
+			fprintf(fl, "%%xmm2");
 			break;
 		case XMM3:
-			fprintf(fl, "%%XMM3");
+			fprintf(fl, "%%xmm3");
 			break;
 		case XMM4:
-			fprintf(fl, "%%XMM4");
+			fprintf(fl, "%%xmm4");
 			break;
 		case XMM5:
-			fprintf(fl, "%%XMM5");
+			fprintf(fl, "%%xmm5");
 			break;
 		case XMM6:
-			fprintf(fl, "%%XMM6");
+			fprintf(fl, "%%xmm6");
 			break;
 		case XMM7:
-			fprintf(fl, "%%XMM7");
+			fprintf(fl, "%%xmm7");
 			break;
 		case XMM8:
-			fprintf(fl, "%%XMM8");
+			fprintf(fl, "%%xmm8");
 			break;
 		case XMM9:
-			fprintf(fl, "%%XMM9");
+			fprintf(fl, "%%xmm9");
 			break;
 		case XMM10:
-			fprintf(fl, "%%XMM10");
+			fprintf(fl, "%%xmm10");
 			break;
 		case XMM11:
-			fprintf(fl, "%%XMM11");
+			fprintf(fl, "%%xmm11");
 			break;
 		case XMM12:
-			fprintf(fl, "%%XMM12");
+			fprintf(fl, "%%xmm12");
 			break;
 		case XMM13:
-			fprintf(fl, "%%XMM13");
+			fprintf(fl, "%%xmm13");
 			break;
 		case XMM14:
-			fprintf(fl, "%%XMM14");
+			fprintf(fl, "%%xmm14");
 			break;
 		case XMM15:
-			fprintf(fl, "%%XMM15");
+			fprintf(fl, "%%xmm15");
 			break;
 	}
 }
@@ -1557,52 +1580,52 @@ void print_double_precision_sse_register(FILE* fl, sse_register_t reg){
 			fprintf(fl, "NOREG Doulbe Precision");
 			break;
 		case XMM0:
-			fprintf(fl, "%%XMM0");
+			fprintf(fl, "%%xmm0");
 			break;
 		case XMM1:
-			fprintf(fl, "%%XMM1");
+			fprintf(fl, "%%xmm1");
 			break;
 		case XMM2:
-			fprintf(fl, "%%XMM2");
+			fprintf(fl, "%%xmm2");
 			break;
 		case XMM3:
-			fprintf(fl, "%%XMM3");
+			fprintf(fl, "%%xmm3");
 			break;
 		case XMM4:
-			fprintf(fl, "%%XMM4");
+			fprintf(fl, "%%xmm4");
 			break;
 		case XMM5:
-			fprintf(fl, "%%XMM5");
+			fprintf(fl, "%%xmm5");
 			break;
 		case XMM6:
-			fprintf(fl, "%%XMM6");
+			fprintf(fl, "%%xmm6");
 			break;
 		case XMM7:
-			fprintf(fl, "%%XMM7");
+			fprintf(fl, "%%xmm7");
 			break;
 		case XMM8:
-			fprintf(fl, "%%XMM8");
+			fprintf(fl, "%%xmm8");
 			break;
 		case XMM9:
-			fprintf(fl, "%%XMM9");
+			fprintf(fl, "%%xmm9");
 			break;
 		case XMM10:
-			fprintf(fl, "%%XMM10");
+			fprintf(fl, "%%xmm10");
 			break;
 		case XMM11:
-			fprintf(fl, "%%XMM11");
+			fprintf(fl, "%%xmm11");
 			break;
 		case XMM12:
-			fprintf(fl, "%%XMM12");
+			fprintf(fl, "%%xmm12");
 			break;
 		case XMM13:
-			fprintf(fl, "%%XMM13");
+			fprintf(fl, "%%xmm13");
 			break;
 		case XMM14:
-			fprintf(fl, "%%XMM14");
+			fprintf(fl, "%%xmm14");
 			break;
 		case XMM15:
-			fprintf(fl, "%%XMM15");
+			fprintf(fl, "%%xmm15");
 			break;
 	}
 }
@@ -2741,7 +2764,7 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 /**
  * Handle a simple register to register or immediate to register move
  */
-static void print_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static void print_general_purpose_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
 	switch(instruction->instruction_type){
 		case MOVQ:
@@ -2817,7 +2840,7 @@ static void print_register_to_register_move(FILE* fl, instruction_t* instruction
  * Handle a complex register(or immediate) to memory move with a complex
  * address offset calculation
  */
-static void print_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
 	switch(instruction->instruction_type){
 		case MOVQ:
@@ -2889,7 +2912,7 @@ static void print_register_to_memory_move(FILE* fl, instruction_t* instruction, 
 /**
  * Handle a complex memory to register move with a complex address offset calculation
  */
-static void print_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//What we need to print out here
 	switch(instruction->instruction_type){
 		case MOVQ:
@@ -2936,6 +2959,212 @@ static void print_memory_to_register_move(FILE* fl, instruction_t* instruction, 
 			break;
 		case MOVZWQ:
 			fprintf(fl, "movzwq ");
+			break;
+		//We should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
+	}
+	
+	//The address mode expression comes firsj
+	print_addressing_mode_expression(fl, instruction, mode);
+	fprintf(fl, ", ");
+	print_variable(fl, instruction->destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Handle a simple register to register or immediate to register move using SSE instructions
+ */
+static void print_sse_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//What we need to print out here
+	switch(instruction->instruction_type){
+		case MOVSS:
+			fprintf(fl, "movss ");
+			break;
+		case MOVSD:
+			fprintf(fl, "movsd ");
+			break;
+		case MOVAPS:
+			fprintf(fl, "movaps ");
+			break;
+		case MOVAPD:
+			fprintf(fl, "movapd ");
+			break;
+		case CVTSS2SD:
+			fprintf(fl, "cvtss2sd ");
+			break;
+		case CVTSD2SS:
+			fprintf(fl, "cvtsd2ss ");
+			break;
+		case CVTTSD2SIL:
+			fprintf(fl, "cvttsd2sil ");
+			break;
+		case CVTTSD2SIQ:
+			fprintf(fl, "cvttsd2siq ");
+			break;
+		case CVTTSS2SIL:
+			fprintf(fl, "cvttss2sil ");
+			break;
+		case CVTTSS2SIQ:
+			fprintf(fl, "cvttss2siq ");
+			break;
+		case CVTSI2SSL:
+			fprintf(fl, "cvtsi2ssl ");
+			break;
+		case CVTSI2SSQ:
+			fprintf(fl, "cvtsi2ssq ");
+			break;
+		case CVTSI2SDL:
+			fprintf(fl, "cvtsi2sdl ");
+			break;
+		case CVTSI2SDQ:
+			fprintf(fl, "cvtsi2sdq ");
+			break;
+		//We should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
+	}
+
+	//Print the appropriate variable here. There are no immediate values
+	//that may be produced by SSE, but we'll keep the optionality here
+	if(instruction->source_register != NULL){
+		print_variable(fl, instruction->source_register, mode);
+	} else {
+		print_immediate_value(fl, instruction->source_immediate);
+	}
+
+	//Needed comma
+	fprintf(fl, ", ");
+
+	//Finally we print the destination
+	print_variable(fl, instruction->destination_register, mode);
+
+	//A final newline is needed for all instructions
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Handle a complex register(or immediate) to memory move with a complex
+ * address offset calculation for SSE instructions
+ */
+static void print_sse_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//What we need to print out here
+	switch(instruction->instruction_type){
+		case MOVSS:
+			fprintf(fl, "movss ");
+			break;
+		case MOVSD:
+			fprintf(fl, "movsd ");
+			break;
+		case MOVAPS:
+			fprintf(fl, "movaps ");
+			break;
+		case MOVAPD:
+			fprintf(fl, "movapd ");
+			break;
+		case CVTSS2SD:
+			fprintf(fl, "cvtss2sd ");
+			break;
+		case CVTSD2SS:
+			fprintf(fl, "cvtsd2ss ");
+			break;
+		case CVTTSD2SIL:
+			fprintf(fl, "cvttsd2sil ");
+			break;
+		case CVTTSD2SIQ:
+			fprintf(fl, "cvttsd2siq ");
+			break;
+		case CVTTSS2SIL:
+			fprintf(fl, "cvttss2sil ");
+			break;
+		case CVTTSS2SIQ:
+			fprintf(fl, "cvttss2siq ");
+			break;
+		case CVTSI2SSL:
+			fprintf(fl, "cvtsi2ssl ");
+			break;
+		case CVTSI2SSQ:
+			fprintf(fl, "cvtsi2ssq ");
+			break;
+		case CVTSI2SDL:
+			fprintf(fl, "cvtsi2sdl ");
+			break;
+		case CVTSI2SDQ:
+			fprintf(fl, "cvtsi2sdq ");
+			break;
+		//We should never hit this
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
+	}
+
+	//First we'll print out the source
+	if(instruction->source_register != NULL){
+		print_variable(fl, instruction->source_register, mode);
+	} else {
+		//Otherwise we have an immediate value source
+		print_immediate_value(fl, instruction->source_immediate);
+	}
+	
+	fprintf(fl, ", ");
+	//Let this handle it now
+	print_addressing_mode_expression(fl, instruction, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Handle a complex memory to register move with a complex address offset calculation for SSE
+ * instructions
+ */
+static void print_sse_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//What we need to print out here
+	switch(instruction->instruction_type){
+		case MOVSS:
+			fprintf(fl, "movss ");
+			break;
+		case MOVSD:
+			fprintf(fl, "movsd ");
+			break;
+		case MOVAPS:
+			fprintf(fl, "movaps ");
+			break;
+		case MOVAPD:
+			fprintf(fl, "movapd ");
+			break;
+		case CVTSS2SD:
+			fprintf(fl, "cvtss2sd ");
+			break;
+		case CVTSD2SS:
+			fprintf(fl, "cvtsd2ss ");
+			break;
+		case CVTTSD2SIL:
+			fprintf(fl, "cvttsd2sil ");
+			break;
+		case CVTTSD2SIQ:
+			fprintf(fl, "cvttsd2siq ");
+			break;
+		case CVTTSS2SIL:
+			fprintf(fl, "cvttss2sil ");
+			break;
+		case CVTTSS2SIQ:
+			fprintf(fl, "cvttss2siq ");
+			break;
+		case CVTSI2SSL:
+			fprintf(fl, "cvtsi2ssl ");
+			break;
+		case CVTSI2SSQ:
+			fprintf(fl, "cvtsi2ssq ");
+			break;
+		case CVTSI2SDL:
+			fprintf(fl, "cvtsi2sdl ");
+			break;
+		case CVTSI2SDQ:
+			fprintf(fl, "cvtsi2sdq ");
 			break;
 		//We should never hit this
 		default:
@@ -3910,15 +4139,15 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			 */
 			switch(instruction->memory_access_type){
 				case NO_MEMORY_ACCESS:
-					print_register_to_register_move(fl, instruction, mode);
+					print_general_purpose_register_to_register_move(fl, instruction, mode);
 					break;
 
 				case WRITE_TO_MEMORY:
-					print_register_to_memory_move(fl, instruction, mode);
+					print_general_purpose_register_to_memory_move(fl, instruction, mode);
 					break;
 
 				case READ_FROM_MEMORY:
-					print_memory_to_register_move(fl, instruction, mode);
+					print_general_purpose_memory_to_register_move(fl, instruction, mode);
 					break;
 			}
 
@@ -4077,6 +4306,155 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			}
 
 			fprintf(fl, ")\n");
+
+			break;
+
+		// ============================ Begin floating point area ==============================
+		// The instructions below operate either exclusively with xmm registers or with a mix
+		// of xmm and general purpose registers or memory operations. These handle basic movement
+		// and conversion
+		case MOVAPD:
+		case MOVAPS:
+		case MOVSD:
+		case MOVSS:
+		case CVTTSS2SIL:
+		case CVTTSS2SIQ:
+		case CVTTSD2SIL:
+		case CVTTSD2SIQ:
+		case CVTSD2SS:
+		case CVTSS2SD:
+		case CVTSI2SSL:
+		case CVTSI2SSQ:
+		case CVTSI2SDL:
+		case CVTSI2SDQ:
+			/**
+			 * Now we go based on what kind of memory
+			 * access we're doing here. This will determine
+			 * the final output of our move
+			 */
+			switch(instruction->memory_access_type){
+				case NO_MEMORY_ACCESS:
+					print_sse_register_to_register_move(fl, instruction, mode);
+					break;
+
+				case WRITE_TO_MEMORY:
+					print_sse_register_to_memory_move(fl, instruction, mode);
+					break;
+
+				case READ_FROM_MEMORY:
+					print_sse_memory_to_register_move(fl, instruction, mode);
+					break;
+			}
+
+			break;
+
+		case ADDSS:
+			fprintf(fl, "addss ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case ADDSD:
+			fprintf(fl, "addsd ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case SUBSS:
+			fprintf(fl, "subss ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case SUBSD:
+			fprintf(fl, "subsd ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case MULSS:
+			fprintf(fl, "mulss ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case MULSD:
+			fprintf(fl, "mulsd ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case DIVSS:
+			fprintf(fl, "divss ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case DIVSD:
+			fprintf(fl, "DIVSD ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case PAND:
+			fprintf(fl, "pand ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case PANDN:
+			fprintf(fl, "pandn ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case POR:
+			fprintf(fl, "por ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+		
+		//PXOR is largely used as a zeroer/dependency breaker in FP operations
+		//to fully 0 out the entire register. A property of any xor is the x ^ x = 0
+		case PXOR:
+			fprintf(fl, "pxor ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
 
 			break;
 

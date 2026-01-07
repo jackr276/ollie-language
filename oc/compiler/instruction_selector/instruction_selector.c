@@ -142,6 +142,58 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 
 /**
+ * Is the source register for a given move instruction "clean" or not. Clean means
+ * that we know where it comes from *and* we know where it's going. For example, 
+ * temporary variables that are not returned are known to be clean, as well as variables
+ * that are entirely local. The only examples of "unclean" variables would be function
+ * parameters & values that we're returning
+ */
+static inline u_int8_t is_source_register_clean(three_addr_var_t* source_register){
+	switch(source_register->membership){
+		//These are considered dirty - require a full movement instruction
+		case RETURNED_VARIABLE:
+			return FALSE;
+		case FUNCTION_PARAMETER:
+			//No linked var - must be clean
+			if(source_register->linked_var == NULL){
+				return TRUE;
+			}
+
+			//If this itself is the original parameter, then it's dirty
+			if(IS_ORIGINAL_FUNCTION_PARAMETER(source_register->linked_var) == TRUE){
+				return FALSE;
+			}
+
+			//Otherwise this is just the alias of that function parameter - so there is nothing
+			//to clean up
+			return TRUE;
+
+		//Everything else - nothing to worry about
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
+ * Is the given instruction a conversion instruction with an SSE destination register?
+ *
+ * Examples are statements like CVTSI2SDL, which take an i32 and turn it into an f64 
+ */
+static inline u_int8_t is_conversion_with_sse_declaration(instruction_type_t instruction_type){
+	switch(instruction_type){
+		case CVTSI2SDL:
+		case CVTSI2SDQ:
+		case CVTSI2SSL:
+		case CVTSI2SSQ:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * The first step in our instruction selector is to get the instructions stored in
  * a straight line in the exact way that we want them to be. This is done with a breadth-first
  * search traversal of the simplified CFG that has been optimized. 
@@ -562,7 +614,7 @@ static u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_
 
 	//Otherwise, we know that we have a regular assignment statement
 	//This cannot be optimized away
-	if(is_expanding_move_required(assignment_instruction->assignee->type, assignment_instruction->op1->type) == TRUE){
+	if(is_converting_move_required(assignment_instruction->assignee->type, assignment_instruction->op1->type) == TRUE){
 		return FALSE;
 	}
 
@@ -2976,9 +3028,124 @@ static void simplify(cfg_t* cfg){
 
 
 /**
+ * Select a register movement SSE instruction based on source and destination sizes
+ *
+ * We need to know if the source is a known "clean" SSE value. SSE values are not known
+ * to be clean unless we've made them ourselves in the function, so for example,
+ * a register parameter in an XMM register would be assumed dirty. This affects whether
+ * we use instructions like movss or movaps for floating point values
+ *
+ * Additionally, for any converting move instructions, we will need to have zeroing logic
+ * placed in front of the instruction *if* the destination is an XMM register to maintain
+ * this "clean" register idea
+ */
+static instruction_type_t select_sse_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t source_clean){
+	//If these are a match, we don't have any
+	//kind of converting move here
+	if(destination_size == source_size){
+		switch(destination_size) {
+			case SINGLE_PRECISION:
+				if(source_clean == TRUE){
+					return MOVSS;
+				} else {
+					return MOVAPS;
+				}
+
+			case DOUBLE_PRECISION:
+				if(source_clean == TRUE){
+					return MOVSD;
+				} else {
+					return MOVAPD;
+				}
+
+			default:
+				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+				exit(1);
+		}
+	}
+
+	//We know that we have a difference, so go based on the source size
+	switch(source_size){
+		case SINGLE_PRECISION:
+			switch(destination_size){
+				case DOUBLE_PRECISION:
+					return CVTSS2SD;
+
+				case DOUBLE_WORD:
+					return CVTTSS2SIL;
+
+				case QUAD_WORD:
+					return CVTTSS2SIQ;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					exit(1);
+			}
+
+			break;
+
+		case DOUBLE_PRECISION:
+			switch(destination_size){
+				case SINGLE_PRECISION:
+					return CVTSD2SS;
+
+				case DOUBLE_WORD:
+					return CVTTSD2SIL;
+
+				case QUAD_WORD:
+					return CVTTSD2SIQ;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					exit(1);
+			}
+
+			break;
+
+		//TODO - handling for smaller sources - we don't currently
+		//have this but it is possible in our paradigm
+
+		case DOUBLE_WORD:
+			switch(destination_size){
+				case SINGLE_PRECISION:
+					return CVTSI2SSL;
+
+				case DOUBLE_PRECISION:
+					return CVTSI2SDL;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					exit(1);
+			}
+
+			break;
+
+		case QUAD_WORD:
+			switch(destination_size){
+				case SINGLE_PRECISION:
+					return CVTSI2SSQ;
+
+				case DOUBLE_PRECISION:
+					return CVTSI2SDQ;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					exit(1);
+			}
+
+			break;
+
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Select a register movement instruction based on the source and destination sizes
  */
-static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
+static instruction_type_t select_general_purpose_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
 	//If these are the exact same, then all we need to do is
 	//select a generic move here
 	if(destination_size == source_size){
@@ -3126,8 +3293,20 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 		source->variable_size = get_type_size(destination->type);
 	}
 
+
+	//
+	//
+	//
+	//
+	//
+	//TODO need float handling
+	//
+	//
+	//
+	//
+
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
+	instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -3151,26 +3330,55 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	variable_size_t destination_size = get_type_size(assignee->type);
 	variable_size_t source_size = get_type_size(op1->type);
 
-	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-	//zero pad when 32 bit moves happen
-	if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
-		//Emit a variable copy of the source
-		op1 = emit_var_copy(op1);
+	//If we have *at least one* floating point instruction, we need to use the specialized selector rule. Otherwise
+	//we use the generic rules
+	if(IS_FLOATING_POINT(assignee->type) == FALSE 
+		&& IS_FLOATING_POINT(op1->type) == FALSE){
+		//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+		//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+		//zero pad when 32 bit moves happen
+		if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
+			//Emit a variable copy of the source
+			op1 = emit_var_copy(op1);
 
-		//Reassign it's type to be the desired type
-		op1->type = assignee->type;
+			//Reassign it's type to be the desired type
+			op1->type = assignee->type;
 
-		//Select the size appropriately after the type is reassigned
-		op1->variable_size = get_type_size(op1->type);
+			//Select the size appropriately after the type is reassigned
+			op1->variable_size = get_type_size(op1->type);
+		}
+
+		//Use the helper to get the right sized move instruction
+		instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
+
+	//Handle floating point move
+	} else {
+		/**
+		 * An important concept for floating point movements is whether we have a "clean" source or not. Clean
+		 * source values mean that the entire register has been wiped. This will determine whether or not we use certain
+		 * types of move instructions and/or insert given clear instructions
+		 */
+
+		//Use the floating point selector here
+		instruction->instruction_type = select_sse_move_instruction(destination_size, source_size, is_source_register_clean(instruction->op1));
+
+		/**
+		 * If we have a conversion instruction that has an SSE destination, we need to emit
+		 * a special "pxor" statement beforehand to completely wipe out said register
+		 */
+		if(is_conversion_with_sse_declaration(instruction->instruction_type) == TRUE){
+			//We need to completely zero out the destination register here, so we will emit a pxor to do
+			//just that
+			instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+
+			//Get this in right before the given
+			insert_instruction_before_given(pxor_instruction, instruction);
+		}
 	}
 
 	//Set the sources and destinations
 	instruction->destination_register = instruction->assignee;
 	instruction->source_register = instruction->op1;
-
-	//Use the helper to get the right sized move instruction
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
 }
 
 
@@ -3218,7 +3426,7 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
  * Create and insert a converting move operation where the destination's type is the desired type. This handles all of the overhead of creating,
  * finding the converting moves, and inserting
  */
-static three_addr_var_t* create_and_insert_expanding_move_operation(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
+static three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
 	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
 	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
 	//zero pad when 32 bit moves happen
@@ -3502,6 +3710,10 @@ static instruction_type_t select_add_instruction(variable_size_t size){
 			return ADDL;
 		case QUAD_WORD:
 			return ADDQ;
+		case SINGLE_PRECISION:
+			return ADDSS;
+		case DOUBLE_PRECISION:
+			return ADDSD;
 		default:
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
 			exit(1);
@@ -3545,6 +3757,10 @@ static instruction_type_t select_sub_instruction(variable_size_t size){
 			return SUBL;
 		case QUAD_WORD:
 			return SUBQ;
+		case SINGLE_PRECISION:
+			return SUBSS;
+		case DOUBLE_PRECISION:
+			return SUBSD;
 		default:
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
 			exit(1);
@@ -3769,8 +3985,8 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
 		//If we need to convert, we'll do that here
-		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = create_and_insert_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
+		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise it's a direct translation
 		} else {
@@ -3815,8 +4031,8 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
 		//If we need to convert, we'll do that here
-		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = create_and_insert_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
+		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise it's a direct translation
 		} else {
@@ -3861,8 +4077,8 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 	//We can have an immediate value or we can have a register
 	if(instruction->op2 != NULL){
 		//If we need to convert, we'll do that here
-		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
-			instruction->source_register = create_and_insert_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
+		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise it's a direct translation
 		} else {
@@ -3932,9 +4148,9 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	
 	//Since we have a comparison instruction, we don't actually have a destination
 	//register as the registers remain unmodified in this event
-	if(is_expanding_move_required(right_hand_type, instruction->op1->type) == TRUE){
+	if(is_converting_move_required(right_hand_type, instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		instruction->source_register = create_and_insert_expanding_move_operation(instruction, instruction->op1, right_hand_type);
+		instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op1, right_hand_type);
 	} else {
 		//Otherwise we assign directly
 		instruction->source_register = instruction->op1;
@@ -3942,9 +4158,9 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 
 	//If we have op2, we'll use source_register2
 	if(instruction->op2 != NULL){
-		if(is_expanding_move_required(left_hand_type, instruction->op2->type) == TRUE){
+		if(is_converting_move_required(left_hand_type, instruction->op2->type) == TRUE){
 			//Let the helper deal with it
-			instruction->source_register2 = create_and_insert_expanding_move_operation(instruction, instruction->op2, left_hand_type);
+			instruction->source_register2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, left_hand_type);
 		} else {
 			//Otherwise we assign directly
 			instruction->source_register2 = instruction->op2;
@@ -4004,9 +4220,9 @@ static void handle_subtraction_instruction(instruction_t* instruction){
 	//If we have a register value, we add that
 	if(instruction->op2 != NULL){
 		//Do we need any kind of type conversion here? If so we'll do that now
-		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
 			//If this is needed, we'll let the helper do it
-			instruction->source_register = create_and_insert_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
+			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise let this deal with it
 		} else {
@@ -4043,9 +4259,9 @@ static void handle_addition_instruction(instruction_t* instruction){
 	//If we have a register value, we add that
 	if(instruction->op2 != NULL){
 		//Do we need a type conversion? If so, we'll do that here
-		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
 			//Let the helper function deal with this
-			instruction->source_register = create_and_insert_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
+			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise we'll just do this
 		} else {
@@ -4091,9 +4307,9 @@ static void handle_addition_instruction_lea_modification(instruction_t* instruct
 
 		//Does this adhere to the same type as reg1? It must, so if it does not we will force it
 		//to 
-		if(is_expanding_move_required(instruction->address_calc_reg1->type, addresss_calc_reg2->type) == TRUE){
+		if(is_converting_move_required(instruction->address_calc_reg1->type, addresss_calc_reg2->type) == TRUE){
 			//Let the helper deal with it
-			addresss_calc_reg2 = create_and_insert_expanding_move_operation(instruction, addresss_calc_reg2, instruction->address_calc_reg1->type);
+			addresss_calc_reg2 = create_and_insert_converting_move_instruction(instruction, addresss_calc_reg2, instruction->address_calc_reg1->type);
 		}
 
 		//Whether or not a type conversion happened, we can assign this here
@@ -4137,9 +4353,9 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	//If we have a BIN_OP with const statement, we need to 
 	if(multiplication_instruction->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
 		//If we need to convert, we'll do that here
-		if(is_expanding_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
+		if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op2->type) == TRUE){
 			//Let the helper deal with it
-			source2 = create_and_insert_expanding_move_operation(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
+			source2 = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op2, multiplication_instruction->assignee->type);
 
 		//Otherwise this can be moved directly
 		} else {
@@ -4167,8 +4383,8 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 	}
 
 	//Let's also check is any conversions are needed for the first source register
-	if(is_expanding_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op1->type) == TRUE){
-		source = create_and_insert_expanding_move_operation(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
+	if(is_converting_move_required(multiplication_instruction->assignee->type, multiplication_instruction->op1->type) == TRUE){
+		source = create_and_insert_converting_move_instruction(multiplication_instruction, multiplication_instruction->op1, multiplication_instruction->assignee->type);
 
 	//Otherwise we'll just assign this to be op1
 	} else {
@@ -4247,9 +4463,9 @@ static void handle_signed_multiplication_instruction(instruction_t* instruction)
 	//Are we using an immediate or register?
 	if(instruction->op2 != NULL){
 		//Do we need a type conversion here?
-		if(is_expanding_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
 			//Let the helper deal with it
-			instruction->source_register = create_and_insert_expanding_move_operation(instruction, instruction->op2, instruction->assignee->type);
+			instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
 
 		//Otherwise assign directly
 		} else {
@@ -4290,9 +4506,9 @@ static void handle_division_instruction(instruction_window_t* window){
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
-	if(is_expanding_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
+	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		dividend = create_and_insert_expanding_move_operation(division_instruction, division_instruction->op1, division_instruction->assignee->type);
+		dividend = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op1, division_instruction->assignee->type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -4330,8 +4546,8 @@ static void handle_division_instruction(instruction_window_t* window){
 	}
 
 	//Do we need to do a type conversion? If so, we'll do a converting move here
-	if(is_expanding_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
-		divisor = create_and_insert_expanding_move_operation(division_instruction, division_instruction->op2, division_instruction->assignee->type);
+	if(is_converting_move_required(division_instruction->assignee->type, division_instruction->op2->type) == TRUE){
+		divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->op2, division_instruction->assignee->type);
 
 	//Otherwise divisor is just the op2
 	} else {
@@ -4362,6 +4578,26 @@ static void handle_division_instruction(instruction_window_t* window){
 
 
 /**
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
+ * converting moves if such moves are required
+ */
+static void handle_sse_division_instruction(instruction_window_t* window){
+	//TODO
+}
+
+
+/**
+ * Handle an SSE multiplication instruction. By the time we get here, we already
+ * know that we're dealing with an SSE operation. This instruction will generate
+ * converting moves if such moves are required
+ */
+static void handle_sse_multiplication_instruction(instruction_window_t* window){
+	//TODO
+}
+
+
+/**
  * Handle a modulus(remainder) operation
  * Handle a division operation
  *
@@ -4388,9 +4624,9 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
-	if(is_expanding_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
+	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op1->type) == TRUE){
 		//Let the helper deal with it
-		dividend = create_and_insert_expanding_move_operation(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
+		dividend = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op1, modulus_instruction->assignee->type);
 
 	//Otherwise this can be moved directly
 	} else {
@@ -4428,8 +4664,8 @@ static void handle_modulus_instruction(instruction_window_t* window){
 	}
 
 	//Do we need to do a type conversion? If so, we'll do a converting move here
-	if(is_expanding_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
-		divisor = create_and_insert_expanding_move_operation(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
+	if(is_converting_move_required(modulus_instruction->assignee->type, modulus_instruction->op2->type) == TRUE){
+		divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->op2, modulus_instruction->assignee->type);
 
 	//Otherwise source 2 is just the op2
 	} else {
@@ -4699,8 +4935,8 @@ static void handle_lea_statement(instruction_t* instruction){
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+				instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 
 			break;
@@ -4717,8 +4953,8 @@ static void handle_lea_statement(instruction_t* instruction){
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+				instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 
 			//Set the appropriate value here
@@ -4768,8 +5004,8 @@ static void handle_lea_statement(instruction_t* instruction){
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+				instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 
 			//Set the appropriate value here
@@ -4789,8 +5025,8 @@ static void handle_lea_statement(instruction_t* instruction){
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+				instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 
 			//The scale is already stored in the multiplier
@@ -5285,7 +5521,7 @@ static void handle_test_instruction(instruction_t* instruction){
  *
  * This bypasses all register allocation entirely
  */
-static instruction_t* emit_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
+static instruction_t* emit_general_purpose_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
 	//First allocate it
 	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
 
@@ -5298,7 +5534,7 @@ static instruction_t* emit_move_instruction_directly(three_addr_var_t* destinati
 	generic_type_t* source_type = source_register->type;
 
 	//Now we will decide what the move instruction is
-	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+	move_instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
 
 	//Give back the pointer
 	return move_instruction;
@@ -5356,7 +5592,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
 					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_move_instruction_directly(new_source, store_instruction->op1);
+					instruction_t* converting_move = emit_general_purpose_move_instruction_directly(new_source, store_instruction->op1);
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
@@ -5420,7 +5656,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
 					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_move_instruction_directly(new_source, store_instruction->op2);
+					instruction_t* converting_move = emit_general_purpose_move_instruction_directly(new_source, store_instruction->op2);
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
@@ -5455,7 +5691,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	}
 
 	//Once we've done all the above assignments, we need to determine what our instruction type is
-	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+	store_instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
 }
 
 
@@ -5509,7 +5745,7 @@ static void handle_load_instruction(instruction_t* instruction){
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
 	//Let the helper select for us
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
+	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -5587,7 +5823,7 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
 	//Let the helper decide for us
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
+	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -5666,7 +5902,7 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
 	//Let the helper decide for us
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
+	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
 
 	//This is a read from memory type
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -5699,8 +5935,8 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+					instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 				}
 
 			//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
@@ -5715,8 +5951,8 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+					instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 				}
 			}
 
@@ -5743,8 +5979,8 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+				instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 		}
 
@@ -5760,8 +5996,8 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 		//must adhere to this one's type
-		if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-			instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+		if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+			instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 		}
 	}
 }
@@ -5867,11 +6103,11 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(variable_offset_load->address_calc_reg1->type, variable_offset_load->address_calc_reg2->type) == TRUE){
-				variable_offset_load->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
+			if(is_converting_move_required(variable_offset_load->address_calc_reg1->type, variable_offset_load->address_calc_reg2->type) == TRUE){
+				variable_offset_load->address_calc_reg2 = create_and_insert_converting_move_instruction(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
 			}
 
-			//This one will have an addressing type of registers and offset
+		//This one will have an addressing type of registers and offset
 			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 			//The lea is now useless so get rid of it
@@ -5899,8 +6135,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(variable_offset_load->address_calc_reg1->type, variable_offset_load->address_calc_reg2->type) == TRUE){
-				variable_offset_load->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
+			if(is_converting_move_required(variable_offset_load->address_calc_reg1->type, variable_offset_load->address_calc_reg2->type) == TRUE){
+				variable_offset_load->address_calc_reg2 = create_and_insert_converting_move_instruction(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
 			}
 
 			//The calculation mode type depends on the constant
@@ -5944,8 +6180,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(variable_offset_load->address_calc_reg1->type, variable_offset_load->address_calc_reg2->type) == TRUE){
-				variable_offset_load->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
+			if(is_converting_move_required(variable_offset_load->address_calc_reg1->type, variable_offset_load->address_calc_reg2->type) == TRUE){
+				variable_offset_load->address_calc_reg2 = create_and_insert_converting_move_instruction(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
 			}
 
 			//This will always be a registers, offset and scale type
@@ -5971,7 +6207,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 	
 	//NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
 	//Let the helper decide for us
-	variable_offset_load->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed);
+	variable_offset_load->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
 	//This is a read from memory type
 	variable_offset_load->memory_access_type = READ_FROM_MEMORY;
 	//Handle the destination assignment
@@ -6165,8 +6401,8 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+					instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 				}
 
 			//Even if this is 0, we still need to account for the offset in the original
@@ -6184,8 +6420,8 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-					instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+					instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 				}
 			}
 
@@ -6211,8 +6447,8 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-				instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+				instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 			}
 		}
 
@@ -6231,8 +6467,8 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 		//must adhere to this one's type
-		if(is_expanding_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-			instruction->address_calc_reg2 = create_and_insert_expanding_move_operation(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+		if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+			instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
 		}
 	}
 }
@@ -6336,8 +6572,8 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(variable_offset_store->address_calc_reg1->type, variable_offset_store->address_calc_reg2->type) == TRUE){
-				variable_offset_store->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
+			if(is_converting_move_required(variable_offset_store->address_calc_reg1->type, variable_offset_store->address_calc_reg2->type) == TRUE){
+				variable_offset_store->address_calc_reg2 = create_and_insert_converting_move_instruction(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
 			}
 
 			//The calculation mode here will always be registers and offset
@@ -6371,8 +6607,8 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(variable_offset_store->address_calc_reg1->type, variable_offset_store->address_calc_reg2->type) == TRUE){
-				variable_offset_store->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
+			if(is_converting_move_required(variable_offset_store->address_calc_reg1->type, variable_offset_store->address_calc_reg2->type) == TRUE){
+				variable_offset_store->address_calc_reg2 = create_and_insert_converting_move_instruction(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
 			}
 
 			//Determine the calculation mode based on the present of offset
@@ -6420,8 +6656,8 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_expanding_move_required(variable_offset_store->address_calc_reg1->type, variable_offset_store->address_calc_reg2->type) == TRUE){
-				variable_offset_store->address_calc_reg2 = create_and_insert_expanding_move_operation(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
+			if(is_converting_move_required(variable_offset_store->address_calc_reg1->type, variable_offset_store->address_calc_reg2->type) == TRUE){
+				variable_offset_store->address_calc_reg2 = create_and_insert_converting_move_instruction(variable_offset_store, variable_offset_store->address_calc_reg2, variable_offset_store->address_calc_reg1->type);
 			}
 
 			//This will always have registers, an offset and a scale
@@ -6493,11 +6729,11 @@ static void select_instruction_patterns(instruction_window_t* window){
 			default:
 				//If it is signed, we'll want to preserve the signedness
 				if(is_type_signed(true_source->type) == TRUE){
-					true_source = create_and_insert_expanding_move_operation(window->instruction1, window->instruction1->op2, i32);
+					true_source = create_and_insert_converting_move_instruction(window->instruction1, window->instruction1->op2, i32);
 
 				//Otherwise, we'll use the unsigned version
 				} else {
-					true_source = create_and_insert_expanding_move_operation(window->instruction1, window->instruction1->op2, u32);
+					true_source = create_and_insert_converting_move_instruction(window->instruction1, window->instruction1->op2, u32);
 				}
 
 				break;
@@ -6560,18 +6796,28 @@ static void select_instruction_patterns(instruction_window_t* window){
 		switch(window->instruction1->op){
 			//Handle the logical and case
 			case DOUBLE_AND:
+				//TODO FLOAT VERSION NEEDED
 				handle_logical_and_instruction(window);
 				return;
 
 			//Handle logical or
 			case DOUBLE_OR:
+				//TODO FLOAT VERSION NEEDED
 				handle_logical_or_instruction(window);
 				return;
 
 			//Handle division
 			case F_SLASH:
-				//This will generate more than one instruction
-				handle_division_instruction(window);
+				//Likely the most common case - it's not a float
+				if(IS_FLOATING_POINT(window->instruction1->assignee->type) == FALSE){
+					handle_division_instruction(window);
+
+				//Otherwise we have a floating point division here so we need
+				//to handle it appropriately
+				} else {
+					handle_sse_division_instruction(window);
+				}
+
 				return;
 
 			//Handle modulus
@@ -6582,12 +6828,21 @@ static void select_instruction_patterns(instruction_window_t* window){
 
 			//If we have a multiplication *and* it's unsigned, we go here
 			case STAR:
-				//Only do this if we're signed
-				if(is_type_signed(window->instruction1->assignee->type) == FALSE){
-					//Let the helper deal with it
-					handle_unsigned_multiplication_instruction(window);
-					return;
+				//Likely the most common case - it's not a float
+				if(IS_FLOATING_POINT(window->instruction1->assignee->type) == FALSE){
+					//Only do this if we're unsigned
+					if(is_type_signed(window->instruction1->assignee->type) == FALSE){
+						//Let the helper deal with it
+						handle_unsigned_multiplication_instruction(window);
+						return;
+					}
+
+				//Otherwise we have a floating point multiplication here so we need
+				//to handle it appropriately
+				} else {
+					handle_sse_multiplication_instruction(window);
 				}
+
 				break;
 
 			default:

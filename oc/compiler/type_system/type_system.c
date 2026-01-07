@@ -295,10 +295,11 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 	}
 }
 
+
 /**
- * Is a type conversion needed between these two types for the source type to fit into the destination type
+ * Is a type conversion needed between these two types?
  */
-u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_type_t* source_type){
+u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_type_t* source_type){
 	//The maximum that any of these can ever be is 8
 	u_int32_t destination_size = destination_type->type_size <= 8 ? destination_type->type_size : 8;
 	u_int32_t source_size = source_type->type_size <= 8 ? source_type->type_size : 8;
@@ -308,7 +309,44 @@ u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_ty
 		return TRUE;
 	}
 
-	//By default, we say no
+	//Just because they are the same size does not mean that a converting move isn't required, though. We
+	//may also be trying to convert from general purpose to SSE or vice versa
+	if(destination_type->type_class == TYPE_CLASS_BASIC && source_type->type_class == TYPE_CLASS_BASIC){
+		switch(destination_type->basic_type_token){
+			//Destination is SSE, so is the source?
+			case SINGLE_PRECISION:
+			case DOUBLE_PRECISION:
+				//Go based on what the source is
+				switch(source_type->basic_type_token){
+					//Source is also a floating point value, so we're fine
+					case SINGLE_PRECISION:
+					case DOUBLE_PRECISION:
+						return FALSE;
+
+					//Otherwise it isn't, so we'll need to convert
+					default:
+						return TRUE;
+				}
+
+				break;
+				
+			//Destination is not a floating point value
+			default:
+				//Go based on what the source is
+				switch(source_type->basic_type_token){
+					//Source is a float value, so we need to convert
+					case SINGLE_PRECISION:
+					case DOUBLE_PRECISION:
+						return TRUE;
+
+					//Otherwise it's not, so nothing is needed
+					default:
+						return FALSE;
+				}
+		}
+	}
+
+	//If we made it all the way down here then we're fine
 	return FALSE;
 }
 

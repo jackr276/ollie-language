@@ -611,7 +611,7 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
 	record->stack_region = aliases->stack_region;
 	record->stack_variable = aliases->stack_variable;
 
-	//This is still a function parameter at hear
+	//This is still a function parameter at heart
 	record->membership = FUNCTION_PARAMETER;
 
 	//Insert this into the variable symtab

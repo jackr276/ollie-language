@@ -76,6 +76,12 @@ typedef enum type_class_t {
  */
 #define IS_VOID_TYPE(type) \
 	((type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID) ? TRUE : FALSE)
+
+/**
+ * Determine whether a type is or is not floating point
+ */
+#define IS_FLOATING_POINT(type)\
+	((type->type_class == TYPE_CLASS_BASIC && ((type->basic_type_token == F32) || (type->basic_type_token == F64))) ? TRUE : FALSE)
 //========================= Utility Macros ============================
 
 
@@ -232,9 +238,9 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type);
 u_int8_t is_type_valid_for_conditional(generic_type_t* type);
 
 /**
- * Do we need an expanding move to convert between two types?
+ * Do we need a converting move to convert between two types?
  */
-u_int8_t is_expanding_move_required(generic_type_t* destination_type, generic_type_t* source_type);
+u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_type_t* source_type);
 
 /**
  * Determine the compatibility of two types and coerce appropraitely. The double pointer

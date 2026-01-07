@@ -2621,6 +2621,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 
 		//The return variable is now what was assigned
 		return_variable	= assignment->assignee;
+
+		//Flag for later on in the compiler that this variable has been returned
+		return_variable->membership = RETURNED_VARIABLE;
 	}
 
 	//We'll use the ret stmt feature here
