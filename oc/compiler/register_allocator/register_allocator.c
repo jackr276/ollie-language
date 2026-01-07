@@ -15,6 +15,7 @@
 #include "../postprocessor/postprocessor.h"
 #include "../utils/queue/max_priority_queue.h"
 #include "../cfg/cfg.h"
+#include <cmath>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1384,6 +1385,31 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 
 
 /**
+ * Scan the given source array and return a result array with only live ranges of the target
+ * class inside of the returned array
+ */
+static dynamic_array_t get_specific_live_ranges(dynamic_array_t* source_array, live_range_class_t target_class){
+	//Create the array
+	dynamic_array_t result = dynamic_array_alloc();
+
+	//Loop through the old array and copy any pointers over
+	//that match the target class
+	for(u_int16_t i = 0; i < source_array->current_index; i++){
+		//Extract our candidate
+		live_range_t* candidate = dynamic_array_get_at(source_array, i);
+
+		//Add it into the result array *if* the classes match
+		if(candidate->live_range_class == target_class){
+			dynamic_array_add(&result, candidate);
+		}
+	}
+
+	//Give back the distinct result array now
+	return result;
+}
+
+
+/**
  * NOTE: We must walk the block from bottom to top
  *
  * Algorithm:
@@ -1408,14 +1434,16 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
  * to, we can safely remove it from LIVE_NOW because everything before that cannot possibly rely on the register
  * because it hadn't been written to yet.
  *
- * We have a stopper parameter that can be used to halt the execution at a certain point. This is used for
- * function call caller/callee saving calculations
+ * For the distinction between SSE and non-SSE variables, we maintain 2 separate live now sets. This allows
+ * us to use one traversal while still maintaining proper separation
  */
 static void calculate_interference_in_block(interference_graph_t* graph, basic_block_t* block){
 	/**
 	 * As you can see in the algorithm, the LIVE_NOW set initially starts
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
-	 * set by a different name for our calculation
+	 * set by a different name for our calculation. We do need to maintain
+	 * distinction between float and non float live ranges though, so we
+	 * will maintain 2 separate live now buckets
 	 */
 	dynamic_array_t live_now = clone_dynamic_array(&(block->live_out));
 
