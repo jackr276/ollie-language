@@ -4384,6 +4384,42 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 
+		case MULSS:
+			fprintf(fl, "mulss ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case MULSD:
+			fprintf(fl, "mulsd ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case DIVSS:
+			fprintf(fl, "divss ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
+		case DIVSD:
+			fprintf(fl, "DIVSD ");
+			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+
 		case PAND:
 			fprintf(fl, "pand ");
 			print_variable(fl, instruction->source_register, mode);

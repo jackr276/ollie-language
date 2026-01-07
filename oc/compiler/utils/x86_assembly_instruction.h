@@ -181,6 +181,10 @@ typedef enum{
 	SUBSD, //Subtract scalar f64
 	ADDSS, //Add scalar f32
 	SUBSS, //Subtract scalar f32
+	DIVSS, //Divide scalar f32
+	DIVSD, //Divide scalar f64
+	MULSS, //Multiply scalar f32
+	MULSD, //Multiply scalar f64
 	MOVSS, //Move f32 -> f32
 	MOVSD, //Move f64 -> f64
 	MOVAPS, //Move aligned packed f32 -> used if we need to clear out the whole thing
