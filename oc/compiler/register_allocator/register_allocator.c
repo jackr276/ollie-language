@@ -420,14 +420,16 @@ static void print_blocks_with_registers(cfg_t* cfg){
 
 
 /**
- * Print all live ranges that we have
+ * Print all live ranges that we have. This includes our general purpose
+ * live ranges and our SSE live ranges
  */
-static void print_all_live_ranges(dynamic_array_t* live_ranges){
+static void print_all_live_ranges(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	printf("============= All Live Ranges ==============\n");
+	printf("=============== GENERAL PURPOSE ============\n");
 	//For each live range in the array
-	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+	for(u_int16_t i = 0; i < general_purpose_live_ranges->current_index; i++){
 		//Grab it out
-		live_range_t* current = dynamic_array_get_at(live_ranges, i);
+		live_range_t* current = dynamic_array_get_at(general_purpose_live_ranges, i);
 
 		//We'll print out it's id first
 		printf("LR%d: {", current->live_range_id);
@@ -460,6 +462,49 @@ static void print_all_live_ranges(dynamic_array_t* live_ranges){
 		//And we'll close it out
 		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
 	}
+	printf("=============== GENERAL PURPOSE ============\n");
+
+
+	//Repeat for SSE
+	printf("==================== SSE ===================\n");
+	//For each live range in the array
+	for(u_int16_t i = 0; i < sse_live_ranges->current_index; i++){
+		//Grab it out
+		live_range_t* current = dynamic_array_get_at(sse_live_ranges, i);
+
+		//We'll print out it's id first
+		printf("LR%d: {", current->live_range_id);
+
+		//Now we'll run through and print out all of its variables
+		for(u_int16_t j = 0; j < current->variables.current_index; j++){
+			//Print the variable name
+			print_variable(stdout, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
+
+			//Print a comma if appropriate
+			if(j != current->variables.current_index - 1){
+				printf(", ");
+			}
+		}
+
+		printf("} Neighbors: {");
+
+		//Now we'll print out all of it's neighbors
+		for(u_int16_t k = 0; k < current->neighbors.current_index; k++){
+			live_range_t* neighbor = dynamic_array_get_at(&(current->neighbors), k);
+			printf("LR%d", neighbor->live_range_id);
+ 
+			//Print a comma if appropriate
+			if(k != current->neighbors.current_index - 1){
+				printf(", ");
+			}
+
+		}
+		
+		//And we'll close it out
+		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
+	}
+
+	printf("==================== SSE ===================\n");
 	printf("============= All Live Ranges ==============\n");
 }
 
@@ -967,8 +1012,11 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
  * 	else:
  * 		add the variable to the corresponding live range set
  * 		mark said variable 
+ *
+ * Note: we have 2 distinct sets of live ranges - SSE and non-SSE. These sets are entirely separate so we will build
+ * them in tandem, but manipulate them separately to boost efficiency
  */
-static dynamic_array_t construct_live_ranges_in_function(basic_block_t* function_entry){
+static dynamic_array_t construct_live_ranges_in_function(basic_block_t* function_entry, dynamic_array_t* general_purpose_ranges, dynamic_array_t* sse_ranges){
 	//First create the set of live ranges
 	dynamic_array_t live_ranges = dynamic_array_alloc();
 
@@ -3106,7 +3154,11 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 *
 	 * 	We only need to do this once for the allocation
 	 */
-	dynamic_array_t live_ranges = construct_live_ranges_in_function(function_entry);
+	dynamic_array_t general_purpose_live_ranges = dynamic_array_alloc();
+	dynamic_array_t sse_live_ranges = dynamic_array_alloc();
+
+	//We will do a 2-for-1 pass of the entire function level CFG 
+	construct_live_ranges_in_function(function_entry, &general_purpose_live_ranges, &sse_live_ranges);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
@@ -3123,12 +3175,13 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * counts. Since it is not possible to get an accurate use/assignment count
 	 * until the entire cfg is combed over, we need to do this in a separate step
 	 */
-	compute_spill_costs(&live_ranges);
+	compute_spill_costs(&general_purpose_live_ranges);
+	compute_spill_costs(&sse_live_ranges);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("=============== After Cost Update ============\n");
-		print_all_live_ranges(&live_ranges);
+		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
 		printf("=============== After Cost Update ============\n");
 	}
 
