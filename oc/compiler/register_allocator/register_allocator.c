@@ -28,7 +28,7 @@ const general_purpose_register_t gen_purpose_parameter_registers[] = {RDI, RSI, 
 const sse_register_t sse_parameter_registers[] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5};
 
 //Avoid need to rearrange
-static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* live_ranges);
+static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges);
 static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range);
 
 //Just hold the stack pointer live range
@@ -1419,6 +1419,8 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 	 */
 	dynamic_array_t live_now = clone_dynamic_array(&(block->live_out));
 
+	//TODO
+
 	//For later user
 	dynamic_array_t operation_function_parameters;
 	
@@ -1560,7 +1562,7 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
  *
  * This function will always invoke a helper that does it for a specific block
  */
-static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* live_ranges){
+static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	//It starts off as null
 	interference_graph_t* graph = NULL;
 
@@ -3194,14 +3196,15 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * modified by this point in the compilation process that starting over
 	 * is easier
 	 *
-	 * We will need to do this every single time we reallocate
+	 * We will need to do this every single time we reallocate. This is also a "2-for-1",
+	 * meaning that it will count for both general purpose and SSE registers
 	*/
 	calculate_live_range_liveness_sets(function_entry);
 
 	//Show our IR's here
 	if(print_irs == TRUE){
 		//Show our live ranges once again
-		print_all_live_ranges(&live_ranges);
+		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
 	}
 
 	/**
@@ -3254,7 +3257,8 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * allow for even more coalescence. We will use this to our advantage
 	 * by letting this rule run every time
 	*/
-	u_int8_t could_coalesce = perform_live_range_coalescence(function_entry, graph, debug_printing);
+	u_int8_t could_coalesce_general_purpose = perform_live_range_coalescence(function_entry, graph, debug_printing);
+	u_int8_t could_coalesce_sse = //TODO;
 
 	/**
 	 * If we were in fact able to coalesce, we will have messed up the liveness sets due
