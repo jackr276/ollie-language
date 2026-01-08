@@ -33,6 +33,23 @@ static interference_graph_t* interference_graph_alloc(u_int16_t live_range_count
 
 
 /**
+ * Add the interference between these two live ranges into the graph. Note that this
+ * function does not deal with the neighbor arrays itself, and will assume that the caller
+ * has already taken care of all that
+ */
+static inline void add_interference_in_graph(interference_graph_t* graph, live_range_t* a, live_range_t *b){
+	//To add the interference we'll first need to calculate the offsets for both
+	//b's and a's version
+	u_int16_t offset_a_b = a->interference_graph_index * graph->live_range_count + b->interference_graph_index;
+	u_int16_t offset_b_a = b->interference_graph_index * graph->live_range_count + a->interference_graph_index;
+
+	//Now we'll go to the adjacency matrix and add this in
+	graph->nodes[offset_a_b] = TRUE;
+	graph->nodes[offset_b_a] = TRUE;
+}
+
+
+/**
  * Mark that live ranges a and b interfere. This function does not impact the graph at all
  */
 void add_interference(live_range_t* a, live_range_t* b){
@@ -118,7 +135,10 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 		remove_interference(graph, neighbor, coalescee);
 
 		//The target and the neighbor are now interfering
-		add_interference(graph, target, neighbor);
+		add_interference(target, neighbor);
+
+		//Put this interference into the graph now
+		add_interference_in_graph(graph, target, neighbor);
 	}
 
 	/**
