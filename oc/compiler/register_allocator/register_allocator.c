@@ -23,7 +23,9 @@
 //The atomically increasing live range id
 u_int32_t live_range_id = 0;
 
-//The array that holds all of our parameter passing
+/**
+ * Cache all of our register parameters for passing
+ */
 const general_purpose_register_t gen_purpose_parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 const sse_register_t sse_parameter_registers[] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5};
 
@@ -1644,38 +1646,6 @@ static inline void calculate_all_interferences_in_function(basic_block_t* functi
 
 
 /**
- * Does precoloring interference exist?
- *
- * Precoloring interference exists if:
- *  An LR wants to be colored with Register R
- *  But one of it's neighbors *is already* colored with Register R
- *
- * Takes in the register that we want to color(coloree) and the register we want to color it with
- *
- * This function will return the value of the neighbor that we interfere with. This will be needed
- * for spilling
- */
-static live_range_t* does_precoloring_interference_exist_gen_purpose(live_range_t* coloree, general_purpose_register_t reg){
-	//Extract for convenience
-	dynamic_array_t neighbors = coloree->neighbors;
-
-	//Run through all of the neighbors
-	for(u_int16_t i = 0; i < neighbors.current_index; i++){
-		//Grab the given neighbor out
-		live_range_t* neighbor = dynamic_array_get_at(&neighbors, i);
-
-		//This collision means we do have interference
-		if(neighbor->reg.gen_purpose == reg){
-			return NULL;
-		}
-	}
-
-	//If we get here then no
-	return NULL;
-}
-
-
-/**
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
  *
@@ -1690,6 +1660,7 @@ static u_int8_t precolor_instruction(instruction_t* instruction){
 	//One thing to check for - function parameter passing
 	if(instruction->destination_register != NULL
 		&& instruction->destination_register->associated_live_range->function_parameter_order > 0){
+	
 		//Extract the register
 		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->destination_register->associated_live_range->function_parameter_order - 1];
 
@@ -1815,13 +1786,13 @@ static u_int8_t precolor_instruction(instruction_t* instruction){
 		case IDIVL:
 		case IDIVQ:
 			//The source register for a division must be in RAX
-			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
+			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
 
 			//The first destination register is the quotient, and is in RAX
-			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 			//The second destination register is the remainder, and is in RDX
-			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
+			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
 
 			break;
 
@@ -1830,7 +1801,7 @@ static u_int8_t precolor_instruction(instruction_t* instruction){
 		case INDIRECT_CALL:
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
-				colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			//	colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 			}
 
 			/**
@@ -1851,7 +1822,7 @@ static u_int8_t precolor_instruction(instruction_t* instruction){
 				live_range_t* param_live_range = param->associated_live_range;
 
 				//And we'll use the function param list to precolor appropriately
-				colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, param_live_range, gen_purpose_parameter_registers[i]);
+				//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, param_live_range, gen_purpose_parameter_registers[i]);
 			}
 
 			break;
@@ -3072,8 +3043,11 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	u_int8_t print_irs = options->print_irs;
 	u_int8_t debug_printing = options->enable_debug_printing;
 
-	//Save the flag that tells us whether or not the graph that we constructed was colorable
-	u_int8_t colorable = FALSE;
+	//These flags tell us whether or not our given graphs were colorable or not. It
+	//is important to not that the general purpose and SSE graphs are 100% distinct,
+	//so storing these separately is important
+	u_int8_t colorable_gen_purpose = FALSE;
+	u_int8_t colorable_sse = FALSE;
 
 	/**
 	 * STEP 1: Build all live ranges from variables:
@@ -3097,6 +3071,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 		printf("============= Before Liveness ==============\n");
 	}
 
+
 	/**
 	 * STEP 2: Compute spill costs for live ranges
 	 *
@@ -3108,12 +3083,14 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	compute_spill_costs(&general_purpose_live_ranges);
 	compute_spill_costs(&sse_live_ranges);
 
+
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("=============== After Cost Update ============\n");
 		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
 		printf("=============== After Cost Update ============\n");
 	}
+
 
 	/**
 	 * STEP 3: Construct LIVE_IN and LIVE_OUT sets
@@ -3129,11 +3106,13 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	*/
 	calculate_live_range_liveness_sets(function_entry);
 
+
 	//Show our IR's here
 	if(print_irs == TRUE){
 		//Show our live ranges once again
 		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
 	}
+
 
 	/**
 	 * STEP 4: Construct the interference graph
@@ -3153,12 +3132,14 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	interference_graph_t* general_purpose_graph = construct_interference_graph_from_adjacency_lists(&general_purpose_live_ranges);
 	interference_graph_t* sse_graph = construct_interference_graph_from_adjacency_lists(&sse_live_ranges);
 
+
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("============= After Live Range Determination ==============\n");
 		print_function_blocks_with_live_ranges(function_entry);
 		printf("============= After Live Range Determination ==============\n");
 	}
+	
 
 	/**
 	 * STEP 5: Pre-coloring registers
@@ -3170,6 +3151,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * This has the potential to cause spills
 	 */
 	 pre_color(function_entry, &live_ranges);
+
 
 	/**
 	 * STEP 6: Live range coalescence optimization
@@ -3301,8 +3283,9 @@ spill_loop:
 		colorable = graph_color_and_allocate(function_entry, &live_ranges);
 	}
 
-	//Destroy this now that we're done
-	dynamic_array_dealloc(&live_ranges);
+	//Destroy both of these now that we're done
+	dynamic_array_dealloc(&general_purpose_live_ranges);
+	dynamic_array_dealloc(&sse_live_ranges);
 }
 
 
