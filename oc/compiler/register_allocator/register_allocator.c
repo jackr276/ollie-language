@@ -2141,57 +2141,29 @@ static u_int8_t does_general_purpose_register_allocation_interference_exist(live
  */
 static u_int8_t does_sse_register_allocation_interference_exist(live_range_t* source, live_range_t* destination){
 	switch(source->reg.sse_reg){
-		case NO_REG_GEN_PURPOSE:
+		case NO_REG_SSE:
 			//If the destination has a register, we need
 			//to check if any *neighbors* of the source
 			//are colored the same. If they are, that would
 			//lead to interference
-			if(destination->reg.gen_purpose != NO_REG_GEN_PURPOSE){
+			if(destination->reg.sse_reg != NO_REG_SSE){
 				//Whatever this is is our answer
-				return do_neighbors_use_general_purpose_register(source, destination->reg.gen_purpose);
+				return do_neighbors_use_sse_register(source, destination->reg.sse_reg);
 			}
 
 			//No interference
 			return FALSE;
 
-		/**
-		 * Special case - if the source register is RSP, we need to ensure
-		 * that the destination that we're moving to is only ever
-		 * assigned to one(that would be the assignment between it and %rsp)
-		 *
-		 * If it is, that means that we'd be overwriting the stack pointer which
-		 * is a big issue
-		 */
-		case RSP:
-			//We *cannot* combine these two
-			if(destination->assignment_count > 1){
-				return TRUE;
-			}
-
-			//Even if the destination has no register, it's neighbors 
-			//could. We'll use the helper to get our answer
-			if(destination->reg.gen_purpose == NO_REG_GEN_PURPOSE){
-				return do_neighbors_use_general_purpose_register(destination, source->reg.gen_purpose);
-			}
-
-			//If they're the exact same, then this is also fine
-			if(destination->reg.gen_purpose == source->reg.gen_purpose){
-				return FALSE;
-			}
-
-			//Otherwise we have interference
-			return TRUE;
-
 		//This means the source has a register already assigned
 		default:
 			//Even if the destination has no register, it's neighbors 
 			//could. We'll use the helper to get our answer
-			if(destination->reg.gen_purpose == NO_REG_GEN_PURPOSE){
-				return do_neighbors_use_general_purpose_register(destination, source->reg.gen_purpose);
+			if(destination->reg.sse_reg == NO_REG_SSE){
+				return do_neighbors_use_sse_register(destination, source->reg.sse_reg);
 			}
 
 			//If they're the exact same, then this is also fine
-			if(destination->reg.gen_purpose == source->reg.gen_purpose){
+			if(destination->reg.sse_reg == source->reg.sse_reg){
 				//No interference
 				return FALSE;
 			}
@@ -2200,8 +2172,6 @@ static u_int8_t does_sse_register_allocation_interference_exist(live_range_t* so
 			return TRUE;
 	}
 }
-
-
 
 
 /**
