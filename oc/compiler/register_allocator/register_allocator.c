@@ -1706,24 +1706,28 @@ static void precolor_instruction(instruction_t* instruction){
 
 			break;
 
+		/**
+		 * These are exclusively general purpose so we do not need
+		 * to handle any kind of floating point coloring here
+		 */
 		case MULB:
 		case MULW:
 		case MULL:
 		case MULQ:
 			//When we do an unsigned multiplication, the implicit source register must be in RAX
-			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
-
-			//TODO
+			instruction->source_register2->associated_live_range->reg.gen_purpose = RAX;
 
 			//The destination must also be in RAX here
-			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
-
+			instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
 
 			break;
 
 		/**
 		 * For all shift instructions, if they have a register source, that
 		 * source is required to be in the %cl register
+		 *
+		 * These are exclusively general purpose so we do not need
+		 * to handle any kind of floating point coloring here
 		 */
 		case SALB:
 		case SALW:
@@ -1744,27 +1748,28 @@ static void precolor_instruction(instruction_t* instruction){
 			//Do we have a register source?
 			if(instruction->source_register != NULL){
 				//Due to a quirk in old x86, shift instructions must have their source in RCX
-				//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register->associated_live_range, RCX);
-				
-				//TODO
-
+				instruction->source_register->associated_live_range->reg.gen_purpose = RCX;
 			}
 		
 			break;
 
+		/**
+		 * These converter instructions only operate on general purpose registers
+		 * so we don't need to do any checking for floating point
+		 */
 		case CQTO:
 		case CLTD:
 		case CWTL:
 		case CBTW:
 			//Source is always %RAX
-			//colorable =  precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register->associated_live_range, RAX);
+			instruction->source_register->associated_live_range->reg.gen_purpose = RAX;
 
 			//The results are always RDX and RAX 
 			//Lower order bits
-			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
 
 			//Higher order bits
-	//		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
+			instruction->destination_register2->associated_live_range->reg.gen_purpose = RDX;
 
 			break;
 
@@ -1777,19 +1782,33 @@ static void precolor_instruction(instruction_t* instruction){
 		case IDIVL:
 		case IDIVQ:
 			//The source register for a division must be in RAX
-			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
+			instruction->source_register2->associated_live_range->reg.gen_purpose = RAX;
 
 			//The first destination register is the quotient, and is in RAX
-			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
 
 			//The second destination register is the remainder, and is in RDX
-			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
+			instruction->destination_register2->associated_live_range->reg.gen_purpose = RDX;
 
 			break;
 
 		//Function calls always return through rax
 		case CALL:
 		case INDIRECT_CALL:
+
+			//
+			//
+			//
+			//
+			//TODO needs to now accomodate different kinds of parameter registers(SSE vs. gen purpose)
+			//
+			//
+			//
+			//
+			//
+
+
+
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
 			//	colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
