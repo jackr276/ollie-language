@@ -117,7 +117,7 @@ static void print_live_range_array(dynamic_array_t* live_ranges){
 /**
  * Increment and return the live range ID
  */
-static u_int32_t increment_and_get_live_range_id(){
+static inline u_int32_t increment_and_get_live_range_id(){
 	return live_range_id++;
 }
 
@@ -1410,7 +1410,7 @@ static inline dynamic_array_t get_live_ranges_from_given_class(dynamic_array_t* 
 
 
 /**
- * NOTE: We must walk the block from bottom to top
+ * The general purpose interference calculation function works on both SSE and non-SSE targets
  *
  * Algorithm:
  * 	create an interference graph
@@ -1437,7 +1437,7 @@ static inline dynamic_array_t get_live_ranges_from_given_class(dynamic_array_t* 
  * For the distinction between SSE and non-SSE variables, we maintain 2 separate live now sets. This allows
  * us to use one traversal while still maintaining proper separation
  */
-static void calculate_interference_in_block(interference_graph_t* graph, basic_block_t* block){
+static void calculate_interference_in_block(interference_graph_t* general_purpose_graph, interference_graph_t* sse_graph, basic_block_t* block){
 	/**
 	 * As you can see in the algorithm, the LIVE_NOW set initially starts
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
@@ -1482,20 +1482,27 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 			 * *not* delete this after we add our interference
 			 */
 			if(is_destination_also_operand(operation) == TRUE){
-				//This counts as interference
-				add_destination_interference(graph, &live_now, operation->destination_register->associated_live_range);
-				//Since this is *also* an operand, it needs to be added to the LIVE_NOW array. It would not be picked up any
-				//other way
-				add_live_now_live_range(operation->destination_register->associated_live_range, &live_now);
+				//Add the interference in the appropriate graph 
+				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					add_destination_interference(general_purpose_graph, &live_now_general_purpose, operation->destination_register->associated_live_range);
+					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_general_purpose);
+
+				//If we hit this we're using a float LR 
+				} else {
+					add_destination_interference(general_purpose_graph, &live_now_sse, operation->destination_register->associated_live_range);
+					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_sse);
+				}
 
 			/**
-			 * If the indirection level is more than 0, this means that we're moving into a memory
-			 * region. Since this is the case, we're not really assigning to the register here. In
-			 * fact, we're using it, so we'll need to add this to LIVE_NOW
+			 * If we hit this, this means that the destination register itself is never being assigned. In this
+			 * case, we'll just need to add the destination LR to live now
 			 */
 			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
-				//Add it to live now and we're done
-				add_live_now_live_range(operation->destination_register->associated_live_range, &live_now);
+				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_general_purpose);
+				} else {
+					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_sse);
+				}
 
 			/**
 			 * The final case here is the ideal case in the algorithm, where we have a simple
@@ -1503,11 +1510,20 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 			 * between the destination and LIVE_NOW and then delete the destination from live_now
 			 */
 			} else {
-				//Add the interference
-				add_destination_interference(graph, &live_now, operation->destination_register->associated_live_range);
+				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					//Add the interference
+					add_destination_interference(general_purpose_graph, &live_now_general_purpose, operation->destination_register->associated_live_range);
 
-				//And then scrap it from live_now
-				dynamic_array_delete(&live_now, operation->destination_register->associated_live_range);
+					//And then scrap it from live_now
+					dynamic_array_delete(&live_now_general_purpose, operation->destination_register->associated_live_range);
+
+				} else {
+					//Add the interference
+					add_destination_interference(sse_graph, &live_now_sse, operation->destination_register->associated_live_range);
+
+					//And then scrap it from live_now
+					dynamic_array_delete(&live_now_sse, operation->destination_register->associated_live_range);
+				}
 			}
 		}
 
