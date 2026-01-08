@@ -147,8 +147,20 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 	 * If the target has a register and the source has no/the same register, no
 	 * action is needed
 	 */
-	if(target->reg.gen_purpose == NO_REG_GEN_PURPOSE){
-		target->reg = coalescee->reg;
+	switch(target->live_range_class){
+		case LIVE_RANGE_CLASS_GEN_PURPOSE:
+			if(target->reg.gen_purpose == NO_REG_GEN_PURPOSE){
+				target->reg = coalescee->reg;
+			}
+
+			break;
+
+		case LIVE_RANGE_CLASS_SSE:
+			if(target->reg.sse_reg == NO_REG_SSE){
+				target->reg = coalescee->reg;
+			}
+
+			break;
 	}
 
 	//If the target already has no function parameter order,

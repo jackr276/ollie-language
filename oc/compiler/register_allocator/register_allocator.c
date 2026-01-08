@@ -2260,49 +2260,45 @@ static coalescence_result_t perform_block_level_coalescence(basic_block_t* block
 				break;
 
 			case LIVE_RANGE_CLASS_SSE:
+				if(do_live_ranges_interfere(sse_graph, destination_live_range, source_live_range) == FALSE
+					&& does_sse_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
+
+					//Debug logs for Dev use only
+					if(debug_printing == TRUE){
+						printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
+						printf("DELETING LR%d\n", destination_live_range->live_range_id);
+						
+						printf("Deleting redundant instruction:\n");
+						print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+					}
+
+					//Perform the actual coalescence. Remember that the destination is effectively being
+					//absorbed into the source
+					coalesce_live_ranges(sse_graph, source_live_range, destination_live_range);
+
+					//Update the result based on what we already have
+					switch(result){
+						case COALESCENCE_RESULT_NONE:
+							result = COALESCENCE_RESULT_SSE_ONLY;
+							break;
+						case COALESCENCE_RESULT_GP_ONLY:
+							result = COALESCENCE_RESULT_BOTH;
+							break;
+						default:
+							break;
+					}
+
+					//Delete the now useless instruction
+					holder = instruction;
+					instruction = instruction->next_statement;
+					delete_statement(holder);
+
+				//Otherwise we're fine - just bump the instruction up and move along
+				} else {
+					instruction = instruction->next_statement;
+				}
 
 				break;
-		}
-
-		//We need to ensure that the two live ranges:
-		//	1.) Do not interfere with one another(and as such they're in separate webs)
-		//	2.) Do not have any pre-coloring that would prevent them from being merged. For example, if the
-		//	destination register is %rdi because it's a function parameter, we can't just change the register
-		//	it's in
-		if(do_live_ranges_interfere(graph, destination_live_range, source_live_range) == FALSE
-			&& does_register_allocation_interference_exist_gen_purpose(source_live_range, destination_live_range) == FALSE){
-
-			//DEBUG LOGS
-			if(debug_printing == TRUE){
-				printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
-				printf("DELETING LR%d\n", destination_live_range->live_range_id);
-			}
-
-			//Perform the actual coalescence
-			coalesce_live_ranges(graph, source_live_range, destination_live_range);
-
-			//Be sure to now set this flag - we have coalesced overall here
-			coalescence_occured = TRUE;
-
-			//Grab a holder to this 
-			instruction_t* holder = instruction;
-
-			//Push this up
-			instruction = instruction->next_statement;
-
-			//DEBUG
-			if(debug_printing == TRUE){
-				printf("Deleting:\n");
-				print_instruction(stdout, holder, PRINTING_VAR_INLINE);
-			}
-
-			//Delete the old one from the graph
-			delete_statement(holder);
-		
-		//All we need do here is advance it up
-		} else {
-			//Push this up
-			instruction = instruction->next_statement;
 		}
 	}
 
@@ -2324,6 +2320,21 @@ static inline u_int8_t perform_live_range_coalescence(basic_block_t* function_en
 
 	//Run through every single block in here
 	basic_block_t* current = function_entry_block;
+
+	//
+	//
+	//
+	//
+	//
+	//
+	//TODO functionality integration on what we had here for coalescence
+	//result - i.e. what does NONE, GP_ONLY, SSE_ONLY, etc. turn into after
+	//each run
+	//
+	//
+	//
+	//
+	//
 
 	//Run through every block
 	while(current != NULL){
