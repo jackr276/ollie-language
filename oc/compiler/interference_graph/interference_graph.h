@@ -30,10 +30,16 @@ struct interference_graph_t{
 /**
  * Mark that live ranges a and b interfere
  *
- * NOTE: The graph is an optional parameter. If NULL is passed in, we'll assume that
- * the graph has not yet been allocated and skip that part
+ * NOTE: we assume that if the caller is using this function, the graph is *not* null
  */
 void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b);
+
+/**
+ * Mark that live ranges a and b interfere
+ *
+ * NOTE: this only does bookkeeping with the live ranges. It does not use the graph
+ */
+void add_interference_raw(live_range_t* a, live_range_t* b);
 
 /**
  * Build the interference graph from the adjacency lists

@@ -72,6 +72,37 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 
 
 /**
+ * Mark that live ranges a and b interfere. This function does not impact the graph at all
+ */
+void add_interference_raw(live_range_t* a, live_range_t* b){
+	//If these are the exact same live range, they can't interfere with eachother 
+	//so we'll skip this
+	if(a == b){
+		return;
+	}
+
+	//Stack pointer - this never interferes with anything
+	if(a->reg.gen_purpose == RSP || b->reg.gen_purpose == RSP){
+		return;
+	}
+
+	//Add b to a's neighbors if it's not already there
+	if(dynamic_array_contains(&(a->neighbors), b) == NOT_FOUND){
+		dynamic_array_add(&(a->neighbors), b);
+	}
+
+	//Add a to b's neighbors if it's not already there
+	if(dynamic_array_contains(&(b->neighbors), a) == NOT_FOUND){
+		dynamic_array_add(&(b->neighbors), a);
+	}
+
+	//Reset their degree values
+	a->degree = a->neighbors.current_index;
+	b->degree = b->neighbors.current_index;
+}
+
+
+/**
  * Mark that live ranges a and b do not interfere. This can be used if an interference
  * relation is removed
  */
