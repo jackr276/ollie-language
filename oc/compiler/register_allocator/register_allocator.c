@@ -1681,7 +1681,7 @@ static live_range_t* does_precoloring_interference_exist_gen_purpose(live_range_
  *
  * Returns TRUE if we could color, false if not
  */
-static u_int8_t pre_color_instruction(instruction_t* instruction){
+static u_int8_t precolor_instruction(instruction_t* instruction){
 	/**
 	 * The first thing will check for here is after-call function parameters. These
 	 * need to be allocated appropriately
@@ -1693,13 +1693,7 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 		//Extract the register
 		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->destination_register->associated_live_range->function_parameter_order - 1];
 
-		//Let the helper deal with it
-		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, reg);
-
-		//We had a spill - so we'll need to jump out immediately
-		if(colorable == FALSE){
-			return FALSE;
-		}
+		//TODO
 	}
 
 	//One thing to check for - function parameter passing
@@ -1708,13 +1702,7 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 		//Extract the register
 		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->source_register->associated_live_range->function_parameter_order - 1];
 
-		//Let the helper deal with it
-		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register->associated_live_range, reg);
-
-		//We had a spill - so we'll need to jump out immediately
-		if(colorable == FALSE){
-			return FALSE;
-		}
+		//TODO
 	}
 
 	//Check source 2 as well
@@ -1723,13 +1711,7 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 		//Extract the register
 		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->source_register2->associated_live_range->function_parameter_order - 1];
 
-		//Let the helper deal with it
-		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register2->associated_live_range, reg);
-
-		//We had a spill - so we'll need to jump out immediately
-		if(colorable == FALSE){
-			return FALSE;
-		}
+		//TODO
 	}
 
 	//Check address calc 1 as well
@@ -1738,13 +1720,7 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 		//Extract the register
 		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->address_calc_reg1->associated_live_range->function_parameter_order - 1];
 
-		//Let the helper deal with it
-		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->address_calc_reg1->associated_live_range, reg);
-
-		//We had a spill - so we'll need to jump out immediately
-		if(colorable == FALSE){
-			return FALSE;
-		}
+		//TODO
 	}
 
 	//Check address calc 2 as well
@@ -1752,14 +1728,8 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 		&& instruction->address_calc_reg2->associated_live_range->function_parameter_order > 0){
 		//Extract the register
 		general_purpose_register_t reg = gen_purpose_parameter_registers[instruction->address_calc_reg2->associated_live_range->function_parameter_order - 1];
-		
-		//Let the helper deal with it
-		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->address_calc_reg2->associated_live_range, reg);
 
-		//We had a spill - so we'll need to jump out immediately
-		if(colorable == FALSE){
-			return FALSE;
-		}
+		//TODO
 	}
 
 	//Pre-color based on what kind of instruction it is
@@ -1770,13 +1740,7 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 		case RET:
 			//If it has one, assign it
 			if(instruction->source_register != NULL){
-				//Let the helper do it
-				colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register->associated_live_range, RAX);
-
-				//We had to spill here - jump out
-				if(colorable == FALSE){
-					return FALSE;
-				}
+				//TODO
 			}
 			break;
 
@@ -1785,20 +1749,13 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 		case MULL:
 		case MULQ:
 			//When we do an unsigned multiplication, the implicit source register must be in RAX
-			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
+			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
 
-			//We had to spill here - jump out
-			if(colorable == FALSE){
-				return FALSE;
-			}
+			//TODO
 
 			//The destination must also be in RAX here
-			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
+			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
-			//We had to spill here - jump out
-			if(colorable == FALSE){
-				return FALSE;
-			}
 
 			break;
 
@@ -1825,12 +1782,10 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 			//Do we have a register source?
 			if(instruction->source_register != NULL){
 				//Due to a quirk in old x86, shift instructions must have their source in RCX
-				colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register->associated_live_range, RCX);
+				//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register->associated_live_range, RCX);
+				
+				//TODO
 
-				//We had to spill here - jump out
-				if(colorable == FALSE){
-					return FALSE;
-				}
 			}
 		
 			break;
@@ -1840,29 +1795,14 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 		case CWTL:
 		case CBTW:
 			//Source is always %RAX
-			colorable =  precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register->associated_live_range, RAX);
-
-			//We had to spill here - jump out
-			if(colorable == FALSE){
-				return FALSE;
-			}
+			//colorable =  precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register->associated_live_range, RAX);
 
 			//The results are always RDX and RAX 
 			//Lower order bits
-			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
-
-			//We had to spill here - jump out
-			if(colorable == FALSE){
-				return FALSE;
-			}
+			//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
 			//Higher order bits
-			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
-
-			//We had to spill here - jump out
-			if(colorable == FALSE){
-				return FALSE;
-			}
+	//		colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
 
 			break;
 
@@ -1877,26 +1817,11 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 			//The source register for a division must be in RAX
 			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->source_register2->associated_live_range, RAX);
 
-			//We had to spill here - jump out
-			if(colorable == FALSE){
-				return FALSE;
-			}
-
 			//The first destination register is the quotient, and is in RAX
 			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
 
-			//We had to spill here - jump out
-			if(colorable == FALSE){
-				return FALSE;
-			}
-
 			//The second destination register is the remainder, and is in RDX
 			colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register2->associated_live_range, RDX);
-
-			//We had to spill here - jump out
-			if(colorable == FALSE){
-				return FALSE;
-			}
 
 			break;
 
@@ -1906,11 +1831,6 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
 				colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
-
-				//We had to spill here - jump out
-				if(colorable == FALSE){
-					return FALSE;
-				}
 			}
 
 			/**
@@ -1932,11 +1852,6 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
 
 				//And we'll use the function param list to precolor appropriately
 				colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, param_live_range, gen_purpose_parameter_registers[i]);
-
-				//We had to spill here - jump out
-				if(colorable == FALSE){
-					return FALSE;
-				}
 			}
 
 			break;
@@ -1956,7 +1871,7 @@ static u_int8_t pre_color_instruction(instruction_t* instruction){
  * purpose and SSE precoloring. If all is going well, we should only need to precolor
  * once per run
  */
-static inline void pre_color(basic_block_t* function_entry, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
+static inline void precolor_function(basic_block_t* function_entry, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	//Grab a cursor to the head block
 	basic_block_t* cursor = function_entry;
 
