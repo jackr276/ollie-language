@@ -137,7 +137,7 @@ struct live_range_t {
 	//The interference graph index of it
 	u_int16_t interference_graph_index;
 	//What is the function parameter order here?
-	u_int8_t function_parameter_order;
+	u_int16_t class_relative_function_parameter_order;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
 	//Was this live range spilled?
@@ -183,15 +183,15 @@ struct three_addr_var_t{
 	//This will be needed later on down the line in 
 	//the instruction selector
 	u_int32_t use_count;
+	//What is the parameter number of this var? Used for parameter passing. If
+	//it is 0, it's ignored
+	u_int16_t class_relative_parameter_order;
 	//What is the indirection level
 	//Is this variable dereferenced in some way
 	//(either loaded from or stored to)
 	u_int8_t is_dereferenced;
 	//Is this a stack pointer?
 	u_int8_t is_stack_pointer;
-	//What is the parameter number of this var? Used for parameter passing. If
-	//it is 0, it's ignored
-	u_int8_t parameter_number;
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//What membership do we have if any

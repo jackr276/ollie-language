@@ -813,7 +813,7 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	emitted_var->membership = var->membership;
 
 	//Copy these over
-	emitted_var->parameter_number = var->function_parameter_order;
+	emitted_var->class_relative_parameter_order = var->class_relative_function_parameter_order;
 
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);
@@ -857,7 +857,7 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	emitted_var->membership = var->membership;
 
 	//Copy these over
-	emitted_var->parameter_number = var->function_parameter_order;
+	emitted_var->class_relative_parameter_order= var->class_relative_function_parameter_order;
 
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);

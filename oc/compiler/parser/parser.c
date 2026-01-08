@@ -10005,12 +10005,12 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int16_t* curr
 	//Most common case, not a floating point so
 	//it counts as general-purpose
 	if(IS_FLOATING_POINT(type) == FALSE){
-		param_record->function_parameter_order = *current_gen_purpose_param;
+		param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
 
 		//Bump it for the next go about
 		(*current_gen_purpose_param)++;
 	} else {
-		param_record->function_parameter_order = *current_sse_param;
+		param_record->class_relative_function_parameter_order = *current_sse_param;
 
 		//Bump it for the next go about
 		(*current_sse_param)++;
@@ -10147,6 +10147,9 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			num_errors++;
 			return FAILURE;;
 		}
+
+		//We will also store the "absolute" parameter number as well
+		parameter->absolute_function_parameter_order = absolute_parameter_number;
 
 		//Status tracker
 		u_int8_t status;

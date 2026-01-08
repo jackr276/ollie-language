@@ -609,7 +609,7 @@ static void add_variable_to_live_range(live_range_t* live_range, three_addr_var_
 
 	//Most of the time this will just be 0, but when it isn't we'll have it here
 	if(variable->linked_var != NULL){
-		live_range->function_parameter_order = variable->parameter_number;
+		live_range->class_relative_function_parameter_order = variable->linked_var->class_relative_function_parameter_order;
 	}
 
 	//Link this live range to the variable
@@ -2264,7 +2264,7 @@ static void handle_source_spill(dynamic_array_t* live_ranges, three_addr_var_t* 
 		(*currently_spilled)->was_spilled = TRUE;
 
 		//Be sure we copy this over too
-		(*currently_spilled)->function_parameter_order = spill_range->function_parameter_order;
+		(*currently_spilled)->class_relative_function_parameter_order = spill_range->class_relative_function_parameter_order;
 
 		//Add it in
 		dynamic_array_add(live_ranges, *currently_spilled);
