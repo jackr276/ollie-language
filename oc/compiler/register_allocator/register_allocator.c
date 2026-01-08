@@ -1405,7 +1405,7 @@ static inline void add_destination_interference(dynamic_array_t* LIVE_NOW, live_
 		}
 
 		//Now we'll add this to the graph
-		add_interference_raw(destination_lr, range);
+		add_interference(destination_lr, range);
 	}
 }
 

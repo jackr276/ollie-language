@@ -33,48 +33,9 @@ static interference_graph_t* interference_graph_alloc(u_int16_t live_range_count
 
 
 /**
- * Mark that live ranges a and b interfere
- */
-void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b){
-	//If these are the exact same live range, they can't interfere with eachother 
-	//so we'll skip this
-	if(a == b){
-		return;
-	}
-
-	//Stack pointer - this never interferes with anything
-	if(a->reg.gen_purpose == RSP || b->reg.gen_purpose == RSP){
-		return;
-	}
-
-	//Add b to a's neighbors if it's not already there
-	if(dynamic_array_contains(&(a->neighbors), b) == NOT_FOUND){
-		dynamic_array_add(&(a->neighbors), b);
-	}
-
-	//Add a to b's neighbors if it's not already there
-	if(dynamic_array_contains(&(b->neighbors), a) == NOT_FOUND){
-		dynamic_array_add(&(b->neighbors), a);
-	}
-
-	//Calculate the offsets
-	u_int16_t offset_a_b = a->interference_graph_index * graph->live_range_count + b->interference_graph_index;
-	u_int16_t offset_b_a = b->interference_graph_index * graph->live_range_count + a->interference_graph_index;
-
-	//Now we'll go to the adjacency matrix and add this in
-	graph->nodes[offset_a_b] = TRUE;
-	graph->nodes[offset_b_a] = TRUE;
-
-	//Reset their degree values
-	a->degree = a->neighbors.current_index;
-	b->degree = b->neighbors.current_index;
-}
-
-
-/**
  * Mark that live ranges a and b interfere. This function does not impact the graph at all
  */
-void add_interference_raw(live_range_t* a, live_range_t* b){
+void add_interference(live_range_t* a, live_range_t* b){
 	//If these are the exact same live range, they can't interfere with eachother 
 	//so we'll skip this
 	if(a == b){
