@@ -1649,9 +1649,37 @@ static inline void calculate_all_interferences_in_function(basic_block_t* functi
  * Before we do any other precoloring, we should be crawling the function body to determine what the function parameter
  * live ranges are and to precolor them as need be. This can be done beforehand because the function parameter order
  * is always maintained in the variable itself
+ *
+ * NOTE: Currently, we do not have the ability to handle more than 6 of each parameter
  */
 static inline void precolor_in_body_function_parameters(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
+	//First we'll run through the general purpose ones
+	for(u_int16_t i = 0; i < general_purpose_live_ranges->current_index; i++){
+		//Extract it
+		live_range_t* general_purpose_lr = dynamic_array_get_at(general_purpose_live_ranges, i);
 
+		//Extract for neatness
+		u_int16_t general_purpose_parameter_order = general_purpose_lr->class_relative_function_parameter_order;
+
+		//If it has a function parameter order, we'll color it appropriately
+		if(general_purpose_parameter_order > 0){
+			general_purpose_lr->reg.gen_purpose = gen_purpose_parameter_registers[general_purpose_parameter_order - 1];
+		}
+	}
+
+	//Now do the exact same thing for SSE
+	for(u_int16_t i = 0; i < sse_live_ranges->current_index; i++){
+		//Extract it
+		live_range_t* sse_lr = dynamic_array_get_at(sse_live_ranges, i);
+
+		//Extract for neatness
+		u_int16_t sse_parameter_order = sse_lr->class_relative_function_parameter_order;
+
+		//If it has a function parameter order, we'll color it appropriately
+		if(sse_parameter_order > 0){
+			sse_lr->reg.sse_reg = sse_parameter_registers[sse_parameter_order - 1];
+		}
+	}
 }
 
 
@@ -1802,12 +1830,11 @@ static void precolor_instruction(instruction_t* instruction){
  * purpose and SSE precoloring. If all is going well, we should only need to precolor
  * once per run
  */
-static inline void precolor_function(basic_block_t* function_entry, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
+static void precolor_function(basic_block_t* function_entry, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	//Before we crawl the instructions, we'll crawl the live range arrays 
 	//to precolor any function parameters that are in the function
 	//body that we have
 	precolor_in_body_function_parameters(general_purpose_live_ranges, sse_live_ranges);
-
 
 	//Grab a cursor to the head block
 	basic_block_t* cursor = function_entry;
