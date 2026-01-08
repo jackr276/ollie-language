@@ -1897,9 +1897,9 @@ static void precolor_function(basic_block_t* function_entry, dynamic_array_t* ge
 
 
 /**
- * Does any neighbor of the target already use "reg"?
+ * Do any neighbors of the given live range use the given general purpose register?
  */
-static u_int8_t does_neighbor_precoloring_interference_exist_gen_purpose(live_range_t* target, general_purpose_register_t reg){
+static inline u_int8_t do_neighbors_use_general_purpose_register(live_range_t* target, general_purpose_register_t reg){
 	//Run through all neighbors
 	for(u_int16_t i = 0; i < target->neighbors.current_index; i++){
 		//Extract this one out
@@ -1917,7 +1917,27 @@ static u_int8_t does_neighbor_precoloring_interference_exist_gen_purpose(live_ra
 
 
 /**
- * Do we have precoloring interference for these two registers? If we do, we'll
+ * Do any neighbors of the given live range use the given sse register
+ */
+static inline u_int8_t do_neighbors_use_sse_register(live_range_t* target, sse_register_t reg){
+	//Run through all neighbors
+	for(u_int16_t i = 0; i < target->neighbors.current_index; i++){
+		//Extract this one out
+		live_range_t* neighbor = dynamic_array_get_at(&(target->neighbors), i);
+
+		//Counts as interference
+		if(neighbor->reg.sse_reg == reg){
+			return TRUE;
+		}
+	}
+
+	//By the time we get here it's a no
+	return FALSE;
+}
+
+
+/**
+ * Do we have precoloring interference for these two *general purpose* LRs? If it does, we'll
  * return true and this will prevent the coalescing algorithm from combining them
  *
  * Precoloring is important to work around. On the surface for some move instructions,
@@ -1929,19 +1949,15 @@ static u_int8_t does_neighbor_precoloring_interference_exist_gen_purpose(live_ra
  * Another criteria for register allocation interference - do any of the new source's neighbor's
  * have themselves precolored the same as the source/destination register? If so that does count
  * as interference
+ *
+ * Case 1: Source has no reg, and destination has no reg -> No interference 
+ * Case 2: Source has no reg, and destination has reg -> No interference (take the destination register)
+ * Case 3: Source has reg, and destination has no reg -> No interference (take the source register)
+ * Case 4: Source has reg, and destination has reg *and* source->reg == destination->reg -> No Interference
+ * Case 5: Source has reg, and destination has reg *and* source->reg != destination->reg -> *Interference*
  */
-static u_int8_t does_register_allocation_interference_exist_gen_purpose(live_range_t* source, live_range_t* destination){
-	/**
-	 * Cases here:
-	 *
-	 * Case 1: Source has no reg, and destination has no reg -> TRUE
-	 * Case 2: Source has no reg, and destination has reg -> TRUE (take the destination register)
-	 * Case 3: Source has reg, and destination has no reg -> TRUE (take the source register)
-	 * Case 4: Source has reg, and destination has reg *and* source->reg == destination->reg -> TRUE
-	 * Case 5: Source has reg, and destination has reg *and* source->reg != destination->reg -> FALSE
-	 */
+static u_int8_t does_general_purpose_register_allocation_interference_exist(live_range_t* source, live_range_t* destination){
 	switch(source->reg.gen_purpose){
-		//If the source has no reg, this will work
 		case NO_REG_GEN_PURPOSE:
 			//If the destination has a register, we need
 			//to check if any *neighbors* of the source
@@ -1949,7 +1965,7 @@ static u_int8_t does_register_allocation_interference_exist_gen_purpose(live_ran
 			//lead to interference
 			if(destination->reg.gen_purpose != NO_REG_GEN_PURPOSE){
 				//Whatever this is is our answer
-				return does_neighbor_precoloring_interference_exist_gen_purpose(source, destination->reg.gen_purpose);
+				return do_neighbors_use_general_purpose_register(source, destination->reg.gen_purpose);
 			}
 
 			//No interference
@@ -1972,12 +1988,11 @@ static u_int8_t does_register_allocation_interference_exist_gen_purpose(live_ran
 			//Even if the destination has no register, it's neighbors 
 			//could. We'll use the helper to get our answer
 			if(destination->reg.gen_purpose == NO_REG_GEN_PURPOSE){
-				return does_neighbor_precoloring_interference_exist_gen_purpose(destination, source->reg.gen_purpose);
+				return do_neighbors_use_general_purpose_register(destination, source->reg.gen_purpose);
 			}
 
 			//If they're the exact same, then this is also fine
 			if(destination->reg.gen_purpose == source->reg.gen_purpose){
-				//No interference
 				return FALSE;
 			}
 
@@ -1989,7 +2004,7 @@ static u_int8_t does_register_allocation_interference_exist_gen_purpose(live_ran
 			//Even if the destination has no register, it's neighbors 
 			//could. We'll use the helper to get our answer
 			if(destination->reg.gen_purpose == NO_REG_GEN_PURPOSE){
-				return does_neighbor_precoloring_interference_exist_gen_purpose(destination, source->reg.gen_purpose);
+				return do_neighbors_use_general_purpose_register(destination, source->reg.gen_purpose);
 			}
 
 			//If they're the exact same, then this is also fine
@@ -2150,7 +2165,7 @@ static coalescence_result_t perform_block_level_coalescence(basic_block_t* block
 		switch(source_live_range->live_range_class){
 			case LIVE_RANGE_CLASS_GEN_PURPOSE:
 				if(do_live_ranges_interfere(general_purpose_graph, destination_live_range, source_live_range) == FALSE
-					&& does_register_allocation_interference_exist_gen_purpose(source_live_range, destination_live_range) == FALSE){
+					&& does_general_purpose_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
 
 					//Debug logs for Dev use only
 					if(debug_printing == TRUE){
