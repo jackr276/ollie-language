@@ -1210,7 +1210,7 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
  * A helper function for interference construction. This adds interference between every
  * value in LIVE_NOW and the given destination_lr
  */
-static void add_destination_interference(interference_graph_t* graph, dynamic_array_t* LIVE_NOW, live_range_t* destination_lr){
+static void add_destination_interference(dynamic_array_t* LIVE_NOW, live_range_t* destination_lr){
 	for(u_int16_t i = 0; i < LIVE_NOW->current_index; i++){
 		//Graph the LR out
 		live_range_t* range = dynamic_array_get_at(LIVE_NOW, i);
@@ -1437,7 +1437,7 @@ static inline dynamic_array_t get_live_ranges_from_given_class(dynamic_array_t* 
  * For the distinction between SSE and non-SSE variables, we maintain 2 separate live now sets. This allows
  * us to use one traversal while still maintaining proper separation
  */
-static void calculate_interference_in_block(interference_graph_t* general_purpose_graph, interference_graph_t* sse_graph, basic_block_t* block){
+static void calculate_all_interference_in_block(basic_block_t* block){
 	/**
 	 * As you can see in the algorithm, the LIVE_NOW set initially starts
 	 * out as LIVE_OUT. For this reason, we will just use the LIVE_OUT
@@ -1484,12 +1484,12 @@ static void calculate_interference_in_block(interference_graph_t* general_purpos
 			if(is_destination_also_operand(operation) == TRUE){
 				//Add the interference in the appropriate graph 
 				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					add_destination_interference(general_purpose_graph, &live_now_general_purpose, operation->destination_register->associated_live_range);
+					add_destination_interference(&live_now_general_purpose, operation->destination_register->associated_live_range);
 					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_general_purpose);
 
 				//If we hit this we're using a float LR 
 				} else {
-					add_destination_interference(general_purpose_graph, &live_now_sse, operation->destination_register->associated_live_range);
+					add_destination_interference(&live_now_sse, operation->destination_register->associated_live_range);
 					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_sse);
 				}
 
@@ -1512,14 +1512,14 @@ static void calculate_interference_in_block(interference_graph_t* general_purpos
 			} else {
 				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
 					//Add the interference
-					add_destination_interference(general_purpose_graph, &live_now_general_purpose, operation->destination_register->associated_live_range);
+					add_destination_interference(&live_now_general_purpose, operation->destination_register->associated_live_range);
 
 					//And then scrap it from live_now
 					dynamic_array_delete(&live_now_general_purpose, operation->destination_register->associated_live_range);
 
 				} else {
 					//Add the interference
-					add_destination_interference(sse_graph, &live_now_sse, operation->destination_register->associated_live_range);
+					add_destination_interference(&live_now_sse, operation->destination_register->associated_live_range);
 
 					//And then scrap it from live_now
 					dynamic_array_delete(&live_now_sse, operation->destination_register->associated_live_range);
@@ -1532,11 +1532,20 @@ static void calculate_interference_in_block(interference_graph_t* general_purpos
 		 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
 		 */
 		if(operation->destination_register2 != NULL){
-			//Add the interference
-			add_destination_interference(graph, &live_now, operation->destination_register2->associated_live_range);
+			if(operation->destination_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				//Add the interference
+				add_destination_interference(&live_now_general_purpose, operation->destination_register2->associated_live_range);
 
-			//And then scrap it from live_now
-			dynamic_array_delete(&live_now, operation->destination_register2->associated_live_range);
+				//And then scrap it from live_now
+				dynamic_array_delete(&live_now_general_purpose, operation->destination_register2->associated_live_range);
+
+			} else {
+				//Add the interference
+				add_destination_interference(&live_now_sse, operation->destination_register2->associated_live_range);
+
+				//And then scrap it from live_now
+				dynamic_array_delete(&live_now_sse, operation->destination_register2->associated_live_range);
+			}
 		}
 
 		/**
@@ -1609,6 +1618,28 @@ static void calculate_interference_in_block(interference_graph_t* general_purpos
 
 		//Crawl back up by 1
 		operation = operation->previous_statement;
+	}
+}
+
+
+/**
+ * A simple wrapper function that will calculate interferences inside
+ * of a given function. This function simply iterates over all blocks
+ * and invokes the helper. It *does not* construct the interference
+ * graphs. This is the responsibility of the caller
+ */
+static inline void calculate_all_interferences_in_function(basic_block_t* function_entry_block){
+	//We'll first need a pointer
+	basic_block_t* current = function_entry_block;
+
+	//Run through every block in the CFG's ordered set
+	while(current != NULL){
+		//Use the helper. Set stopper to be NULL because we aren't trying to halt
+		//anything here
+		calculate_all_interference_in_block(current);
+		
+		//Advance this up
+		current = current->direct_successor;
 	}
 }
 

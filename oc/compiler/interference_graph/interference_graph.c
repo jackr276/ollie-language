@@ -57,16 +57,13 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 		dynamic_array_add(&(b->neighbors), a);
 	}
 
-	//If the graph isn't null, we'll assume that the caller wants us to add this in
-	if(graph != NULL){
-		//Calculate the offsets
-		u_int16_t offset_a_b = a->interference_graph_index * graph->live_range_count + b->interference_graph_index;
-		u_int16_t offset_b_a = b->interference_graph_index * graph->live_range_count + a->interference_graph_index;
+	//Calculate the offsets
+	u_int16_t offset_a_b = a->interference_graph_index * graph->live_range_count + b->interference_graph_index;
+	u_int16_t offset_b_a = b->interference_graph_index * graph->live_range_count + a->interference_graph_index;
 
-		//Now we'll go to the adjacency matrix and add this in
-		graph->nodes[offset_a_b] = TRUE;
-		graph->nodes[offset_b_a] = TRUE;
-	}
+	//Now we'll go to the adjacency matrix and add this in
+	graph->nodes[offset_a_b] = TRUE;
+	graph->nodes[offset_b_a] = TRUE;
 
 	//Reset their degree values
 	a->degree = a->neighbors.current_index;
