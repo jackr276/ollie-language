@@ -1388,7 +1388,7 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
  * Scan the given source array and return a result array with only live ranges of the target
  * class inside of the returned array
  */
-static dynamic_array_t get_specific_live_ranges(dynamic_array_t* source_array, live_range_class_t target_class){
+static inline dynamic_array_t get_live_ranges_from_given_class(dynamic_array_t* source_array, live_range_class_t target_class){
 	//Create the array
 	dynamic_array_t result = dynamic_array_alloc();
 
@@ -1445,13 +1445,9 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 	 * distinction between float and non float live ranges though, so we
 	 * will maintain 2 separate live now buckets
 	 */
-	dynamic_array_t live_now = clone_dynamic_array(&(block->live_out));
+	dynamic_array_t live_now_general_purpose = get_live_ranges_from_given_class(&(block->live_out), LIVE_RANGE_CLASS_GEN_PURPOSE);
+	dynamic_array_t live_now_sse = get_live_ranges_from_given_class(&(block->live_out), LIVE_RANGE_CLASS_SSE);
 
-	//TODO
-
-	//For later user
-	dynamic_array_t operation_function_parameters;
-	
 	//We will crawl our way up backwards through the CFG
 	instruction_t* operation = block->exit_statement;
 
@@ -1531,25 +1527,40 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 		 * STEP:
 		 *  Add LA an LB to LIVENOW
 		 *
-		 * This really means add any non-destination variables to LIVENOW. We will take
-		 * into account every special case here, including function calls and INC/DEC instructions
-		 *
-		 * These first few are the obvious cases
+		 *  Remember - in this version of the algorithm we are segregating the general purpose and
+		 *  SSE because either is fair game
 		 */
 		if(operation->source_register != NULL){
-			add_live_now_live_range(operation->source_register->associated_live_range, &live_now);
+			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->source_register->associated_live_range, &live_now_general_purpose);
+			} else {
+				add_live_now_live_range(operation->source_register->associated_live_range, &live_now_sse);
+			}
 		}
 
 		if(operation->source_register2 != NULL){
-			add_live_now_live_range(operation->source_register2->associated_live_range, &live_now);
+			if(operation->source_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->source_register2->associated_live_range, &live_now_general_purpose);
+			} else {
+				add_live_now_live_range(operation->source_register2->associated_live_range, &live_now_sse);
+			}
 		}
 
 		if(operation->address_calc_reg1 != NULL){
-			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now);
+			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_general_purpose);
+			} else {
+				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_sse);
+			}
+
 		}
 
 		if(operation->address_calc_reg2 != NULL){
-			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now);
+			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_general_purpose);
+			} else {
+				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_sse);
+			}
 		}
 
 		/**
@@ -1560,16 +1571,17 @@ static void calculate_interference_in_block(interference_graph_t* graph, basic_b
 		switch(operation->instruction_type){
 			case CALL:
 			case INDIRECT_CALL:
-				//Grab it out
-				operation_function_parameters = operation->parameters;
-
 				//Let's go through all of these and add them to LIVE_NOW
-				for(u_int16_t i = 0; i < operation_function_parameters.current_index; i++){
+				for(u_int16_t i = 0; i < operation->parameters.current_index; i++){
 					//Extract the variable
-					three_addr_var_t* variable = dynamic_array_get_at(&operation_function_parameters, i);
+					three_addr_var_t* variable = dynamic_array_get_at(&(operation->parameters), i);
 
-					//Add it to live_now
-					add_live_now_live_range(variable->associated_live_range, &live_now);
+					//Add it to live_now for the appropriate set
+					if(variable->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+						add_live_now_live_range(variable->associated_live_range, &live_now_general_purpose);
+					} else {
+						add_live_now_live_range(variable->associated_live_range, &live_now_sse);
+					}
 				}
 
 				break;
