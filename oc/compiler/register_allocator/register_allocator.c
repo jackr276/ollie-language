@@ -1795,23 +1795,14 @@ static void precolor_instruction(instruction_t* instruction){
 		//Function calls always return through rax
 		case CALL:
 		case INDIRECT_CALL:
-
-			//
-			//
-			//
-			//
-			//TODO needs to now accomodate different kinds of parameter registers(SSE vs. gen purpose)
-			//
-			//
-			//
-			//
-			//
-
-
-
 			//We could have a void return, but usually we'll give something
 			if(instruction->destination_register != NULL){
-			//	colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, instruction->destination_register->associated_live_range, RAX);
+				//Go based on the type
+				if(instruction->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					instruction->destination_register->associated_live_range->reg.gen_purpose = RAX;
+				} else {
+					instruction->destination_register->associated_live_range->reg.sse_reg = XMM0;
+				}
 			}
 
 			/**
@@ -1823,6 +1814,9 @@ static void precolor_instruction(instruction_t* instruction){
 			//Grab the parameters out
 			dynamic_array_t function_params = instruction->parameters;
 
+			u_int16_t general_purpose_parameter_order = 0;
+			u_int16_t sse_parameter_order = 0;
+
 			//Run thorugh all of the params and precolor
 			for(u_int16_t i = 0; i < function_params.current_index; i++){
 				//Grab it out
@@ -1831,8 +1825,17 @@ static void precolor_instruction(instruction_t* instruction){
 				//Now that we have it, we'll grab it's live range
 				live_range_t* param_live_range = param->associated_live_range;
 
-				//And we'll use the function param list to precolor appropriately
-				//colorable = precolor_live_range_gen_purpose(function_entry, live_ranges, param_live_range, gen_purpose_parameter_registers[i]);
+				//Precolor and increment the appropriate counter based on the type
+				if(param_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					param_live_range->reg.gen_purpose = gen_purpose_parameter_registers[general_purpose_parameter_order];
+
+					general_purpose_parameter_order++;
+
+				} else {
+					param_live_range->reg.sse_reg = sse_parameter_registers[sse_parameter_order];
+
+					sse_parameter_order++;
+				}
 			}
 
 			break;
