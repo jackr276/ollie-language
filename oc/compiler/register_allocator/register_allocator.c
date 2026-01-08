@@ -2089,7 +2089,7 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
  * not only for live range width but also *where* the live range is being used(think inside a of 2 or 3 level
  * loop)
  */
-static void recompute_used_and_assigned_sets(basic_block_t* function_entry){
+static inline void recompute_used_and_assigned_sets(basic_block_t* function_entry){
 	//Grab a cursor block
 	basic_block_t* cursor = function_entry;
 
@@ -2109,9 +2109,12 @@ static void recompute_used_and_assigned_sets(basic_block_t* function_entry){
  * we need to recompute the used and assigned sets for this block as those are 
  * affected by coalescing
  */
-static  perform_block_level_coalescence(basic_block_t* block, interference_graph_t* general_purpose_graph, interference_graph_t* sse_graph, u_int8_t debug_printing){
-	//By default assume nothing happened
-	u_int8_t coalescence_occured = FALSE;
+static coalescence_result_t perform_block_level_coalescence(basic_block_t* block, interference_graph_t* general_purpose_graph, interference_graph_t* sse_graph, u_int8_t debug_printing){
+	//Holder for deleting
+	instruction_t* holder;
+
+	//By default, assume nothing got coalesced
+	coalescence_result_t result = COALESCENCE_RESULT_NONE;
 
 	//Now we'll run through every instruction in every block
 	instruction_t* instruction = block->leader_statement;
@@ -2135,13 +2138,59 @@ static  perform_block_level_coalescence(basic_block_t* block, interference_graph
 			continue;
 		}
 
-		//Now we know that the two live range classes match up completely, so we can go based
-		//on the source's type
+		/**
+		 * Now that we know what the classes match, we will go based on the source's type.
+		 *
+		 * To truly coalesce, we need to ensure: 
+		 * 	1.) Do not interfere with one another(and as such they're in separate webs)
+		 *  2.) Do not have any pre-coloring that would prevent them from being merged. For example, if the
+		 *	destination register is %rdi because it's a function parameter, we can't just change the register
+		 *	it's in
+		 */
 		switch(source_live_range->live_range_class){
 			case LIVE_RANGE_CLASS_GEN_PURPOSE:
+				if(do_live_ranges_interfere(general_purpose_graph, destination_live_range, source_live_range) == FALSE
+					&& does_register_allocation_interference_exist_gen_purpose(source_live_range, destination_live_range) == FALSE){
+
+					//Debug logs for Dev use only
+					if(debug_printing == TRUE){
+						printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
+						printf("DELETING LR%d\n", destination_live_range->live_range_id);
+						
+						printf("Deleting redundant instruction:\n");
+						print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+					}
+
+					//Perform the actual coalescence. Remember that the destination is effectively being
+					//absorbed into the source
+					coalesce_live_ranges(general_purpose_graph, source_live_range, destination_live_range);
+
+					//Update the result based on what we already have
+					switch(result){
+						case COALESCENCE_RESULT_NONE:
+							result = COALESCENCE_RESULT_GP_ONLY;
+							break;
+						case COALESCENCE_RESULT_SSE_ONLY:
+							result = COALESCENCE_RESULT_BOTH;
+							break;
+						default:
+							break;
+					}
+
+					//Delete the now useless instruction
+					holder = instruction;
+					instruction = instruction->next_statement;
+					delete_statement(holder);
+
+				//Otherwise we're fine - just bump the instruction up and move along
+				} else {
+					instruction = instruction->next_statement;
+				}
+
 				break;
 
 			case LIVE_RANGE_CLASS_SSE:
+
 				break;
 		}
 
@@ -2187,8 +2236,8 @@ static  perform_block_level_coalescence(basic_block_t* block, interference_graph
 		}
 	}
 
-	//Return whether or not we did or did not coalesce
-	return coalescence_occured;
+	//Give back the final result on what got coalesced
+	return result;
 }
 
 
