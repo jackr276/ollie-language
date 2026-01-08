@@ -1897,6 +1897,106 @@ static void precolor_function(basic_block_t* function_entry, dynamic_array_t* ge
 
 
 /**
+ * Compute the used and assignment sets for a given block
+ *
+ * We will tie this into the coalesce block-level function. We will recompute used/assigned
+ * at the block level if we coalesce at the block level
+ *
+ * Actually, we may need to do this for the whole CFG due to the way the live ranges are not tied to their
+ * variables. We will likely need to recompute at CFG level
+ */
+static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
+	//Wipe these two values out
+	reset_dynamic_array(&(block->used_variables));
+	reset_dynamic_array(&(block->assigned_variables));
+
+	//Instruction cursor
+	instruction_t* cursor = block->leader_statement;
+
+	//Now we run through the block to recompute
+	while(cursor != NULL){
+		switch(cursor->instruction_type){
+			//These two have no use associated with them
+			case PHI_FUNCTION:
+			case RET:
+				break;
+
+			case INCB:
+			case INCW:
+			case INCL:
+			case INCQ:
+			case DECB:
+			case DECW:
+			case DECL:
+			case DECQ:
+				//This counts as both an assignment and a use
+				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
+				add_used_live_range(cursor->destination_register->associated_live_range, block);
+				break;
+
+			default:
+				//Handle destination 1
+				if(cursor->destination_register != NULL){
+					update_use_assignment_for_destination_variable(cursor, block);
+				}
+
+				//Handle destination 2(this is rare but we have it sometimes)
+				if(cursor->destination_register2 != NULL){
+					add_assigned_live_range(cursor->destination_register2->associated_live_range, block);
+				}
+
+				//And then the usual procedure for source1 
+				if(cursor->source_register != NULL){
+					add_used_live_range(cursor->source_register->associated_live_range, block);
+				}
+
+				//And then the usual procedure for source2
+				if(cursor->source_register2 != NULL){
+					add_used_live_range(cursor->source_register2->associated_live_range, block);
+				}
+
+				//And then the usual procedure for the address calc reg
+				if(cursor->address_calc_reg1 != NULL){
+					add_used_live_range(cursor->address_calc_reg1->associated_live_range, block);
+				}
+
+				//And then the usual procedure for the address calc reg
+				if(cursor->address_calc_reg2 != NULL){
+					add_used_live_range(cursor->address_calc_reg2->associated_live_range, block);
+				}
+					
+				break;
+		}
+
+		//Advance it up
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
+ * Recompute the used & assigned sets for a given function. These used
+ * and assigned sets also account for the frequencies of the blocks in which they exist.
+ * This is a very important step to ensure that our spill cost estimates are accurate and account
+ * not only for live range width but also *where* the live range is being used(think inside a of 2 or 3 level
+ * loop)
+ */
+static inline void recompute_used_and_assigned_sets(basic_block_t* function_entry){
+	//Grab a cursor block
+	basic_block_t* cursor = function_entry;
+
+	//Run through every block
+	while(cursor != NULL){
+		//Invoke the block-level helper
+		compute_block_level_used_and_assigned_sets(cursor);
+
+		//Push it up
+		cursor = cursor->direct_successor;
+	}
+}
+
+
+/**
  * Do any neighbors of the given live range use the given general purpose register?
  */
 static inline u_int8_t do_neighbors_use_general_purpose_register(live_range_t* target, general_purpose_register_t reg){
@@ -2020,103 +2120,88 @@ static u_int8_t does_general_purpose_register_allocation_interference_exist(live
 
 
 /**
- * Compute the used and assignment sets for a given block
+ * Do we have precoloring interference for these two *SSE* LRs? If it does, we'll
+ * return true and this will prevent the coalescing algorithm from combining them
  *
- * We will tie this into the coalesce block-level function. We will recompute used/assigned
- * at the block level if we coalesce at the block level
+ * Precoloring is important to work around. On the surface for some move instructions,
+ * it may seem like the move is a pointless copy. However, this is not the case when precoloring
+ * is involved because moving into those exact registers is very important. Since we cannot guarantee
+ * that we're going to move into those exact registers long in advance, we need to keep the movements
+ * for precoloring around
  *
- * Actually, we may need to do this for the whole CFG due to the way the live ranges are not tied to their
- * variables. We will likely need to recompute at CFG level
+ * Another criteria for register allocation interference - do any of the new source's neighbor's
+ * have themselves precolored the same as the source/destination register? If so that does count
+ * as interference
+ *
+ * Case 1: Source has no reg, and destination has no reg -> No interference 
+ * Case 2: Source has no reg, and destination has reg -> No interference (take the destination register)
+ * Case 3: Source has reg, and destination has no reg -> No interference (take the source register)
+ * Case 4: Source has reg, and destination has reg *and* source->reg == destination->reg -> No Interference
+ * Case 5: Source has reg, and destination has reg *and* source->reg != destination->reg -> *Interference*
  */
-static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
-	//Wipe these two values out
-	reset_dynamic_array(&(block->used_variables));
-	reset_dynamic_array(&(block->assigned_variables));
+static u_int8_t does_sse_register_allocation_interference_exist(live_range_t* source, live_range_t* destination){
+	switch(source->reg.sse_reg){
+		case NO_REG_GEN_PURPOSE:
+			//If the destination has a register, we need
+			//to check if any *neighbors* of the source
+			//are colored the same. If they are, that would
+			//lead to interference
+			if(destination->reg.gen_purpose != NO_REG_GEN_PURPOSE){
+				//Whatever this is is our answer
+				return do_neighbors_use_general_purpose_register(source, destination->reg.gen_purpose);
+			}
 
-	//Instruction cursor
-	instruction_t* cursor = block->leader_statement;
+			//No interference
+			return FALSE;
 
-	//Now we run through the block to recompute
-	while(cursor != NULL){
-		switch(cursor->instruction_type){
-			//These two have no use associated with them
-			case PHI_FUNCTION:
-			case RET:
-				break;
+		/**
+		 * Special case - if the source register is RSP, we need to ensure
+		 * that the destination that we're moving to is only ever
+		 * assigned to one(that would be the assignment between it and %rsp)
+		 *
+		 * If it is, that means that we'd be overwriting the stack pointer which
+		 * is a big issue
+		 */
+		case RSP:
+			//We *cannot* combine these two
+			if(destination->assignment_count > 1){
+				return TRUE;
+			}
 
-			case INCB:
-			case INCW:
-			case INCL:
-			case INCQ:
-			case DECB:
-			case DECW:
-			case DECL:
-			case DECQ:
-				//This counts as both an assignment and a use
-				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
-				add_used_live_range(cursor->destination_register->associated_live_range, block);
-				break;
+			//Even if the destination has no register, it's neighbors 
+			//could. We'll use the helper to get our answer
+			if(destination->reg.gen_purpose == NO_REG_GEN_PURPOSE){
+				return do_neighbors_use_general_purpose_register(destination, source->reg.gen_purpose);
+			}
 
-			default:
-				//Handle destination 1
-				if(cursor->destination_register != NULL){
-					update_use_assignment_for_destination_variable(cursor, block);
-				}
+			//If they're the exact same, then this is also fine
+			if(destination->reg.gen_purpose == source->reg.gen_purpose){
+				return FALSE;
+			}
 
-				//Handle destination 2(this is rare but we have it sometimes)
-				if(cursor->destination_register2 != NULL){
-					add_assigned_live_range(cursor->destination_register2->associated_live_range, block);
-				}
+			//Otherwise we have interference
+			return TRUE;
 
-				//And then the usual procedure for source1 
-				if(cursor->source_register != NULL){
-					add_used_live_range(cursor->source_register->associated_live_range, block);
-				}
+		//This means the source has a register already assigned
+		default:
+			//Even if the destination has no register, it's neighbors 
+			//could. We'll use the helper to get our answer
+			if(destination->reg.gen_purpose == NO_REG_GEN_PURPOSE){
+				return do_neighbors_use_general_purpose_register(destination, source->reg.gen_purpose);
+			}
 
-				//And then the usual procedure for source2
-				if(cursor->source_register2 != NULL){
-					add_used_live_range(cursor->source_register2->associated_live_range, block);
-				}
+			//If they're the exact same, then this is also fine
+			if(destination->reg.gen_purpose == source->reg.gen_purpose){
+				//No interference
+				return FALSE;
+			}
 
-				//And then the usual procedure for the address calc reg
-				if(cursor->address_calc_reg1 != NULL){
-					add_used_live_range(cursor->address_calc_reg1->associated_live_range, block);
-				}
-
-				//And then the usual procedure for the address calc reg
-				if(cursor->address_calc_reg2 != NULL){
-					add_used_live_range(cursor->address_calc_reg2->associated_live_range, block);
-				}
-					
-				break;
-		}
-
-		//Advance it up
-		cursor = cursor->next_statement;
+			//Otherwise we have interference
+			return TRUE;
 	}
 }
 
 
-/**
- * Recompute the used & assigned sets for a given function. These used
- * and assigned sets also account for the frequencies of the blocks in which they exist.
- * This is a very important step to ensure that our spill cost estimates are accurate and account
- * not only for live range width but also *where* the live range is being used(think inside a of 2 or 3 level
- * loop)
- */
-static inline void recompute_used_and_assigned_sets(basic_block_t* function_entry){
-	//Grab a cursor block
-	basic_block_t* cursor = function_entry;
-
-	//Run through every block
-	while(cursor != NULL){
-		//Invoke the block-level helper
-		compute_block_level_used_and_assigned_sets(cursor);
-
-		//Push it up
-		cursor = cursor->direct_successor;
-	}
-}
 
 
 /**
