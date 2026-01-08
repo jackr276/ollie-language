@@ -9919,7 +9919,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
  *
  * BNF Rule: <parameter-declaration> ::= <identifier> : <type-specifier>
  */
-static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
+static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int16_t* current_gen_purpose_param, u_int16_t* current_sse_param){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -10001,8 +10001,21 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 	param_record->line_number = parser_line_num;
 	//Store the type as well, very important
 	param_record->type_defined_as = type;
-	//Store the current parameter number of it
-	param_record->function_parameter_order = current_parameter_number;
+
+	//Most common case, not a floating point so
+	//it counts as general-purpose
+	if(IS_FLOATING_POINT(type) == FALSE){
+		param_record->function_parameter_order = *current_gen_purpose_param;
+
+		//Bump it for the next go about
+		(*current_gen_purpose_param)++;
+	} else {
+		param_record->function_parameter_order = *current_sse_param;
+
+		//Bump it for the next go about
+		(*current_sse_param)++;
+	}
+
 	//This parameter was declared in whatever function we're currently in
 	param_record->function_declared_in = current_function;
 
