@@ -153,8 +153,8 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 
 	//If the target already has no function parameter order,
 	//we can copy over the coalescee's
-	if(target->function_parameter_order == 0){
-		target->function_parameter_order = coalescee->function_parameter_order;
+	if(target->class_relative_function_parameter_order == 0){
+		target->class_relative_function_parameter_order = coalescee->class_relative_function_parameter_order;
 	}
 
 	//We now add the spill cost of the one that was coalesced to the target

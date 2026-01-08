@@ -46,6 +46,22 @@ static generic_type_t* u64_type;
 
 
 /**
+ * What is the result of our live range coalescing run?
+ * The options represent:
+ * 	- nothing was coalesced
+ * 	- exclusively general purpose(gp) LRs coalesced
+ * 	- exclusively SSE LRs coalesced
+ * 	- Both gp and SSE coalesced
+ */
+typedef enum {
+	COALESCENCE_RESULT_NONE,
+	COALESCENCE_RESULT_GP_ONLY,
+	COALESCENCE_RESULT_SSE_ONLY,
+	COALESCENCE_RESULT_BOTH
+} coalescence_result_t;
+
+
+/**
  * Does a live range for a given variable already exist? If so, we'll need to 
  * coalesce the two live ranges in a union
  *
@@ -2089,10 +2105,11 @@ static void recompute_used_and_assigned_sets(basic_block_t* function_entry){
 
 
 /**
- * Perform coalescence at a block level. Remember that if we do end up coalescing, we need to recompute the used and assigned sets for
- * this block as those are affected by coalescing
+ * Perform coalescence at a block level. Remember that if we do end up coalescing,
+ * we need to recompute the used and assigned sets for this block as those are 
+ * affected by coalescing
  */
-static u_int8_t perform_block_level_coalescence(basic_block_t* block, interference_graph_t* graph, u_int8_t debug_printing){
+static  perform_block_level_coalescence(basic_block_t* block, interference_graph_t* general_purpose_graph, interference_graph_t* sse_graph, u_int8_t debug_printing){
 	//By default assume nothing happened
 	u_int8_t coalescence_occured = FALSE;
 
@@ -2110,6 +2127,23 @@ static u_int8_t perform_block_level_coalescence(basic_block_t* block, interferen
 		//Otherwise if we get here, then we know that we have a pure copy instruction
 		live_range_t* source_live_range = instruction->source_register->associated_live_range;
 		live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
+
+		//These cannot possible coalesce since we have a mismatch, we will continue if that is
+		//the case
+		if(source_live_range->live_range_class != destination_live_range->live_range_class){
+			instruction = instruction->next_statement;
+			continue;
+		}
+
+		//Now we know that the two live range classes match up completely, so we can go based
+		//on the source's type
+		switch(source_live_range->live_range_class){
+			case LIVE_RANGE_CLASS_GEN_PURPOSE:
+				break;
+
+			case LIVE_RANGE_CLASS_SSE:
+				break;
+		}
 
 		//We need to ensure that the two live ranges:
 		//	1.) Do not interfere with one another(and as such they're in separate webs)
@@ -2165,7 +2199,7 @@ static u_int8_t perform_block_level_coalescence(basic_block_t* block, interferen
  * We coalesce source to destination. When we're done, the *source* should
  * survive, the destination should NOT
  */
-static u_int8_t perform_live_range_coalescence(basic_block_t* function_entry_block, interference_graph_t* graph, u_int8_t debug_printing){
+static inline u_int8_t perform_live_range_coalescence(basic_block_t* function_entry_block, interference_graph_t* graph, u_int8_t debug_printing){
 	//By default, assume we did not coalesce anything
 	u_int8_t coalescence_occured = FALSE;
 
@@ -3179,6 +3213,10 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * Since spilling breaks up large live ranges, it has the opportunity to
 	 * allow for even more coalescence. We will use this to our advantage
 	 * by letting this rule run every time
+	 *
+	 * The coalescer will run on all live ranges - both general purpose and SSE. There
+	 * are 2 separate flags - general purpose coalesce and sse coalesce that flag if we could 
+	 * coalesce at least one range in either one, both or none
 	*/
 	u_int8_t could_coalesce_general_purpose = perform_live_range_coalescence(function_entry, graph, debug_printing);
 	//u_int8_t could_coalesce_sse = //TODO;
