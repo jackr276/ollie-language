@@ -1207,28 +1207,6 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 
 
 /**
- * A helper function for interference construction. This adds interference between every
- * value in LIVE_NOW and the given destination_lr
- */
-static void add_destination_interference(dynamic_array_t* LIVE_NOW, live_range_t* destination_lr){
-	for(u_int16_t i = 0; i < LIVE_NOW->current_index; i++){
-		//Graph the LR out
-		live_range_t* range = dynamic_array_get_at(LIVE_NOW, i);
-
-		//If the live range is the stack pointer or instruction pointer, it does
-		//not really count as interference because those registers are never alive
-		//at the same time. As such, we'll skip if that's the case
-		if(range == stack_pointer_lr || range == instruction_pointer_lr){
-			continue;
-		}
-
-		//Now we'll add this to the graph
-		add_interference(graph, destination_lr, range);
-	}
-}
-
-
-/**
  * Calculate "live_after" in a given block. "live_after" represents all of the live ranges
  * that will survive "after" a function runs
  *
@@ -1406,6 +1384,28 @@ static inline dynamic_array_t get_live_ranges_from_given_class(dynamic_array_t* 
 
 	//Give back the distinct result array now
 	return result;
+}
+
+
+/**
+ * A helper function for interference construction. This adds interference between every
+ * value in LIVE_NOW and the given destination_lr
+ */
+static inline void add_destination_interference(dynamic_array_t* LIVE_NOW, live_range_t* destination_lr){
+	for(u_int16_t i = 0; i < LIVE_NOW->current_index; i++){
+		//Graph the LR out
+		live_range_t* range = dynamic_array_get_at(LIVE_NOW, i);
+
+		//If the live range is the stack pointer or instruction pointer, it does
+		//not really count as interference because those registers are never alive
+		//at the same time. As such, we'll skip if that's the case
+		if(range == stack_pointer_lr || range == instruction_pointer_lr){
+			continue;
+		}
+
+		//Now we'll add this to the graph
+		add_interference_raw(destination_lr, range);
+	}
 }
 
 
@@ -1641,36 +1641,6 @@ static inline void calculate_all_interferences_in_function(basic_block_t* functi
 		//Advance this up
 		current = current->direct_successor;
 	}
-}
-
-
-/**
- * Construct the interference graph using LIVENOW sets
- *
- * This function will always invoke a helper that does it for a specific block
- */
-static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
-	//It starts off as null
-	interference_graph_t* graph = NULL;
-
-	//We'll first need a pointer
-	basic_block_t* current = function_entry_block;
-
-	//Run through every block in the CFG's ordered set
-	while(current != NULL){
-		//Use the helper. Set stopper to be NULL because we aren't trying to halt
-		//anything here
-		calculate_interference_in_block(graph, current);
-		
-		//Advance this up
-		current = current->direct_successor;
-	}
-
-	//Now at the very end, we'll construct the matrix
-	graph = construct_interference_graph_from_adjacency_lists(live_ranges);
-
-	//And finally give the graph back
-	return graph;
 }
 
 
@@ -3304,7 +3274,13 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 *
 	 * Again, this is required every single time we need to retry after a spill
 	*/
-	interference_graph_t* graph = construct_function_level_interference_graph(function_entry, &live_ranges);
+	//First, calculate all of our interferences
+	calculate_all_interferences_in_function(function_entry);
+
+	//Once we have that done, we can construct 2 separate graphs. One graph is for SSE live ranges,
+	//and the other is for general purpose live ranges
+	interference_graph_t* general_purpose_graph = construct_interference_graph_from_adjacency_lists(&general_purpose_live_ranges);
+	interference_graph_t* sse_graph = construct_interference_graph_from_adjacency_lists(&sse_live_ranges);
 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
