@@ -15,7 +15,6 @@
 #include "../postprocessor/postprocessor.h"
 #include "../utils/queue/max_priority_queue.h"
 #include "../cfg/cfg.h"
-#include <cmath>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1677,46 +1676,12 @@ static live_range_t* does_precoloring_interference_exist_gen_purpose(live_range_
 
 
 /**
- * Perform the precoloring. Return TRUE if we can precolor, FALSE if we cannot and had to spill
- */
-static u_int8_t precolor_live_range_gen_purpose(basic_block_t* function_entry, dynamic_array_t* live_ranges, live_range_t* coloree, general_purpose_register_t reg){
-	//Returns NULL if there's no interference, the interferee if there is one
-	live_range_t* interferee = does_precoloring_interference_exist_gen_purpose(coloree, reg);
-
-	//Does nothing for now
-	//This is turned off - until we have a better
-	//scheme for it
-	if(interferee != NULL){
-		if(coloree->spill_cost < interferee->spill_cost){
-			spill_in_function(function_entry, live_ranges, coloree);
-		} else {
-			spill_in_function(function_entry, live_ranges, interferee);
-		}
-
-		//Whatever we spill the return value here is false
-		return FALSE;
-	}
-
-	//Assign the register over
-	coloree->reg.gen_purpose = reg;
-
-	//And mark that it's pre-colored
-	coloree->is_precolored = TRUE;
-
-	return TRUE;
-}
-
-
-
-/**
  * Some variables need to be in special registers at a given time. We can
  * bind them to the right register at this stage and avoid having to worry about it later
  *
  * Returns TRUE if we could color, false if not
  */
-static u_int8_t precolor_instruction_gen_purpose(basic_block_t* function_entry, dynamic_array_t* live_ranges, instruction_t* instruction){
-	u_int8_t colorable;
-
+static u_int8_t pre_color_instruction(instruction_t* instruction){
 	/**
 	 * The first thing will check for here is after-call function parameters. These
 	 * need to be allocated appropriately
@@ -1987,17 +1952,11 @@ static u_int8_t precolor_instruction_gen_purpose(basic_block_t* function_entry, 
 
 
 /**
- * Crawl the entire CFG and pre-color all registers.
- *
- * If we encounter a case where 2 registers are attempting to be pre-colored
- * with the same register, then we have a case where we must spill
- *
- * This function returns TRUE if pre-coloring worked, FALSE if not
+ * Crawl the entire CFG and pre-color all registers. This will handle both general
+ * purpose and SSE precoloring. If all is going well, we should only need to precolor
+ * once per run
  */
-static u_int8_t pre_color(basic_block_t* function_entry, dynamic_array_t* live_ranges){
-	//By default assume that we can precolor it
-	u_int8_t could_be_precolored = TRUE;
-
+static inline void pre_color(basic_block_t* function_entry, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	//Grab a cursor to the head block
 	basic_block_t* cursor = function_entry;
 
@@ -2008,8 +1967,7 @@ static u_int8_t pre_color(basic_block_t* function_entry, dynamic_array_t* live_r
 
 		//Crawl all statements in the block
 		while(instruction_cursor != NULL){
-			//Invoke the helper to pre-color it
-			could_be_precolored = precolor_instruction_gen_purpose(function_entry, live_ranges, instruction_cursor);
+			precolor_instruction(instruction_cursor);
 
 			//Push along to the next statement
 			instruction_cursor = instruction_cursor->next_statement;
@@ -2018,8 +1976,6 @@ static u_int8_t pre_color(basic_block_t* function_entry, dynamic_array_t* live_r
 		//Push onto the next statement
 		cursor = cursor->direct_successor;
 	}
-
-	return could_be_precolored;
 }
 
 
@@ -3298,15 +3254,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 *
 	 * This has the potential to cause spills
 	 */
-	 colorable = pre_color(function_entry, &live_ranges);
-
-	/**
-	 * If we couldn't precolor, we'll have spilled a live range and as such must go
-	 * to the "spill loop"
-	 */
-	if(colorable == FALSE){
-		goto spill_loop;
-	}
+	 pre_color(function_entry, &live_ranges);
 
 	/**
 	 * STEP 6: Live range coalescence optimization
