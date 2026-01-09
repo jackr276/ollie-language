@@ -109,6 +109,12 @@ static inline live_range_class_t get_live_range_class_for_variable(three_addr_va
 }
 
 
+//TODO
+static inline u_int8_t does_instruction_use_target_register_class(instruction_t* instruction, live_range_class_t target_class){
+
+}
+
+
 /**
  * Developer utility function to validate the priority queue implementation
  */
@@ -1658,6 +1664,225 @@ static inline void calculate_all_interferences_in_function(basic_block_t* functi
 		current = current->direct_successor;
 	}
 }
+
+
+/**
+ * Calculate interferences *exclusively* for a given class of live range and only that class
+ *
+ * Algorithm:
+ * 	create an interference graph
+ * 	for each block b:
+ * 		LIVENOW <- LIVEOUT(b)
+ * 		for each operation with form op LA, LB -> LC:
+ * 			for each LRi in LIVENOW:
+ * 				add(LC, LRi) to Interference Graph E 
+ * 			remove LC from LIVENOW
+ * 			Add LA an LB to LIVENOW
+ *
+ * This algorithm operates on the basic(and obvious) principle that two values cannot occupy the same
+ * register at the same time. So, we can determine what values are "live"(currently in use) by keeping
+ * track of what values have been used but not written. We crawl up the block, starting with the "live_out"
+ * values as our initial set. Remember that live out values are just values that are live-in at one of the
+ * successors of the current block. In other words, we require that these values survive after the block is done
+ * executing.
+ *
+ * We work by starting at the bottom of the block and crawling our way up. A value is considered "live_now" until
+ * we find the instruction where it was a destination. Once we find the instruction where the value was written
+ * to, we can safely remove it from LIVE_NOW because everything before that cannot possibly rely on the register
+ * because it hadn't been written to yet.
+ *
+ * For the distinction between SSE and non-SSE variables, we maintain 2 separate live now sets. This allows
+ * us to use one traversal while still maintaining proper separation
+ */
+static void calculate_target_interference_in_block(basic_block_t* block, live_range_class_t target_class){
+	//Get the specific live_now bucket based on the target class
+	dynamic_array_t target_live_now = get_live_ranges_from_given_class(&(block->live_out), target_class);
+
+	//We will crawl our way up backwards through the CFG
+	instruction_t* operation = block->exit_statement;
+
+	//Run through backwards
+	while(operation != NULL){
+		//If we have an exact copy operation, we can
+		//skip it as it won't create any interference
+		if(operation->instruction_type == PHI_FUNCTION){
+			//Skip it
+			operation = operation->previous_statement;
+			continue;
+		}
+
+		//Is this even the type of live range that we're after? We know that
+		//basically every instruction will have a source/destination. If at
+		//least one of those matches up, we know that we'll have to
+		//keep looking
+		if((operation->source_register != NULL 
+			&& operation->source_register->associated_live_range->live_range_class != target_class)
+			&& 
+
+
+
+		/**
+		 * Step from algorithm:
+		 *
+		 * for each LRi in LIVENOW:
+		 * 	add(DEST, LRi) to Interference Graph E 
+		 * remove LC from LIVENOW
+		 *
+		 * 	Mark that the destination interferes with every LIVE_NOW range
+		 *
+		 * 	This is straightforward in the algorithm, but for us it's not so
+		 * 	straightforward. There are several cases where the destination
+		 * 	register may be present but this step in the algorithm will not 
+		 * 	apply or may apply in a different way
+		 */
+		if(operation->destination_register != NULL){
+			/**
+			 * This is if we have something like add LRa, LRb. LRb
+			 * is a destination but it's also a value. As such, we will
+			 * *not* delete this after we add our interference
+			 */
+			if(is_destination_also_operand(operation) == TRUE){
+				//Add the interference in the appropriate graph 
+				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->destination_register->associated_live_range);
+					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_general_purpose);
+
+				//If we hit this we're using a float LR 
+				} else {
+					add_interefence_between_target_and_live_now(&live_now_sse, operation->destination_register->associated_live_range);
+					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_sse);
+				}
+
+			/**
+			 * If we hit this, this means that the destination register itself is never being assigned. In this
+			 * case, we'll just need to add the destination LR to live now
+			 */
+			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
+				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_general_purpose);
+				} else {
+					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_sse);
+				}
+
+			/**
+			 * The final case here is the ideal case in the algorithm, where we have a simple
+			 * assignment at the end. To satisfy the algorithm, we'll add all of the interference
+			 * between the destination and LIVE_NOW and then delete the destination from live_now
+			 */
+			} else {
+				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					//Add the interference
+					add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->destination_register->associated_live_range);
+
+					//And then scrap it from live_now
+					dynamic_array_delete(&live_now_general_purpose, operation->destination_register->associated_live_range);
+
+				} else {
+					//Add the interference
+					add_interefence_between_target_and_live_now(&live_now_sse, operation->destination_register->associated_live_range);
+
+					//And then scrap it from live_now
+					dynamic_array_delete(&live_now_sse, operation->destination_register->associated_live_range);
+				}
+			}
+		}
+
+		/**
+		 * Some instructions like CXXX and division instructions have 2 destinations. The second destination,
+		 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
+		 */
+		if(operation->destination_register2 != NULL){
+			if(operation->destination_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				//Add the interference
+				add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->destination_register2->associated_live_range);
+
+				//And then scrap it from live_now
+				dynamic_array_delete(&live_now_general_purpose, operation->destination_register2->associated_live_range);
+
+			} else {
+				//Add the interference
+				add_interefence_between_target_and_live_now(&live_now_sse, operation->destination_register2->associated_live_range);
+
+				//And then scrap it from live_now
+				dynamic_array_delete(&live_now_sse, operation->destination_register2->associated_live_range);
+			}
+		}
+
+		/**
+		 * STEP:
+		 *  Add LA an LB to LIVENOW
+		 *
+		 *  Remember - in this version of the algorithm we are segregating the general purpose and
+		 *  SSE because either is fair game
+		 */
+		if(operation->source_register != NULL){
+			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->source_register->associated_live_range, &live_now_general_purpose);
+			} else {
+				add_live_now_live_range(operation->source_register->associated_live_range, &live_now_sse);
+			}
+		}
+
+		if(operation->source_register2 != NULL){
+			if(operation->source_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->source_register2->associated_live_range, &live_now_general_purpose);
+			} else {
+				add_live_now_live_range(operation->source_register2->associated_live_range, &live_now_sse);
+			}
+		}
+
+		if(operation->address_calc_reg1 != NULL){
+			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_general_purpose);
+			} else {
+				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_sse);
+			}
+
+		}
+
+		if(operation->address_calc_reg2 != NULL){
+			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_general_purpose);
+			} else {
+				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_sse);
+			}
+		}
+
+		/**
+		 * SPECIAL CASES:
+		 *
+		 * Function calls(direct/indirect) have function parameters that are being used
+		 */
+		switch(operation->instruction_type){
+			case CALL:
+			case INDIRECT_CALL:
+				//Let's go through all of these and add them to LIVE_NOW
+				for(u_int16_t i = 0; i < operation->parameters.current_index; i++){
+					//Extract the variable
+					three_addr_var_t* variable = dynamic_array_get_at(&(operation->parameters), i);
+
+					//Add it to live_now for the appropriate set
+					if(variable->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+						add_live_now_live_range(variable->associated_live_range, &live_now_general_purpose);
+					} else {
+						add_live_now_live_range(variable->associated_live_range, &live_now_sse);
+					}
+				}
+
+				break;
+
+			//By default do nothing
+			default:
+				break;
+		}
+
+		//Crawl back up by 1
+		operation = operation->previous_statement;
+	}
+}
+
+
+
 
 
 
