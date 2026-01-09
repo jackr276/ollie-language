@@ -1660,6 +1660,27 @@ static inline void calculate_all_interferences_in_function(basic_block_t* functi
 }
 
 
+
+/**
+ * Calculate interferences only for the target class of live ranges inside
+ * of a given function
+ */
+static inline void calculate_target_interferences_in_function(basic_block_t* function_entry_block, live_range_class_t target_class){
+	//We'll first need a pointer
+	basic_block_t* current = function_entry_block;
+
+	//Run through every block in the CFG's ordered set
+	while(current != NULL){
+		//Use the helper. Set stopper to be NULL because we aren't trying to halt
+		//anything here
+		calculate_target_interference_in_block(current, target_class);
+		
+		//Advance this up
+		current = current->direct_successor;
+	}
+}
+
+
 /**
  * Before we do any other precoloring, we should be crawling the function body to determine what the function parameter
  * live ranges are and to precolor them as need be. This can be done beforehand because the function parameter order
@@ -3346,10 +3367,19 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 				//Only redo the general purpose live ranges
 				reset_all_live_ranges(&general_purpose_live_ranges);
 
-				//TODO - special used/assigned rule that only hits GP registers
+				//Redo all of the used & assigned sets. This will hit everything
+				//but since no SSE registers were coalesced, it shouldn't matter
+				recompute_used_and_assigned_sets(function_entry);
 			
 				//Redo the spill costs for the GP registers only
 				compute_spill_costs(&general_purpose_live_ranges);
+
+				//Recalculate all liveness sets as well. Again this hits
+				//everything but nothing's changed for SSE so it's fine
+				calculate_live_range_liveness_sets(function_entry);
+
+				//Calculate only the general purpose interferences
+				calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_GEN_PURPOSE);
 
 				
 
@@ -3359,10 +3389,19 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 				//Only redo the SSE live ranges
 				reset_all_live_ranges(&sse_live_ranges);
 
-				//TODO - special used/assigned rule that only hits SSE registers
+				//Redo all of the used & assigned sets. This will hit everything
+				//but since no GP registers were coalesced, it shouldn't matter
+				recompute_used_and_assigned_sets(function_entry);
 
 				//Redo the spill costs for the GP registers only
 				compute_spill_costs(&sse_live_ranges);
+
+				//Recalculate all liveness sets as well. Again this hits
+				//everything but nothing's changed for GP so it's fine
+				calculate_live_range_liveness_sets(function_entry);
+
+				//Calculate only the SSE interferences
+				calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_SSE);
 
 				break;
 
@@ -3427,7 +3466,6 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * In reality, usually this will only happen once or twice, even in the most extreme 
 	 * cases
 	 */
-spill_loop:
 	//Keep going so long as we can't color
 	while(colorable == FALSE){
 		if(print_irs == TRUE){
