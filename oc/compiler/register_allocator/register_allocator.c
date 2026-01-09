@@ -29,8 +29,7 @@ u_int32_t live_range_id = 0;
 const general_purpose_register_t gen_purpose_parameter_registers[] = {RDI, RSI, RDX, RCX, R8, R9};
 const sse_register_t sse_parameter_registers[] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5};
 
-//Avoid need to rearrange
-static interference_graph_t* construct_function_level_interference_graph(basic_block_t* function_entry_block, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges);
+//Spill a live range
 static void spill_in_function(basic_block_t* function_entry_block, dynamic_array_t* live_ranges, live_range_t* spill_range);
 
 //Just hold the stack pointer live range
@@ -3327,8 +3326,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * are 2 separate flags - general purpose coalesce and sse coalesce that flag if we could 
 	 * coalesce at least one range in either one, both or none
 	*/
-	u_int8_t could_coalesce_general_purpose = perform_live_range_coalescence(function_entry, graph, debug_printing);
-	//u_int8_t could_coalesce_sse = //TODO;
+	coalescence_result_t coalescence_result = perform_live_range_coalescence(function_entry, general_purpose_graph, sse_graph, debug_printing);
 
 	/**
 	 * If we were in fact able to coalesce, we will have messed up the liveness sets due
@@ -3338,34 +3336,58 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * 	2.) all of the liveness sets(those rely on used & defined entirely)
 	 * 	3.) the interference
 	 *
-	 * short of this, we will see strange an inaccurate results such as excessive interference
+	 * short of this, we will see strange an inaccurate results such as excessive interferenceo
+	 *
+	 * This coalescence loop is also sensitive 
 	 */
-	while(could_coalesce == TRUE){
-		//We need to *reset* all of our live ranges here
-		reset_all_live_ranges(&live_ranges);
+	while(coalescence_result != COALESCENCE_RESULT_NONE){
+		switch(coalescence_result){
+			case COALESCENCE_RESULT_GP_ONLY:
 
-		//First step - recalculate all of our used & assigned sets
-		recompute_used_and_assigned_sets(function_entry);
 
-		//After we coalesce, we need to recompute all of the
-		//spill costs
-		compute_spill_costs(&live_ranges);
+				break;
 
-		//Then - recalculate all liveness sets
-		calculate_live_range_liveness_sets(function_entry);
+			case COALESCENCE_RESULT_SSE_ONLY:
+				break;
 
-		//Finally, recalculate all of the interference now that all of the
-		//prerequisites have been met
-		graph = construct_function_level_interference_graph(function_entry, &live_ranges);
+			//We were able to coalesce *at least one* SSE and *at least one* GP
+			//live range, so we need to redo everything
+			case COALESCENCE_RESULT_BOTH:
+				//Reset all of our live ranges
+				reset_all_live_ranges(&general_purpose_live_ranges);
+				reset_all_live_ranges(&sse_live_ranges);
 
-		//Now let's try again - we want to keep at this until we're sure we cannot coalesce
-		//anymore to guarantee the smallest final number of instructions possible
-		could_coalesce = perform_live_range_coalescence(function_entry, graph, debug_printing);
+				//First step - recalculate all of our used & assigned sets
+				recompute_used_and_assigned_sets(function_entry);
+
+				//Redo both of the spill costs
+				compute_spill_costs(&general_purpose_live_ranges);
+				compute_spill_costs(&sse_live_ranges);
+
+				//Now recompute all liveness sets
+				calculate_live_range_liveness_sets(function_entry);
+
+				//Now we build all of our interferences
+				calculate_all_interferences_in_function(function_entry);
+
+				//Now rebuild both of the graphs
+				general_purpose_graph = construct_interference_graph_from_adjacency_lists(&general_purpose_live_ranges);
+				sse_graph = construct_interference_graph_from_adjacency_lists(&sse_live_ranges);
+
+				//And finally - invoke the coalescer again to see what we get
+				coalescence_result = perform_live_range_coalescence(function_entry, general_purpose_graph, sse_graph, debug_printing);
+
+				break;
+
+			//Should be unreachable based on the while loop logic
+			default:
+				break;
+		}
 	}
 
 	//Show our live ranges once again if requested
 	if(print_irs == TRUE){
-		print_all_live_ranges(&live_ranges);
+		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
 		printf("================= After Coalescing =======================\n");
 		print_function_blocks_with_live_ranges(function_entry);
 		printf("================= After Coalescing =======================\n");
