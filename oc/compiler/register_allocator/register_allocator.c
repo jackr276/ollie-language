@@ -2178,13 +2178,12 @@ static u_int8_t does_sse_register_allocation_interference_exist(live_range_t* so
  * Perform coalescence at a block level. Remember that if we do end up coalescing,
  * we need to recompute the used and assigned sets for this block as those are 
  * affected by coalescing
+ *
+ * This function will modify the "result" parameter to maintain internal consistency
  */
-static coalescence_result_t perform_block_level_coalescence(basic_block_t* block, interference_graph_t* general_purpose_graph, interference_graph_t* sse_graph, u_int8_t debug_printing){
+static void perform_block_level_coalescence(basic_block_t* block, interference_graph_t* general_purpose_graph, interference_graph_t* sse_graph, coalescence_result_t* result, u_int8_t debug_printing){
 	//Holder for deleting
 	instruction_t* holder;
-
-	//By default, assume nothing got coalesced
-	coalescence_result_t result = COALESCENCE_RESULT_NONE;
 
 	//Now we'll run through every instruction in every block
 	instruction_t* instruction = block->leader_statement;
@@ -2236,13 +2235,15 @@ static coalescence_result_t perform_block_level_coalescence(basic_block_t* block
 					coalesce_live_ranges(general_purpose_graph, source_live_range, destination_live_range);
 
 					//Update the result based on what we already have
-					switch(result){
+					switch(*result){
 						case COALESCENCE_RESULT_NONE:
-							result = COALESCENCE_RESULT_GP_ONLY;
+							*result = COALESCENCE_RESULT_GP_ONLY;
 							break;
+
 						case COALESCENCE_RESULT_SSE_ONLY:
-							result = COALESCENCE_RESULT_BOTH;
+							*result = COALESCENCE_RESULT_BOTH;
 							break;
+
 						default:
 							break;
 					}
@@ -2277,13 +2278,15 @@ static coalescence_result_t perform_block_level_coalescence(basic_block_t* block
 					coalesce_live_ranges(sse_graph, source_live_range, destination_live_range);
 
 					//Update the result based on what we already have
-					switch(result){
+					switch(*result){
 						case COALESCENCE_RESULT_NONE:
-							result = COALESCENCE_RESULT_SSE_ONLY;
+							*result = COALESCENCE_RESULT_SSE_ONLY;
 							break;
+
 						case COALESCENCE_RESULT_GP_ONLY:
-							result = COALESCENCE_RESULT_BOTH;
+							*result = COALESCENCE_RESULT_BOTH;
 							break;
+
 						default:
 							break;
 					}
@@ -2301,9 +2304,6 @@ static coalescence_result_t perform_block_level_coalescence(basic_block_t* block
 				break;
 		}
 	}
-
-	//Give back the final result on what got coalesced
-	return result;
 }
 
 
@@ -2314,45 +2314,24 @@ static coalescence_result_t perform_block_level_coalescence(basic_block_t* block
  * We coalesce source to destination. When we're done, the *source* should
  * survive, the destination should NOT
  */
-static inline u_int8_t perform_live_range_coalescence(basic_block_t* function_entry_block, interference_graph_t* graph, u_int8_t debug_printing){
-	//By default, assume we did not coalesce anything
-	u_int8_t coalescence_occured = FALSE;
+static inline coalescence_result_t perform_live_range_coalescence(basic_block_t* function_entry_block, interference_graph_t* general_purpose_graph, interference_graph_t* sse_graph, u_int8_t debug_printing){
+	//By default we assume nothing happened
+	coalescence_result_t result = COALESCENCE_RESULT_NONE;
 
 	//Run through every single block in here
 	basic_block_t* current = function_entry_block;
 
-	//
-	//
-	//
-	//
-	//
-	//
-	//TODO functionality integration on what we had here for coalescence
-	//result - i.e. what does NONE, GP_ONLY, SSE_ONLY, etc. turn into after
-	//each run
-	//
-	//
-	//
-	//
-	//
-
 	//Run through every block
 	while(current != NULL){
 		//Invoke the helper for the block-level coalescing
-		u_int8_t block_coalesced = perform_block_level_coalescence(current, graph, debug_printing);
-
-		//If it's false - then the new value is what we got. If it's already true, don't bother
-		//setting it again
-		if(coalescence_occured == FALSE){
-			coalescence_occured = block_coalesced;
-		}
+		perform_block_level_coalescence(current, general_purpose_graph, sse_graph, &result, debug_printing);
 
 		//Advance to the direct successor
 		current = current->direct_successor;
 	}
 
-	//Give back whether or not we did coalesce
-	return coalescence_occured;
+	//Give back the result that's been modified by the rule
+	return result;
 }
 
 
