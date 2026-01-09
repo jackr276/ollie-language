@@ -4989,9 +4989,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//Counts as a use
 		add_used_variable(basic_block, result);
 
-		//Mark this parameter order
-		assignment->assignee->parameter_number = current_func_param_idx;
-
 		//Add this into the block
 		add_statement(basic_block, assignment);
 
@@ -5138,9 +5135,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		//Counts as a use
 		add_used_variable(basic_block, result);
-
-		//Mark this parameter order
-		assignment->assignee->parameter_number = current_func_param_idx;
 
 		//Add this into the block
 		add_statement(basic_block, assignment);

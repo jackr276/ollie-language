@@ -192,12 +192,16 @@ struct symtab_variable_record_t{
 	u_int16_t counter;
 	//What is the struct offset for this variable
 	u_int16_t struct_offset;
+	//What is the parameter order for this value?
+	u_int16_t absolute_function_parameter_order;
+	//What is the relative parameter order for this value? In other words,
+	//what is the SSE parameter number or the general purpose parameter number.
+	//This is what really matters to us in the register allocator
+	u_int16_t class_relative_function_parameter_order;
 	//Was it initialized?
 	u_int8_t initialized;
 	//Has this been mutated
 	u_int8_t mutated;
-	//What is the parameter order for this value?
-	u_int8_t function_parameter_order;
 	//What type structure or language concept does this variable belong to?
 	variable_membership_t membership;
 	//Where does this variable get stored? By default we assume register, so
