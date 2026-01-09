@@ -109,12 +109,6 @@ static inline live_range_class_t get_live_range_class_for_variable(three_addr_va
 }
 
 
-//TODO
-static inline u_int8_t does_instruction_use_target_register_class(instruction_t* instruction, live_range_class_t target_class){
-
-}
-
-
 /**
  * Developer utility function to validate the priority queue implementation
  */
@@ -1594,7 +1588,7 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 		}
 
 		if(operation->address_calc_reg1 != NULL){
-			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+			if(operation->address_calc_reg1->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
 				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_general_purpose);
 			} else {
 				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_sse);
@@ -1603,7 +1597,7 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 		}
 
 		if(operation->address_calc_reg2 != NULL){
-			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+			if(operation->address_calc_reg2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
 				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_general_purpose);
 			} else {
 				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_sse);
@@ -1711,16 +1705,6 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 			continue;
 		}
 
-		//Is this even the type of live range that we're after? We know that
-		//basically every instruction will have a source/destination. If at
-		//least one of those matches up, we know that we'll have to
-		//keep looking
-		if((operation->source_register != NULL 
-			&& operation->source_register->associated_live_range->live_range_class != target_class)
-			&& 
-
-
-
 		/**
 		 * Step from algorithm:
 		 *
@@ -1743,14 +1727,9 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 			 */
 			if(is_destination_also_operand(operation) == TRUE){
 				//Add the interference in the appropriate graph 
-				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->destination_register->associated_live_range);
-					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_general_purpose);
-
-				//If we hit this we're using a float LR 
-				} else {
-					add_interefence_between_target_and_live_now(&live_now_sse, operation->destination_register->associated_live_range);
-					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_sse);
+				if(operation->destination_register->associated_live_range->live_range_class == target_class){
+					add_interefence_between_target_and_live_now(&target_live_now, operation->destination_register->associated_live_range);
+					add_live_now_live_range(operation->destination_register->associated_live_range, &target_live_now);
 				}
 
 			/**
@@ -1758,10 +1737,8 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 			 * case, we'll just need to add the destination LR to live now
 			 */
 			} else if(is_move_instruction_destination_assigned(operation) == FALSE){
-				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_general_purpose);
-				} else {
-					add_live_now_live_range(operation->destination_register->associated_live_range, &live_now_sse);
+				if(operation->destination_register->associated_live_range->live_range_class == target_class){
+					add_live_now_live_range(operation->destination_register->associated_live_range, &target_live_now);
 				}
 
 			/**
@@ -1770,19 +1747,12 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 			 * between the destination and LIVE_NOW and then delete the destination from live_now
 			 */
 			} else {
-				if(operation->destination_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+				if(operation->destination_register->associated_live_range->live_range_class == target_class){
 					//Add the interference
-					add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->destination_register->associated_live_range);
+					add_interefence_between_target_and_live_now(&target_live_now, operation->destination_register->associated_live_range);
 
 					//And then scrap it from live_now
-					dynamic_array_delete(&live_now_general_purpose, operation->destination_register->associated_live_range);
-
-				} else {
-					//Add the interference
-					add_interefence_between_target_and_live_now(&live_now_sse, operation->destination_register->associated_live_range);
-
-					//And then scrap it from live_now
-					dynamic_array_delete(&live_now_sse, operation->destination_register->associated_live_range);
+					dynamic_array_delete(&target_live_now, operation->destination_register->associated_live_range);
 				}
 			}
 		}
@@ -1792,19 +1762,12 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 		 * unlike the first, will never have any dual purpose, so we can just add the interference and delete
 		 */
 		if(operation->destination_register2 != NULL){
-			if(operation->destination_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+			if(operation->destination_register2->associated_live_range->live_range_class == target_class){
 				//Add the interference
-				add_interefence_between_target_and_live_now(&live_now_general_purpose, operation->destination_register2->associated_live_range);
+				add_interefence_between_target_and_live_now(&target_live_now, operation->destination_register2->associated_live_range);
 
 				//And then scrap it from live_now
-				dynamic_array_delete(&live_now_general_purpose, operation->destination_register2->associated_live_range);
-
-			} else {
-				//Add the interference
-				add_interefence_between_target_and_live_now(&live_now_sse, operation->destination_register2->associated_live_range);
-
-				//And then scrap it from live_now
-				dynamic_array_delete(&live_now_sse, operation->destination_register2->associated_live_range);
+				dynamic_array_delete(&target_live_now, operation->destination_register2->associated_live_range);
 			}
 		}
 
@@ -1815,37 +1778,28 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 		 *  Remember - in this version of the algorithm we are segregating the general purpose and
 		 *  SSE because either is fair game
 		 */
-		if(operation->source_register != NULL){
-			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->source_register->associated_live_range, &live_now_general_purpose);
-			} else {
-				add_live_now_live_range(operation->source_register->associated_live_range, &live_now_sse);
-			}
+		if(operation->source_register != NULL
+			&& operation->source_register->associated_live_range->live_range_class == target_class){
+
+			add_live_now_live_range(operation->source_register->associated_live_range, &target_live_now);
 		}
 
-		if(operation->source_register2 != NULL){
-			if(operation->source_register2->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->source_register2->associated_live_range, &live_now_general_purpose);
-			} else {
-				add_live_now_live_range(operation->source_register2->associated_live_range, &live_now_sse);
-			}
+		if(operation->source_register2 != NULL
+			&& operation->source_register2->associated_live_range->live_range_class == target_class){
+
+			add_live_now_live_range(operation->source_register2->associated_live_range, &target_live_now);
 		}
 
-		if(operation->address_calc_reg1 != NULL){
-			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_general_purpose);
-			} else {
-				add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &live_now_sse);
-			}
+		if(operation->address_calc_reg1 != NULL
+			&& operation->address_calc_reg1->associated_live_range->live_range_class == target_class){
 
+			add_live_now_live_range(operation->address_calc_reg1->associated_live_range, &target_live_now);
 		}
 
-		if(operation->address_calc_reg2 != NULL){
-			if(operation->source_register->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_general_purpose);
-			} else {
-				add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &live_now_sse);
-			}
+		if(operation->address_calc_reg2 != NULL
+			&& operation->address_calc_reg2->associated_live_range->live_range_class == target_class){
+
+			add_live_now_live_range(operation->address_calc_reg2->associated_live_range, &target_live_now);
 		}
 
 		/**
@@ -1862,10 +1816,8 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 					three_addr_var_t* variable = dynamic_array_get_at(&(operation->parameters), i);
 
 					//Add it to live_now for the appropriate set
-					if(variable->associated_live_range->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-						add_live_now_live_range(variable->associated_live_range, &live_now_general_purpose);
-					} else {
-						add_live_now_live_range(variable->associated_live_range, &live_now_sse);
+					if(variable->associated_live_range->live_range_class == target_class){
+						add_live_now_live_range(variable->associated_live_range, &target_live_now);
 					}
 				}
 
@@ -1880,10 +1832,6 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 		operation = operation->previous_statement;
 	}
 }
-
-
-
-
 
 
 /**
@@ -3606,6 +3554,9 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 				//Calculate only the general purpose interferences
 				calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_GEN_PURPOSE);
 
+				//
+				//
+				//TODO NOT DONE
 				
 
 				break;
@@ -3627,6 +3578,10 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 
 				//Calculate only the SSE interferences
 				calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_SSE);
+
+				//
+				//
+				//TODO NOT DONE
 
 				break;
 
