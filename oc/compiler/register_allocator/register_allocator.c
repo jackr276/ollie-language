@@ -3343,11 +3343,27 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	while(coalescence_result != COALESCENCE_RESULT_NONE){
 		switch(coalescence_result){
 			case COALESCENCE_RESULT_GP_ONLY:
+				//Only redo the general purpose live ranges
+				reset_all_live_ranges(&general_purpose_live_ranges);
 
+				//TODO - special used/assigned rule that only hits GP registers
+			
+				//Redo the spill costs for the GP registers only
+				compute_spill_costs(&general_purpose_live_ranges);
+
+				
 
 				break;
 
 			case COALESCENCE_RESULT_SSE_ONLY:
+				//Only redo the SSE live ranges
+				reset_all_live_ranges(&sse_live_ranges);
+
+				//TODO - special used/assigned rule that only hits SSE registers
+
+				//Redo the spill costs for the GP registers only
+				compute_spill_costs(&sse_live_ranges);
+
 				break;
 
 			//We were able to coalesce *at least one* SSE and *at least one* GP
