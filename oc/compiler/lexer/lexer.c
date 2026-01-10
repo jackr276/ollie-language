@@ -735,88 +735,120 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == TRUE) 
 						|| ((ch >= 'A' && ch <= 'F') && seen_hex == TRUE)){
 					dynamic_string_add_char_to_back(&lexeme, ch);
-				} else if(ch == 'x' || ch == 'X'){
-					//Have we seen the hex code?
-					//Fail case here
-					if(seen_hex == TRUE){
-						lexitem_t err;
-						err.tok = ERROR;
-						return err;
-					}
-
-					//If we haven't seen the 0 here it's bad
-					if(*(lexeme.string) != '0'){
-						lexitem_t err;
-						err.tok = ERROR;
-						return err;
-					}
-
-					//Otherwise set this and add it in
-					seen_hex = TRUE;
-
-					//Add the character dynamically
-					dynamic_string_add_char_to_back(&lexeme, ch);
-				
-				} else if (ch == '.'){
-					//We're actually in a float const
-					current_state = IN_FLOAT;
-					//Add the character dynamically
-					dynamic_string_add_char_to_back(&lexeme, ch);
-
-				//The 'l' or 'L' tells us that we're forcing to long
-				} else if (ch == 'l' || ch == 'L'){
-					lex_item.line_num = line_num;
-					lex_item.lexeme = lexeme;
-					lex_item.tok = LONG_CONST;
-					return lex_item;
-				
-				//The 's' or 'S' tells us that we're forcing to short
-				} else if(ch == 's' || ch == 'S'){
-					lex_item.line_num = line_num;
-					lex_item.lexeme = lexeme;
-					lex_item.tok = LONG_CONST;
-					return lex_item;
-
-				} else if (ch == 'u' || ch == 'U'){
-					//We are forcing this to be unsigned
-					//We can still see "l", so let's check
-					ch2 = GET_NEXT_CHAR(fl);
-
-					//If this is an l, it's a long
-					if(ch2 == 'l' || ch2 == 'L'){
-						lex_item.tok = LONG_CONST_FORCE_U;
-
-					//Forcing an unsigned short constant
-					} else if(ch2 == 's' || ch2 == 'S'){
-						lex_item.tok = SHORT_CONST_FORCE_U;
-
-					} else {
-						//Put it back
-						PUT_BACK_CHAR(fl);
-						lex_item.tok = INT_CONST_FORCE_U;
-					}
-
-					//Pack everything up and return
-					lex_item.lexeme = lexeme;
-					lex_item.line_num = line_num;
-
-					return lex_item;
-
 				} else {
-					//Otherwise we're out
-					//"Put back" the char
-					PUT_BACK_CHAR(fl);
+					switch(ch){
+						case 'x':
+						case 'X':
+							//Have we seen the hex code?
+							//Fail case here
+							if(seen_hex == TRUE){
+								lexitem_t err;
+								err.tok = ERROR;
+								return err;
+							}
 
-					//Populate and return
-					if(seen_hex == TRUE){
-						lex_item.tok = HEX_CONST;
-					} else {
-						lex_item.tok = INT_CONST;
+							//If we haven't seen the 0 here it's bad
+							if(*(lexeme.string) != '0'){
+								lexitem_t err;
+								err.tok = ERROR;
+								return err;
+							}
+
+							//Otherwise set this and add it in
+							seen_hex = TRUE;
+
+							//Add the character dynamically
+							dynamic_string_add_char_to_back(&lexeme, ch);
+
+							break;
+
+						case '.':
+							//We're actually in a float const
+							current_state = IN_FLOAT;
+							//Add the character dynamically
+							dynamic_string_add_char_to_back(&lexeme, ch);
+
+							break;
+
+						//The 'l' or 'L' tells us that we're forcing to long
+						case 'l':
+						case 'L':
+							lex_item.line_num = line_num;
+							lex_item.lexeme = lexeme;
+							lex_item.tok = LONG_CONST;
+							return lex_item;
+
+						//Forcing to short
+						case 's':
+						case 'S':
+							lex_item.line_num = line_num;
+							lex_item.lexeme = lexeme;
+							lex_item.tok = LONG_CONST;
+							return lex_item;
+
+						//Forcing to Byte
+						case 'b':
+						case 'B':
+							lex_item.line_num = line_num;
+							lex_item.lexeme = lexeme;
+							lex_item.tok = BYTE_CONST;
+							return lex_item;
+
+						//If we see this it means we're forcing to unsigned
+						case 'u':
+						case 'U':
+							//We are forcing this to be unsigned
+							//We can still see "l", so let's check
+							ch2 = GET_NEXT_CHAR(fl);
+
+							//We can still see more qualifiers
+							switch(ch2){
+								case 'l':
+								case 'L':
+									lex_item.tok = LONG_CONST_FORCE_U;
+									break;
+
+								case 's':
+								case 'S':
+									lex_item.tok = SHORT_CONST_FORCE_U;
+									break;
+
+								case 'b':
+								case 'B':
+									lex_item.tok = BYTE_CONST_FORCE_U;
+									break;
+
+								default:
+									//Put it back
+									PUT_BACK_CHAR(fl);
+									lex_item.tok = INT_CONST_FORCE_U;
+
+									break;
+							}
+
+
+							//Pack everything up and return
+							lex_item.lexeme = lexeme;
+							lex_item.line_num = line_num;
+
+							return lex_item;
+
+						default:
+							//Otherwise we're out
+							//"Put back" the char
+							PUT_BACK_CHAR(fl);
+
+							//Populate and return
+							if(seen_hex == TRUE){
+								lex_item.tok = HEX_CONST;
+							} else {
+								lex_item.tok = INT_CONST;
+							}
+
+							lex_item.lexeme = lexeme;
+							lex_item.line_num = line_num;
+							return lex_item;
 					}
-
-					lex_item.lexeme = lexeme;
-					lex_item.line_num = line_num;
-					return lex_item;
 				}
 
 				break;
