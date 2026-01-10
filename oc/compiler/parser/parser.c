@@ -152,6 +152,8 @@ static inline void perform_constant_assignment_coercion(generic_ast_node_t* cons
 	//If we have a basic constant type like this, we need to perform coercion
 	switch(constant_node->constant_type){
 		case CHAR_CONST:
+		case BYTE_CONST:
+		case BYTE_CONST_FORCE_U:
 		case SHORT_CONST:
 		case SHORT_CONST_FORCE_U:
 		case INT_CONST:
@@ -1444,6 +1446,8 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 		case FLOAT_CONST:
 		case DOUBLE_CONST:
 		case CHAR_CONST:
+		case BYTE_CONST:
+		case BYTE_CONST_FORCE_U:
 		case LONG_CONST:
 		case HEX_CONST:
 		case INT_CONST_FORCE_U:
@@ -8744,6 +8748,10 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
 		case CHAR_CONST:
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+		case BYTE_CONST:
+		case BYTE_CONST_FORCE_U:
 		case HEX_CONST:
 		case LONG_CONST:
 		case LONG_CONST_FORCE_U:
@@ -8762,28 +8770,34 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			//would mess with the jump table logic. Ollie langauge does not support GCC-style "switch-to-if" conversions
 			//if the user does this
 			switch(const_node->constant_type){
+				case BYTE_CONST:
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_byte_value;
+					break;
+				case SHORT_CONST:
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_short_value;
+					break;
+				case SHORT_CONST_FORCE_U:
+					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_short_value;
+					break;
 				case INT_CONST:
-					//Store the value
 					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
 					break;
 				case HEX_CONST:
-					//Store the value
 					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
 					break;
 				case INT_CONST_FORCE_U:
-					//Store the value
 					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_int_value;
 					break;
 				case LONG_CONST:
-					//Store the value
 					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_long_value;
 					break;
 				case LONG_CONST_FORCE_U:
-					//Store the value
 					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_long_value;
 					break;
 				case CHAR_CONST:
-					//Just assign the char value here
 					case_stmt->constant_value.signed_int_value = const_node->constant_value.char_value;
 					break;
 
