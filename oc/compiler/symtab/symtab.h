@@ -93,6 +93,15 @@ typedef enum {
 	LOCAL_CONSTANT_TYPE_F64,
 } local_constant_type_t;
 
+/**
+ * Is a given function public or private? Simple enum for
+ * this 
+ */
+typedef enum {
+	FUNCTION_VISIBILITY_PRIVATE,
+	FUNCTION_VISIBILITY_PUBLIC
+} function_visibility_t;
+
 
 /**
  * A local constant(.LCx) is a value like a string that is intended to 
@@ -155,6 +164,8 @@ struct symtab_function_record_t{
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;
+	//Is this function public or private
+	function_visibility_t function_visibility;
 };
 
 

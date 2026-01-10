@@ -122,6 +122,8 @@ struct generic_ast_node_t{
 		u_int16_t unsigned_short_value;
 		double double_value;
 		float float_value;
+		int8_t signed_byte_value;
+		u_int8_t unsigned_byte_value;
 		char char_value;
 	} constant_value;
 	//Holds the token for what kind of constant it is
