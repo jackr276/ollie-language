@@ -824,14 +824,48 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 		//For True & False, they are internally treated the exact same as 
 		//unsigned 8 bit integers
 		case TRUE_CONST:
-			//TODO
+			//Unsigned byte
+			constant_node->constant_type = BYTE_CONST_FORCE_U;
+				
+			//Use the true value here
+			constant_node->constant_value.unsigned_byte_value = TRUE;
+
+			//Inferred type is u8
+			constant_node->inferred_type = immut_u8;
 
 			break;
 			
-
 		case FALSE_CONST:
-			//TODO
+			//Unsigned byte
+			constant_node->constant_type = BYTE_CONST_FORCE_U;
 			
+			//Use the true value here
+			constant_node->constant_value.unsigned_byte_value = FALSE;
+
+			//Inferred type is u8
+			constant_node->inferred_type = immut_u8;
+
+			break;
+
+		case BYTE_CONST:
+			//Signed byte
+			constant_node->constant_type = BYTE_CONST;
+
+			constant_node->constant_value.signed_byte_value = atoi(lookahead.lexeme.string);
+
+			//Inferred type is i8
+			constant_node->inferred_type = immut_i8;
+
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			//Unsigned byte
+			constant_node->constant_type = BYTE_CONST_FORCE_U;
+
+			constant_node->constant_value.unsigned_byte_value = atoi(lookahead.lexeme.string);
+
+			//Inferred type is u8
+			constant_node->inferred_type = immut_u8;
 
 			break;
 
