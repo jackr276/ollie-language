@@ -667,6 +667,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	//Hash it and store it to avoid to repeated hashing
 	record->hash = hash_function(name.string);
 
+	//Throw in whether or not it's public or private
+	record->function_visibility = is_public == TRUE ? FUNCTION_VISIBILITY_PUBLIC : FUNCTION_VISIBILITY_PRIVATE;
+
 	//Store the line number
 	record->line_number = line_number;
 
@@ -1933,7 +1936,7 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 			//Get it off of the queue
 			record = min_priority_queue_dequeue(&queue);
 		
-			if(record->called == 0 && record->defined == 0){
+			if(record->called == FALSE && record->defined == FALSE){
 				//Generate a warning here
 				(*num_warnings)++;
 
@@ -1942,7 +1945,8 @@ void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnin
 				//Also print where the function was defined
 				print_function_name(record);
 
-			} else if(record->called == 0 && record->defined == 1){
+			//Only generate here if we have a private function. Public functions may be called from external files
+			} else if(record->called == FALSE && record->defined == TRUE && record->function_visibility == FUNCTION_VISIBILITY_PRIVATE){
 				//Generate a warning here
 				(*num_warnings)++;
 
