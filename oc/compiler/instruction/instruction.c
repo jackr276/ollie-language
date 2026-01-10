@@ -1790,6 +1790,12 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 		case CHAR_CONST:
 			fprintf(fl, "\t.byte %d\n", global_variable_constant->constant_value.char_constant);
 			break;
+		case BYTE_CONST:
+			fprintf(fl, "\t.byte %d\n", global_variable_constant->constant_value.signed_byte_constant);
+			break;
+		case BYTE_CONST_FORCE_U:
+			fprintf(fl, "\t.byte %d\n", global_variable_constant->constant_value.unsigned_byte_constant);
+			break;
 		case SHORT_CONST:
 			fprintf(fl, "\t.value %d\n", global_variable_constant->constant_value.signed_short_constant);
 			break;
@@ -1921,6 +1927,12 @@ void print_live_range(FILE* fl, live_range_t* live_range){
  */
 static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
+		case BYTE_CONST:
+			fprintf(fl, "%d", constant->constant_value.signed_byte_constant);
+			break;
+		case BYTE_CONST_FORCE_U:
+			fprintf(fl, "%d", constant->constant_value.unsigned_byte_constant);
+			break;
 		case SHORT_CONST:
 			fprintf(fl, "%d", constant->constant_value.signed_short_constant);
 			break;
@@ -2567,6 +2579,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
  */
 static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
+		case BYTE_CONST:
+			fprintf(fl, "$%d", constant->constant_value.signed_byte_constant);
+			break;
+		case BYTE_CONST_FORCE_U:
+			fprintf(fl, "$%d", constant->constant_value.unsigned_byte_constant);
+			break;
 		case SHORT_CONST:
 			fprintf(fl, "$%d", constant->constant_value.signed_short_constant);
 			break;
@@ -2601,6 +2619,16 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
  */
 static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* constant){
 	switch(constant->const_type){
+		case BYTE_CONST:
+			if(constant->constant_value.signed_byte_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.signed_byte_constant);
+			}
+			break;
+		case BYTE_CONST_FORCE_U:
+			if(constant->constant_value.unsigned_byte_constant != 0){
+				fprintf(fl, "%d", constant->constant_value.unsigned_byte_constant);
+			}
+			break;
 		case SHORT_CONST:
 			if(constant->constant_value.signed_short_constant != 0){
 				fprintf(fl, "%d", constant->constant_value.signed_short_constant);
@@ -5297,8 +5325,6 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 	ollie_token_t basic_type_token = type->basic_type_token;
 	
 	switch(basic_type_token){
-
-		//TODO
 		case I64:
 			constant->const_type = LONG_CONST;
 			constant->constant_value.signed_long_constant = value;
@@ -5308,16 +5334,28 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 			constant->constant_value.unsigned_long_constant = value;
 			break;
 		case I32:
-		case I16:
-		case I8:
 			constant->const_type = INT_CONST;
 			constant->constant_value.signed_integer_constant = value;
 			break;
+		case I16:
+			constant->const_type = SHORT_CONST;
+			constant->constant_value.signed_short_constant = value;
+			break;
+		case I8:
+			constant->const_type = SHORT_CONST;
+			constant->constant_value.signed_byte_constant = value;
+			break;
 		case U32:
-		case U16:
-		case U8:
 			constant->const_type = INT_CONST_FORCE_U;
 			constant->constant_value.unsigned_integer_constant = value;
+			break;
+		case U16:
+			constant->const_type = SHORT_CONST_FORCE_U;
+			constant->constant_value.unsigned_short_constant = value;
+			break;
+		case U8:
+			constant->const_type = BYTE_CONST_FORCE_U;
+			constant->constant_value.unsigned_byte_constant = value;
 			break;
 		case CHAR:
 			constant->const_type = CHAR_CONST;
