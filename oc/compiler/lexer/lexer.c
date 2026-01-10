@@ -48,7 +48,7 @@ static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
-				    EXTERNAL};
+				    EXTERNAL, TRUE_CONST, FALSE_CONST};
 
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
@@ -57,7 +57,7 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub", "union", "bool", "external"};
+						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 

@@ -128,5 +128,7 @@ typedef enum {
 	F64,
 	CHAR,
 	PUB,
+	TRUE_CONST,
+	FALSE_CONST,
 } ollie_token_t;
 

@@ -821,6 +821,20 @@ static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_
 			constant_node->inferred_type = immut_char;
 			break;
 
+		//For True & False, they are internally treated the exact same as 
+		//unsigned 8 bit integers
+		case TRUE_CONST:
+			//TODO
+
+			break;
+			
+
+		case FALSE_CONST:
+			//TODO
+			
+
+			break;
+
 		case STR_CONST:
 			constant_node->constant_type = STR_CONST;
 			//The type is an immutable char*
