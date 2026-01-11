@@ -85,6 +85,8 @@ typedef enum {
 	LONG_CONST_FORCE_U,
 	SHORT_CONST,
 	SHORT_CONST_FORCE_U,
+	BYTE_CONST,
+	BYTE_CONST_FORCE_U,
 	LONG_CONST,
 	FLOAT_CONST,
 	DOUBLE_CONST,
@@ -128,5 +130,7 @@ typedef enum {
 	F64,
 	CHAR,
 	PUB,
+	TRUE_CONST,
+	FALSE_CONST,
 } ollie_token_t;
 
