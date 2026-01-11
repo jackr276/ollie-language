@@ -5637,10 +5637,8 @@ void equals_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_
  * The result will be: constant1 = constant1 > constant2
  */
 void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
-	//Go based on the first one's type
 	switch(constant_node1->constant_type){
 		case INT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case DOUBLE_CONST:
 					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value > constant_node2->constant_value.double_value;
@@ -5666,10 +5664,15 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value > constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value > (u_int8_t)(constant_node2->constant_value.signed_byte_value);
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value > constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.unsigned_int_value = constant_node1->constant_value.unsigned_int_value > (u_int8_t)(constant_node2->constant_value.char_value);
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant > operation\n");
 					exit(1);
@@ -5678,7 +5681,6 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 			break;
 
 		case INT_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case DOUBLE_CONST:
 					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value > constant_node2->constant_value.double_value;
@@ -5704,10 +5706,15 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.signed_int_value = (u_int32_t)(constant_node1->constant_value.signed_int_value) > constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value > constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value = (u_int32_t)(constant_node1->constant_value.signed_int_value) > constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.signed_int_value = constant_node1->constant_value.signed_int_value > constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant > operation\n");
 					exit(1);
@@ -5716,7 +5723,6 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 			break;
 
 		case FLOAT_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case DOUBLE_CONST:
 					constant_node1->constant_value.float_value = constant_node1->constant_value.float_value > constant_node2->constant_value.double_value;
@@ -5742,10 +5748,15 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.float_value = constant_node1->constant_value.float_value > constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.float_value = constant_node1->constant_value.float_value > constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.float_value = constant_node1->constant_value.float_value > constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.float_value = constant_node1->constant_value.float_value > constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant > operation\n");
 					exit(1);
@@ -5754,7 +5765,6 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 			break;
 
 		case LONG_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case DOUBLE_CONST:
 					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > constant_node2->constant_value.double_value;
@@ -5780,10 +5790,15 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > (u_int16_t)(constant_node2->constant_value.signed_byte_value);
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.unsigned_long_value = constant_node1->constant_value.unsigned_long_value > (u_int8_t)(constant_node2->constant_value.char_value);
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant > operation\n");
 					exit(1);
@@ -5792,7 +5807,6 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 			break;
 
 		case LONG_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case DOUBLE_CONST:
 					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value > constant_node2->constant_value.double_value;
@@ -5818,10 +5832,15 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) > constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value > constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value = (u_int64_t)(constant_node1->constant_value.signed_long_value) > constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.signed_long_value = constant_node1->constant_value.signed_long_value > constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant > operation\n");
 					exit(1);
@@ -5830,7 +5849,6 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 			break;
 
 		case DOUBLE_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case DOUBLE_CONST:
 					constant_node1->constant_value.double_value = constant_node1->constant_value.double_value > constant_node2->constant_value.double_value;
@@ -5856,10 +5874,15 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.double_value = constant_node1->constant_value.double_value > constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.double_value = constant_node1->constant_value.double_value > constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.double_value	= constant_node1->constant_value.double_value > constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.double_value = constant_node1->constant_value.double_value > constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant > operation\n");
 					exit(1);
@@ -5867,9 +5890,90 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 
 			break;
 
+		case BYTE_CONST:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					constant_node1->constant_value.signed_byte_value = constant_node1->constant_value.signed_byte_value > constant_node2->constant_value.double_value;
+					break;
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_byte_value = (u_int8_t)(constant_node1->constant_value.signed_byte_value) > constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					 constant_node1->constant_value.signed_byte_value = constant_node1->constant_value.signed_byte_value > constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					 constant_node1->constant_value.signed_byte_value = (u_int8_t)(constant_node1->constant_value.signed_byte_value) > constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_byte_value = constant_node1->constant_value.signed_byte_value > constant_node2->constant_value.signed_int_value;
+					break;
+				case FLOAT_CONST:
+					constant_node1->constant_value.signed_byte_value = constant_node1->constant_value.signed_byte_value > constant_node2->constant_value.float_value;
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.signed_byte_value = constant_node1->constant_value.signed_byte_value > constant_node2->constant_value.signed_short_value;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_byte_value = (u_int8_t)(constant_node1->constant_value.signed_byte_value) > constant_node2->constant_value.unsigned_short_value;
+					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.signed_byte_value = constant_node1->constant_value.signed_byte_value > constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.signed_byte_value = (u_int8_t)(constant_node1->constant_value.signed_byte_value) > constant_node2->constant_value.unsigned_byte_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_byte_value = constant_node1->constant_value.signed_byte_value > constant_node2->constant_value.char_value;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant > operation\n");
+					exit(1);
+			}
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			switch(constant_node2->constant_type){
+				case DOUBLE_CONST:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > constant_node2->constant_value.double_value;
+					break;
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > (u_int64_t)(constant_node2->constant_value.signed_long_value);
+					break;
+				case INT_CONST_FORCE_U:
+					 constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > (u_int32_t)(constant_node2->constant_value.signed_int_value);
+					break;
+				case FLOAT_CONST:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > constant_node2->constant_value.float_value;
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > (u_int16_t)(constant_node2->constant_value.signed_short_value);
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > constant_node2->constant_value.unsigned_short_value;
+					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > (u_int8_t)(constant_node2->constant_value.signed_byte_value);
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > constant_node2->constant_value.unsigned_byte_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_byte_value = constant_node1->constant_value.unsigned_byte_value > (u_int8_t)(constant_node2->constant_value.char_value);
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant > operation\n");
+					exit(1);
+			}
+
+			break;
 
 		case SHORT_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case DOUBLE_CONST:
 					constant_node1->constant_value.signed_short_value = constant_node1->constant_value.signed_short_value > constant_node2->constant_value.double_value;
@@ -5878,7 +5982,7 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 					constant_node1->constant_value.signed_short_value = (u_int16_t)(constant_node1->constant_value.signed_short_value) > constant_node2->constant_value.unsigned_long_value;
 					break;
 				case LONG_CONST:
-					 constant_node1->constant_value.signed_short_value = constant_node1->constant_value.signed_short_value > constant_node2->constant_value.signed_long_value;
+					constant_node1->constant_value.signed_short_value = constant_node1->constant_value.signed_short_value > constant_node2->constant_value.signed_long_value;
 					break;
 				case INT_CONST_FORCE_U:
 					 constant_node1->constant_value.signed_short_value = (u_int16_t)(constant_node1->constant_value.signed_short_value) > constant_node2->constant_value.unsigned_int_value;
@@ -5895,17 +5999,21 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.signed_short_value = (u_int16_t)(constant_node1->constant_value.signed_short_value) > constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.signed_short_value = constant_node1->constant_value.signed_short_value > constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.signed_short_value = (u_int16_t)(constant_node1->constant_value.signed_short_value) > constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.signed_short_value = constant_node1->constant_value.signed_short_value > constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant > operation\n");
 					exit(1);
 			}
 
 		case SHORT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case DOUBLE_CONST:
 					constant_node1->constant_value.unsigned_short_value = constant_node1->constant_value.unsigned_short_value > constant_node2->constant_value.double_value;
@@ -5931,10 +6039,15 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_short_value = constant_node1->constant_value.unsigned_short_value > constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.unsigned_short_value = constant_node1->constant_value.unsigned_short_value > (u_int8_t)(constant_node2->constant_value.signed_byte_value);
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_short_value = constant_node1->constant_value.unsigned_short_value > constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.unsigned_short_value = constant_node1->constant_value.unsigned_short_value > (u_int8_t)(constant_node2->constant_value.char_value);
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant > operation\n");
 					exit(1);
@@ -5942,7 +6055,6 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 
 
 		case CHAR_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case DOUBLE_CONST:
 					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value > constant_node2->constant_value.double_value;
@@ -5968,10 +6080,15 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) > constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value > constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.char_value = (u_int8_t)(constant_node1->constant_value.char_value) > constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.char_value = constant_node1->constant_value.char_value > constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant > operation\n");
 					exit(1);
@@ -5979,7 +6096,6 @@ void greater_than_constant_nodes(generic_ast_node_t* constant_node1, generic_ast
 
 			break;
 
-		//This should never happen
 		default:
 			printf("Fatal internal compiler error: Unsupported constant > operation\n");
 			exit(1);
