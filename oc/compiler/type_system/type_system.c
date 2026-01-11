@@ -839,11 +839,15 @@ static inline void integer_to_floating_point(type_symtab_t* symtab, generic_type
 		case U32:
 		case I32:
 			*a = lookup_type_name_only(symtab, "f32", (*a)->mutability)->type;
+			
+			break;
 
 		//These become f64's
 		case U64:
 		case I64:
 			*a = lookup_type_name_only(symtab, "f64", (*a)->mutability)->type;
+
+			break;
 
 		//This should never happen
 		default:
