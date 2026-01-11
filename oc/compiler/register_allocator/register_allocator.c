@@ -2610,43 +2610,31 @@ static void perform_block_level_coalescence_for_target(basic_block_t* block, int
 				printf("Deleting redundant instruction:\n");
 				print_instruction(stdout, holder, PRINTING_VAR_INLINE);
 			}
-		}
 
-		switch(source_live_range->live_range_class){
-			case LIVE_RANGE_CLASS_GEN_PURPOSE:
-				if(do_live_ranges_interfere(general_purpose_graph, destination_live_range, source_live_range) == FALSE
-					&& does_general_purpose_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
+			//Invoke the helper to actually coalesce
+			coalesce_live_ranges(target_graph, source_live_range, destination_live_range);
+			
+			//Update accordingly here based on what kind of result that we got
+			if(*result == COALESCENCE_RESULT_NONE){
+				switch(target_class){
+					case LIVE_RANGE_CLASS_SSE:
+						*result = COALESCENCE_RESULT_SSE_ONLY;
+						break;
 
-
-					//Perform the actual coalescence. Remember that the destination is effectively being
-					//absorbed into the source
-					coalesce_live_ranges(general_purpose_graph, source_live_range, destination_live_range);
-
-					//Update the result based on what we already have
-					switch(*result){
-						case COALESCENCE_RESULT_NONE:
-							*result = COALESCENCE_RESULT_GP_ONLY;
-							break;
-
-						case COALESCENCE_RESULT_SSE_ONLY:
-							*result = COALESCENCE_RESULT_BOTH;
-							break;
-
-						default:
-							break;
-					}
-
-					//Delete the now useless instruction
-					holder = instruction;
-					instruction = instruction->next_statement;
-					delete_statement(holder);
-
-				//Otherwise we're fine - just bump the instruction up and move along
-				} else {
-					instruction = instruction->next_statement;
+					case LIVE_RANGE_CLASS_GEN_PURPOSE:
+						*result = COALESCENCE_RESULT_GP_ONLY;
+						break;
 				}
+			}
 
-				break;
+			//Delete the now useless instruction
+			holder = instruction;
+			instruction = instruction->next_statement;
+			delete_statement(holder);
+
+		//Bump up to the next instruction
+		} else {
+			instruction = instruction->next_statement;
 		}
 	}
 }
@@ -2664,7 +2652,7 @@ static inline coalescence_result_t perform_live_range_coalescence_for_target(bas
 	basic_block_t* current = function_entry_block;
 	while(current != NULL){
 		//Invoke the helper for a specific kind of coalescing
-		perform_block_level_coalescence_for_target(function_entry_block, target_graph, &result, debug_printing);
+		perform_block_level_coalescence_for_target(function_entry_block, target_graph, target_class, &result, debug_printing);
 
 		//Go to the direct successor
 		current = current->direct_successor;
@@ -2681,7 +2669,7 @@ static inline coalescence_result_t perform_live_range_coalescence_for_target(bas
  *
  * We return TRUE if we were able to color, and we return false if we were not
  */
-static u_int8_t allocate_register_gen_purpose(live_range_t* live_range){
+static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg.gen_purpose != NO_REG_GEN_PURPOSE){
 		//Flag this as used in the function
@@ -3102,7 +3090,7 @@ static void spill_in_function(basic_block_t* function_entry_block, dynamic_array
  *
  * Return TRUE if the graph was colorable, FALSE if not
  */
-static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_array_t* live_ranges){
+static u_int8_t graph_color_and_allocate_general_purpose(basic_block_t* function_entry, dynamic_array_t* live_ranges){
 	//Max priority queue for our live ranges
 	max_priority_queue_t priority_live_ranges = max_priority_queue_alloc();
 
@@ -3131,12 +3119,12 @@ static u_int8_t graph_color_and_allocate(basic_block_t* function_entry, dynamic_
 		 * means we should be able to allocate no issue
 		 */
 		if(range->degree < K_COLORS_GEN_USE){
-			allocate_register_gen_purpose(range);
+			allocate_register_general_purpose(range);
 
 		//Otherwise, we may still be able to allocate here
 		} else {
 			//We must still attempt to allocate it
-			u_int8_t can_allocate = allocate_register_gen_purpose(range);
+			u_int8_t can_allocate = allocate_register_general_purpose(range);
 			
 			//However if this is false, we need to perform a spill
 			if(can_allocate == FALSE){
@@ -3541,12 +3529,6 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	u_int8_t print_irs = options->print_irs;
 	u_int8_t debug_printing = options->enable_debug_printing;
 
-	//These flags tell us whether or not our given graphs were colorable or not. It
-	//is important to not that the general purpose and SSE graphs are 100% distinct,
-	//so storing these separately is important
-	u_int8_t colorable_gen_purpose = FALSE;
-	u_int8_t colorable_sse = FALSE;
-
 	/**
 	 * STEP 1: Build all live ranges from variables:
 	 * 	
@@ -3781,13 +3763,16 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	}
 
 	/**
-	 * STEP 7: Invoke the actual allocator
+	 * STEP 7: Invoke the actual allocator for GP registers
 	 *
 	 * The allocator will attempt to color the graph. If the graph is not k-colorable, 
 	 * then the allocator will spill the least costly LR and return FALSE, and we will go through
-	 * this whol process again
+	 * this whole process again
+	 *
+	 * For the actual allocation process, we will do entirely separate allocation loops. We first
+	 * look through and attempt to allocate GP registers. Following that, we will then allocate SSE registers
 	*/
-	colorable = graph_color_and_allocate(function_entry, &live_ranges);
+	u_int8_t colorable_general_purpose = graph_color_and_allocate_general_purpose(function_entry, &general_purpose_live_ranges);
 
 	/**
 	 * Our so-called "spill loop" essentially repeats most of the steps
@@ -3799,7 +3784,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 * cases
 	 */
 	//Keep going so long as we can't color
-	while(colorable == FALSE){
+	while(colorable_general_purpose == FALSE){
 		if(print_irs == TRUE){
 			printf("============ After Spilling =============== \n");
 			print_function_blocks_with_live_ranges(function_entry);
@@ -3809,7 +3794,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 		/**
 		 * First reset all of these
 		 */
-		reset_all_live_ranges(&live_ranges);
+		reset_all_live_ranges(&general_purpose_live_ranges);
 
 		/**
 		 * Following this, we need to recompute all of our used and assigned
@@ -3822,7 +3807,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 		 * sets, we need to go back through and update all of our spill
 		 * costs
 		 */
-		compute_spill_costs(&live_ranges);
+		compute_spill_costs(&general_purpose_live_ranges);
 
 		/**
 		 * Following that, we need to go through and calculate
@@ -3831,14 +3816,20 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 		calculate_live_range_liveness_sets(function_entry);
 
 		/**
+		 * Now we will compute the interferences for our given
+		 * set of registers
+		 */
+		calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_GEN_PURPOSE);
+
+		/**
 		 * Once the liveness sets have been recalculated, we're able
 		 * to go through and compute all of the interference again
 		 */
-		graph = construct_function_level_interference_graph(function_entry, &live_ranges);
+		general_purpose_graph = construct_interference_graph_from_adjacency_lists(&general_purpose_live_ranges);
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE){
-			print_all_live_ranges(&live_ranges);
+			print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
 			printf("================= After Interference =======================\n");
 			print_function_blocks_with_live_ranges(function_entry);
 			printf("================= After Interference =======================\n");
@@ -3850,7 +3841,7 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 		 * again. This loop will keep executing until the
 		 * graph_color_and_allocate returns a successful result
 		 */
-		colorable = graph_color_and_allocate(function_entry, &live_ranges);
+		colorable_general_purpose = graph_color_and_allocate_general_purpose(function_entry, &general_purpose_live_ranges);
 	}
 
 	//Destroy both of these now that we're done
