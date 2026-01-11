@@ -4351,10 +4351,8 @@ void bitwise_exclusive_or_constant_nodes(generic_ast_node_t* constant_node1, gen
  * The result will be: constant1 = constant1 & constant2
  */
 void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_node_t* constant_node2){
-	//Go based on the first one's type
 	switch(constant_node1->constant_type){
 		case CHAR_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case LONG_CONST_FORCE_U:
 					constant_node1->constant_value.char_value &= constant_node2->constant_value.unsigned_long_value;
@@ -4374,10 +4372,87 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.char_value &= constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.char_value &= constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.char_value &= constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.char_value &= constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case BYTE_CONST:
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.signed_byte_value &= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.signed_byte_value &= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_byte_value &= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.signed_byte_value &= constant_node2->constant_value.signed_int_value;
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.signed_byte_value &= constant_node2->constant_value.signed_short_value;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.signed_byte_value &= constant_node2->constant_value.unsigned_short_value;
+					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.signed_byte_value &= constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.signed_byte_value &= constant_node2->constant_value.unsigned_byte_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.signed_byte_value &= constant_node2->constant_value.char_value;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
+					exit(1);
+			}
+
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			switch(constant_node2->constant_type){
+				case LONG_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_byte_value &= constant_node2->constant_value.unsigned_long_value;
+					break;
+				case LONG_CONST:
+					constant_node1->constant_value.unsigned_byte_value &= constant_node2->constant_value.signed_long_value;
+					break;
+				case INT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_byte_value &= constant_node2->constant_value.unsigned_int_value;
+					break;
+				case INT_CONST:
+					constant_node1->constant_value.unsigned_byte_value &= constant_node2->constant_value.signed_int_value;
+					break;
+				case SHORT_CONST:
+					constant_node1->constant_value.unsigned_byte_value &= constant_node2->constant_value.signed_short_value;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_byte_value &= constant_node2->constant_value.unsigned_short_value;
+					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.unsigned_byte_value &= constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_byte_value &= constant_node2->constant_value.unsigned_byte_value;
+					break;
+				case CHAR_CONST:
+					constant_node1->constant_value.unsigned_byte_value &= constant_node2->constant_value.char_value;
+					break;
 				default:
 					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
 					exit(1);
@@ -4386,7 +4461,6 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 			break;
 
 		case SHORT_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case LONG_CONST_FORCE_U:
 					constant_node1->constant_value.signed_short_value &= constant_node2->constant_value.unsigned_long_value;
@@ -4406,10 +4480,15 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.signed_short_value &= constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.signed_short_value &= constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.signed_short_value &= constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.signed_short_value &= constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
 					exit(1);
@@ -4418,7 +4497,6 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 			break;
 
 		case SHORT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case LONG_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_short_value &= constant_node2->constant_value.unsigned_long_value;
@@ -4438,10 +4516,15 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_short_value &= constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.unsigned_short_value &= constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_short_value &= constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.unsigned_short_value &= constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
 					exit(1);
@@ -4450,7 +4533,6 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 			break;
 
 		case INT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case LONG_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_int_value &= constant_node2->constant_value.unsigned_long_value;
@@ -4470,10 +4552,15 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_int_value &= constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.unsigned_int_value &= constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_int_value &= constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.unsigned_int_value &= constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
 					exit(1);
@@ -4482,7 +4569,6 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 			break;
 
 		case INT_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case LONG_CONST_FORCE_U:
 					constant_node1->constant_value.signed_int_value &= constant_node2->constant_value.unsigned_long_value;
@@ -4502,10 +4588,15 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.signed_int_value &= constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.signed_int_value &= constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.signed_int_value &= constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.signed_int_value &= constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
 					exit(1);
@@ -4514,7 +4605,6 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 			break;
 
 		case LONG_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case LONG_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.unsigned_long_value;
@@ -4534,10 +4624,15 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.unsigned_long_value &= constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
 					exit(1);
@@ -4546,7 +4641,6 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 			break;
 
 		case LONG_CONST:
-			//Now go based on the second one's type
 			switch(constant_node2->constant_type){
 				case LONG_CONST_FORCE_U:
 					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.unsigned_long_value;
@@ -4566,10 +4660,15 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 				case SHORT_CONST_FORCE_U:
 					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.unsigned_short_value;
 					break;
+				case BYTE_CONST:
+					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.signed_byte_value;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.unsigned_byte_value;
+					break;
 				case CHAR_CONST:
 					constant_node1->constant_value.signed_long_value &= constant_node2->constant_value.char_value;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
 					exit(1);
@@ -4577,7 +4676,6 @@ void bitwise_and_constant_nodes(generic_ast_node_t* constant_node1, generic_ast_
 
 			break;
 
-		//This should never happen
 		default:
 			printf("Fatal internal compiler error: Unsupported constant bitwise and operation\n");
 			exit(1);
