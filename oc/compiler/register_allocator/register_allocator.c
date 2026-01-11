@@ -444,6 +444,7 @@ static void print_blocks_with_registers(cfg_t* cfg){
 static void print_all_live_ranges(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	printf("============= All Live Ranges ==============\n");
 	printf("=============== GENERAL PURPOSE ============\n");
+	printf("There are %d general purpose live ranges\n", general_purpose_live_ranges->current_index);
 	//For each live range in the array
 	for(u_int16_t i = 0; i < general_purpose_live_ranges->current_index; i++){
 		//Grab it out
@@ -485,6 +486,7 @@ static void print_all_live_ranges(dynamic_array_t* general_purpose_live_ranges, 
 
 	//Repeat for SSE
 	printf("==================== SSE ===================\n");
+	printf("There are %d SSE live ranges\n", sse_live_ranges->current_index);
 	//For each live range in the array
 	for(u_int16_t i = 0; i < sse_live_ranges->current_index; i++){
 		//Grab it out
@@ -847,7 +849,20 @@ static void assign_live_range_to_implicit_source_variable(dynamic_array_t* live_
  * Note that the phi function does not count as an actual assignment, we'll just want
  * to ensure that the live range is ready for us when we need it
  */
-static void construct_phi_function_live_range(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+static void construct_phi_function_live_range(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+	//Get the class here first
+	live_range_class_t class = get_live_range_class_for_variable(instruction->assignee);
+
+	switch(class){
+		case LIVE_RANGE_CLASS_GEN_PURPOSE:
+			break;
+
+		case LIVE_RANGE_CLASS_SSE:
+			break;
+
+	}
+
+
 	//Let's see if we can find this
 	live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, instruction->assignee);
 
@@ -930,7 +945,7 @@ static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, ba
  * We invoke special processing functions to handle exception cases like phi functions, inc/dec instructions,
  * and function calls
  */
-static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_block_t* basic_block){
+static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	//Call the helper API to wipe out any old variable tracking in here
 	reset_block_variable_tracking(basic_block);
 
@@ -948,14 +963,16 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			 */
 			case PHI_FUNCTION:
 				//Invoke the helper rule for this
-				construct_phi_function_live_range(live_ranges, basic_block, current);
+				construct_phi_function_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 			
 				//And we're done - no need to go further
 				current = current->next_statement;
 				continue;
 
 			case RET:
-				assign_live_range_to_implicit_source_variable(live_ranges, basic_block, current->source_register);
+				if(IS_FLOATING_POINT(current->source_register->type) == FALSE){
+					assign_live_range_to_implicit_source_variable(live_ranges, basic_block, current->source_register);
+				}
 				
 				current = current->next_statement;
 				continue;
@@ -972,8 +989,8 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
 			case DECL:
 			case DECW:
 			case DECB:
-				//Let the helper rule do the actual construction
-				construct_inc_dec_live_range(live_ranges, basic_block, current);
+				//These will always be general purpose
+				construct_inc_dec_live_range(general_purpose_live_ranges, basic_block, current);
 			
 				//And we're done - no need to go further
 				current = current->next_statement;
@@ -1034,6 +1051,19 @@ static void construct_live_ranges_in_block(dynamic_array_t* live_ranges, basic_b
  * Note: we have 2 distinct sets of live ranges - SSE and non-SSE. These sets are entirely separate so we will build
  * them in tandem, but manipulate them separately to boost efficiency
  */
+//
+//
+//
+//
+//
+//
+//TODO 100% WRONG
+//
+//
+//
+//
+//
+//
 static dynamic_array_t construct_live_ranges_in_function(basic_block_t* function_entry, dynamic_array_t* general_purpose_ranges, dynamic_array_t* sse_ranges){
 	//First create the set of live ranges
 	dynamic_array_t live_ranges = dynamic_array_alloc();
@@ -2421,7 +2451,7 @@ static void perform_block_level_coalescence(basic_block_t* block, interference_g
 						printf("DELETING LR%d\n", destination_live_range->live_range_id);
 						
 						printf("Deleting redundant instruction:\n");
-						print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+						print_instruction(stdout, instruction, PRINTING_VAR_INLINE);
 					}
 
 					//Perform the actual coalescence. Remember that the destination is effectively being
@@ -2464,7 +2494,7 @@ static void perform_block_level_coalescence(basic_block_t* block, interference_g
 						printf("DELETING LR%d\n", destination_live_range->live_range_id);
 						
 						printf("Deleting redundant instruction:\n");
-						print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+						print_instruction(stdout, instruction, PRINTING_VAR_INLINE);
 					}
 
 					//Perform the actual coalescence. Remember that the destination is effectively being
@@ -2608,7 +2638,7 @@ static void perform_block_level_coalescence_for_target(basic_block_t* block, int
 				printf("DELETING LR%d\n", destination_live_range->live_range_id);
 				
 				printf("Deleting redundant instruction:\n");
-				print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+				print_instruction(stdout, instruction, PRINTING_VAR_INLINE);
 			}
 
 			//Invoke the helper to actually coalesce
