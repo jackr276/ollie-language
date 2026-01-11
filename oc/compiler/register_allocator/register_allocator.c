@@ -2714,7 +2714,7 @@ static inline coalescence_result_t perform_live_range_coalescence_for_target(bas
 	basic_block_t* current = function_entry_block;
 	while(current != NULL){
 		//Invoke the helper for a specific kind of coalescing
-		perform_block_level_coalescence_for_target(function_entry_block, target_graph, target_class, &result, debug_printing);
+		perform_block_level_coalescence_for_target(current, target_graph, target_class, &result, debug_printing);
 
 		//Go to the direct successor
 		current = current->direct_successor;
