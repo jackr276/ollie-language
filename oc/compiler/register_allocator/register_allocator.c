@@ -927,19 +927,19 @@ static inline void construct_phi_function_live_range(dynamic_array_t* general_pu
  * An increment/decrement live range is a special case because the invisible "source" needs to be part of the
  * same live range as the destination. We ensure that that happens within this rule
  */
-static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+static inline void construct_inc_dec_live_range(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//If this is not temporary, we can handle it like any other statement
 	if(instruction->destination_register->variable_type != VARIABLE_TYPE_TEMP){
 		//Handle the destination variable
-		assign_live_range_to_destination_variable(live_ranges, basic_block, instruction);
+		assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, instruction);
 
 		//Assign all of the source variable live ranges
-		assign_live_range_to_source_variable(live_ranges, basic_block, instruction->source_register);
+		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, instruction->source_register);
 
 	//Otherwise, we'll need to take a more specialized approach
 	} else {
-		//Let's see if we can find this
-		live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, instruction->destination_register);
+		//Let's see if we can find this. We only need to consider general purpose here for inc/dec
+		live_range_t* live_range = find_or_create_live_range(general_purpose_live_ranges, basic_block, instruction->destination_register);
 
 		//Add this into the live range
 		add_variable_to_live_range(live_range, instruction->destination_register);
@@ -961,18 +961,18 @@ static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_blo
  * A function call statement keeps track of the parameters that it uses. In doing this,
  * it is using those parameters. We need to keep track of this by recording it as a use
  */
-static inline void construct_function_call_live_ranges(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+static inline void construct_function_call_live_ranges(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//First let's handle the destination register. It is possible that this could 
 	//be null
 	if(instruction->destination_register != NULL){
-		assign_live_range_to_destination_variable(live_ranges, basic_block, instruction);
+		assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, instruction);
 	}
 
 	/**
 	 * NOTE: For indirect function calls, the variable itself is actually stored in the source register.
 	 * We'll make this call to account for such a case here
 	 */
-	assign_live_range_to_source_variable(live_ranges, basic_block, instruction->source_register);
+	assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, instruction->source_register);
 
 	//Extract for us
 	dynamic_array_t function_parameters = instruction->parameters;
@@ -986,7 +986,7 @@ static inline void construct_function_call_live_ranges(dynamic_array_t* live_ran
 		 * Because we are not explicitly reading in this instruction, we need a special rule that takes care to not
 		 * add these as used variables. We will instead just assign the appropriate live ranges
 		 */
-		assign_live_range_to_implicit_source_variable(live_ranges, basic_block, parameter);
+		assign_live_range_to_implicit_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, parameter);
 	}
 }
 
@@ -1022,7 +1022,8 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				continue;
 
 			case RET:
-				assign_live_range_to_implicit_source_variable(jk, basic_block_t *block, three_addr_var_t *source_variable)
+				//Let the helper deal with it
+				assign_live_range_to_implicit_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register);
 				
 				current = current->next_statement;
 				continue;
@@ -1040,7 +1041,7 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			case DECW:
 			case DECB:
 				//These will always be general purpose
-				construct_inc_dec_live_range(general_purpose_live_ranges, basic_block, current);
+				construct_inc_dec_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 			
 				//And we're done - no need to go further
 				current = current->next_statement;
@@ -1050,7 +1051,7 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			case CALL:
 			case INDIRECT_CALL:
 				//Let the helper rule handle it
-				construct_function_call_live_ranges(live_ranges, basic_block, current);
+				construct_function_call_live_ranges(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 
 				//And we're done - no need to go further
 				current = current->next_statement;
@@ -1071,10 +1072,10 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 		assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 
 		//Assign all of the source variable live ranges
-		assign_live_range_to_source_variable(live_ranges, basic_block, current->source_register);
-		assign_live_range_to_source_variable(live_ranges, basic_block, current->source_register2);
-		assign_live_range_to_source_variable(live_ranges, basic_block, current->address_calc_reg1);
-		assign_live_range_to_source_variable(live_ranges, basic_block, current->address_calc_reg2);
+		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register);
+		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->source_register2);
+		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg1);
+		assign_live_range_to_source_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current->address_calc_reg2);
 
 		//Advance it down
 		current = current->next_statement;
@@ -1101,26 +1102,10 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
  * Note: we have 2 distinct sets of live ranges - SSE and non-SSE. These sets are entirely separate so we will build
  * them in tandem, but manipulate them separately to boost efficiency
  */
-//
-//
-//
-//
-//
-//
-//TODO 100% WRONG
-//
-//
-//
-//
-//
-//
-static dynamic_array_t construct_live_ranges_in_function(basic_block_t* function_entry, dynamic_array_t* general_purpose_ranges, dynamic_array_t* sse_ranges){
-	//First create the set of live ranges
-	dynamic_array_t live_ranges = dynamic_array_alloc();
-
+static inline void construct_live_ranges_in_function(basic_block_t* function_entry, dynamic_array_t* general_purpose_ranges, dynamic_array_t* sse_ranges){
 	//Add these both in immediately
-	dynamic_array_add(&live_ranges, stack_pointer_lr);
-	dynamic_array_add(&live_ranges, instruction_pointer_lr);
+	dynamic_array_add(general_purpose_ranges, stack_pointer_lr);
+	dynamic_array_add(general_purpose_ranges, instruction_pointer_lr);
 
 	//Grab the entry block
 	basic_block_t* current = function_entry;
@@ -1128,21 +1113,18 @@ static dynamic_array_t construct_live_ranges_in_function(basic_block_t* function
 	//Run through every single block
 	while(current != NULL){
 		//Let the helper do this
-		construct_live_ranges_in_block(&live_ranges, current);
+		construct_live_ranges_in_block(current, general_purpose_ranges, sse_ranges);
 
 		//Advance to the next
 		current = current->direct_successor;
 	}
-
-	//Give back the array
-	return live_ranges;
 }
 
 
 /**
  * Reset the visited status and the liveness arrays for each block
  */
-static void reset_function_blocks_for_liveness(basic_block_t* function_entry_block){
+static inline void reset_function_blocks_for_liveness(basic_block_t* function_entry_block){
 	//This is our initial current
 	basic_block_t* current = function_entry_block;
 
@@ -3923,6 +3905,8 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 		 */
 		colorable_general_purpose = graph_color_and_allocate_general_purpose(function_entry, &general_purpose_live_ranges);
 	}
+
+	//TODO ALLOCATION & SPILLING FOR SSE
 
 	//Destroy both of these now that we're done
 	dynamic_array_dealloc(&general_purpose_live_ranges);
