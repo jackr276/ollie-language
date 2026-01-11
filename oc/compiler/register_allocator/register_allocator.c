@@ -767,7 +767,7 @@ static void update_use_assignment_for_destination_variable(instruction_t* instru
  * Handle a live range being assigned to a destination variable,
  * and all of the bookkeeping that comes with it
  */
-static void assign_live_range_to_destination_variable(dynamic_array_t* live_ranges, basic_block_t* block, instruction_t* instruction){
+static inline void assign_live_range_to_destination_variable(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* block, instruction_t* instruction){
 	//Bail out if this happens
 	if(instruction->destination_register == NULL){
 		return;
@@ -776,8 +776,22 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 	//Extract for convenience
 	three_addr_var_t* destination_register = instruction->destination_register;
 
-	//Let's see if we can find this
-	live_range_t* live_range = find_or_create_live_range(live_ranges, block, destination_register);
+	//Get what class we need here
+	live_range_class_t target_class = get_live_range_class_for_variable(destination_register);
+
+	//Holder for the live range
+	live_range_t* live_range;
+
+	//Use the appropiate dyn array based on the class
+	switch(target_class){
+		case LIVE_RANGE_CLASS_GEN_PURPOSE:
+			live_range = find_or_create_live_range(general_purpose_live_ranges, block, destination_register);
+			break;
+
+		case LIVE_RANGE_CLASS_SSE:
+			live_range = find_or_create_live_range(sse_live_ranges, block, destination_register);
+			break;
+	}
 
 	//Add this into the live range
 	add_variable_to_live_range(live_range, destination_register);
@@ -797,9 +811,20 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 	 */
 	//Extract for convenience
 	three_addr_var_t* destination_register2 = instruction->destination_register2;
+	
+	//Get what class we need here
+	target_class = get_live_range_class_for_variable(destination_register2);
 
-	//Let's see if we can find this
-	live_range = find_or_create_live_range(live_ranges, block, destination_register2);
+	//Use the appropiate dyn array based on the class
+	switch(target_class){
+		case LIVE_RANGE_CLASS_GEN_PURPOSE:
+			live_range = find_or_create_live_range(general_purpose_live_ranges, block, destination_register2);
+			break;
+
+		case LIVE_RANGE_CLASS_SSE:
+			live_range = find_or_create_live_range(sse_live_ranges, block, destination_register2);
+			break;
+	}
 
 	//Add this into the live range
 	add_variable_to_live_range(live_range, destination_register2);
@@ -812,14 +837,27 @@ static void assign_live_range_to_destination_variable(dynamic_array_t* live_rang
 /**
  * Handle the live range that comes from the source of an instruction
  */
-static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
+static inline void assign_live_range_to_source_variable(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
 	//Just leave if it's NULL
 	if(source_variable == NULL){
 		return;
 	}
 
-	//Let the helper deal with this
-	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, source_variable);
+	//What live range class are we after
+	live_range_class_t target_class = get_live_range_class_for_variable(source_variable);
+
+	//Holder for the live range
+	live_range_t* live_range;
+
+	switch(target_class){
+		case LIVE_RANGE_CLASS_GEN_PURPOSE:
+			live_range = assign_live_range_to_variable(general_purpose_live_ranges, block, source_variable);
+			break;
+
+		case LIVE_RANGE_CLASS_SSE:
+			live_range = assign_live_range_to_variable(sse_live_ranges, block, source_variable);
+			break;
+	}
 
 	//Add this as a used live range
 	add_used_live_range(live_range, block);
@@ -829,14 +867,27 @@ static void assign_live_range_to_source_variable(dynamic_array_t* live_ranges, b
 /**
  * Handle the live range that comes from the source of an instruction
  */
-static void assign_live_range_to_implicit_source_variable(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
+static inline void assign_live_range_to_implicit_source_variable(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* block, three_addr_var_t* source_variable){
 	//Just leave if it's NULL
 	if(source_variable == NULL){
 		return;
 	}
 
-	//Let the helper deal with this
-	live_range_t* live_range = assign_live_range_to_variable(live_ranges, block, source_variable);
+	//What live range class are we after
+	live_range_class_t target_class = get_live_range_class_for_variable(source_variable);
+
+	//Holder for the live range
+	live_range_t* live_range;
+
+	switch(target_class){
+		case LIVE_RANGE_CLASS_GEN_PURPOSE:
+			live_range = assign_live_range_to_variable(general_purpose_live_ranges, block, source_variable);
+			break;
+
+		case LIVE_RANGE_CLASS_SSE:
+			live_range = assign_live_range_to_variable(sse_live_ranges, block, source_variable);
+			break;
+	}
 
 	//Bump the use count by using the blocks estimated execution frequency
 	live_range->use_count += block->estimated_execution_frequency;
@@ -849,22 +900,23 @@ static void assign_live_range_to_implicit_source_variable(dynamic_array_t* live_
  * Note that the phi function does not count as an actual assignment, we'll just want
  * to ensure that the live range is ready for us when we need it
  */
-static void construct_phi_function_live_range(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+static inline void construct_phi_function_live_range(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//Get the class here first
 	live_range_class_t class = get_live_range_class_for_variable(instruction->assignee);
+	
+	//Holder for the live range
+	live_range_t* live_range;
 
+	//Use the appropriate array based on the type
 	switch(class){
 		case LIVE_RANGE_CLASS_GEN_PURPOSE:
+			live_range = find_or_create_live_range(general_purpose_live_ranges, basic_block, instruction->assignee);
 			break;
 
 		case LIVE_RANGE_CLASS_SSE:
+			live_range = find_or_create_live_range(sse_live_ranges, basic_block, instruction->assignee);
 			break;
-
 	}
-
-
-	//Let's see if we can find this
-	live_range_t* live_range = find_or_create_live_range(live_ranges, basic_block, instruction->assignee);
 
 	//Add this into the live range
 	add_variable_to_live_range(live_range, instruction->assignee);
@@ -909,7 +961,7 @@ static void construct_inc_dec_live_range(dynamic_array_t* live_ranges, basic_blo
  * A function call statement keeps track of the parameters that it uses. In doing this,
  * it is using those parameters. We need to keep track of this by recording it as a use
  */
-static void construct_function_call_live_ranges(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+static inline void construct_function_call_live_ranges(dynamic_array_t* live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//First let's handle the destination register. It is possible that this could 
 	//be null
 	if(instruction->destination_register != NULL){
@@ -970,9 +1022,7 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				continue;
 
 			case RET:
-				if(IS_FLOATING_POINT(current->source_register->type) == FALSE){
-					assign_live_range_to_implicit_source_variable(live_ranges, basic_block, current->source_register);
-				}
+				assign_live_range_to_implicit_source_variable(jk, basic_block_t *block, three_addr_var_t *source_variable)
 				
 				current = current->next_statement;
 				continue;
@@ -1018,7 +1068,7 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 		 */
 
 		//Handle the destination variable
-		assign_live_range_to_destination_variable(live_ranges, basic_block, current);
+		assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 
 		//Assign all of the source variable live ranges
 		assign_live_range_to_source_variable(live_ranges, basic_block, current->source_register);
