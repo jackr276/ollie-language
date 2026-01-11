@@ -22,7 +22,7 @@
 #include "../utils/constants.h"
 
 //Total number of keywords
-#define KEYWORD_COUNT 50
+#define KEYWORD_COUNT 52
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -48,7 +48,7 @@ static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
-				    EXTERNAL};
+				    EXTERNAL, TRUE_CONST, FALSE_CONST};
 
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
@@ -57,7 +57,7 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub", "union", "bool", "external"};
+						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -109,11 +109,29 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int16_t line_n
 	//Let's see if we have a keyword here
 	for(u_int8_t i = 0; i < KEYWORD_COUNT; i++){
 		if(strcmp(keyword_array[i], lexeme.string) == 0){
-			//We can get out of here
-			lex_item.tok = tok_array[i];
-			//Store the lexeme in here
-			lex_item.lexeme = lexeme;
-			return lex_item;
+			//For true/false, we can convert them into the kind of constant we want off the bat
+			switch(tok_array[i]){
+				case TRUE_CONST:
+					lex_item.tok = BYTE_CONST_FORCE_U;
+					lex_item.lexeme = dynamic_string_alloc();
+					dynamic_string_set(&(lex_item.lexeme), "1");
+
+					return lex_item;
+				
+				case FALSE_CONST:
+					lex_item.tok = BYTE_CONST_FORCE_U;
+					lex_item.lexeme = dynamic_string_alloc();
+					dynamic_string_set(&(lex_item.lexeme), "0");
+
+					return lex_item;
+
+				default:
+					//We can get out of here
+					lex_item.tok = tok_array[i];
+					//Store the lexeme in here
+					lex_item.lexeme = lexeme;
+					return lex_item;
+			}
 		}
 	}
 	
@@ -735,88 +753,120 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == TRUE) 
 						|| ((ch >= 'A' && ch <= 'F') && seen_hex == TRUE)){
 					dynamic_string_add_char_to_back(&lexeme, ch);
-				} else if(ch == 'x' || ch == 'X'){
-					//Have we seen the hex code?
-					//Fail case here
-					if(seen_hex == TRUE){
-						lexitem_t err;
-						err.tok = ERROR;
-						return err;
-					}
-
-					//If we haven't seen the 0 here it's bad
-					if(*(lexeme.string) != '0'){
-						lexitem_t err;
-						err.tok = ERROR;
-						return err;
-					}
-
-					//Otherwise set this and add it in
-					seen_hex = TRUE;
-
-					//Add the character dynamically
-					dynamic_string_add_char_to_back(&lexeme, ch);
-				
-				} else if (ch == '.'){
-					//We're actually in a float const
-					current_state = IN_FLOAT;
-					//Add the character dynamically
-					dynamic_string_add_char_to_back(&lexeme, ch);
-
-				//The 'l' or 'L' tells us that we're forcing to long
-				} else if (ch == 'l' || ch == 'L'){
-					lex_item.line_num = line_num;
-					lex_item.lexeme = lexeme;
-					lex_item.tok = LONG_CONST;
-					return lex_item;
-				
-				//The 's' or 'S' tells us that we're forcing to short
-				} else if(ch == 's' || ch == 'S'){
-					lex_item.line_num = line_num;
-					lex_item.lexeme = lexeme;
-					lex_item.tok = LONG_CONST;
-					return lex_item;
-
-				} else if (ch == 'u' || ch == 'U'){
-					//We are forcing this to be unsigned
-					//We can still see "l", so let's check
-					ch2 = GET_NEXT_CHAR(fl);
-
-					//If this is an l, it's a long
-					if(ch2 == 'l' || ch2 == 'L'){
-						lex_item.tok = LONG_CONST_FORCE_U;
-
-					//Forcing an unsigned short constant
-					} else if(ch2 == 's' || ch2 == 'S'){
-						lex_item.tok = SHORT_CONST_FORCE_U;
-
-					} else {
-						//Put it back
-						PUT_BACK_CHAR(fl);
-						lex_item.tok = INT_CONST_FORCE_U;
-					}
-
-					//Pack everything up and return
-					lex_item.lexeme = lexeme;
-					lex_item.line_num = line_num;
-
-					return lex_item;
-
 				} else {
-					//Otherwise we're out
-					//"Put back" the char
-					PUT_BACK_CHAR(fl);
+					switch(ch){
+						case 'x':
+						case 'X':
+							//Have we seen the hex code?
+							//Fail case here
+							if(seen_hex == TRUE){
+								lexitem_t err;
+								err.tok = ERROR;
+								return err;
+							}
 
-					//Populate and return
-					if(seen_hex == TRUE){
-						lex_item.tok = HEX_CONST;
-					} else {
-						lex_item.tok = INT_CONST;
+							//If we haven't seen the 0 here it's bad
+							if(*(lexeme.string) != '0'){
+								lexitem_t err;
+								err.tok = ERROR;
+								return err;
+							}
+
+							//Otherwise set this and add it in
+							seen_hex = TRUE;
+
+							//Add the character dynamically
+							dynamic_string_add_char_to_back(&lexeme, ch);
+
+							break;
+
+						case '.':
+							//We're actually in a float const
+							current_state = IN_FLOAT;
+							//Add the character dynamically
+							dynamic_string_add_char_to_back(&lexeme, ch);
+
+							break;
+
+						//The 'l' or 'L' tells us that we're forcing to long
+						case 'l':
+						case 'L':
+							lex_item.line_num = line_num;
+							lex_item.lexeme = lexeme;
+							lex_item.tok = LONG_CONST;
+							return lex_item;
+
+						//Forcing to short
+						case 's':
+						case 'S':
+							lex_item.line_num = line_num;
+							lex_item.lexeme = lexeme;
+							lex_item.tok = LONG_CONST;
+							return lex_item;
+
+						//Forcing to Byte
+						case 'b':
+						case 'B':
+							lex_item.line_num = line_num;
+							lex_item.lexeme = lexeme;
+							lex_item.tok = BYTE_CONST;
+							return lex_item;
+
+						//If we see this it means we're forcing to unsigned
+						case 'u':
+						case 'U':
+							//We are forcing this to be unsigned
+							//We can still see "l", so let's check
+							ch2 = GET_NEXT_CHAR(fl);
+
+							//We can still see more qualifiers
+							switch(ch2){
+								case 'l':
+								case 'L':
+									lex_item.tok = LONG_CONST_FORCE_U;
+									break;
+
+								case 's':
+								case 'S':
+									lex_item.tok = SHORT_CONST_FORCE_U;
+									break;
+
+								case 'b':
+								case 'B':
+									lex_item.tok = BYTE_CONST_FORCE_U;
+									break;
+
+								default:
+									//Put it back
+									PUT_BACK_CHAR(fl);
+									lex_item.tok = INT_CONST_FORCE_U;
+
+									break;
+							}
+
+
+							//Pack everything up and return
+							lex_item.lexeme = lexeme;
+							lex_item.line_num = line_num;
+
+							return lex_item;
+
+						default:
+							//Otherwise we're out
+							//"Put back" the char
+							PUT_BACK_CHAR(fl);
+
+							//Populate and return
+							if(seen_hex == TRUE){
+								lex_item.tok = HEX_CONST;
+							} else {
+								lex_item.tok = INT_CONST;
+							}
+
+							lex_item.lexeme = lexeme;
+							lex_item.line_num = line_num;
+							return lex_item;
 					}
-
-					lex_item.lexeme = lexeme;
-					lex_item.line_num = line_num;
-					return lex_item;
 				}
 
 				break;
