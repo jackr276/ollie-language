@@ -3221,6 +3221,34 @@ static u_int8_t graph_color_and_allocate_general_purpose(basic_block_t* function
 
 
 /**
+ * Perform graph coloring to allocate all registers in the interference graph
+ *
+ * Graph coloring is used as a way to model this problem. For us, no two interfering
+ * live ranges may have the same register. In graph coloring, no two adjacent nodes
+ * may have the same color. It is easy to see how these problems resemble eachother.
+ *
+ * Algorithm graphcolor:
+ * 	for all live ranges in interference graph:
+ * 		if live_range's degree is less than N:
+ * 			remove it
+ * 			color it
+ * 		else:
+ * 			if live_range can still be colored:
+ * 				remove it and color it
+ * 			else:
+ * 				spill and rewrite the whole program, and 
+ * 				redo all allocation
+ *
+ *
+ * Return TRUE if the graph was colorable, FALSE if not
+ */
+static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dynamic_array_t* sse_live_ranges){
+	//TODO
+	return TRUE;
+}
+
+
+/**
  * Insert caller saved logic for a direct function call. In a direct function call, we'll know what
  * registers are being used by the function being called. As such, we can be precise about what
  * we push/pop onto and off of the stack and have for a more efficient saving regime. This is not
@@ -3905,8 +3933,20 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 		 */
 		colorable_general_purpose = graph_color_and_allocate_general_purpose(function_entry, &general_purpose_live_ranges);
 	}
+	
+	//Note that for a lot of functions, having SSE live
+	//ranges is not a guarantee. As such, we'll gate
+	//ourselves out here and only do this if it's necessary
+	if(sse_live_ranges.current_index > 0){
+		//Initial attempt - this will trigger the spiller if it's not possible
+		u_int8_t colorable_sse = graph_color_and_allocate_sse(function_entry, &sse_live_ranges);
 
-	//TODO ALLOCATION & SPILLING FOR SSE
+		//So long as we could not color the graph
+		while(colorable_sse == FALSE){
+			//TODO colorer/spill loop
+
+		}
+	}
 
 	//Destroy both of these now that we're done
 	dynamic_array_dealloc(&general_purpose_live_ranges);
