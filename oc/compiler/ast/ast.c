@@ -480,6 +480,12 @@ void coerce_constant(generic_ast_node_t* constant_node){
 u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
+		case BYTE_CONST:
+			return constant_node->constant_value.signed_byte_value == 0 ? TRUE : FALSE;
+
+		case BYTE_CONST_FORCE_U:
+			return constant_node->constant_value.unsigned_byte_value == 0 ? TRUE : FALSE;
+
 		case SHORT_CONST:
 			return constant_node->constant_value.signed_short_value == 0 ? TRUE : FALSE;
 			
@@ -521,6 +527,12 @@ u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node){
 void negate_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
+		case BYTE_CONST:
+			constant_node->constant_value.signed_byte_value *= -1;
+			break;
+		case BYTE_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_byte_value *= -1;
+			break;
 		case SHORT_CONST:
 			constant_node->constant_value.signed_short_value *= -1;
 			break;
@@ -561,6 +573,12 @@ void negate_constant_value(generic_ast_node_t* constant_node){
 void decrement_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
+		case BYTE_CONST:
+			constant_node->constant_value.signed_byte_value--;
+			break;
+		case BYTE_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_byte_value--;
+			break;
 		case SHORT_CONST:
 			constant_node->constant_value.signed_short_value--;
 			break;
@@ -601,6 +619,12 @@ void decrement_constant_value(generic_ast_node_t* constant_node){
 void increment_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
+		case BYTE_CONST:
+			constant_node->constant_value.signed_byte_value++;
+			break;
+		case BYTE_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_byte_value++;
+			break;
 		case SHORT_CONST:
 			constant_node->constant_value.signed_short_value++;
 			break;
@@ -641,8 +665,13 @@ void increment_constant_value(generic_ast_node_t* constant_node){
 void logical_not_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
+		case BYTE_CONST:
+			constant_node->constant_value.signed_byte_value = !(constant_node->constant_value.signed_byte_value);
+			break;
+		case BYTE_CONST_FORCE_U:
+			break;
 		case SHORT_CONST:
-			constant_node->constant_value.signed_short_value = !(constant_node->constant_value.signed_short_value);
+			constant_node->constant_value.signed_byte_value = !(constant_node->constant_value.signed_byte_value);
 			break;
 		case SHORT_CONST_FORCE_U:
 			constant_node->constant_value.unsigned_short_value = !(constant_node->constant_value.unsigned_short_value);
@@ -681,6 +710,12 @@ void logical_not_constant_value(generic_ast_node_t* constant_node){
 void bitwise_not_constant_value(generic_ast_node_t* constant_node){
 	//Switch based on the value here
 	switch(constant_node->constant_type){
+		case BYTE_CONST:
+			constant_node->constant_value.signed_byte_value = ~(constant_node->constant_value.signed_byte_value);
+			break;
+		case BYTE_CONST_FORCE_U:
+			constant_node->constant_value.unsigned_byte_value = ~(constant_node->constant_value.unsigned_byte_value);
+			break;
 		case SHORT_CONST:
 			constant_node->constant_value.signed_short_value = ~(constant_node->constant_value.signed_short_value);
 			break;
