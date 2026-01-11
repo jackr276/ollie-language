@@ -442,6 +442,22 @@ static void update_constant_with_log2_value(three_addr_const_t* constant){
 			constant->constant_value.unsigned_long_constant = log2_of_known_power_of_2(constant->constant_value.unsigned_long_constant);
 			break;
 
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant = log2_of_known_power_of_2(constant->constant_value.signed_short_constant);
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant = log2_of_known_power_of_2(constant->constant_value.unsigned_short_constant);
+			break;
+
+		case BYTE_CONST:
+			constant->constant_value.signed_byte_constant = log2_of_known_power_of_2(constant->constant_value.signed_byte_constant);
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			constant->constant_value.unsigned_byte_constant = log2_of_known_power_of_2(constant->constant_value.unsigned_byte_constant);
+			break;
+
 		case CHAR_CONST:
 			constant->constant_value.char_constant = log2_of_known_power_of_2(constant->constant_value.char_constant);
 			break;

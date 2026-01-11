@@ -5791,10 +5791,8 @@ three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* con
  * NOTE: The result is always stored in the first one
  */
 void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
-	//Go based on the first one's type
 	switch(constant1->const_type){
 		case INT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.unsigned_long_constant;
@@ -5814,10 +5812,15 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case SHORT_CONST_FORCE_U:
 					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.unsigned_short_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_integer_constant *= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
 					exit(1);
@@ -5826,7 +5829,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			break;
 
 		case INT_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.signed_integer_constant *= constant2->constant_value.unsigned_long_constant;
@@ -5840,6 +5842,12 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.signed_integer_constant *= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_integer_constant *= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant *= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.signed_integer_constant *= constant2->constant_value.signed_short_constant;
 					break;
@@ -5849,7 +5857,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.signed_integer_constant *= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
 					exit(1);
@@ -5857,8 +5864,79 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 
 			break;
 
+		case BYTE_CONST:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant *= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_byte_constant *= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant *= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_byte_constant *= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_byte_constant *= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant *= constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_byte_constant *= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant *= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_byte_constant *= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant *= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_byte_constant *= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant *= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_byte_constant *= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_byte_constant *= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant *= constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_byte_constant *= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant *= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_byte_constant *= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
+					exit(1);
+			}
+			
+			break;
+
 		case LONG_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.unsigned_integer_constant;
@@ -5878,10 +5956,15 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case SHORT_CONST_FORCE_U:
 					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.unsigned_short_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_long_constant *= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
 					exit(1);
@@ -5890,7 +5973,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			break;
 
 		case LONG_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.signed_long_constant *= constant2->constant_value.unsigned_long_constant;
@@ -5904,6 +5986,12 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.signed_long_constant *= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_long_constant *= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant *= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.signed_long_constant *= constant2->constant_value.signed_short_constant;
 					break;
@@ -5913,7 +6001,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.signed_long_constant *= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
 					exit(1);
@@ -5922,7 +6009,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			break;
 
 		case SHORT_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.signed_short_constant *= constant2->constant_value.unsigned_long_constant;
@@ -5936,6 +6022,12 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.signed_short_constant *= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_short_constant *= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant *= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.signed_short_constant *= constant2->constant_value.signed_short_constant;
 					break;
@@ -5945,7 +6037,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.signed_short_constant *= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
 					exit(1);
@@ -5955,7 +6046,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			
 
 		case SHORT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.unsigned_long_constant;
@@ -5969,6 +6059,12 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.signed_short_constant;
 					break;
@@ -5978,7 +6074,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_short_constant *= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
 					exit(1);
@@ -5987,7 +6082,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			break;
 
 		case CHAR_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.char_constant *= constant2->constant_value.unsigned_long_constant;
@@ -6001,6 +6095,12 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.char_constant *= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.char_constant *= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.char_constant *= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.char_constant *= constant2->constant_value.signed_short_constant;
 					break;
@@ -6010,7 +6110,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.char_constant *= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
 					exit(1);
@@ -6018,7 +6117,6 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
 
 			break;
 
-		//This should never happen
 		default:
 			printf("Fatal internal compiler error: Unsupported constant multiplication operation\n");
 			exit(1);
@@ -6032,10 +6130,8 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
  * NOTE: The result is always stored in the first one
  */
 void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
-	//Go based on the first one's type
 	switch(constant1->const_type){
 		case INT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.unsigned_long_constant;
@@ -6055,10 +6151,15 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case SHORT_CONST_FORCE_U:
 					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.unsigned_short_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.unsigned_byte_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_integer_constant += constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 					exit(1);
@@ -6067,7 +6168,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 			break;
 
 		case INT_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.signed_integer_constant += constant2->constant_value.unsigned_long_constant;
@@ -6081,6 +6181,12 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case INT_CONST:
 					constant1->constant_value.signed_integer_constant += constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_integer_constant += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant += constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.signed_integer_constant += constant2->constant_value.signed_short_constant;
 					break;
@@ -6090,7 +6196,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case CHAR_CONST:
 					constant1->constant_value.signed_integer_constant += constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 					exit(1);
@@ -6098,8 +6203,79 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 
 			break;
 
+		case BYTE_CONST:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_byte_constant += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_byte_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_byte_constant += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant += constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_byte_constant += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant += constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_byte_constant += constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_byte_constant += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_byte_constant += constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_byte_constant += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant += constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_byte_constant += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant += constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_byte_constant += constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+			
+			break;
+
 		case LONG_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_integer_constant;
@@ -6119,10 +6295,15 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case SHORT_CONST_FORCE_U:
 					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_short_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant += constant2->constant_value.unsigned_byte_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_long_constant += constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 					exit(1);
@@ -6131,7 +6312,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 			break;
 
 		case LONG_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.signed_long_constant += constant2->constant_value.unsigned_long_constant;
@@ -6145,6 +6325,12 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case INT_CONST:
 					constant1->constant_value.signed_long_constant += constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_long_constant += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant += constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.signed_long_constant += constant2->constant_value.signed_short_constant;
 					break;
@@ -6154,7 +6340,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case CHAR_CONST:
 					constant1->constant_value.signed_long_constant += constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 					exit(1);
@@ -6163,7 +6348,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 			break;
 
 		case SHORT_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.signed_short_constant += constant2->constant_value.unsigned_long_constant;
@@ -6177,6 +6361,12 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case INT_CONST:
 					constant1->constant_value.signed_short_constant += constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_short_constant += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant += constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.signed_short_constant += constant2->constant_value.signed_short_constant;
 					break;
@@ -6186,7 +6376,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case CHAR_CONST:
 					constant1->constant_value.signed_short_constant += constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 					exit(1);
@@ -6196,7 +6385,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 			
 
 		case SHORT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.unsigned_short_constant += constant2->constant_value.unsigned_long_constant;
@@ -6210,6 +6398,12 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case INT_CONST:
 					constant1->constant_value.unsigned_short_constant += constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_short_constant += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant += constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.unsigned_short_constant += constant2->constant_value.signed_short_constant;
 					break;
@@ -6219,7 +6413,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_short_constant += constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 					exit(1);
@@ -6228,7 +6421,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 			break;
 
 		case CHAR_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.char_constant += constant2->constant_value.unsigned_long_constant;
@@ -6242,6 +6434,12 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case INT_CONST:
 					constant1->constant_value.char_constant += constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.char_constant += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.char_constant += constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.char_constant += constant2->constant_value.signed_short_constant;
 					break;
@@ -6251,7 +6449,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 				case CHAR_CONST:
 					constant1->constant_value.char_constant += constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 					exit(1);
@@ -6259,7 +6456,6 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 
 			break;
 
-		//This should never happen
 		default:
 			printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 			exit(1);
@@ -6273,10 +6469,8 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
  * NOTE: The result is always stored in the first one
  */
 void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
-	//Go based on the first one's type
 	switch(constant1->const_type){
 		case INT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.unsigned_long_constant;
@@ -6296,10 +6490,15 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case SHORT_CONST_FORCE_U:
 					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.unsigned_short_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_integer_constant -= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
 					exit(1);
@@ -6308,7 +6507,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			break;
 
 		case INT_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.signed_integer_constant -= constant2->constant_value.unsigned_long_constant;
@@ -6322,6 +6520,12 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.signed_integer_constant -= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_integer_constant -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_integer_constant -= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.signed_integer_constant -= constant2->constant_value.signed_short_constant;
 					break;
@@ -6331,7 +6535,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.signed_integer_constant -= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
 					exit(1);
@@ -6339,8 +6542,79 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 
 			break;
 
+		case BYTE_CONST:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant -= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.signed_byte_constant -= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant -= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.signed_byte_constant -= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.signed_byte_constant -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant -= constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_byte_constant -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_byte_constant -= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.signed_byte_constant -= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+			
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant -= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_value.unsigned_byte_constant -= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant -= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_value.unsigned_byte_constant -= constant2->constant_value.signed_integer_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_value.unsigned_byte_constant -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant -= constant2->constant_value.unsigned_short_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_byte_constant -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_byte_constant -= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_value.unsigned_byte_constant -= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+			
+			break;
+
 		case LONG_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.unsigned_integer_constant;
@@ -6360,10 +6634,15 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case SHORT_CONST_FORCE_U:
 					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.unsigned_short_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_long_constant -= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
 					exit(1);
@@ -6372,7 +6651,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			break;
 
 		case LONG_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.signed_long_constant -= constant2->constant_value.unsigned_long_constant;
@@ -6386,6 +6664,12 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.signed_long_constant -= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_long_constant -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_long_constant -= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.signed_long_constant -= constant2->constant_value.signed_short_constant;
 					break;
@@ -6395,7 +6679,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.signed_long_constant -= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
 					exit(1);
@@ -6404,7 +6687,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			break;
 
 		case SHORT_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.signed_short_constant -= constant2->constant_value.unsigned_long_constant;
@@ -6418,6 +6700,12 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.signed_short_constant -= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.signed_short_constant -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.signed_short_constant -= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.signed_short_constant -= constant2->constant_value.signed_short_constant;
 					break;
@@ -6427,7 +6715,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.signed_short_constant -= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
 					exit(1);
@@ -6437,7 +6724,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			
 
 		case SHORT_CONST_FORCE_U:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.unsigned_long_constant;
@@ -6451,6 +6737,12 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.signed_short_constant;
 					break;
@@ -6460,7 +6752,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.unsigned_short_constant -= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
 					exit(1);
@@ -6469,7 +6760,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 			break;
 
 		case CHAR_CONST:
-			//Now go based on the second one's type
 			switch(constant2->const_type){
 				case LONG_CONST_FORCE_U:
 					constant1->constant_value.char_constant -= constant2->constant_value.unsigned_long_constant;
@@ -6483,6 +6773,12 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case INT_CONST:
 					constant1->constant_value.char_constant -= constant2->constant_value.signed_integer_constant;
 					break;
+				case BYTE_CONST:
+					constant1->constant_value.char_constant -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_value.char_constant -= constant2->constant_value.unsigned_byte_constant;
+					break;
 				case SHORT_CONST:
 					constant1->constant_value.char_constant -= constant2->constant_value.signed_short_constant;
 					break;
@@ -6492,7 +6788,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 				case CHAR_CONST:
 					constant1->constant_value.char_constant -= constant2->constant_value.char_constant;
 					break;
-				//This should never happen
 				default:
 					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
 					exit(1);
@@ -6500,7 +6795,6 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 
 			break;
 
-		//This should never happen
 		default:
 			printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
 			exit(1);
