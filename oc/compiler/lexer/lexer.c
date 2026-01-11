@@ -22,7 +22,7 @@
 #include "../utils/constants.h"
 
 //Total number of keywords
-#define KEYWORD_COUNT 50
+#define KEYWORD_COUNT 52
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -109,11 +109,29 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int16_t line_n
 	//Let's see if we have a keyword here
 	for(u_int8_t i = 0; i < KEYWORD_COUNT; i++){
 		if(strcmp(keyword_array[i], lexeme.string) == 0){
-			//We can get out of here
-			lex_item.tok = tok_array[i];
-			//Store the lexeme in here
-			lex_item.lexeme = lexeme;
-			return lex_item;
+			//For true/false, we can convert them into the kind of constant we want off the bat
+			switch(tok_array[i]){
+				case TRUE_CONST:
+					lex_item.tok = BYTE_CONST_FORCE_U;
+					lex_item.lexeme = dynamic_string_alloc();
+					dynamic_string_set(&(lex_item.lexeme), "1");
+
+					return lex_item;
+				
+				case FALSE_CONST:
+					lex_item.tok = BYTE_CONST_FORCE_U;
+					lex_item.lexeme = dynamic_string_alloc();
+					dynamic_string_set(&(lex_item.lexeme), "0");
+
+					return lex_item;
+
+				default:
+					//We can get out of here
+					lex_item.tok = tok_array[i];
+					//Store the lexeme in here
+					lex_item.lexeme = lexeme;
+					return lex_item;
+			}
 		}
 	}
 	
