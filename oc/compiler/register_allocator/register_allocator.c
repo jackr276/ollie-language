@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/ucontext.h>
 
 //The atomically increasing live range id
 u_int32_t live_range_id = 0;
@@ -2529,6 +2530,158 @@ static inline coalescence_result_t perform_live_range_coalescence(basic_block_t*
 
 
 /**
+ * Perform coalescence at a block level. Remember that if we do end up coalescing,
+ * we need to recompute the used and assigned sets for this block as those are 
+ * affected by coalescing. This rule will only look to coalesce for a specific target class
+ * of registers. Anything that is not in this target class will be ignored
+ *
+ * This function will modify the "result" parameter to maintain internal consistency
+ */
+static void perform_block_level_coalescence(basic_block_t* block, interference_graph_t* general_purpose_graph, coalescence_result_t* result, u_int8_t debug_printing){
+	//Holder for deleting
+	instruction_t* holder;
+
+	//Now we'll run through every instruction in every block
+	instruction_t* instruction = block->leader_statement;
+
+	//Now run through all of these
+	while(instruction != NULL){
+		//If it's not a pure copy *or* it's marked as non-combinable, just move along
+		if(is_instruction_pure_copy(instruction) == FALSE){
+			instruction = instruction->next_statement;
+			continue;
+		}
+
+		//Otherwise if we get here, then we know that we have a pure copy instruction
+		live_range_t* source_live_range = instruction->source_register->associated_live_range;
+		live_range_t* destination_live_range = instruction->destination_register->associated_live_range;
+
+		//These cannot possible coalesce since we have a mismatch, we will continue if that is
+		//the case
+		if(source_live_range->live_range_class != destination_live_range->live_range_class){
+			instruction = instruction->next_statement;
+			continue;
+		}
+
+		/**
+		 * Now that we know what the classes match, we will go based on the source's type.
+		 *
+		 * To truly coalesce, we need to ensure: 
+		 * 	1.) Do not interfere with one another(and as such they're in separate webs)
+		 *  2.) Do not have any pre-coloring that would prevent them from being merged. For example, if the
+		 *	destination register is %rdi because it's a function parameter, we can't just change the register
+		 *	it's in
+		 */
+		switch(source_live_range->live_range_class){
+			case LIVE_RANGE_CLASS_GEN_PURPOSE:
+				if(do_live_ranges_interfere(general_purpose_graph, destination_live_range, source_live_range) == FALSE
+					&& does_general_purpose_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
+
+					//Debug logs for Dev use only
+					if(debug_printing == TRUE){
+						printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
+						printf("DELETING LR%d\n", destination_live_range->live_range_id);
+						
+						printf("Deleting redundant instruction:\n");
+						print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+					}
+
+					//Perform the actual coalescence. Remember that the destination is effectively being
+					//absorbed into the source
+					coalesce_live_ranges(general_purpose_graph, source_live_range, destination_live_range);
+
+					//Update the result based on what we already have
+					switch(*result){
+						case COALESCENCE_RESULT_NONE:
+							*result = COALESCENCE_RESULT_GP_ONLY;
+							break;
+
+						case COALESCENCE_RESULT_SSE_ONLY:
+							*result = COALESCENCE_RESULT_BOTH;
+							break;
+
+						default:
+							break;
+					}
+
+					//Delete the now useless instruction
+					holder = instruction;
+					instruction = instruction->next_statement;
+					delete_statement(holder);
+
+				//Otherwise we're fine - just bump the instruction up and move along
+				} else {
+					instruction = instruction->next_statement;
+				}
+
+				break;
+
+			case LIVE_RANGE_CLASS_SSE:
+				if(do_live_ranges_interfere(sse_graph, destination_live_range, source_live_range) == FALSE
+					&& does_sse_register_allocation_interference_exist(source_live_range, destination_live_range) == FALSE){
+
+					//Debug logs for Dev use only
+					if(debug_printing == TRUE){
+						printf("Can coalesce LR%d and LR%d\n", source_live_range->live_range_id, destination_live_range->live_range_id);
+						printf("DELETING LR%d\n", destination_live_range->live_range_id);
+						
+						printf("Deleting redundant instruction:\n");
+						print_instruction(stdout, holder, PRINTING_VAR_INLINE);
+					}
+
+					//Perform the actual coalescence. Remember that the destination is effectively being
+					//absorbed into the source
+					coalesce_live_ranges(sse_graph, source_live_range, destination_live_range);
+
+					//Update the result based on what we already have
+					switch(*result){
+						case COALESCENCE_RESULT_NONE:
+							*result = COALESCENCE_RESULT_SSE_ONLY;
+							break;
+
+						case COALESCENCE_RESULT_GP_ONLY:
+							*result = COALESCENCE_RESULT_BOTH;
+							break;
+
+						default:
+							break;
+					}
+
+					//Delete the now useless instruction
+					holder = instruction;
+					instruction = instruction->next_statement;
+					delete_statement(holder);
+
+				//Otherwise we're fine - just bump the instruction up and move along
+				} else {
+					instruction = instruction->next_statement;
+				}
+
+				break;
+		}
+	}
+}
+
+
+static inline coalescence_result_t perform_live_range_coalescence_for_target(basic_block_t* function_entry_block, interference_graph_t* target_graph, live_range_class_t target_class, u_int8_t debug_printing){
+	//By default assume nothing happened
+	coalescence_result_t result = COALESCENCE_RESULT_NONE;
+
+	//Grab a cursor and run through everything
+	basic_block_t* current = function_entry_block;
+	while(current != NULL){
+		//Invoke the helper for a specific king of coalescing
+		
+		//Go to the direct successor
+		current = current->direct_successor;
+	}
+
+	//Give back the result
+	return result;
+}
+
+
+/**
  *
  * Allocate an individual register to a given live range
  *
@@ -3554,6 +3707,9 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 				//Calculate only the general purpose interferences
 				calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_GEN_PURPOSE);
 
+				//Now construct the specific interference graph that we need
+				general_purpose_graph = construct_interference_graph_from_adjacency_lists(&general_purpose_live_ranges);
+
 				//
 				//
 				//TODO NOT DONE
@@ -3578,6 +3734,9 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 
 				//Calculate only the SSE interferences
 				calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_SSE);
+
+				//Now construct the specific interference graph that we need
+				sse_graph = construct_interference_graph_from_adjacency_lists(&sse_live_ranges);
 
 				//
 				//
