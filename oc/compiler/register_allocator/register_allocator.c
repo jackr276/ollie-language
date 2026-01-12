@@ -3103,6 +3103,26 @@ static void spill_in_function(basic_block_t* function_entry_block, dynamic_array
 
 
 /**
+ * Bitmap: 011110111110000
+ * 					^
+ * Index: 5
+ *
+ * Procedure to grab it:
+ * 	Get a mask: 0x01 = 00000000000001
+ * 	Shift it over "Index" places: 00000000100000
+ * 	Bitwise and the two together: 011110111110000 & 00000000100000 = 00000000100000
+ *  Take the result and then shift it back "Index" places: 00000000000001 = 1 = TRUE
+ *
+ * Function is inlined so in reality this is essentially a macro
+ */
+static inline u_int32_t get_bitmap_at_index(u_int32_t bitmap, u_int8_t index){
+
+	//TODO
+	return FALSE;
+}
+
+
+/**
  * Allocate an individual register to a given live range
  *
  * We return TRUE if we were able to color, and we return false if we were not
@@ -3118,11 +3138,11 @@ static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
 	}
 
 	//Allocate an area that holds all the registers that we have available for use. This is offset by 1 from
-	//the actual value in the enum. For example, RAX is 1 in the enum, so it's 0 in here
-	u_int8_t registers[K_COLORS_GEN_USE];
-
-	//Wipe this entire thing out
-	memset(registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+	//the actual value in the enum. For example, RAX is 1 in the enum, so it's 0 in here. We do not need
+	//to use an array here. Instead, we will use a 32 bit integer(more than enough space for us) and store
+	//1 or 0 in the physical slot based on if the register is used or not. This avoids the need to touch
+	//any memory at all
+	u_int32_t register_use_bit_map = 0;
 
 	//Run through every single neighbor
 	for(u_int16_t i = 0; i < live_range->neighbors.current_index; i++){
