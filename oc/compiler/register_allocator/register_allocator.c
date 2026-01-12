@@ -3138,6 +3138,27 @@ static inline u_int32_t get_bitmap_at_index(u_int32_t bitmap, u_int8_t index){
 
 
 /**
+ * Set the bitmap at a given index:
+ *
+ * Current Bitmap: 011110111010000
+ *                          ^
+ * Index: 5
+ *
+ * Procedure to set it:
+ * 	Get a mask: 0x01 = 00000000000001
+ * 	Shift it over "Index" places: 00000000100000
+ * 	Bitwise or the two together: 011110111010000 | 00000000100000 = 011110111110000
+ *
+ * Function is inlined so in reality this is essentially a macro
+ */
+static inline void set_bitmap_at_index(u_int32_t* bitmap, u_int8_t index){
+	//Grab a mask
+	u_int32_t mask = 0x01;
+
+}
+
+
+/**
  * Allocate an individual register to a given live range
  *
  * We return TRUE if we were able to color, and we return false if we were not
