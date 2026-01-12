@@ -3980,17 +3980,54 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 		 */
 		colorable_general_purpose = graph_color_and_allocate_general_purpose(function_entry, &general_purpose_live_ranges);
 	}
+
 	
-	//Note that for a lot of functions, having SSE live
-	//ranges is not a guarantee. As such, we'll gate
-	//ourselves out here and only do this if it's necessary
+	/**
+	 * STEP 8: Invoke the actual allocator for SSE registers
+	 *
+	 * The allocator will attempt to color the graph. If the graph is not k-colorable, 
+	 * then the allocator will spill the least costly LR and return FALSE, and we will go through
+	 * this whole process again
+	 *
+	 * For the actual allocation process, we will do entirely separate allocation loops. We first
+	 * look through and attempt to allocate GP registers. Following that, we will then allocate SSE registers
+	 * Note that for a lot of functions, having SSE live ranges is not a guarantee. As such, we'll gate
+	 * ourselves out here and only do this if it's necessary
+	*/
 	if(sse_live_ranges.current_index > 0){
 		//Initial attempt - this will trigger the spiller if it's not possible
 		u_int8_t colorable_sse = graph_color_and_allocate_sse(function_entry, &sse_live_ranges);
 
 		//So long as we could not color the graph
 		while(colorable_sse == FALSE){
-			//TODO colorer/spill loop
+			//Dev printing only
+			if(print_irs == TRUE){
+				printf("============ After Spilling =============== \n");
+				print_function_blocks_with_live_ranges(function_entry);
+				printf("============ After Spilling =============== \n");
+			}
+
+			/**
+			 * First we need to reset all of the SSE live ranges
+			 */
+			reset_all_live_ranges(&sse_live_ranges);
+
+			/**
+			 * Following that, we can recompute all of our used
+			 * and assigned sets
+			 */
+			recompute_used_and_assigned_sets(function_entry);
+
+			/**
+			 * Next we'll recalculate all spill costs for our given
+			 * live ranges
+			 */
+			compute_spill_costs(&sse_live_ranges);
+
+			/**
+			 * Following that we'll go through and redo all liveness
+			 */
+
 
 		}
 	}
