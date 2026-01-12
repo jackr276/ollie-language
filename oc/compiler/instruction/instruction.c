@@ -1036,7 +1036,27 @@ instruction_t* emit_direct_register_push_instruction(general_purpose_register_t 
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//Set the type
-	instruction->instruction_type = PUSH_DIRECT;
+	instruction->instruction_type = PUSH_DIRECT_GEN_PURPOSE;
+
+	//Now we'll set the register
+	instruction->push_or_pop_reg.gen_purpose = reg;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ */
+instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = POP_DIRECT_GEN_PURPOSE;
 
 	//Now we'll set the register
 	instruction->push_or_pop_reg.gen_purpose = reg;
@@ -1082,26 +1102,6 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee){
 	instruction->source_register = popee;
 
 	//Finally give it back
-	return instruction;
-}
-
-
-/**
- * Sometimes we just want to pop a given register. We're able to do this
- * by directly emitting a pop instruction with the register in it. This
- * saves us allocation overhead
- */
-instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg){
-	//First allocate
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the type
-	instruction->instruction_type = POP_DIRECT;
-
-	//Now we'll set the register
-	instruction->push_or_pop_reg.gen_purpose = reg;
-
-	//Now give it back
 	return instruction;
 }
 

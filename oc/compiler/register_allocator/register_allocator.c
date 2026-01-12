@@ -3486,14 +3486,17 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 	//Grab out this LR for reference later on. Remember that this is nullable, so we 
 	//need to account for that
 	live_range_t* destination_lr = NULL;
-	//By default it's NO_REG, we will assign if it exists below
-	general_purpose_register_t destination_lr_reg = NO_REG_GEN_PURPOSE;
+
+	//What type of LR is the destination register
+	live_range_class_t destination_lr_class;
 	
 	//Assign if it's not null
 	if(instruction->destination_register != NULL){
+		//Extract the destination LR for our uses later
 		destination_lr = instruction->destination_register->associated_live_range;
-		//Save the register as well now that we know it exists
-		destination_lr_reg = destination_lr->reg.gen_purpose;
+
+		//Cache the class as well
+		destination_lr_class = destination_lr->live_range_class;
 	}
 
 	//Start off with this as the last instruction
@@ -3512,47 +3515,77 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		//Extract it
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
-		//And remove its register
-		//TODO needs reworking
-		general_purpose_register_t reg = lr->reg.gen_purpose;
+		//Holders for our different register types
+		general_purpose_register_t general_purpose_reg;
+		sse_register_t sse_reg;
 
-		//If it's not caller-saved, it's irrelevant to us
-		if(is_general_purpose_register_caller_saved(reg) == FALSE){
-			continue;
+		//Go based on the class that we've got
+		switch(lr->live_range_class){
+			case LIVE_RANGE_CLASS_GEN_PURPOSE:
+				//Extract the general purpose register
+				general_purpose_reg = lr->reg.gen_purpose;
+
+				//If it's not caller-saved, it's irrelevant to us
+				if(is_general_purpose_register_caller_saved(general_purpose_reg) == FALSE){
+					continue;
+				}
+
+				//There's also no point in saving this. This could happen if we have precoloring
+				//We'll only check this if the classes match though
+				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					//Skip it
+					if(general_purpose_reg == destination_lr->reg.gen_purpose){
+						continue;
+					}
+				}
+
+				/**
+				 * Once we get past here, we know that we need to save this
+				 * register because the callee will also assign it, so whatever
+				 * value it has that we're relying on would not survive the call
+				 */
+				if(get_bitmap_at_index(callee->assigned_general_purpose_registers, general_purpose_reg - 1) == TRUE){
+					//Emit a direct push with this live range's register
+					instruction_t* push_inst = emit_direct_register_push_instruction(general_purpose_reg);
+
+					//Emit the pop instruction for this
+					instruction_t* pop_inst = emit_direct_register_pop_instruction(general_purpose_reg);
+
+					//Insert the push instruction directly before the call instruction
+					insert_instruction_before_given(push_inst, instruction);
+
+					//Insert the pop instruction directly after the last instruction
+					insert_instruction_after_given(pop_inst, instruction);
+
+					//If the last instruction still is the original instruction. That
+					//means that this is the first pop instruction that we're inserting.
+					//As such, we'll set the last instruction to be this pop instruction
+					//to save ourselves time down the line
+					if(last_instruction == instruction){
+						last_instruction = pop_inst;
+					}
+				}
+
+				break;
+
+			//We know that *all* SSE registers are caller saved. As such, we will
+			//need to save anything/everything that is live after for these
+			case LIVE_RANGE_CLASS_SSE:
+				//Extract the SSE register
+				sse_reg = lr->reg.sse_reg;
+
+				//There's also no point in saving this. This could happen if we have precoloring
+				//We'll only check this if the classes match though
+				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
+					//Skip it
+					if(sse_reg == destination_lr->reg.sse_reg){
+						continue;
+					}
+				}
+
+				break;
 		}
 
-		//There's also no point in saving this. This could happen
-		//if we have precoloring
-		if(reg == destination_lr_reg){
-			continue;
-		}
-
-		/**
-		 * Once we get past here, we know that we need to save this
-		 * register because the callee will also assign it, so whatever
-		 * value it has that we're relying on would not survive the call
-		 */
-		if(get_bitmap_at_index(callee->assigned_general_purpose_registers, reg - 1) == TRUE){
-			//Emit a direct push with this live range's register
-			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
-
-			//Emit the pop instruction for this
-			instruction_t* pop_inst = emit_direct_register_pop_instruction(reg);
-
-			//Insert the push instruction directly before the call instruction
-			insert_instruction_before_given(push_inst, instruction);
-
-			//Insert the pop instruction directly after the last instruction
-			insert_instruction_after_given(pop_inst, instruction);
-
-			//If the last instruction still is the original instruction. That
-			//means that this is the first pop instruction that we're inserting.
-			//As such, we'll set the last instruction to be this pop instruction
-			//to save ourselves time down the line
-			if(last_instruction == instruction){
-				last_instruction = pop_inst;
-			}
-		}
 	}
 
 	//Free it up once done
