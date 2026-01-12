@@ -3155,6 +3155,11 @@ static inline void set_bitmap_at_index(u_int32_t* bitmap, u_int8_t index){
 	//Grab a mask
 	u_int32_t mask = 0x01;
 
+	//Shift it over by the index
+	mask <<= index;
+
+	//Bitwise or the two together to set
+	*bitmap |= mask;
 }
 
 
@@ -3188,8 +3193,8 @@ static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
 		//Get whatever register this neighbor has. If it's not the "no_reg" value, 
 		//we'll store it in the array
 		if(neighbor->reg.gen_purpose != NO_REG_GEN_PURPOSE && neighbor->reg.gen_purpose <= K_COLORS_GEN_USE){
-			//Flag it as used
-			registers[neighbor->reg.gen_purpose - 1] = TRUE;
+			//Use the helper to do our bitmap setting
+			set_bitmap_at_index(&register_use_bit_map, neighbor->reg.gen_purpose - 1);
 		}
 	}
 	
@@ -3198,7 +3203,7 @@ static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
 	u_int16_t i;
 	for(i = 0; i < K_COLORS_GEN_USE; i++){
 		//If we've found an empty one, that means we're good
-		if(registers[i] == FALSE){
+		if(get_bitmap_at_index(register_use_bit_map, i) == FALSE){
 			break;
 		}
 	}
