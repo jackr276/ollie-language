@@ -4026,9 +4026,36 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 
 			/**
 			 * Following that we'll go through and redo all liveness
+			 * for the entire function
 			 */
+			calculate_live_range_liveness_sets(function_entry);
 
+			/**
+			 * Now we'll recalculate all target interferences for the
+			 * SSE class of live ranges only
+			 */
+			calculate_target_interferences_in_function(function_entry, LIVE_RANGE_CLASS_SSE);
 
+			/**
+			 * Now we can rebuild our graph from what we had before
+			 */
+			sse_graph = construct_interference_graph_from_adjacency_lists(&sse_live_ranges);
+
+			//Show our live ranges once again if requested
+			if(print_irs == TRUE){
+				print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+				printf("================= After Interference =======================\n");
+				print_function_blocks_with_live_ranges(function_entry);
+				printf("================= After Interference =======================\n");
+			}
+
+			/**
+			 * And finally - once we have our interference, we are
+			 * able to go through and attempt to color once
+			 * again. This loop will keep executing until the
+			 * graph_color_and_allocate returns a successful result
+			 */
+			colorable_sse = graph_color_and_allocate_sse(function_entry, &sse_live_ranges);
 		}
 	}
 
