@@ -17,7 +17,6 @@
 #include "../cfg/cfg.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 #include <sys/ucontext.h>
 
@@ -1217,10 +1216,9 @@ static void calculate_live_range_liveness_sets(basic_block_t* function_entry_blo
 	//A cursor for the current block
 	basic_block_t* current;
 
-	//We'll reset the assigned registers array here because we have not assigned any registers at this
-	//point
-	memset(function_entry_block->function_defined_in->assigned_registers_gen_purpose, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
-	memset(function_entry_block->function_defined_in->assigned_registers_sse, 0, sizeof(u_int8_t) * K_COLORS_SSE);
+	//Wipe these two out
+	function_entry_block->function_defined_in->assigned_general_purpose_registers = 0;
+	function_entry_block->function_defined_in->assigned_sse_registers = 0;
 
 	//We keep calculating this until we end up with no change in the old and new LIVE_IN/LIVE_OUT sets
 	do{
@@ -3172,7 +3170,7 @@ static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg.gen_purpose != NO_REG_GEN_PURPOSE){
 		//Flag that the function has used this
-		live_range->function_defined_in->assigned_registers_gen_purpose[live_range->reg.gen_purpose - 1] = TRUE;
+		set_bitmap_at_index(&(live_range->function_defined_in->assigned_general_purpose_registers), live_range->reg.gen_purpose - 1);
 
 		//All went well
 		return TRUE;
@@ -3215,7 +3213,7 @@ static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
 		live_range->reg.gen_purpose = i + 1;
 
 		//Flag this as used in the function
-		live_range->function_defined_in->assigned_registers_gen_purpose[i] = TRUE;
+		set_bitmap_at_index(&(live_range->function_defined_in->assigned_general_purpose_registers), i);
 
 		//Return true here
 		return TRUE;
@@ -3327,8 +3325,8 @@ static u_int8_t allocate_register_sse(live_range_t* live_range){
 	//this case, we'll just fill out the function's assigned list and move
 	//along
 	if(live_range->reg.sse_reg != NO_REG_SSE){
-		//Flag that it was in fact assigned
-		live_range->function_defined_in->assigned_registers_sse[live_range->reg.sse_reg - 1] = TRUE;
+		//Flag it inside
+		set_bitmap_at_index(&(live_range->function_defined_in->assigned_sse_registers), live_range->reg.sse_reg - 1);
 
 		//All went well
 		return TRUE;
@@ -3371,7 +3369,7 @@ static u_int8_t allocate_register_sse(live_range_t* live_range){
 		live_range->reg.sse_reg = i + 1;
 
 		//Flag this as used in the function
-		live_range->function_defined_in->assigned_registers_sse[i] = TRUE;
+		set_bitmap_at_index(&(live_range->function_defined_in->assigned_sse_registers), i);
 
 		//Return true here
 		return TRUE;
@@ -3534,10 +3532,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		 * register because the callee will also assign it, so whatever
 		 * value it has that we're relying on would not survive the call
 		 */
-
-		//TODO - this needs to be made for not only gen purpose but also for
-		//SSE registers
-		if(callee->assigned_registers_gen_purpose[reg - 1] == TRUE){
+		if(get_bitmap_at_index(callee->assigned_general_purpose_registers, reg - 1) == TRUE){
 			//Emit a direct push with this live range's register
 			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
 
@@ -3726,7 +3721,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
 		//We don't use this register, so move on
-		if(function->assigned_registers_gen_purpose[i] == FALSE){
+		if(get_bitmap_at_index(function->assigned_general_purpose_registers, i) == FALSE){
 			continue;
 		}
 
@@ -3795,7 +3790,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		//Run through all the registers backwards
 		for(int16_t j = K_COLORS_GEN_USE - 1; j >= 0; j--){
 			//If we haven't used this register, then skip it
-			if(function->assigned_registers_gen_purpose[j] == FALSE){
+			if(get_bitmap_at_index(function->assigned_general_purpose_registers, j) == FALSE){
 				continue;
 			}
 

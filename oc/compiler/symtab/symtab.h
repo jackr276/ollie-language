@@ -135,9 +135,6 @@ struct local_constant_t{
 struct symtab_function_record_t{
 	//The parameters for the function
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
-	//Maintain arrays for the assigned general use and SSE registers
-	u_int8_t assigned_registers_gen_purpose[K_COLORS_GEN_USE];
-	u_int8_t assigned_registers_sse[K_COLORS_SSE];
 	//The name of the function
 	dynamic_string_t func_name;
 	//Functions have dynamic arrays for string/nonstring constants
@@ -158,6 +155,10 @@ struct symtab_function_record_t{
 	generic_type_t* return_type;
 	//The line number
 	u_int32_t line_number;
+	//A bitmap for all assigned general purpose registers
+	u_int32_t assigned_general_purpose_registers;
+	//A bitmap for all assigned SSE registers
+	u_int32_t assigned_sse_registers;
 	//Number of parameters
 	u_int8_t number_of_params;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
