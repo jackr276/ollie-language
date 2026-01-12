@@ -863,16 +863,6 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
 instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed);
 
 /**
- * Is the given register caller saved?
- */
-u_int8_t is_register_caller_saved(general_purpose_register_t reg);
-
-/**
- * Is the given register callee saved?
- */
-u_int8_t is_register_callee_saved(general_purpose_register_t reg);
-
-/**
  * Get the estimated cycle count for a given instruction. This count
  * is of course estimated, we cannot know for sure
  */

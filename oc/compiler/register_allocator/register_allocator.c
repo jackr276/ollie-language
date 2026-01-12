@@ -111,6 +111,46 @@ static inline live_range_class_t get_live_range_class_for_variable(three_addr_va
 
 
 /**
+ * Is the given general purpose register caller saved?
+ */
+static inline u_int8_t is_general_purpose_register_caller_saved(general_purpose_register_t reg){
+	switch(reg){
+		case RAX:
+		case RDI:
+		case RSI:
+		case RDX:
+		case RCX:
+		case R8:
+		case R9:
+		case R10:
+		case R11:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is the given general purpose register callee saved?
+ */
+static inline u_int8_t is_general_purpose_register_callee_saved(general_purpose_register_t reg){
+	//This is all determined based on the register type
+	switch(reg){
+		case RBX:
+		case RBP:
+		case R12:
+		case R13:
+		case R14:
+		case R15:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Developer utility function to validate the priority queue implementation
  */
 static void print_live_range_array(dynamic_array_t* live_ranges){
@@ -3293,10 +3333,11 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
 		//And remove its register
+		//TODO needs reworking
 		general_purpose_register_t reg = lr->reg.gen_purpose;
 
 		//If it's not caller-saved, it's irrelevant to us
-		if(is_register_caller_saved(reg) == FALSE){
+		if(is_general_purpose_register_caller_saved(reg) == FALSE){
 			continue;
 		}
 
@@ -3311,6 +3352,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		 * register because the callee will also assign it, so whatever
 		 * value it has that we're relying on would not survive the call
 		 */
+
+		//TODO - this needs to be made for not only gen purpose but also for
+		//SSE registers
 		if(callee->assigned_registers_gen_purpose[reg - 1] == TRUE){
 			//Emit a direct push with this live range's register
 			instruction_t* push_inst = emit_direct_register_push_instruction(reg);
@@ -3384,7 +3428,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		general_purpose_register_t reg = lr->reg.gen_purpose;
 
 		//It's not caller saved, so it's irrelevant
-		if(is_register_caller_saved(reg) == FALSE){
+		if(is_general_purpose_register_caller_saved(reg) == FALSE){
 			continue;
 		}
 
@@ -3392,6 +3436,9 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		if(reg == destination_reg){
 			continue;
 		}
+
+		//TODO - this needs to be made for not only gen purpose but also for
+		//SSE registers. This one may already be fine though
 
 		//Emit a direct push with this live range's register
 		instruction_t* push_inst = emit_direct_register_push_instruction(reg);
@@ -3506,7 +3553,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		general_purpose_register_t used_reg = i + 1;
 
 		//If this isn't callee saved, then we know to move on
-		if(is_register_callee_saved(used_reg) == FALSE){
+		if(is_general_purpose_register_callee_saved(used_reg) == FALSE){
 			continue;
 		}
 
@@ -3575,7 +3622,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 			general_purpose_register_t used_reg = j + 1;
 
 			//If it's not callee saved then we don't care
-			if(is_register_callee_saved(used_reg) == FALSE){
+			if(is_general_purpose_register_callee_saved(used_reg) == FALSE){
 				continue;
 			}
 

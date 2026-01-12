@@ -6996,45 +6996,6 @@ instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_sig
 	}
 }
 
-/**
- * Is the given register caller saved?
- */
-u_int8_t is_register_caller_saved(general_purpose_register_t reg){
-	switch(reg){
-		case RAX:
-		case RDI:
-		case RSI:
-		case RDX:
-		case RCX:
-		case R8:
-		case R9:
-		case R10:
-		case R11:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
- * Is the given register callee saved?
- */
-u_int8_t is_register_callee_saved(general_purpose_register_t reg){
-	//This is all determined based on the register type
-	switch(reg){
-		case RBX:
-		case RBP:
-		case R12:
-		case R13:
-		case R14:
-		case R15:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
 
 /**
  * Get the estimated cycle count for a given instruction. This count
