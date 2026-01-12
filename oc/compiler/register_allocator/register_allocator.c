@@ -3215,9 +3215,7 @@ static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
 		live_range->reg.gen_purpose = i + 1;
 
 		//Flag this as used in the function
-		if(live_range->assignment_count > 0){
-			live_range->function_defined_in->assigned_registers_gen_purpose[i] = TRUE;
-		}
+		live_range->function_defined_in->assigned_registers_gen_purpose[i] = TRUE;
 
 		//Return true here
 		return TRUE;
@@ -3336,16 +3334,52 @@ static u_int8_t allocate_register_sse(live_range_t* live_range){
 		return TRUE;
 	}
 
+	//Allocate an area that holds all the registers that we have available for use. This is offset by 1 from
+	//the actual value in the enum. For example, RAX is 1 in the enum, so it's 0 in here. We do not need
+	//to use an array here. Instead, we will use a 32 bit integer(more than enough space for us) and store
+	//1 or 0 in the physical slot based on if the register is used or not. This avoids the need to touch
+	//any memory at all
+	u_int32_t register_use_bit_map = 0;
 
+	//Run through every single neighbor
+	for(u_int16_t i = 0; i < live_range->neighbors.current_index; i++){
+		//Grab the neighbor out
+		live_range_t* neighbor = dynamic_array_get_at(&(live_range->neighbors), i);
 
-	//
-	//
-	//
-	//TODO NOT DONE
-	//
-	//
-	//
-	return TRUE;
+		//Get whatever register this neighbor has. If it's not the "no_reg" value, 
+		//we'll store it in the array
+		if(neighbor->reg.sse_reg != NO_REG_SSE){
+			//Use the helper to do our bitmap setting
+			set_bitmap_at_index(&register_use_bit_map, neighbor->reg.sse_reg - 1);
+		}
+	}
+	
+	//Now that the registers array has been populated with interferences, we can scan it and
+	//pick the first available register
+	u_int16_t i;
+	for(i = 0; i < K_COLORS_SSE; i++){
+		//If we've found an empty one, that means we're good
+		if(get_bitmap_at_index(register_use_bit_map, i) == FALSE){
+			break;
+		}
+	}
+
+	//Now that we've gotten here, i should hold the value of a free register - 1. We'll
+	//add 1 back to it to get that free register's name
+	if(i < K_COLORS_SSE){
+		//Assign the register value to it
+		live_range->reg.sse_reg = i + 1;
+
+		//Flag this as used in the function
+		live_range->function_defined_in->assigned_registers_sse[i] = TRUE;
+
+		//Return true here
+		return TRUE;
+
+	//This means that our neighbors allocated all of the registers available
+	} else {
+		return FALSE;
+	}
 }
 
 
