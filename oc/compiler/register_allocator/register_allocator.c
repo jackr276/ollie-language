@@ -2766,73 +2766,6 @@ static inline coalescence_result_t perform_live_range_coalescence_for_target(bas
 
 
 /**
- *
- * Allocate an individual register to a given live range
- *
- * We return TRUE if we were able to color, and we return false if we were not
- */
-static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
-	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
-	if(live_range->reg.gen_purpose != NO_REG_GEN_PURPOSE){
-		//Flag that the function has used this
-		live_range->function_defined_in->assigned_registers_gen_purpose[live_range->reg.gen_purpose - 1] = TRUE;
-
-		//All went well
-		return TRUE;
-	}
-
-	//Allocate an area that holds all the registers that we have available for use. This is offset by 1 from
-	//the actual value in the enum. For example, RAX is 1 in the enum, so it's 0 in here
-	u_int8_t registers[K_COLORS_GEN_USE];
-
-	//Wipe this entire thing out
-	memset(registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
-
-	//Run through every single neighbor
-	for(u_int16_t i = 0; i < live_range->neighbors.current_index; i++){
-		//Grab the neighbor out
-		live_range_t* neighbor = dynamic_array_get_at(&(live_range->neighbors), i);
-
-		//Get whatever register this neighbor has. If it's not the "no_reg" value, 
-		//we'll store it in the array
-		if(neighbor->reg.gen_purpose != NO_REG_GEN_PURPOSE && neighbor->reg.gen_purpose <= K_COLORS_GEN_USE){
-			//Flag it as used
-			registers[neighbor->reg.gen_purpose - 1] = TRUE;
-		}
-	}
-	
-	//Now that the registers array has been populated with interferences, we can scan it and
-	//pick the first available register
-	u_int16_t i;
-	for(i = 0; i < K_COLORS_GEN_USE; i++){
-		//If we've found an empty one, that means we're good
-		if(registers[i] == FALSE){
-			break;
-		}
-	}
-
-	//Now that we've gotten here, i should hold the value of a free register - 1. We'll
-	//add 1 back to it to get that free register's name
-	if(i < K_COLORS_GEN_USE){
-		//Assign the register value to it
-		live_range->reg.gen_purpose = i + 1;
-
-		//Flag this as used in the function
-		if(live_range->assignment_count > 0){
-			live_range->function_defined_in->assigned_registers_gen_purpose[i] = TRUE;
-		}
-
-		//Return true here
-		return TRUE;
-
-	//This means that our neighbors allocated all of the registers available
-	} else {
-		return FALSE;
-	}
-}
-
-
-/**
  * Get the largest type in a given Live range. This is used for determining stack allocation
  * size. We need to do this due to how type coercion can work in OC
  */
@@ -3170,6 +3103,72 @@ static void spill_in_function(basic_block_t* function_entry_block, dynamic_array
 
 
 /**
+ * Allocate an individual register to a given live range
+ *
+ * We return TRUE if we were able to color, and we return false if we were not
+ */
+static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
+	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
+	if(live_range->reg.gen_purpose != NO_REG_GEN_PURPOSE){
+		//Flag that the function has used this
+		live_range->function_defined_in->assigned_registers_gen_purpose[live_range->reg.gen_purpose - 1] = TRUE;
+
+		//All went well
+		return TRUE;
+	}
+
+	//Allocate an area that holds all the registers that we have available for use. This is offset by 1 from
+	//the actual value in the enum. For example, RAX is 1 in the enum, so it's 0 in here
+	u_int8_t registers[K_COLORS_GEN_USE];
+
+	//Wipe this entire thing out
+	memset(registers, 0, sizeof(u_int8_t) * K_COLORS_GEN_USE);
+
+	//Run through every single neighbor
+	for(u_int16_t i = 0; i < live_range->neighbors.current_index; i++){
+		//Grab the neighbor out
+		live_range_t* neighbor = dynamic_array_get_at(&(live_range->neighbors), i);
+
+		//Get whatever register this neighbor has. If it's not the "no_reg" value, 
+		//we'll store it in the array
+		if(neighbor->reg.gen_purpose != NO_REG_GEN_PURPOSE && neighbor->reg.gen_purpose <= K_COLORS_GEN_USE){
+			//Flag it as used
+			registers[neighbor->reg.gen_purpose - 1] = TRUE;
+		}
+	}
+	
+	//Now that the registers array has been populated with interferences, we can scan it and
+	//pick the first available register
+	u_int16_t i;
+	for(i = 0; i < K_COLORS_GEN_USE; i++){
+		//If we've found an empty one, that means we're good
+		if(registers[i] == FALSE){
+			break;
+		}
+	}
+
+	//Now that we've gotten here, i should hold the value of a free register - 1. We'll
+	//add 1 back to it to get that free register's name
+	if(i < K_COLORS_GEN_USE){
+		//Assign the register value to it
+		live_range->reg.gen_purpose = i + 1;
+
+		//Flag this as used in the function
+		if(live_range->assignment_count > 0){
+			live_range->function_defined_in->assigned_registers_gen_purpose[i] = TRUE;
+		}
+
+		//Return true here
+		return TRUE;
+
+	//This means that our neighbors allocated all of the registers available
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * Perform graph coloring to allocate all registers in the interference graph
  *
  * Graph coloring is used as a way to model this problem. For us, no two interfering
@@ -3295,6 +3294,17 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
 
 		//Add it into the priority queue with it's spill cost as the priority
 		max_priority_queue_enqueue(&priority_live_ranges, live_range, live_range->spill_cost);
+	}
+
+	//So long as there are more live ranges to allocate
+	while(max_priority_queue_is_empty(&priority_live_ranges) == FALSE){
+		//Pop it out
+		live_range_t* target = max_priority_queue_dequeue(&priority_live_ranges);
+
+		//If the degree is *less* than the number of available registers(K_COLORS_SSE),
+		//then this is guaranteed to work and we can invoke the allocator off hte bat
+
+
 	}
 
 	//Destroy this before leaving
