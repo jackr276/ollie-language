@@ -1030,8 +1030,10 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee){
  * Sometimes we just want to push a given register. We're able to do this
  * by directly emitting a push instruction with the register in it. This
  * saves us allocation overhead
+ *
+ * This rule is exclusively for general purpose registers
  */
-instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg){
+instruction_t* emit_direct_gp_register_push_instruction(general_purpose_register_t reg){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -1050,8 +1052,10 @@ instruction_t* emit_direct_register_push_instruction(general_purpose_register_t 
  * Sometimes we just want to pop a given register. We're able to do this
  * by directly emitting a pop instruction with the register in it. This
  * saves us allocation overhead
+ *
+ * This rule is exclusively for general purpose registers
  */
-instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg){
+instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_t reg){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -1060,6 +1064,50 @@ instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t r
 
 	//Now we'll set the register
 	instruction->push_or_pop_reg.gen_purpose = reg;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
+ * Sometimes we just want to push a given register. We're able to do this
+ * by directly emitting a push instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for SSE registers
+ */
+instruction_t* emit_direct_sse_register_push_instruction(sse_register_t reg){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = PUSH_DIRECT_SSE;
+
+	//Now we'll set the register
+	instruction->push_or_pop_reg.sse_register = reg;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for SSE registers
+ */
+instruction_t* emit_direct_sse_register_pop_instruction(sse_register_t reg){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = POP_DIRECT_SSE;
+
+	//Now we'll set the register
+	instruction->push_or_pop_reg.sse_register = reg;
 
 	//Now give it back
 	return instruction;

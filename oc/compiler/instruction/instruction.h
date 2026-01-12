@@ -527,21 +527,43 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee);
  * Sometimes we just want to push a given register. We're able to do this
  * by directly emitting a push instruction with the register in it. This
  * saves us allocation overhead
+ *
+ * This rule is explicitly for GP registers
  */
-instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg);
+instruction_t* emit_direct_gp_register_push_instruction(general_purpose_register_t reg);
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for GP registers
+ */
+instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_t reg);
+
+/**
+ * Sometimes we just want to push a given register. We're able to do this
+ * by directly emitting a push instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for SSE registers
+ */
+instruction_t* emit_direct_sse_register_push_instruction(sse_register_t reg);
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for SSE registers
+ */
+instruction_t* emit_direct_sse_register_pop_instruction(sse_register_t reg);
 
 /**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
 instruction_t* emit_pop_instruction(three_addr_var_t* popee);
-
-/**
- * Sometimes we just want to pop a given register. We're able to do this
- * by directly emitting a pop instruction with the register in it. This
- * saves us allocation overhead
- */
-instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg);
 
 /**
  * Emit a PXOR instruction that's already been instruction selected. This is intended to
