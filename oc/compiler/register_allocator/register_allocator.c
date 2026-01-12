@@ -2774,11 +2774,10 @@ static inline coalescence_result_t perform_live_range_coalescence_for_target(bas
 static u_int8_t allocate_register_general_purpose(live_range_t* live_range){
 	//If this is the case, we're already done. This will happen in the event that a register has been pre-colored
 	if(live_range->reg.gen_purpose != NO_REG_GEN_PURPOSE){
-		//Flag this as used in the function
-		if(live_range->assignment_count > 0){
-			live_range->function_defined_in->assigned_registers_gen_purpose[live_range->reg.gen_purpose - 1] = TRUE;
-		}
+		//Flag that the function has used this
+		live_range->function_defined_in->assigned_registers_gen_purpose[live_range->reg.gen_purpose - 1] = TRUE;
 
+		//All went well
 		return TRUE;
 	}
 
@@ -3283,7 +3282,25 @@ static u_int8_t graph_color_and_allocate_general_purpose(basic_block_t* function
  * Return TRUE if the graph was colorable, FALSE if not
  */
 static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dynamic_array_t* sse_live_ranges){
-	//TODO
+	//We need to maintain a priority queue for our live ranges. The ranges with
+	//the highest spill cost need to be allocated first
+	max_priority_queue_t priority_live_ranges = max_priority_queue_alloc();
+
+	//For each SSE live range only. Unlike the GP live ranges, there's
+	//no special LRs here like the stack pointer/instruction pointer ones
+	//so we can just add them all
+	for(u_int16_t i = 0; i < sse_live_ranges->current_index; i++){
+		//Extract it
+		live_range_t* live_range = dynamic_array_get_at(sse_live_ranges, i);
+
+		//Add it into the priority queue with it's spill cost as the priority
+		max_priority_queue_enqueue(&priority_live_ranges, live_range, live_range->spill_cost);
+	}
+
+	//Destroy this before leaving
+	max_priority_queue_dealloc(&priority_live_ranges);
+
+	//If we made it all the way down here, then the graph was N-colorable and we're good
 	return TRUE;
 }
 
