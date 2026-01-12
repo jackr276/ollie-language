@@ -3259,6 +3259,36 @@ static u_int8_t graph_color_and_allocate_general_purpose(basic_block_t* function
 
 
 /**
+ * Allocate an individual SSE live range's register. If we are able to
+ * allocate successfully, we return true. If not, we'll return false which
+ * will invoke the "spill_in_function" process in the caller
+ */
+static u_int8_t allocate_register_sse(live_range_t* live_range){
+	//This is possible - it means that it's already been allocated. In
+	//this case, we'll just fill out the function's assigned list and move
+	//along
+	if(live_range->reg.sse_reg != NO_REG_SSE){
+		//Flag that it was in fact assigned
+		live_range->function_defined_in->assigned_registers_sse[live_range->reg.sse_reg - 1] = TRUE;
+
+		//All went well
+		return TRUE;
+	}
+
+
+
+	//
+	//
+	//
+	//TODO NOT DONE
+	//
+	//
+	//
+	return TRUE;
+}
+
+
+/**
  * Perform graph coloring to allocate all registers in the interference graph
  *
  * Graph coloring is used as a way to model this problem. For us, no two interfering
@@ -3303,8 +3333,20 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
 
 		//If the degree is *less* than the number of available registers(K_COLORS_SSE),
 		//then this is guaranteed to work and we can invoke the allocator off hte bat
+		if(target->degree < K_COLORS_SSE){
+			allocate_register_sse(target);
 
+		//Even if it's degree is more than the K colors, there's still a chance
+		//that we could allocate it. We will give it a try. If it works, great, if
+		//not, we'll need to engage our spilling logic for this 
+		} else {
+			//Attempt to allocate it
+			u_int8_t could_allocate = allocate_register_sse(target);
 
+			//
+			//TODO
+
+		}
 	}
 
 	//Destroy this before leaving
