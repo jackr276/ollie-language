@@ -3438,9 +3438,27 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
 			//Attempt to allocate it
 			u_int8_t could_allocate = allocate_register_sse(target);
 
-			//
-			//TODO
+			//If we were not able to allocate at all, that is where we need
+			//to use the spiller
+			if(could_allocate == FALSE){
+				printf("\n\n\nCould not allocate: LR%d\n", target->live_range_id);
 
+				/**
+				 * Now we need to spill this live range. It is important to note that
+				 * spilling has the effect of completely rewriting the entire program.
+				 * As such, once we spill, we need to redo everything, including the entire 
+				 * graph coloring process. This will require a reset. In practice, even
+				 * the most extreme programs only require that this be done once or twice
+				 */
+				spill_in_function(function_entry, sse_live_ranges, target);
+
+				//Destroy the priority queue now that we're done with it
+				max_priority_queue_dealloc(&priority_live_ranges);
+
+				//We could not allocate everything here, so we need to return false to
+				//trigger the restart by the parent process
+				return FALSE;
+			}
 		}
 	}
 

@@ -7,9 +7,11 @@
 fn float_add_tester(x:f32, y:f32, z:f32) -> f32 {
 	let result:mut f32 = x + y;
 
+	let result_helper:f32 = x - (y + z);
+
 	result -= z;
 	
-	ret result + 3;
+	ret result + result_helper;
 }
 
 
