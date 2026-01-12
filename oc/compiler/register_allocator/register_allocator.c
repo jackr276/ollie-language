@@ -3116,9 +3116,24 @@ static void spill_in_function(basic_block_t* function_entry_block, dynamic_array
  * Function is inlined so in reality this is essentially a macro
  */
 static inline u_int32_t get_bitmap_at_index(u_int32_t bitmap, u_int8_t index){
+	//Grab a mask
+	u_int32_t mask = 0x01;
 
-	//TODO
-	return FALSE;
+	//Shift the mask over by the index amount
+	mask <<= index;
+
+	//Now take the bitmap and "and" it with the mask that we found. This will knock out
+	//anything that is not the index we're after
+	u_int32_t result = bitmap & mask;
+
+	//Now we have our result, we need to left shift it over back
+	//by the index. This will take our result and put it in the LSB
+	//place. In reality what this means is we'll have 0 for false
+	//and 1 for true
+	result >>= index;
+
+	//Give back the result
+	return result;
 }
 
 
