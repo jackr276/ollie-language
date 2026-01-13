@@ -1388,6 +1388,30 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//Let's look and see if we have a variable for use here. If we do, then
 			//we're done with this exploration
 			if(found_var != NULL){
+				//We have an enum type. This means that we're really seeing
+				//a constant here, and need to treat this as such
+				if(found_var->type_defined_as->type_class == TYPE_CLASS_ENUMERATED){
+					//We'll change the type of this node from an identifier to a constant
+					ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
+
+					//Extract the enum integer type from here
+					ident->inferred_type = found_var->type_defined_as->internal_values.enum_integer_type;
+
+					//Start off as a byte, it will be coerced up
+					ident->constant_type = BYTE_CONST;
+
+					//Coerce it here
+					coerce_constant(ident);
+
+					//It is not assignable
+					ident->is_assignable = FALSE;
+
+					printf("HERE\n\n\n\n\n");
+
+					//Give it back
+					return ident;
+				}
+
 				//If this is the right hand side and our variable is not initialized,
 				//this is invalid as we are trying to use before initialization
 				if(side == SIDE_TYPE_RIGHT 
@@ -1438,7 +1462,6 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//We'll through an error if this happens
 			sprintf(info, "Variable \"%s\" has not been declared", var_name);
 			return print_and_return_error(info, current_line);
-
 
 		//If we see any constant
 		case INT_CONST:
@@ -8713,6 +8736,8 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	//valid solution here is one where we end up with a constant in the end
 	generic_ast_node_t* constant_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
+	printf("Value is %d\n\n\n", constant_node->constant_value.signed_int_value);
+
 	//There is only one valid result here - and that is a constant node
 	switch(constant_node->ast_node_type){
 		//The one and only valid case
@@ -8723,6 +8748,7 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			return print_and_return_error("Invalid constant found in switch statment", current_line);
 
 		default:
+			printf("NODE TYPE IS %d\n", constant_node->ast_node_type);
 			return print_and_return_error("Case statements must be values that expand to constants", current_line);
 	}
 
@@ -8743,6 +8769,10 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	//Ultimately the constant type here is assigned over
 	constant_node->inferred_type = case_stmt->inferred_type;
 
+	//Once we have the constant node, it's done it's work. We will copy over whatever the resultant signed
+	//integer value is from it
+	case_stmt->constant_value.signed_int_value = constant_node->constant_value.signed_int_value;
+	
 	//If it's higher than the upper bound, it now is the upper bound
 	if(case_stmt->constant_value.signed_int_value > switch_stmt_node->upper_bound){
 		switch_stmt_node->upper_bound = case_stmt->constant_value.signed_int_value;
