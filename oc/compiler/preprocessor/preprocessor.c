@@ -114,7 +114,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 
 	//We will run through the opening part of the file. If we do not
 	//see the comptime guards, we will back right out
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we see a DEPENDENCIES token, we need to keep going. However if we don't see this, we're
 	//completely done here
@@ -129,7 +129,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	//simple check for a common error by seeing if the next token is the dependencies
 	//end guard. In doing this we'll save processing time and ensure that any allocations
 	//going forward are actually needed
-	lookahead = get_next_token(fl,  &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl,  &parser_line_num);
 	if(lookahead.tok == DEPENDENCIES){
 		//Throw a warning for the user
 		print_preproc_error_linenum(PREPROC_WARN, "Empty \"dependencies\" region detected, consider removing it.", parser_line_num, fname);
@@ -146,13 +146,13 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 	//So long as we keep seeing require -- there is no limit here
 	while(lookahead.tok == REQUIRE){
 		//After the require keyword, we can either see the "lib" keyword or a string constant
-		lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 
 		//We have a library file here -- special location
 		//TODO LIKELY NOT DONE
 		if(lookahead.tok == LIB){
 			//We still need to see a string constant
-			lookahead = get_next_token(fl, &parser_line_num, SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 
 			//If we don't see one here, then it's immediately a failure
 			if(lookahead.tok != STR_CONST){
@@ -166,7 +166,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 			strncpy(added_filename, lookahead.lexeme.string, strlen(lookahead.lexeme.string) + 1);
 
 			//One last thing that we need to see -- closing semicolon
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 
 			//If it's not a semicolon, we fail
 			if(lookahead.tok != SEMICOLON){
@@ -185,7 +185,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 			strncpy(added_filename, lookahead.lexeme.string, strlen(lookahead.lexeme.string) + 1);
 
 			//One last thing that we need to see -- closing semicolon
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 
 			//If it's not a semicolon, we fail
 			if(lookahead.tok != SEMICOLON){
@@ -204,7 +204,7 @@ static dependency_tree_node_t* build_dependency_tree_rec(char* fname){
 		}
 
 		//Refresh the token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//At the very end, if what we saw here causing us to exit was not a COMPTIME token, we
