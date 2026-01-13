@@ -218,7 +218,7 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 /**
  * Constantly iterate through the file and grab the next token that we have
 */
-lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t const_search){
+lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num){
 	//IF we have pushed back tokens, we need to return them first
 	if(lex_stack_is_empty(&pushed_back_tokens) == FALSE){
 		//Just pop this and leave

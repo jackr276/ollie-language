@@ -15,13 +15,6 @@
 #define MAX_TOKEN_LENGTH 500
 #define MAX_IDENT_LENGTH 200
 
-//Are we hunting for a constant?
-typedef enum {
-	SEARCHING_FOR_CONSTANT,
-	NOT_SEARCHING_FOR_CONSTANT
-} const_search_t;
-
-
 //The lexitem_t struct
 typedef struct lexitem_t lexitem_t;
 
@@ -61,7 +54,7 @@ lexitem_t get_next_assembly_statement(FILE* fl);
 /**
  * Generic token grabbing function
  */
-lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t const_search);
+lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num);
 
 /**
  * Push a token back to the stream
