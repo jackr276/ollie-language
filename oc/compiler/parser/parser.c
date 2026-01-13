@@ -8745,6 +8745,34 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 			//We already have the value -- so this doesn't need to be a child node
 			break;
 
+		//If we did not see an identifier, then we will attempt to parse a binary
+		//expression that needs to result in a constant. For example, a user would be
+		//able to do something like case typesize(int) in their switch
+		default:
+			//Push it back up
+			push_back_token(lookahead);
+
+			//Let the binary expression helper deal with this
+			generic_ast_node_t* constant_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+
+			//There is only one valid result here - and that is a constant node
+			switch(constant_node->ast_node_type){
+				//The one and only valid case
+				case AST_NODE_TYPE_CONSTANT:
+					break;
+
+				case AST_NODE_TYPE_ERR_NODE:
+					return print_and_return_error("Invalid constant found in switch statment", current_line);
+
+				default:
+					return print_and_return_error("Case statements must be values that expand to constants", current_line);
+			}
+
+
+			break;
+
+		//We are able to see a minus for negative case values
+		case MINUS:
 		case INT_CONST:
 		case INT_CONST_FORCE_U:
 		case CHAR_CONST:
@@ -8763,47 +8791,13 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 			//If this fails, the whole thing is over
 			if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return print_and_return_error("Invalid constant found in switch statment", current_line);
 			}
 
-			//If we have an integer constant here, we need to make sure that it is not negative. Negative values
-			//would mess with the jump table logic. Ollie langauge does not support GCC-style "switch-to-if" conversions
-			//if the user does this
-			switch(const_node->constant_type){
-				case BYTE_CONST:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_byte_value;
-					break;
-				case BYTE_CONST_FORCE_U:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_byte_value;
-					break;
-				case SHORT_CONST:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_short_value;
-					break;
-				case SHORT_CONST_FORCE_U:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_short_value;
-					break;
-				case INT_CONST:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
-					break;
-				case HEX_CONST:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_int_value;
-					break;
-				case INT_CONST_FORCE_U:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_int_value;
-					break;
-				case LONG_CONST:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.signed_long_value;
-					break;
-				case LONG_CONST_FORCE_U:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.unsigned_long_value;
-					break;
-				case CHAR_CONST:
-					case_stmt->constant_value.signed_int_value = const_node->constant_value.char_value;
-					break;
+			//The inferred type must be an i32
+			const_node->inferred_type = immut_i32;
 
-				default:
-					return print_and_return_error("Illegal type given as case statement value", parser_line_num);
-			}
+			//Now we can coerce this constant
+			coerce_constant(const_node);
 
 			//Otherwise we know that it is good, but is it the right type
 			//Are the types here compatible?
@@ -8821,9 +8815,6 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 
 			//We already have the value -- so this doesn't need to be a child node
 			break;
-
-		default:
-			return print_and_return_error("Enum member or constant required as argument to case statement", current_line);
 	}
 
 
