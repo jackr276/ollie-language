@@ -9981,7 +9981,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
  *
  * BNF Rule: <parameter-declaration> ::= <identifier> : <type-specifier>
  */
-static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t current_parameter_number){
+static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int16_t* current_gen_purpose_param, u_int16_t* current_sse_param){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -10063,8 +10063,21 @@ static symtab_variable_record_t* parameter_declaration(FILE* fl, u_int8_t curren
 	param_record->line_number = parser_line_num;
 	//Store the type as well, very important
 	param_record->type_defined_as = type;
-	//Store the current parameter number of it
-	param_record->function_parameter_order = current_parameter_number;
+
+	//Most common case, not a floating point so
+	//it counts as general-purpose
+	if(IS_FLOATING_POINT(type) == FALSE){
+		param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
+
+		//Bump it for the next go about
+		(*current_gen_purpose_param)++;
+	} else {
+		param_record->class_relative_function_parameter_order = *current_sse_param;
+
+		//Bump it for the next go about
+		(*current_sse_param)++;
+	}
+
 	//This parameter was declared in whatever function we're currently in
 	param_record->function_declared_in = current_function;
 
@@ -10179,13 +10192,16 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			break;
 	}
 
-	//Start off at 1 
-	u_int8_t function_parameter_number = 1;
+	//Start off at 1 for both of these
+	u_int16_t general_purpose_parameter_number = 1;
+	u_int16_t sse_parameter_number = 1;
+	//We also maintain one with no split, just the absolute number
+	u_int16_t absolute_parameter_number = 1;
 
 	//We'll keep going as long as we see more commas
 	do{
 		//We must first see a valid parameter declaration
-		symtab_variable_record_t* parameter = parameter_declaration(fl, function_parameter_number);
+		symtab_variable_record_t* parameter = parameter_declaration(fl, &general_purpose_parameter_number, &sse_parameter_number);
 
 		//It's invalid, we'll just send it up the chain
 		if(parameter == NULL){
@@ -10193,6 +10209,9 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			num_errors++;
 			return FAILURE;;
 		}
+
+		//We will also store the "absolute" parameter number as well
+		parameter->absolute_function_parameter_order = absolute_parameter_number;
 
 		//Status tracker
 		u_int8_t status;
@@ -10214,7 +10233,7 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 		//the same as the one originally given
 		} else {
 			//Check if we've got too many parameters
-			if(function_parameter_number > internal_function_type->num_params){
+			if(absolute_parameter_number > internal_function_type->num_params){
 				sprintf(info, "Function %s was defined with only %d parameters", function_record->func_name.string, internal_function_type->num_params);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
@@ -10222,14 +10241,14 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			}
 
 			//We need to ensure that the mutability levels match here
-			if(internal_function_type->parameters[function_parameter_number - 1]->mutability == MUTABLE && parameter->type_defined_as->mutability == NOT_MUTABLE){
+			if(internal_function_type->parameters[absolute_parameter_number - 1]->mutability == MUTABLE && parameter->type_defined_as->mutability == NOT_MUTABLE){
 				sprintf(info, "Parameter %s was defined as immutable, but predeclared as mutable", parameter->var_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 
 			//The other option for a mismatch
-			} else if(internal_function_type->parameters[function_parameter_number - 1]->mutability == NOT_MUTABLE && parameter->type_defined_as->mutability == MUTABLE){
+			} else if(internal_function_type->parameters[absolute_parameter_number - 1]->mutability == NOT_MUTABLE && parameter->type_defined_as->mutability == MUTABLE){
 				sprintf(info, "Parameter %s was defined as mutable, but predeclared as immutable", parameter->var_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
@@ -10237,21 +10256,21 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			}
 
 			//If the mutability levels are off, we fail out
-			if(internal_function_type->parameters[function_parameter_number-1]->mutability != parameter->type_defined_as->mutability){
-				sprintf(info, "Mutability mismatch for parameter %d", function_parameter_number);
+			if(internal_function_type->parameters[absolute_parameter_number - 1]->mutability != parameter->type_defined_as->mutability){
+				sprintf(info, "Mutability mismatch for parameter %d", absolute_parameter_number);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
 
 			//Grab the defined type out
-			generic_type_t* declared_type = dealias_type(internal_function_type->parameters[function_parameter_number-1]);
+			generic_type_t* declared_type = dealias_type(internal_function_type->parameters[absolute_parameter_number - 1]);
 			//And this type
 			generic_type_t* defined_type = dealias_type(parameter->type_defined_as);
 
 			//If these 2 don't match, we fail
 			if(defined_type != declared_type){
-				sprintf(info, "Parameter %d was defined with type %s, but declared with type %s",  function_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
+				sprintf(info, "Parameter %d was defined with type %s, but declared with type %s",  absolute_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -10271,8 +10290,9 @@ static u_int8_t parameter_list(FILE* fl, symtab_function_record_t* function_reco
 			return FAILURE;
 		}
 
-		//Increment this
-		function_parameter_number++;
+
+		//We made it here, so we've seen one more absolute number
+		absolute_parameter_number++;
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);

@@ -3877,7 +3877,7 @@ static void handle_left_shift_instruction(instruction_t* instruction){
 		//will clash because it doesn't know whether to use the parameter register or
 		//the %ecx register that shift operands must be in. This is a unique case for shifting
 		//due to a quirk of x86
-		if(instruction->op2->parameter_number > 0){
+		if(instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
 			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
 			//Add this instruction to our block
@@ -3950,7 +3950,7 @@ static void handle_right_shift_instruction(instruction_t* instruction){
 		//will clash because it doesn't know whether to use the parameter register or
 		//the %ecx register that shift operands must be in. This is a unique case for shifting
 		//due to a quirk of x86
-		if(instruction->op2->parameter_number > 0){
+		if(instruction->op2->class_relative_parameter_order > 0){
 			//Move it on over here
 			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(instruction->op2->type), instruction->op2);
 			//Add this instruction to our block

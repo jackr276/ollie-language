@@ -135,9 +135,6 @@ struct local_constant_t{
 struct symtab_function_record_t{
 	//The parameters for the function
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
-	//Maintain arrays for the assigned general use and SSE registers
-	u_int8_t assigned_registers_gen_purpose[K_COLORS_GEN_USE];
-	u_int8_t assigned_registers_sse[K_COLORS_SSE];
 	//The name of the function
 	dynamic_string_t func_name;
 	//Functions have dynamic arrays for string/nonstring constants
@@ -158,6 +155,10 @@ struct symtab_function_record_t{
 	generic_type_t* return_type;
 	//The line number
 	u_int32_t line_number;
+	//A bitmap for all assigned general purpose registers
+	u_int32_t assigned_general_purpose_registers;
+	//A bitmap for all assigned SSE registers
+	u_int32_t assigned_sse_registers;
 	//Number of parameters
 	u_int8_t number_of_params;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
@@ -203,12 +204,16 @@ struct symtab_variable_record_t{
 	u_int16_t counter;
 	//What is the struct offset for this variable
 	u_int16_t struct_offset;
+	//What is the parameter order for this value?
+	u_int16_t absolute_function_parameter_order;
+	//What is the relative parameter order for this value? In other words,
+	//what is the SSE parameter number or the general purpose parameter number.
+	//This is what really matters to us in the register allocator
+	u_int16_t class_relative_function_parameter_order;
 	//Was it initialized?
 	u_int8_t initialized;
 	//Has this been mutated
 	u_int8_t mutated;
-	//What is the parameter order for this value?
-	u_int8_t function_parameter_order;
 	//What type structure or language concept does this variable belong to?
 	variable_membership_t membership;
 	//Where does this variable get stored? By default we assume register, so

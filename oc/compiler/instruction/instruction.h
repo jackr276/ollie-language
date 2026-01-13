@@ -137,7 +137,7 @@ struct live_range_t {
 	//The interference graph index of it
 	u_int16_t interference_graph_index;
 	//What is the function parameter order here?
-	u_int8_t function_parameter_order;
+	u_int16_t class_relative_function_parameter_order;
 	//Does this carry a pre-colored value
 	u_int8_t is_precolored;
 	//Was this live range spilled?
@@ -183,15 +183,15 @@ struct three_addr_var_t{
 	//This will be needed later on down the line in 
 	//the instruction selector
 	u_int32_t use_count;
+	//What is the parameter number of this var? Used for parameter passing. If
+	//it is 0, it's ignored
+	u_int16_t class_relative_parameter_order;
 	//What is the indirection level
 	//Is this variable dereferenced in some way
 	//(either loaded from or stored to)
 	u_int8_t is_dereferenced;
 	//Is this a stack pointer?
 	u_int8_t is_stack_pointer;
-	//What is the parameter number of this var? Used for parameter passing. If
-	//it is 0, it's ignored
-	u_int8_t parameter_number;
 	//What is the size of this variable
 	variable_size_t variable_size;
 	//What membership do we have if any
@@ -527,21 +527,43 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee);
  * Sometimes we just want to push a given register. We're able to do this
  * by directly emitting a push instruction with the register in it. This
  * saves us allocation overhead
+ *
+ * This rule is explicitly for GP registers
  */
-instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg);
+instruction_t* emit_direct_gp_register_push_instruction(general_purpose_register_t reg);
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for GP registers
+ */
+instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_t reg);
+
+/**
+ * Sometimes we just want to push a given register. We're able to do this
+ * by directly emitting a push instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for SSE registers
+ */
+instruction_t* emit_direct_sse_register_push_instruction(sse_register_t reg);
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for SSE registers
+ */
+instruction_t* emit_direct_sse_register_pop_instruction(sse_register_t reg);
 
 /**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
 instruction_t* emit_pop_instruction(three_addr_var_t* popee);
-
-/**
- * Sometimes we just want to pop a given register. We're able to do this
- * by directly emitting a pop instruction with the register in it. This
- * saves us allocation overhead
- */
-instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg);
 
 /**
  * Emit a PXOR instruction that's already been instruction selected. This is intended to
@@ -861,16 +883,6 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
  * Select the appropriate set type given the circumstances, including the operand and the signedness
  */
 instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed);
-
-/**
- * Is the given register caller saved?
- */
-u_int8_t is_register_caller_saved(general_purpose_register_t reg);
-
-/**
- * Is the given register callee saved?
- */
-u_int8_t is_register_callee_saved(general_purpose_register_t reg);
 
 /**
  * Get the estimated cycle count for a given instruction. This count

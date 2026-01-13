@@ -841,7 +841,7 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	emitted_var->membership = var->membership;
 
 	//Copy these over
-	emitted_var->parameter_number = var->function_parameter_order;
+	emitted_var->class_relative_parameter_order = var->class_relative_function_parameter_order;
 
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);
@@ -885,7 +885,7 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	emitted_var->membership = var->membership;
 
 	//Copy these over
-	emitted_var->parameter_number = var->function_parameter_order;
+	emitted_var->class_relative_parameter_order= var->class_relative_function_parameter_order;
 
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);
@@ -1030,16 +1030,84 @@ instruction_t* emit_push_instruction(three_addr_var_t* pushee){
  * Sometimes we just want to push a given register. We're able to do this
  * by directly emitting a push instruction with the register in it. This
  * saves us allocation overhead
+ *
+ * This rule is exclusively for general purpose registers
  */
-instruction_t* emit_direct_register_push_instruction(general_purpose_register_t reg){
+instruction_t* emit_direct_gp_register_push_instruction(general_purpose_register_t reg){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//Set the type
-	instruction->instruction_type = PUSH_DIRECT;
+	instruction->instruction_type = PUSH_DIRECT_GP;
 
 	//Now we'll set the register
 	instruction->push_or_pop_reg.gen_purpose = reg;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is exclusively for general purpose registers
+ */
+instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_t reg){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = POP_DIRECT_GP;
+
+	//Now we'll set the register
+	instruction->push_or_pop_reg.gen_purpose = reg;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
+ * Sometimes we just want to push a given register. We're able to do this
+ * by directly emitting a push instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for SSE registers
+ */
+instruction_t* emit_direct_sse_register_push_instruction(sse_register_t reg){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = PUSH_DIRECT_SSE;
+
+	//Now we'll set the register
+	instruction->push_or_pop_reg.sse_register = reg;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
+ * Sometimes we just want to pop a given register. We're able to do this
+ * by directly emitting a pop instruction with the register in it. This
+ * saves us allocation overhead
+ *
+ * This rule is explicitly for SSE registers
+ */
+instruction_t* emit_direct_sse_register_pop_instruction(sse_register_t reg){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = POP_DIRECT_SSE;
+
+	//Now we'll set the register
+	instruction->push_or_pop_reg.sse_register = reg;
 
 	//Now give it back
 	return instruction;
@@ -1082,26 +1150,6 @@ instruction_t* emit_pop_instruction(three_addr_var_t* popee){
 	instruction->source_register = popee;
 
 	//Finally give it back
-	return instruction;
-}
-
-
-/**
- * Sometimes we just want to pop a given register. We're able to do this
- * by directly emitting a pop instruction with the register in it. This
- * saves us allocation overhead
- */
-instruction_t* emit_direct_register_pop_instruction(general_purpose_register_t reg){
-	//First allocate
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the type
-	instruction->instruction_type = POP_DIRECT;
-
-	//Now we'll set the register
-	instruction->push_or_pop_reg.gen_purpose = reg;
-
-	//Now give it back
 	return instruction;
 }
 
@@ -4098,10 +4146,17 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "\n");
 			break;
 
-		case PUSH_DIRECT:
+		case PUSH_DIRECT_GP:
 			fprintf(fl, "push ");
 			//We have to print a register here, there's no choice
 			print_64_bit_register_name(fl, instruction->push_or_pop_reg.gen_purpose);
+			fprintf(fl, "\n");
+			break;
+
+		case PUSH_DIRECT_SSE:
+			fprintf(fl, "push ");
+			//We have to print a register here, there's no choice
+			print_double_precision_sse_register(fl, instruction->push_or_pop_reg.sse_register);
 			fprintf(fl, "\n");
 			break;
 
@@ -4111,10 +4166,17 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "\n");
 			break;
 
-		case POP_DIRECT:
+		case POP_DIRECT_GP:
 			fprintf(fl, "pop ");
 			//We have to print a register here, there's no choice
 			print_64_bit_register_name(fl, instruction->push_or_pop_reg.gen_purpose);
+			fprintf(fl, "\n");
+			break;
+
+		case POP_DIRECT_SSE:
+			fprintf(fl, "pop ");
+			//We have to print a register here, there's no choice
+			print_double_precision_sse_register(fl, instruction->push_or_pop_reg.sse_register);
 			fprintf(fl, "\n");
 			break;
 
@@ -6993,45 +7055,6 @@ instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_sig
 			default:
 				return SETE;
 		}
-	}
-}
-
-/**
- * Is the given register caller saved?
- */
-u_int8_t is_register_caller_saved(general_purpose_register_t reg){
-	switch(reg){
-		case RAX:
-		case RDI:
-		case RSI:
-		case RDX:
-		case RCX:
-		case R8:
-		case R9:
-		case R10:
-		case R11:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
- * Is the given register callee saved?
- */
-u_int8_t is_register_callee_saved(general_purpose_register_t reg){
-	//This is all determined based on the register type
-	switch(reg){
-		case RBX:
-		case RBP:
-		case R12:
-		case R13:
-		case R14:
-		case R15:
-			return TRUE;
-		default:
-			return FALSE;
 	}
 }
 

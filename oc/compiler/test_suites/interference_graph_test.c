@@ -54,7 +54,7 @@ int main(int argc, char** argv){
 		int32_t j = rand() % 20;
 
 		if(j != i){
-			add_interference(graph, dynamic_array_get_at(&live_ranges, i), dynamic_array_get_at(&live_ranges, j));
+			add_interference(dynamic_array_get_at(&live_ranges, i), dynamic_array_get_at(&live_ranges, j));
 			printf("%d and %d interfere\n", i, j);
 		}
 	}

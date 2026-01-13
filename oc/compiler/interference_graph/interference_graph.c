@@ -33,9 +33,26 @@ static interference_graph_t* interference_graph_alloc(u_int16_t live_range_count
 
 
 /**
- * Mark that live ranges a and b interfere
+ * Add the interference between these two live ranges into the graph. Note that this
+ * function does not deal with the neighbor arrays itself, and will assume that the caller
+ * has already taken care of all that
  */
-void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t* b){
+static inline void add_interference_in_graph(interference_graph_t* graph, live_range_t* a, live_range_t *b){
+	//To add the interference we'll first need to calculate the offsets for both
+	//b's and a's version
+	u_int16_t offset_a_b = a->interference_graph_index * graph->live_range_count + b->interference_graph_index;
+	u_int16_t offset_b_a = b->interference_graph_index * graph->live_range_count + a->interference_graph_index;
+
+	//Now we'll go to the adjacency matrix and add this in
+	graph->nodes[offset_a_b] = TRUE;
+	graph->nodes[offset_b_a] = TRUE;
+}
+
+
+/**
+ * Mark that live ranges a and b interfere. This function does not impact the graph at all
+ */
+void add_interference(live_range_t* a, live_range_t* b){
 	//If these are the exact same live range, they can't interfere with eachother 
 	//so we'll skip this
 	if(a == b){
@@ -55,17 +72,6 @@ void add_interference(interference_graph_t* graph, live_range_t* a, live_range_t
 	//Add a to b's neighbors if it's not already there
 	if(dynamic_array_contains(&(b->neighbors), a) == NOT_FOUND){
 		dynamic_array_add(&(b->neighbors), a);
-	}
-
-	//If the graph isn't null, we'll assume that the caller wants us to add this in
-	if(graph != NULL){
-		//Calculate the offsets
-		u_int16_t offset_a_b = a->interference_graph_index * graph->live_range_count + b->interference_graph_index;
-		u_int16_t offset_b_a = b->interference_graph_index * graph->live_range_count + a->interference_graph_index;
-
-		//Now we'll go to the adjacency matrix and add this in
-		graph->nodes[offset_a_b] = TRUE;
-		graph->nodes[offset_b_a] = TRUE;
 	}
 
 	//Reset their degree values
@@ -129,7 +135,10 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 		remove_interference(graph, neighbor, coalescee);
 
 		//The target and the neighbor are now interfering
-		add_interference(graph, target, neighbor);
+		add_interference(target, neighbor);
+
+		//Put this interference into the graph now
+		add_interference_in_graph(graph, target, neighbor);
 	}
 
 	/**
@@ -138,14 +147,26 @@ void coalesce_live_ranges(interference_graph_t* graph, live_range_t* target, liv
 	 * If the target has a register and the source has no/the same register, no
 	 * action is needed
 	 */
-	if(target->reg.gen_purpose == NO_REG_GEN_PURPOSE){
-		target->reg = coalescee->reg;
+	switch(target->live_range_class){
+		case LIVE_RANGE_CLASS_GEN_PURPOSE:
+			if(target->reg.gen_purpose == NO_REG_GEN_PURPOSE){
+				target->reg = coalescee->reg;
+			}
+
+			break;
+
+		case LIVE_RANGE_CLASS_SSE:
+			if(target->reg.sse_reg == NO_REG_SSE){
+				target->reg = coalescee->reg;
+			}
+
+			break;
 	}
 
 	//If the target already has no function parameter order,
 	//we can copy over the coalescee's
-	if(target->function_parameter_order == 0){
-		target->function_parameter_order = coalescee->function_parameter_order;
+	if(target->class_relative_function_parameter_order == 0){
+		target->class_relative_function_parameter_order = coalescee->class_relative_function_parameter_order;
 	}
 
 	//We now add the spill cost of the one that was coalesced to the target
