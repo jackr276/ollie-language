@@ -1388,25 +1388,40 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 			//Let's look and see if we have a variable for use here. If we do, then
 			//we're done with this exploration
 			if(found_var != NULL){
-				//We have an enum type. This means that we're really seeing
-				//a constant here, and need to treat this as such
-				if(found_var->type_defined_as->type_class == TYPE_CLASS_ENUMERATED){
+				//If this var is itself an enum member, we need to treat it as a constant
+				if(found_var->membership == ENUM_MEMBER){
 					//We'll change the type of this node from an identifier to a constant
 					ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
 
 					//Extract the enum integer type from here
-					ident->inferred_type = found_var->type_defined_as->internal_values.enum_integer_type;
+					ident->inferred_type = found_var->type_defined_as;
 
-					//Start off as a byte, it will be coerced up
-					ident->constant_type = BYTE_CONST;
+					//Store the constant value appropriately
+					switch(ident->inferred_type->type_size){
+						case 1:
+							ident->constant_type = BYTE_CONST;
+							ident->constant_value.signed_byte_value = found_var->enum_member_value;
+							break;
 
-					//Coerce it here
-					coerce_constant(ident);
+						case 2:
+							ident->constant_type = SHORT_CONST;
+							ident->constant_value.signed_short_value = found_var->enum_member_value;
+							break;
+
+						case 4:
+							ident->constant_type = INT_CONST;
+							ident->constant_value.signed_int_value = found_var->enum_member_value;
+							break;
+
+						default:
+							ident->constant_type = LONG_CONST;
+							ident->constant_value.signed_long_value = found_var->enum_member_value;
+							break;
+							
+					}
 
 					//It is not assignable
 					ident->is_assignable = FALSE;
-
-					printf("HERE\n\n\n\n\n");
 
 					//Give it back
 					return ident;
@@ -8736,8 +8751,6 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	//valid solution here is one where we end up with a constant in the end
 	generic_ast_node_t* constant_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
-	printf("Value is %d\n\n\n", constant_node->constant_value.signed_int_value);
-
 	//There is only one valid result here - and that is a constant node
 	switch(constant_node->ast_node_type){
 		//The one and only valid case
@@ -8765,6 +8778,17 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 					  switch_stmt_node->inferred_type->type_name.string, constant_node->inferred_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
+
+	//
+	//
+	//
+	//TODO - let's check to see if a given constant is inside of
+	//an enum type's list of current values. We will throw a warning
+	//if it isn't
+	//
+	//
+	//
+	//
 
 	//Ultimately the constant type here is assigned over
 	constant_node->inferred_type = case_stmt->inferred_type;
