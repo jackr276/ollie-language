@@ -3546,10 +3546,10 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 				 */
 				if(get_bitmap_at_index(callee->assigned_general_purpose_registers, general_purpose_reg - 1) == TRUE){
 					//Emit a direct push with this live range's register
-					instruction_t* push_inst = emit_direct_register_push_instruction(general_purpose_reg);
+					instruction_t* push_inst = emit_direct_gp_register_push_instruction(general_purpose_reg);
 
 					//Emit the pop instruction for this
-					instruction_t* pop_inst = emit_direct_register_pop_instruction(general_purpose_reg);
+					instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(general_purpose_reg);
 
 					//Insert the push instruction directly before the call instruction
 					insert_instruction_before_given(push_inst, instruction);
@@ -3651,10 +3651,10 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		//SSE registers. This one may already be fine though
 
 		//Emit a direct push with this live range's register
-		instruction_t* push_inst = emit_direct_register_push_instruction(reg);
+		instruction_t* push_inst = emit_direct_gp_register_push_instruction(reg);
 
 		//Emit the pop instruction for this
-		instruction_t* pop_inst = emit_direct_register_pop_instruction(reg);
+		instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(reg);
 
 		//Insert the push instruction directly before the call instruction
 		insert_instruction_before_given(push_inst, instruction);
@@ -3768,17 +3768,17 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		}
 
 		//Now we'll need to add an instruction to push this at the entry point of our function
-		instruction_t* push = emit_direct_register_push_instruction(used_reg);
+		instruction_t* push_instruction = emit_direct_gp_register_push_instruction(used_reg);
 
 		//Insert this push before the leader instruction
-		insert_instruction_before_given(push, entry_instruction);
+		insert_instruction_before_given(push_instruction, entry_instruction);
 
 		//If the entry instruction is still the function's leader statement, then
 		//we'll need to update it. This only happens on the very first push. For
 		//everyting subsequent, we won't need to do this
 		if(entry_instruction == function_entry->leader_statement){
 			//Reassign this to be the very first push
-			function_entry->leader_statement = push;
+			function_entry->leader_statement = push_instruction;
 		}
 	}
 
@@ -3837,7 +3837,7 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 			}
 
 			//If we make it here, we know that we'll need to save this register
-			instruction_t* pop_instruction = emit_direct_register_pop_instruction(used_reg);
+			instruction_t* pop_instruction = emit_direct_gp_register_pop_instruction(used_reg);
 
 			//Insert it before the ret
 			insert_instruction_before_given(pop_instruction, predecessor->exit_statement);

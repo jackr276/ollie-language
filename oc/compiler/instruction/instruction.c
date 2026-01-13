@@ -1038,7 +1038,7 @@ instruction_t* emit_direct_gp_register_push_instruction(general_purpose_register
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//Set the type
-	instruction->instruction_type = PUSH_DIRECT_GEN_PURPOSE;
+	instruction->instruction_type = PUSH_DIRECT_GP;
 
 	//Now we'll set the register
 	instruction->push_or_pop_reg.gen_purpose = reg;
@@ -1060,7 +1060,7 @@ instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//Set the type
-	instruction->instruction_type = POP_DIRECT_GEN_PURPOSE;
+	instruction->instruction_type = POP_DIRECT_GP;
 
 	//Now we'll set the register
 	instruction->push_or_pop_reg.gen_purpose = reg;
@@ -4146,10 +4146,17 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "\n");
 			break;
 
-		case PUSH_DIRECT:
+		case PUSH_DIRECT_GP:
 			fprintf(fl, "push ");
 			//We have to print a register here, there's no choice
 			print_64_bit_register_name(fl, instruction->push_or_pop_reg.gen_purpose);
+			fprintf(fl, "\n");
+			break;
+
+		case PUSH_DIRECT_SSE:
+			fprintf(fl, "push ");
+			//We have to print a register here, there's no choice
+			print_double_precision_sse_register(fl, instruction->push_or_pop_reg.sse_register);
 			fprintf(fl, "\n");
 			break;
 
@@ -4159,10 +4166,17 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "\n");
 			break;
 
-		case POP_DIRECT:
+		case POP_DIRECT_GP:
 			fprintf(fl, "pop ");
 			//We have to print a register here, there's no choice
 			print_64_bit_register_name(fl, instruction->push_or_pop_reg.gen_purpose);
+			fprintf(fl, "\n");
+			break;
+
+		case POP_DIRECT_SSE:
+			fprintf(fl, "pop ");
+			//We have to print a register here, there's no choice
+			print_double_precision_sse_register(fl, instruction->push_or_pop_reg.sse_register);
 			fprintf(fl, "\n");
 			break;
 

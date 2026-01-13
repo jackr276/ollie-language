@@ -163,9 +163,11 @@ typedef enum{
 	TESTL,
 	TESTQ,
 	PUSH,
-	PUSH_DIRECT, //Bypass live_ranges entirely
+	PUSH_DIRECT_GP,  //Bypass live_ranges entirely
+	PUSH_DIRECT_SSE, //Bypass live ranges entirely
 	POP,
-	POP_DIRECT, //Bypass live_ranges entirely
+	POP_DIRECT_GP, 	 //Bypass live_ranges entirely
+	POP_DIRECT_SSE,	 //Bypass live_ranges entirely
 	SETE, //Set if equal
 	SETNE, //Set if not equal
 	SETGE, //Set >= signed
