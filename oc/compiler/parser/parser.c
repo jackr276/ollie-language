@@ -627,7 +627,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
  */
 static generic_ast_node_t* identifier(FILE* fl, side_type_t side){
 	//Grab the next token
-	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num);
 	
 	//If we can't find it that's bad
 	if(lookahead.tok != IDENT){
@@ -684,12 +684,12 @@ static generic_ast_node_t* emit_direct_constant(int32_t constant){
  * 						  | <float-constant> 
  * 						  | <char-constant>
  */
-static generic_ast_node_t* constant(FILE* fl, const_search_t const_search, side_type_t side){
+static generic_ast_node_t* constant(FILE* fl, side_type_t side){
 	//Lookahead token
 	lexitem_t lookahead;
 
 	//We should see one of the 4 constants here
-	lookahead = get_next_token(fl, &parser_line_num, const_search);
+	lookahead = get_next_token(fl, &parser_line_num;
 
 	//Create our constant node
 	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
@@ -913,7 +913,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	u_int8_t num_params = 0;
 	
 	//Grab the next token using the lookahead
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//We have a general error-probably will be quite uncommon
 	if(lookahead.tok != IDENT){
@@ -996,7 +996,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	function_call_node->inferred_type = function_signature->return_type;
 	
 	//We now need to see a left parenthesis for our param list
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail out here
 	if(lookahead.tok != L_PAREN){
@@ -1011,7 +1011,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 	//we'll expect to immediately see an R_PAREN
 	if(function_signature->num_params == 0){
 		//Refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 		
 		//If it's not an R_PAREN, then we fail
 		if(lookahead.tok != R_PAREN){
@@ -1155,7 +1155,7 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 		add_child_node(function_call_node, current_param);
 
 		//Refresh the token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 
 	//Keep going so long as we don't see a right paren
 	} while (lookahead.tok != R_PAREN);
@@ -1196,7 +1196,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	lexitem_t lookahead;
 
 	//We must then see left parenthesis
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail case here
 	if(lookahead.tok != L_PAREN){
@@ -1221,7 +1221,7 @@ static generic_ast_node_t* sizeof_statement(FILE* fl, side_type_t side){
 	}
 
 	//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail out here if we don't see it
 	if(lookahead.tok != R_PAREN){
@@ -1267,7 +1267,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	lexitem_t lookahead;
 
 	//We must then see left parenthesis
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail case here
 	if(lookahead.tok != L_PAREN){
@@ -1293,7 +1293,7 @@ static generic_ast_node_t* typesize_statement(FILE* fl, side_type_t side){
 	//And then we no longer need the type-spec node, we can just remove it
 
 	//Otherwise if we get here it actually was defined, so now we'll look for an R_PAREN
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail out here if we don't see it
 	if(lookahead.tok != R_PAREN){
@@ -1345,7 +1345,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 	lexitem_t lookahead;
 
 	//Grab the next token, we'll multiplex on this
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Switch based on the token
 	switch(lookahead.tok){
@@ -1489,7 +1489,7 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 
 			//Otherwise it worked, but we're still not done. We now must see the R_PAREN and
 			//match it with the accompanying L_PAREN
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 
 			//Fail case here
 			if(lookahead.tok != R_PAREN){
@@ -1672,7 +1672,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	lex_stack_t stack = lex_stack_alloc();
 	
 	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//So long as we don't see a semicolon(end) or an assignment op, or a left or right curly
 	while(is_assignment_operator(lookahead.tok) == FALSE && lookahead.tok != SEMICOLON && lookahead.tok != L_CURLY && lookahead.tok != R_CURLY){
@@ -1680,7 +1680,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 		push_token(&stack, lookahead);
 
 		//Otherwise refresh
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//Save the assignment operator for later
@@ -1749,7 +1749,7 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 	add_child_node(asn_expr_node, left_hand_unary);
 
 	//Now we are required to see the := terminal
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//Fail case here
 	if(is_assignment_operator(lookahead.tok) == FALSE){
@@ -1948,7 +1948,7 @@ static generic_ast_node_t* union_pointer_accessor(FILE* fl, generic_type_t* curr
 	}
 
 	//Following this, we need to see an identifier
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If this is not an identifier, we fail out
 	if(lookahead.tok != IDENT){
@@ -2014,7 +2014,7 @@ static generic_ast_node_t* struct_pointer_accessor(FILE* fl, generic_type_t* cur
 	}
 
 	//Now we are required to see a valid variable identifier.
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//For now we're just doing error checking
 	if(lookahead.tok != IDENT){
@@ -2082,7 +2082,7 @@ static generic_ast_node_t* struct_accessor(FILE* fl, generic_type_t* current_typ
 	}
 
 	//Now we are required to see a valid variable identifier.
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//For now we're just doing error checking
 	if(lookahead.tok != IDENT){
@@ -2141,7 +2141,7 @@ static generic_ast_node_t* union_accessor(FILE* fl, generic_type_t* type, side_t
 	}
 
 	//Following this, we need to see an identifier
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If this is not an identifier, we fail out
 	if(lookahead.tok != IDENT){
@@ -2230,7 +2230,7 @@ static generic_ast_node_t* array_accessor(FILE* fl, generic_type_t* type, side_t
 	}
 
 	//Otherwise, once we get here we need to check for matching brackets
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If wedon't see a right bracket, we'll fail out
 	if(lookahead.tok != R_BRACKET){
@@ -2364,7 +2364,7 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//So long as we keep seeing operators here, we keep chaining them
 	while(TRUE){
 		//Refresh the token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 
 		//Let's grab whatever type that we currently have
 		generic_type_t* current_type = parent->inferred_type;
@@ -2510,7 +2510,7 @@ static generic_ast_node_t* unary_expression(FILE* fl, side_type_t side){
 	u_int8_t is_assignable = TRUE;
 
 	//Let's see what we have
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	//Save this for searching
 	ollie_token_t unary_op_tok = lookahead.tok;
 
@@ -2830,7 +2830,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	//If we first see an angle bracket, we know that we are truly doing
 	//a cast. If we do not, then this expression is just a pass through for
 	//a unary expression
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//If it's not the <, put the token back and just return the unary expression
 	if(lookahead.tok != L_THAN){
@@ -2852,7 +2852,7 @@ static generic_ast_node_t* cast_expression(FILE* fl, side_type_t side){
 	}
 
 	//We now have to see the closing braces that we need
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we didn't see a match
 	if(lookahead.tok != G_THAN){
@@ -2981,7 +2981,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 	//There are now two options. If we do not see any *'s or %'s or /, we just add 
 	//this node in as the child and move along. But if we do see * or % or / symbols,
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//As long as we have a multiplication operators(* or % or /) 
 	while(lookahead.tok == MOD || lookahead.tok == STAR || lookahead.tok == F_SLASH){
@@ -3100,7 +3100,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 
 			//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 			//"sub-tree root". We'll now refresh the token to keep looking
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 			
 			//Skip forward
 			continue;
@@ -3121,7 +3121,7 @@ static generic_ast_node_t* multiplicative_expression(FILE* fl, side_type_t side)
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//If we get here, it means that we did not see the token we need, so we are done. We'll put
@@ -3175,7 +3175,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 	//There are now two options. If we do not see any +'s or -'s, we just add 
 	//this node in as the child and move along. But if we do see + or - symbols,
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//As long as we have a additive operators(+ or -) 
 	while(lookahead.tok == PLUS || lookahead.tok == MINUS){
@@ -3302,7 +3302,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 
 			//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 			//"sub-tree root". We'll now refresh the token to keep looking
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 			
 			//Skip forward
 			continue;
@@ -3329,7 +3329,7 @@ static generic_ast_node_t* additive_expression(FILE* fl, side_type_t side){
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//If we get here, it means that we did not see the token we need, so we are done. We'll put
@@ -3382,7 +3382,7 @@ static generic_ast_node_t* shift_expression(FILE* fl, side_type_t side){
 	//There are now two options. If we do not see any shift operators, we just add 
 	//this node in as the child and move along. But if we do see shift operator symbols,
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Go based on which token we have
 	switch(lookahead.tok){
@@ -3541,7 +3541,7 @@ static generic_ast_node_t* relational_expression(FILE* fl, side_type_t side){
 	//There are now two options. If we do not see any relational operators, we just add 
 	//this node in as the child and move along. But if we do see relational operator symbols,
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Switch is faster since we have an enum so it can use a jump table
 	switch(lookahead.tok){
@@ -3701,7 +3701,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 	//There are now two options. If we do not see any =='s or !='s, we just add 
 	//this node in as the child and move along. But if we do see == or != symbols,
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//As long as we have a relational operators(== or !=) 
 	while(lookahead.tok == NOT_EQUALS || lookahead.tok == DOUBLE_EQUALS){
@@ -3783,7 +3783,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 			sub_tree_root = temp_holder;
 
 			//Refresh the lookahead and skip ahead
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 			continue;
 		}
 
@@ -3802,7 +3802,7 @@ static generic_ast_node_t* equality_expression(FILE* fl, side_type_t side){
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
@@ -3846,7 +3846,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 	//There are now two options. If we do not see any ^'s, we just add 
 	//this node in as the child and move along. But if we do see ^ symbols, 
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//As long as we have a single and(&) 
 	while(lookahead.tok == SINGLE_AND){
@@ -3915,7 +3915,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 			sub_tree_root = temp_holder;
 
 			//Refresh the lookahead and continue
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 			continue;
 		}
 
@@ -3932,7 +3932,7 @@ static generic_ast_node_t* and_expression(FILE* fl, side_type_t side){
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
@@ -3976,7 +3976,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 	//There are now two options. If we do not see any ^'s, we just add 
 	//this node in as the child and move along. But if we do see ^ symbols, 
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//As long as we have a single xor(^)
 	while(lookahead.tok == CARROT){
@@ -4045,7 +4045,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 			sub_tree_root = temp_holder;
 
 			//And push ahead
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 			continue;
 		}
 
@@ -4063,7 +4063,7 @@ static generic_ast_node_t* exclusive_or_expression(FILE* fl, side_type_t side){
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//If we get here, it means that we did not see the "SINGLE_AND" token, so we are done. We'll put
@@ -4107,7 +4107,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 	//There are now two options. If we do not see any |'s, we just add 
 	//this node in as the child and move along. But if we do see | symbols, 
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//As long as we have a single or(|)
 	while(lookahead.tok == SINGLE_OR){
@@ -4177,7 +4177,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 			sub_tree_root = temp_holder;
 
 			//And push ahead
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 			continue;
 		}
 
@@ -4195,7 +4195,7 @@ static generic_ast_node_t* inclusive_or_expression(FILE* fl, side_type_t side){
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
@@ -4243,7 +4243,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 	//There are now two options. If we do not see any &&'s, we just add 
 	//this node in as the child and move along. But if we do see && symbols, 
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//As long as we have a double and 
 	while(lookahead.tok == DOUBLE_AND){
@@ -4321,7 +4321,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 			sub_tree_root = temp_holder;
 			
 			//And push ahead
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 			continue;
 		}
 
@@ -4339,7 +4339,7 @@ static generic_ast_node_t* logical_and_expression(FILE* fl, side_type_t side){
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 	
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
@@ -4393,7 +4393,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 	//There are now two options. If we do not see any ||'s, we just add 
 	//this node in as the child and move along. But if we do see || symbols, 
 	//we will on the fly construct a subtree here
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 	
 	//As long as we have a double or
 	while(lookahead.tok == DOUBLE_OR){
@@ -4471,7 +4471,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 			sub_tree_root = temp_holder;
 			
 			//And push ahead
-			lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+			lookahead = get_next_token(fl, &parser_line_num);
 			continue;
 		}
 
@@ -4489,7 +4489,7 @@ static generic_ast_node_t* logical_or_expression(FILE* fl, side_type_t side){
 
 		//By the end of this, we always have a proper subtree with the operator as the root, being held in 
 		//"sub-tree root". We'll now refresh the token to keep looking
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 	}
 
 	//If we get here, it means that we did not see the "DOUBLE OR" token, so we are done. We'll put
@@ -4539,7 +4539,7 @@ static generic_ast_node_t* array_initializer(FILE* fl, side_type_t side){
 		add_child_node(initializer_list_node, initializer_node);
 
 		//Refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 
 	//So long as we keep seeing commas, we continue
 	} while(lookahead.tok == COMMA);
@@ -4592,7 +4592,7 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
 		add_child_node(initializer_list_node, initializer_node);
 
 		//Refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 
 	//So long as we keep seeing commas, we continue
 	} while(lookahead.tok == COMMA);
@@ -4621,7 +4621,7 @@ static generic_ast_node_t* struct_initializer(FILE* fl, side_type_t side){
  */
 static generic_ast_node_t* initializer(FILE* fl, side_type_t side){
 	//Grab the next token
-	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num);
 	
 	switch(lookahead.tok){
 		//A left bracket symbol means that we're encountering an array initializer
@@ -4669,7 +4669,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	}
 
 	//Let's now see what comes after this ternary expression
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If this is not a question mark, then we are done here, and we should push this token
 	//back and return the conditional
@@ -4706,7 +4706,7 @@ static generic_ast_node_t* ternary_expression(FILE* fl, side_type_t side){
 	add_child_node(ternary_expression_node, if_branch);
 
 	//Once we've seen the if branch, we need to see the colon to separate the else branch
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//If we don't see an else, we have a failure here
 	if(lookahead.tok != ELSE){
@@ -4750,7 +4750,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* mutable_struct_type, gen
 	lexitem_t lookahead;
 
 	//Get the first token
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Let's make sure it actually worked
 	if(lookahead.tok != IDENT){
@@ -4787,7 +4787,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* mutable_struct_type, gen
 	}
 
 	//After the ident, we need to see a colon
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail out here
 	if(lookahead.tok != COLON){
@@ -4850,7 +4850,7 @@ static u_int8_t struct_member(FILE* fl, generic_type_t* mutable_struct_type, gen
  */
 static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type, generic_type_t* immutable_struct_type){
 	//Now we are required to see a curly brace
-	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num);
 
 	//Fail case here
 	if(lookahead.tok != L_CURLY){
@@ -4864,7 +4864,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 	push_token(&grouping_stack, lookahead);
 
 	//This is just to seed our search
-	lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//We can see as many construct members as we please here, all delimited by semicols
 	do{
@@ -4883,7 +4883,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 		}
 		
 		//Now we will refresh the lookahead
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 
 		//We must now see a valid semicolon
 		if(lookahead.tok != SEMICOLON){
@@ -4893,7 +4893,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
 		}
 
 		//Refresh it once more
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 
 	//So long as we don't see the end
 	} while (lookahead.tok != R_CURLY);
@@ -4928,7 +4928,7 @@ static u_int8_t struct_member_list(FILE* fl, generic_type_t* mutable_struct_type
  */
 static u_int8_t function_pointer_definer(FILE* fl){
 	//Declare a token for search-ahead
-	lexitem_t lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+	lexitem_t lookahead = get_next_token(fl, &parser_line_num);
 
 	//Now we need to see an L_PAREN
 	if(lookahead.tok != L_PAREN){
@@ -4947,14 +4947,14 @@ static u_int8_t function_pointer_definer(FILE* fl){
 	//as an alternative way of saying this function takes no parameters
 	
 	//Grab the next token
-	lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+	lookahead = get_next_token(fl, &parser_line_num);
 
 	//We can optionally see a void type that we need to consume
 	switch(lookahead.tok){
 		//We just need to consume this and move along
 		case VOID:
 			//Refresh the token
-			lookahead = get_next_token(fl, &parser_line_num, parser_line_num);
+			lookahead = get_next_token(fl, &parser_line_num);
 			break;
 
 		default:
@@ -4992,7 +4992,7 @@ static u_int8_t function_pointer_definer(FILE* fl){
 		}
 
 		//Refresh the lookahead token
-		lookahead = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		lookahead = get_next_token(fl, &parser_line_num);
 
 	} while(lookahead.tok == COMMA);
 
