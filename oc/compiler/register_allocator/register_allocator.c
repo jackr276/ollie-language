@@ -3633,14 +3633,16 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t* instruction){
 	//Get the destination LR. Remember that this is nullable
 	live_range_t* destination_lr = NULL;
-	//We'll reassign if it exists
-	general_purpose_register_t destination_reg = NO_REG_GEN_PURPOSE;
+
+	//Also cache what the class of the destination LR is
+	live_range_class_t destination_lr_class;
 
 	//Extract if not null
 	if(instruction->destination_register != NULL){
 		destination_lr = instruction->destination_register->associated_live_range;
-		//Extract this too if not null
-		destination_reg = destination_lr->reg.gen_purpose;
+
+		//What is the class
+		destination_lr_class = destination_lr->live_range_class;
 	}
 
 	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
@@ -3660,40 +3662,51 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 		//Grab it out
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
-		//Extract its register too
-		general_purpose_register_t reg = lr->reg.gen_purpose;
+		general_purpose_register_t general_purpose_reg;
+		sse_register_t sse_reg;
 
-		//It's not caller saved, so it's irrelevant
-		if(is_general_purpose_register_caller_saved(reg) == FALSE){
-			continue;
-		}
+		//Go based on the given LR class
+		switch(lr->live_range_class){
+			case LIVE_RANGE_CLASS_GEN_PURPOSE:
+				general_purpose_reg = lr->reg.gen_purpose;
 
-		//We'll also skip over this too
-		if(reg == destination_reg){
-			continue;
-		}
+				//This register must be caller saved to be relevant
+				if(is_general_purpose_register_caller_saved(general_purpose_reg) == FALSE){
+					continue;
+				}
 
-		//TODO - this needs to be made for not only gen purpose but also for
-		//SSE registers. This one may already be fine though
+				//Let's now check to see if it matches the function destination's register. If it
+				//does, we'll bail
+				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+					if(destination_lr->reg.gen_purpose == general_purpose_reg){
+						continue;
+					}
+				}
 
-		//Emit a direct push with this live range's register
-		instruction_t* push_inst = emit_direct_gp_register_push_instruction(reg);
+				//Emit a direct push with this live range's register
+				instruction_t* push_inst = emit_direct_gp_register_push_instruction(general_purpose_reg);
 
-		//Emit the pop instruction for this
-		instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(reg);
+				//Emit the pop instruction for this
+				instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(general_purpose_reg);
 
-		//Insert the push instruction directly before the call instruction
-		insert_instruction_before_given(push_inst, instruction);
+				//Insert the push instruction directly before the call instruction
+				insert_instruction_before_given(push_inst, instruction);
 
-		//Insert the pop instruction directly after the last instruction
-		insert_instruction_after_given(pop_inst, instruction);
+				//Insert the pop instruction directly after the last instruction
+				insert_instruction_after_given(pop_inst, instruction);
 
-		//If the last instruction still is the original instruction. That
-		//means that this is the first pop instruction that we're inserting.
-		//As such, we'll set the last instruction to be this pop instruction
-		//to save ourselves time down the line
-		if(last_instruction == instruction){
-			last_instruction = pop_inst;
+				//If the last instruction still is the original instruction. That
+				//means that this is the first pop instruction that we're inserting.
+				//As such, we'll set the last instruction to be this pop instruction
+				//to save ourselves time down the line
+				if(last_instruction == instruction){
+					last_instruction = pop_inst;
+				}
+
+				break;
+
+			case LIVE_RANGE_CLASS_SSE:
+				break;
 		}
 	}
 
