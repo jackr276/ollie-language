@@ -10872,26 +10872,27 @@ static u_int8_t replace_statement(FILE* fl){
 		return FAILURE;
 	}
 
-	//Otherwise it worked, so now we need to see a constant of some kind
-	//
-	//
-	//
-	//TODO
-	//This should, in reality, just be an expression call(binary_expression)
-	//
-	//
-	//
-	//
-	//
-	generic_ast_node_t* constant_node = constant(fl, SIDE_TYPE_LEFT);
+	/**
+	 * We now need to see a constant expression, but we will allow for some leniency
+	 * by the logical or expression parsing. If a user types something like typesize(int)
+	 * in, then that should still work for our replace statement
+	 */
+	generic_ast_node_t* constant_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
-	//If this fails, then we are done
-	if(constant_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		//Just return 0, printing already happened
-		return FAILURE;
+	switch(constant_node->ast_node_type){
+		//THis is a straight failure, error has already happened
+		case AST_NODE_TYPE_ERR_NODE:
+			return FAILURE;
+
+		//The one good case here
+		case AST_NODE_TYPE_CONSTANT:
+			break;
+
+		//Anything else is invalid, we'll fail out if that's the case
+		default:
+			print_parse_message(PARSE_ERROR, "Replace statements must have an expression that simplifies to a single constant", parser_line_num);
+			return FAILURE;
 	}
-
-	//TODO check if it is or is not a constant in the end, after all of our fancy constant simplification has happened
 
 	//One last thing, we need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
