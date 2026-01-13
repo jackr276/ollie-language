@@ -32,7 +32,7 @@ int main(int argc, char** argv){
 		}
 
 		//Grab the first one
-		l = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT);
+		l = get_next_token(fl, &parser_line_num);
 
 		//Print it
 		print_token(&l);
@@ -41,7 +41,7 @@ int main(int argc, char** argv){
 		int64_t first_token_seek = GET_CURRENT_FILE_POSITION(fl);
 
 		//Very rudimentary here
-		while((l = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT)).tok != DONE){
+		while((l = get_next_token(fl, &parser_line_num)).tok != DONE){
 			print_token(&l);
 		}
 
@@ -52,7 +52,7 @@ int main(int argc, char** argv){
 		reconsume_tokens(fl, first_token_seek);
 
 		//Very rudimentary here
-		while((l = get_next_token(fl, &parser_line_num, NOT_SEARCHING_FOR_CONSTANT)).tok != DONE){
+		while((l = get_next_token(fl, &parser_line_num)).tok != DONE){
 			print_token(&l);
 		}
 		//Print the last one
