@@ -3583,9 +3583,35 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 					}
 				}
 
+				/**
+				 * Once we get past here, we know that we need to save this
+				 * register because the callee will also assign it, so whatever
+				 * value it has that we're relying on would not survive the call
+				 */
+				if(get_bitmap_at_index(callee->assigned_sse_registers, sse_reg - 1) == TRUE){
+					//Emit a direct push with this live range's register
+					instruction_t* push_inst = emit_direct_sse_register_push_instruction(sse_reg);
+
+					//Emit the pop instruction for this
+					instruction_t* pop_inst = emit_direct_sse_register_pop_instruction(sse_reg);
+
+					//Insert the push instruction directly before the call instruction
+					insert_instruction_before_given(push_inst, instruction);
+
+					//Insert the pop instruction directly after the last instruction
+					insert_instruction_after_given(pop_inst, instruction);
+
+					//If the last instruction still is the original instruction. That
+					//means that this is the first pop instruction that we're inserting.
+					//As such, we'll set the last instruction to be this pop instruction
+					//to save ourselves time down the line
+					if(last_instruction == instruction){
+						last_instruction = pop_inst;
+					}
+				}
+
 				break;
 		}
-
 	}
 
 	//Free it up once done
