@@ -3684,28 +3684,61 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 				}
 
 				//Emit a direct push with this live range's register
-				instruction_t* push_inst = emit_direct_gp_register_push_instruction(general_purpose_reg);
+				instruction_t* push_inst_gp = emit_direct_gp_register_push_instruction(general_purpose_reg);
 
 				//Emit the pop instruction for this
-				instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(general_purpose_reg);
+				instruction_t* pop_inst_gp = emit_direct_gp_register_pop_instruction(general_purpose_reg);
 
 				//Insert the push instruction directly before the call instruction
-				insert_instruction_before_given(push_inst, instruction);
+				insert_instruction_before_given(push_inst_gp, instruction);
 
 				//Insert the pop instruction directly after the last instruction
-				insert_instruction_after_given(pop_inst, instruction);
+				insert_instruction_after_given(pop_inst_gp, instruction);
 
 				//If the last instruction still is the original instruction. That
 				//means that this is the first pop instruction that we're inserting.
 				//As such, we'll set the last instruction to be this pop instruction
 				//to save ourselves time down the line
 				if(last_instruction == instruction){
-					last_instruction = pop_inst;
+					last_instruction = pop_inst_gp;
 				}
 
 				break;
 
 			case LIVE_RANGE_CLASS_SSE:
+				//Extract the register. We know that all SSE registers are caller saved, so we
+				//do not need to check for that
+				sse_reg = lr->reg.sse_reg;
+
+
+				//Let's now check to see if it matches the function destination's register. If it
+				//does, we'll bail
+				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
+					if(destination_lr->reg.sse_reg == sse_reg){
+						continue;
+					}
+				}
+
+				//Emit a direct push with this live range's register
+				instruction_t* push_inst_sse = emit_direct_sse_register_push_instruction(sse_reg);
+
+				//Emit the pop instruction for this
+				instruction_t* pop_inst_sse = emit_direct_sse_register_pop_instruction(sse_reg);
+
+				//Insert the push instruction directly before the call instruction
+				insert_instruction_before_given(push_inst_sse, instruction);
+
+				//Insert the pop instruction directly after the last instruction
+				insert_instruction_after_given(pop_inst_sse, instruction);
+
+				//If the last instruction still is the original instruction. That
+				//means that this is the first pop instruction that we're inserting.
+				//As such, we'll set the last instruction to be this pop instruction
+				//to save ourselves time down the line
+				if(last_instruction == instruction){
+					last_instruction = pop_inst_sse;
+				}
+
 				break;
 		}
 	}
