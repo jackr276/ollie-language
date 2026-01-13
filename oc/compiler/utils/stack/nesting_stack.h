@@ -20,6 +20,7 @@ typedef struct nesting_stack_t nesting_stack_t;
 typedef enum {
 	NO_NESTING_LEVEL = 0, // Our default value
 	NESTING_FUNCTION,
+	NESTING_CASE_CONDITION, //Very special nesting level where we're specifically inside of the case statement evaluation
 	NESTING_CASE_STATEMENT,
 	NESTING_C_STYLE_CASE_STATEMENT, // This one allows breaks
 	NESTING_LOOP_STATEMENT,

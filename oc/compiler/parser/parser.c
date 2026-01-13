@@ -2337,6 +2337,8 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
  * The primary expression becomes the very bottom most part of the tree. We'll construct a tree in a similar was
  * as we do the expression trees, with each new postfix node becoming the new parent
  *
+ * NOTE: Because the case statement operators(-> and :) lead to an ambiguous parse here, we have a special nesting
+ * stack flag NESTING_CASE_CONDITION that allows us to disqualify all of these values here and bypass the rule
  *
  * <factored_postfix_expression> ::= <primary-expression> <postfix-tail>
  * 			<postfix-tail> ::= {=> <identifier> | : <identifier> | . <identifier> | -> <identifier> | [ <expression> ] | ++ | --}
@@ -2351,6 +2353,13 @@ static generic_ast_node_t* postfix_expression(FILE* fl, side_type_t side){
 	//If we fail, then we're bailing out here
 	if(primary_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		//Just return, no need for any errors here
+		return primary_expression_node;
+	}
+
+	//If we are inside of a case condition, we will just skip
+	//out all of these rules because they cannot possibly
+	//work
+	if(peek_nesting_level(&nesting_stack) == NESTING_CASE_CONDITION){
 		return primary_expression_node;
 	}
 
@@ -8692,131 +8701,47 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 	lexitem_t lookahead;
 	//Switch compound statement node for later on
 	generic_ast_node_t* switch_compound_statement;
-	//The identifier name - declared here because of strangeness with C case declarations
-	dynamic_string_t ident_name;
 
-	//Remember that we've already seen the first "case" keyword here, so now we need
-	//to consume whatever comes after it(constant or enum value)
-	
 	//Create the node. This could change later on based on whether we have a c-style switch
 	//statement or not
 	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_TYPE_CASE_STMT, SIDE_TYPE_LEFT);
 	
-	//Let's now lookahead and see if we have a valid constant or not
-	lookahead = get_next_token(fl, &parser_line_num);
+	//Push the case statement nesting level here
+	push_nesting_level(&nesting_stack, NESTING_CASE_CONDITION);
 
-	switch(lookahead.tok){
-		case IDENT:
-			//Extract the name
-			 ident_name = lookahead.lexeme;
+	//Let the binary expression helper deal with this. We know that ultimately, the only
+	//valid solution here is one where we end up with a constant in the end
+	generic_ast_node_t* constant_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
 
-			//If it's an identifier, then it has to be an enum
-			symtab_variable_record_t* enum_record = lookup_variable(variable_symtab, ident_name.string);
-
-			//If we somehow couldn't find it
-			if(enum_record == NULL){
-				sprintf(info, "Identifier \"%s\" has never been declared", ident_name.string);
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//If we could find it, but it isn't an enum
-			if(enum_record->membership != ENUM_MEMBER){
-				sprintf(info, "Identifier \"%s\" does not belong to an enum, and as such cannot be used in a case statement", ident_name.string);
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//Otherwise we know that it is good, but is it the right type
-			//Are the types here compatible?
-			case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, enum_record->type_defined_as);
-
-			//If this fails, they're incompatible
-			if(case_stmt->inferred_type == NULL){
-				sprintf(info, "Switch statement switches on type \"%s%s\", but case statement has incompatible type \"%s%s\"", 
-								(switch_stmt_node->inferred_type->mutability == MUTABLE ? "mut ": ""),
-							  	switch_stmt_node->inferred_type->type_name.string,
-								(enum_record->type_defined_as->mutability == MUTABLE ? "mut ": ""),
-								enum_record->type_defined_as->type_name.string);
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//Grab the value of this case statement
-			case_stmt->constant_value.signed_int_value = enum_record->enum_member_value;
-
-			//We already have the value -- so this doesn't need to be a child node
+	//There is only one valid result here - and that is a constant node
+	switch(constant_node->ast_node_type){
+		//The one and only valid case
+		case AST_NODE_TYPE_CONSTANT:
 			break;
 
-		//If we did not see an identifier, then we will attempt to parse a binary
-		//expression that needs to result in a constant. For example, a user would be
-		//able to do something like case typesize(int) in their switch
+		case AST_NODE_TYPE_ERR_NODE:
+			return print_and_return_error("Invalid constant found in switch statment", current_line);
+
 		default:
-			//Push it back up
-			push_back_token(lookahead);
-
-			//Let the binary expression helper deal with this
-			generic_ast_node_t* constant_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
-
-			//There is only one valid result here - and that is a constant node
-			switch(constant_node->ast_node_type){
-				//The one and only valid case
-				case AST_NODE_TYPE_CONSTANT:
-					break;
-
-				case AST_NODE_TYPE_ERR_NODE:
-					return print_and_return_error("Invalid constant found in switch statment", current_line);
-
-				default:
-					return print_and_return_error("Case statements must be values that expand to constants", current_line);
-			}
-
-
-			break;
-
-		//We are able to see a minus for negative case values
-		case MINUS:
-		case INT_CONST:
-		case INT_CONST_FORCE_U:
-		case CHAR_CONST:
-		case SHORT_CONST:
-		case SHORT_CONST_FORCE_U:
-		case BYTE_CONST:
-		case BYTE_CONST_FORCE_U:
-		case HEX_CONST:
-		case LONG_CONST:
-		case LONG_CONST_FORCE_U:
-			//Put it back
-			push_back_token(lookahead);
-		
-			//We are now required to see a valid constant
-			generic_ast_node_t* const_node = constant(fl, SIDE_TYPE_LEFT);
-
-			//If this fails, the whole thing is over
-			if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			}
-
-			//The inferred type must be an i32
-			const_node->inferred_type = immut_i32;
-
-			//Now we can coerce this constant
-			coerce_constant(const_node);
-
-			//Otherwise we know that it is good, but is it the right type
-			//Are the types here compatible?
-			case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, const_node->inferred_type);
-
-			//If this fails, they're incompatible
-			if(case_stmt->inferred_type == NULL){
-				sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-							  switch_stmt_node->inferred_type->type_name.string, const_node->inferred_type->type_name.string);
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//We'll force this to be whatever we got
-			const_node->inferred_type = case_stmt->inferred_type;
-
-			//We already have the value -- so this doesn't need to be a child node
-			break;
+			return print_and_return_error("Case statements must be values that expand to constants", current_line);
 	}
 
+	//Once we're done we can remove this
+	pop_nesting_level(&nesting_stack);
+
+	//Otherwise we know that it is good, but is it the right type
+	//Are the types here compatible?
+	case_stmt->inferred_type = types_assignable(switch_stmt_node->inferred_type, constant_node->inferred_type);
+
+	//If this fails, they're incompatible
+	if(case_stmt->inferred_type == NULL){
+		sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
+					  switch_stmt_node->inferred_type->type_name.string, constant_node->inferred_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Ultimately the constant type here is assigned over
+	constant_node->inferred_type = case_stmt->inferred_type;
 
 	//If it's higher than the upper bound, it now is the upper bound
 	if(case_stmt->constant_value.signed_int_value > switch_stmt_node->upper_bound){
