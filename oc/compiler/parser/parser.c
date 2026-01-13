@@ -10873,6 +10873,16 @@ static u_int8_t replace_statement(FILE* fl){
 	}
 
 	//Otherwise it worked, so now we need to see a constant of some kind
+	//
+	//
+	//
+	//TODO
+	//This should, in reality, just be an expression call(binary_expression)
+	//
+	//
+	//
+	//
+	//
 	generic_ast_node_t* constant_node = constant(fl, SIDE_TYPE_LEFT);
 
 	//If this fails, then we are done
@@ -10880,6 +10890,8 @@ static u_int8_t replace_statement(FILE* fl){
 		//Just return 0, printing already happened
 		return FAILURE;
 	}
+
+	//TODO check if it is or is not a constant in the end, after all of our fancy constant simplification has happened
 
 	//One last thing, we need to see a semicolon
 	lookahead = get_next_token(fl, &parser_line_num);
