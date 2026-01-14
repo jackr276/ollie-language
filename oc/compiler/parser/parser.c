@@ -1394,6 +1394,12 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 					ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
 
 					//Extract the enum integer type from here
+					//
+					//
+					//TODO - we need to figure out how to hande enum type comparison.
+					//We probably need to stash the enum type in the var itself
+					//
+					//fo
 					ident->inferred_type = found_var->type_defined_as;
 
 					//Store the constant value appropriately
@@ -6102,6 +6108,16 @@ static u_int8_t enum_definer(FILE* fl){
 		//Grab it out
 		symtab_variable_record_t* var = dynamic_array_get_at(&(mutable_enum_type->internal_types.enumeration_table), i);
 
+		//
+		//
+		//
+		//
+		//TODO - we should probably be storing the enum type here
+		//
+		//
+		//
+		//
+
 		//Store the type that we have
 		var->type_defined_as = type_needed;
 	}
@@ -6110,6 +6126,13 @@ static u_int8_t enum_definer(FILE* fl){
 	for(u_int16_t i = 0; i < immutable_enum_type->internal_types.enumeration_table.current_index; i++){
 		//Grab it out
 		symtab_variable_record_t* var = dynamic_array_get_at(&(immutable_enum_type->internal_types.enumeration_table), i);
+
+		//
+		//
+		//TODO - we should probably be storing the enum type here
+		//
+		//
+		//
 
 		//Store the type that we have
 		var->type_defined_as = type_needed;
