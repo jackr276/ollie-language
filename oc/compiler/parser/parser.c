@@ -1129,27 +1129,6 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
-			if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				current_param->inferred_type = final_type;
-
-				//Do coercion
-				perform_constant_assignment_coercion(current_param, final_type);
-			}
-
-			//Special checking here - if we have an enum type that is being assigned to, we need
-			//to make sure that it's being assigned to a valid value in it's range
-			if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
-				if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
-					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-								param_type->type_name.string, current_param->constant_value.signed_int_value);
-					print_parse_message(PARSE_ERROR, info, parser_line_num);
-
-					//Hard fail here
-					return print_and_return_error(info, parser_line_num);
-				}
-			} 
-
 		//Otherwise, we have a reference type and we will do some special handling
 		} else {
 			//This is a hard no - we cannot have references being created on-the-fly
