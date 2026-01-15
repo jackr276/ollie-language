@@ -111,6 +111,9 @@ struct generic_ast_node_t{
 		symtab_type_record_t* type_record;
 		//Field in a struct or union
 		symtab_variable_record_t* field_variable;
+		//For enum constants - we'll hold onto the 
+		//enum type here too
+		generic_type_t* enum_type;
 	} optional_storage;
 	//Storing the constant values
 	union {

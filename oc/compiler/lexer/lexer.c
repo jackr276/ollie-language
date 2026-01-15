@@ -218,7 +218,7 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 /**
  * Constantly iterate through the file and grab the next token that we have
 */
-lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t const_search){
+lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num){
 	//IF we have pushed back tokens, we need to return them first
 	if(lex_stack_is_empty(&pushed_back_tokens) == FALSE){
 		//Just pop this and leave
@@ -354,31 +354,6 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num, const_search_t co
 							lex_item.tok = ARROW;
 							lex_item.line_num = line_num;
 							return lex_item;
-
-						//If we're looking for a constant, there are more options
-						//here. This could be a negative sign.
-						} else if(const_search == SEARCHING_FOR_CONSTANT){
-							//Allocate the lexeme
-							lexeme = dynamic_string_alloc();
-
-							//We're in an int
-							if(ch2 >= '0' && ch2 <= '9'){
-								//Add these two characters in
-								dynamic_string_add_char_to_back(&lexeme, ch);
-								dynamic_string_add_char_to_back(&lexeme, ch2);
-								current_state = IN_INT;
-								break;
-							}
-
-							//We're in a float
-							if(ch2 == '.'){
-								dynamic_string_add_char_to_back(&lexeme, ch);
-								current_state = IN_FLOAT;
-								break;
-							}
-							
-							//Break otherwise
-							break;
 
 						//Otherwise we didn't find anything here
 						} else {
