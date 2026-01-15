@@ -8796,16 +8796,16 @@ static generic_ast_node_t* case_statement(FILE* fl, generic_ast_node_t* switch_s
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//
-	//
-	//
-	//TODO - let's check to see if a given constant is inside of
-	//an enum type's list of current values. We will throw a warning
-	//if it isn't
-	//
-	//
-	//
-	//
+	//If this is an enum type, we'll do some extra checking
+	if(is_enum_type(switch_stmt_node->inferred_type) == TRUE){
+		//We will throw a hard error here. Users will be banking on their enums being strict. This kind of loose
+		//assignment would break that illusion
+		if(does_enum_contain_integer_member(switch_stmt_node->inferred_type, constant_node->constant_value.signed_int_value) == FALSE){
+			sprintf(info, "Switch statement switch type \"%s\" does not contain a member whose value is equivalent to %d",
+		   				switch_stmt_node->inferred_type->type_name.string, constant_node->constant_value.signed_int_value);
+			return print_and_return_error(info, parser_line_num);
+		}
+	}
 
 	//Ultimately the constant type here is assigned over
 	constant_node->inferred_type = case_stmt->inferred_type;
