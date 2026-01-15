@@ -3025,6 +3025,7 @@ static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, th
 	switch(incrementee->type->basic_type_token){
 		case F32:
 			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F32);
+
 			break;
 
 		case F64:
@@ -3036,8 +3037,12 @@ static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, th
 			exit(1);
 	}
 
+	//The final assignee needs to be separate for SSA reasons. It will
+	//have a different "name" than the RHS one
+	three_addr_var_t* final_assignee = emit_var_copy(incrementee);
+
 	//Emit the final addition and get it into the block
-	instruction_t* final_addition = emit_binary_operation_instruction(incrementee, incrementee, PLUS, constant_value);
+	instruction_t* final_addition = emit_binary_operation_instruction(final_assignee, incrementee, PLUS, constant_value);
 	add_statement(basic_block, final_addition);
 
 	//This counts as a use
@@ -3045,10 +3050,10 @@ static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, th
 	add_used_variable(basic_block, constant_value);
 
 	//And this is also an assignment
-	add_assigned_variable(basic_block, incrementee);
+	add_assigned_variable(basic_block, final_assignee);
 
 	//Finally, the result that we give back is the incrementee
-	return incrementee;
+	return final_assignee;
 }
 
 

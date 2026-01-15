@@ -3075,7 +3075,7 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 				}
 
 			default:
-				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 				exit(1);
 		}
 	}
@@ -3094,7 +3094,7 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTTSS2SIQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 					exit(1);
 			}
 
@@ -3112,14 +3112,11 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTTSD2SIQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 					exit(1);
 			}
 
 			break;
-
-		//TODO - handling for smaller sources - we don't currently
-		//have this but it is possible in our paradigm
 
 		case DOUBLE_WORD:
 			switch(destination_size){
@@ -3130,7 +3127,7 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTSI2SDL;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 					exit(1);
 			}
 
@@ -3145,14 +3142,14 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTSI2SDQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 					exit(1);
 			}
 
 			break;
 
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 			exit(1);
 	}
 }
@@ -3176,7 +3173,7 @@ static instruction_type_t select_general_purpose_move_instruction(variable_size_
 			case QUAD_WORD:
 				return MOVQ;
 			default:
-				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in GP move selector\n");
 				exit(1);
 		}
 	}
@@ -3279,6 +3276,7 @@ static instruction_type_t select_general_purpose_move_instruction(variable_size_
 
 			//Unreachable
 			default:
+				printf("HERE\n\n\n");
 				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
 				exit(1);
 		}
@@ -3425,7 +3423,7 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 			break;
 		//Should never reach this
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in constant move instruction\n");
 			exit(1);
 	}
 
@@ -3502,7 +3500,7 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 			instruction->instruction_type = CBTW;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in conversion instruction\n");
 			exit(1);
 	}
 
@@ -3591,7 +3589,7 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 			instruction->instruction_type = ANDB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in and instruction\n");
 			exit(1);
 	}
 
@@ -3628,7 +3626,7 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 			instruction->instruction_type = ORB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in or instruction\n");
 			exit(1);
 	}
 
@@ -3690,7 +3688,7 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 		//Should never reach this
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in division instrution\n");
 			exit(1);
 	}
 
@@ -3731,7 +3729,7 @@ static instruction_type_t select_add_instruction(variable_size_t size){
 		case DOUBLE_PRECISION:
 			return ADDSD;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in add instruction\n");
 			exit(1);
 	}
 }
@@ -3752,7 +3750,7 @@ static instruction_type_t select_lea_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return LEAQ;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in lea instruction\n");
 			exit(1);
 	}
 }
@@ -3778,7 +3776,7 @@ static instruction_type_t select_sub_instruction(variable_size_t size){
 		case DOUBLE_PRECISION:
 			return SUBSD;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in subtraction instruction\n");
 			exit(1);
 	}
 }
@@ -3800,7 +3798,7 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return CMPQ;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in cmp instruction\n");
 			exit(1);
 	}
 }
@@ -3991,7 +3989,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 			instruction->instruction_type = ORB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in or instruction\n");
 			exit(1);
 	}
 
@@ -4037,7 +4035,7 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
 			instruction->instruction_type = ANDB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in and instruction\n");
 			exit(1);
 	}
 
@@ -4083,7 +4081,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 			instruction->instruction_type = XORB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in xor instruction\n");
 			exit(1);
 	}
 	
@@ -4424,7 +4422,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 			break;
 		//Everything else falls here
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
 			exit(1);
 	}
 
@@ -4882,7 +4880,7 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 			instruction->instruction_type = MOVQ;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/incorrect variable size detected\n");
+			printf("Fatal internal compiler error: undefined/incorrect variable size detected in constant to register move instruction\n");
 			exit(1);
 	}
 	
