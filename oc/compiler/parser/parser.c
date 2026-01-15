@@ -1129,6 +1129,27 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 				return print_and_return_error(info, parser_line_num);
 			}
 
+			//If this is a constant node, we'll force it to be whatever we expect from the type assignability
+			if(current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				current_param->inferred_type = final_type;
+
+				//Do coercion
+				perform_constant_assignment_coercion(current_param, final_type);
+			}
+
+			//Special checking here - if we have an enum type that is being assigned to, we need
+			//to make sure that it's being assigned to a valid value in it's range
+			if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
+					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+								param_type->type_name.string, current_param->constant_value.signed_int_value);
+					print_parse_message(PARSE_ERROR, info, parser_line_num);
+
+					//Hard fail here
+					return print_and_return_error(info, parser_line_num);
+				}
+			} 
+
 		//Otherwise, we have a reference type and we will do some special handling
 		} else {
 			//This is a hard no - we cannot have references being created on-the-fly
@@ -1181,6 +1202,18 @@ static generic_ast_node_t* function_call(FILE* fl, side_type_t side){
 			//Do coercion
 			perform_constant_assignment_coercion(current_param, final_type);
 		}
+
+		//Special checking here - if we have an enum type that is being assigned to, we need
+		//to make sure that it's being assigned to a valid value in it's range
+		if(is_enum_type(param_type) == TRUE && current_param->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			if(does_enum_contain_integer_member(param_type, current_param->constant_value.signed_int_value) == FALSE){
+				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+							param_type->type_name.string, current_param->constant_value.signed_int_value);
+
+				//Hard fail here
+				return print_and_return_error(info, parser_line_num);
+			}
+		} 
 
 		//We can now safely add this into the function call node as a child. In the function call node, 
 		//the parameters will appear in order from left to right
@@ -1876,6 +1909,16 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 			perform_constant_assignment_coercion(expr, final_type);
 		}
 
+		//Special checking here - if we have an enum type that is being assigned to, we need
+		//to make sure that it's being assigned to a valid value in it's range
+		if(is_enum_type(left_hand_type) == TRUE && expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+			if(does_enum_contain_integer_member(left_hand_type, expr->constant_value.signed_int_value) == FALSE){
+				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+							left_hand_type->type_name.string, expr->constant_value.signed_int_value);
+				return print_and_return_error(info, parser_line_num);
+			}
+		} 
+
 		//Otherwise the overall type is the final type
 		asn_expr_node->inferred_type = final_type;
 
@@ -1952,6 +1995,16 @@ static generic_ast_node_t* assignment_expression(FILE* fl){
 
 					coerce_constant(expr);
 				}
+
+				//Special checking here - if we have an enum type that is being assigned to, we need
+				//to make sure that it's being assigned to a valid value in it's range
+				if(is_enum_type(left_hand_type) == TRUE && expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+					if(does_enum_contain_integer_member(left_hand_type, expr->constant_value.signed_int_value) == FALSE){
+						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+									left_hand_type->type_name.string, expr->constant_value.signed_int_value);
+						return print_and_return_error(info, parser_line_num);
+					}
+				} 
 
 				//We'll also want to create a complete, distinct copy of the subtree here
 				generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
@@ -7408,6 +7461,17 @@ static generic_ast_node_t* return_statement(FILE* fl){
 		perform_constant_assignment_coercion(expr_node, final_type);
 	}
 
+	//Special checking here - if we have an enum type that is being assigned to, we need
+	//to make sure that it's being assigned to a valid value in it's range
+	if(is_enum_type(current_function->return_type) == TRUE && expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		if(does_enum_contain_integer_member(current_function->return_type, expr_node->constant_value.signed_int_value) == FALSE){
+			sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+						current_function->return_type->type_name.string, expr_node->constant_value.signed_int_value);
+			//Hard fail here
+			return print_and_return_error(info, parser_line_num);
+		}
+	} 
+
 	//Otherwise it worked, so we'll add it as a child of the other node
 	add_child_node(return_stmt, expr_node);
 
@@ -9464,6 +9528,19 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				//Let the helper do whatever we need
 				perform_constant_assignment_coercion(initializer_node, final_type);
 			}
+
+			//Special checking here - if we have an enum type that is being assigned to, we need
+			//to make sure that it's being assigned to a valid value in it's range
+			if(is_enum_type(return_type) == TRUE && initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+				if(does_enum_contain_integer_member(return_type, initializer_node->constant_value.signed_int_value) == FALSE){
+					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+								return_type->type_name.string, initializer_node->constant_value.signed_int_value);
+					print_parse_message(PARSE_ERROR, info, parser_line_num);
+
+					//Fail out here
+					return NULL;
+				}
+			} 
 			
 			//Give back the return type
 			return final_type;
