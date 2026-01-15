@@ -49,6 +49,8 @@ static generic_type_t* i32 = NULL;
 static generic_type_t* u32 = NULL;
 static generic_type_t* u64 = NULL;
 static generic_type_t* i64 = NULL;
+static generic_type_t* f32 = NULL;
+static generic_type_t* f64 = NULL;
 //The break and continue stack will
 //hold values that we can break & continue
 //to. This is done here to avoid the need
@@ -181,9 +183,67 @@ void reset_block_variable_tracking(basic_block_t* block){
  * A helper function that makes a new block id. This ensures we have an atomically
  * increasing block ID
  */
-static int32_t increment_and_get(){
+static inline int32_t increment_and_get(){
 	current_block_id++;
 	return current_block_id;
+}
+
+
+/**
+ * A helper function that will directly emit either an f32 or f64
+ * constant value and place said value into the appropriate location
+ * for a function. This will return a variable that corresponds
+ * to the address load for that new constant(remember we can't put
+ * floats in directly)
+ */
+static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_t* block, symtab_function_record_t* function, double constant_value, ollie_token_t constant_type){
+	three_addr_var_t* final_assignee;
+	three_addr_var_t* local_constant_temp_var;
+	local_constant_t* local_constant;
+
+	switch(constant_type){
+		case F32:
+			//Emit the local constant
+			local_constant = f32_local_constant_alloc(f32, constant_value);
+			local_constant->reference_count++;
+
+			//Add it to the function and emit a var for it
+			add_local_constant_to_function(function, local_constant);
+			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
+
+			//Final return variable
+			final_assignee = emit_temp_var(f32);
+
+			//Emit the load and add it into the block
+			instruction_t* f32_lea_load = emit_lea_rip_relative_constant(final_assignee, local_constant_temp_var, instruction_pointer_var);
+			add_statement(block, f32_lea_load);
+
+			break;
+		
+		case F64:
+			//Emit the local constant
+			local_constant = f64_local_constant_alloc(f64, constant_value);
+			local_constant->reference_count++;
+
+			//Add it to the function and emit a var for it
+			add_local_constant_to_function(function, local_constant);
+			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
+
+			//Final return variable
+			final_assignee = emit_temp_var(f64);
+
+			instruction_t* f64_lea_load = emit_lea_rip_relative_constant(final_assignee, local_constant_temp_var, instruction_pointer_var);
+			add_statement(block, f64_lea_load);
+
+			break;
+
+		default:
+			printf("Fatal internal compiler error: attempt to allocate a non-float constant in the floating point allocator\n");
+			exit(1);
+	}
+
+	//Give back the final assigned variable
+	return final_assignee;
 }
 
 
@@ -9008,6 +9068,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	nesting_stack = nesting_stack_alloc();
 
 	//Keep these on hand
+	f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
+	f32 = lookup_type_name_only(type_symtab, "f32", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
 	i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE)->type;
