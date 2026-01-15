@@ -136,6 +136,38 @@ void print_parse_message(parse_message_type_t message_type, char* info, u_int32_
 
 
 /**
+ * Is a given type an enum type - accounting for all aliasing
+ */
+static inline u_int8_t is_enum_type(generic_type_t* type){
+	//Dealias if need be
+	type = dealias_type(type);
+
+	return type->type_class == TYPE_CLASS_ENUMERATED ? TRUE : FALSE;
+}
+
+
+/**
+ * Does an enum list contain a given value for a member?
+ */
+static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_type, int32_t enum_member){
+	//Extract the member table
+	dynamic_array_t* member_table = &(enum_type->internal_types.enumeration_table);
+
+	//Run through the enum type's table
+	for(u_int16_t i = 0; i < member_table->current_index; i++){
+		symtab_variable_record_t* member = dynamic_array_get_at((member_table), i);
+
+		//Match found - we can get out
+		if(member->enum_member_value == enum_member){
+			return TRUE;
+		}
+	}
+
+	//If we get down here we don't have it
+	return FALSE;
+}
+
+/**
  * Perform any needed constant coercion that is being done for an assignment. This includes converting pointers to 64-bit
  * integers for constant coercion
  */
@@ -174,7 +206,7 @@ static inline void perform_constant_assignment_coercion(generic_ast_node_t* cons
 /**
  * Determine whether or not a variable is able to be assigned to
  */
-static u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
+static inline u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
 	//Extract the type - it contains the mutability information
 	generic_type_t* type = variable->type_defined_as;
 
@@ -243,7 +275,7 @@ static int32_t sorted_list_insert_unique(int32_t* list, int32_t* max_index, int3
  * Returns TRUE if successful, FALSE if not. This function handles
  * all error printing
  */
-static u_int8_t do_duplicate_functions_exist(char* name){
+static inline u_int8_t do_duplicate_functions_exist(char* name){
 	//Look it up
 	symtab_function_record_t* found = lookup_function(function_symtab, name);
 
@@ -271,7 +303,7 @@ static u_int8_t do_duplicate_functions_exist(char* name){
  * Returns TRUE if successful, FALSE if not. This function handles
  * all error printing
  */
-static u_int8_t do_duplicate_variables_exist(char* name){
+static inline u_int8_t do_duplicate_variables_exist(char* name){
 	//Look it up
 	symtab_variable_record_t* found = lookup_variable(variable_symtab, name);
 
@@ -299,7 +331,7 @@ static u_int8_t do_duplicate_variables_exist(char* name){
  * Returns TRUE if successful, FALSE if not. This function handles
  * all error printing
  */
-static u_int8_t do_duplicate_member_variables_exist(char* name, generic_type_t* current_type){
+static inline u_int8_t do_duplicate_member_variables_exist(char* name, generic_type_t* current_type){
 	//Look it up
 	symtab_variable_record_t* found = lookup_variable_local_scope(variable_symtab, name);
 
@@ -327,7 +359,7 @@ static u_int8_t do_duplicate_member_variables_exist(char* name, generic_type_t* 
  * Returns TRUE if successful, FALSE if not. This function handles
  * all error printing
  */
-static u_int8_t do_duplicate_types_exist(char* name){
+static inline u_int8_t do_duplicate_types_exist(char* name){
 	//Look it up
 	symtab_type_record_t* found = lookup_type_name_only(type_symtab, name, NOT_MUTABLE);
 
@@ -366,7 +398,7 @@ static u_int8_t do_duplicate_types_exist(char* name){
 /**
  * Determine whether or not something is an assignment operator
  */
-static u_int8_t is_assignment_operator(ollie_token_t op){
+static inline u_int8_t is_assignment_operator(ollie_token_t op){
 	switch(op){
 		case EQUALS:
 		case LSHIFTEQ:
@@ -390,7 +422,7 @@ static u_int8_t is_assignment_operator(ollie_token_t op){
  * Convert a compressed assignment operator into the equivalent binary 
  * operation
  */
-static ollie_token_t compressed_assignment_to_binary_op(ollie_token_t op){
+static inline ollie_token_t compressed_assignment_to_binary_op(ollie_token_t op){
 	switch(op){
 		case LSHIFTEQ:
 			return L_SHIFT;
@@ -422,7 +454,7 @@ static ollie_token_t compressed_assignment_to_binary_op(ollie_token_t op){
 /**
  * Is a given postfix expression tree address eligible or not
  */
-static u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_node_t* parent){
+static inline u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_node_t* parent){
 	//Grab the second child to overcome the primary expression
 	generic_ast_node_t* cursor = parent->first_child->next_sibling;
 
@@ -456,7 +488,7 @@ static u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_node_t* 
  *
  * All of these will have types that are immutable because we don't expect to be changing them
  */
-static generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value, u_int32_t max_size){
+static inline generic_type_t* determine_required_minimum_unsigned_integer_type_size(u_int64_t value, u_int32_t max_size){
 	//The case where we can use a u8
 	if(max_size <= 8 || value >> 8 == 0){
 		return immut_u8;
