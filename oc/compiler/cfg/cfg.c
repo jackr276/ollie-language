@@ -2932,7 +2932,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 /**
  * Emit increment three adress code
  */
-static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_general_purpose_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
 	//Create the code
 	instruction_t* inc_code = emit_inc_instruction(incrementee);
 
@@ -2956,7 +2956,7 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 /**
  * Emit decrement three address code
  */
-static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
+static three_addr_var_t* emit_general_purpose_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
 	//Create the code
 	instruction_t* dec_code = emit_dec_instruction(decrementee);
 
@@ -3677,13 +3677,37 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		case TYPE_CLASS_BASIC:
 			switch(node->unary_operator){
 				case PLUSPLUS:
-					//We really just have an "inc" instruction here
-					assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+					//Go based on the token type. If we have floating
+					//point operations here, we need special handling
+					switch(assignee->type->basic_type_token){
+						case F32:
+						case F64:
+							printf("NOT YET IMPLEMENTED\n");
+							exit(1);
+							break;
+						default:
+							//We really just have an "inc" instruction here
+							assignee = emit_general_purpose_inc_code(current_block, assignee, is_branch_ending);
+							break;
+					}
+
 					break;
 					
 				case MINUSMINUS:
-					//We really just have an "dec" instruction here
-					assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+					//Go based on the token type. If we have floating
+					//point operations here, we need special handling
+					switch(assignee->type->basic_type_token){
+						case F32:
+						case F64:
+							printf("NOT YET IMPLEMENTED\n");
+							exit(1);
+							break;
+						default:
+							//We really just have an "inc" instruction here
+							assignee = emit_general_purpose_dec_code(current_block, assignee, is_branch_ending);
+							break;
+					}
+
 					break;
 
 				//We shouldn't ever hit here
@@ -3845,33 +3869,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Go based on what we have here
 			switch(assignee->type->type_class){
 				case TYPE_CLASS_BASIC:
-					//If we have a temporary variable, then we need to perform
-					//a reassignment here for analysis purposes
-					if(unary_package.assignee->variable_type == VARIABLE_TYPE_TEMP){
-						//Emit the assignment
-						instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-						temp_assignment->is_branch_ending = is_branch_ending;
-
-						//This now counts as a use
-						add_used_variable(current_block, assignee);
-
-						//Throw it in the block
-						add_statement(current_block, temp_assignment);
-
-						//Now the new assignee equals this new temp that we have
-						assignee = temp_assignment->assignee;
-					}
-					
 					//Go based on the op here
 					switch(unary_operator_node->unary_operator){
 						case PLUSPLUS:
 							//We really just have an "inc" instruction here
-							assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+							assignee = emit_general_purpose_inc_code(current_block, assignee, is_branch_ending);
 							break;
 							
 						case MINUSMINUS:
 							//We really just have an "dec" instruction here
-							assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+							assignee = emit_general_purpose_dec_code(current_block, assignee, is_branch_ending);
 							break;
 
 						//We shouldn't ever hit here
