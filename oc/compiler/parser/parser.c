@@ -1393,14 +1393,11 @@ static generic_ast_node_t* primary_expression(FILE* fl, side_type_t side){
 					//We'll change the type of this node from an identifier to a constant
 					ident->ast_node_type = AST_NODE_TYPE_CONSTANT;
 
+					//Store the enum type inside of optional storage here
+					ident->optional_storage.enum_type = found_var->type_defined_as;
+
 					//Extract the enum integer type from here
-					//
-					//
-					//TODO - we need to figure out how to hande enum type comparison.
-					//We probably need to stash the enum type in the var itself
-					//
-					//fo
-					ident->inferred_type = found_var->type_defined_as;
+					ident->inferred_type = found_var->type_defined_as->internal_values.enum_integer_type;
 
 					//Store the constant value appropriately
 					switch(ident->inferred_type->type_size){
