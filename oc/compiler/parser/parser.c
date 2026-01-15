@@ -6103,41 +6103,6 @@ static u_int8_t enum_definer(FILE* fl){
 	//Assign the size over as well
 	immutable_enum_type->type_size = type_needed->type_size;
 
-	//We now go through and set the type now that we know what it is
-	for(u_int16_t i = 0; i < mutable_enum_type->internal_types.enumeration_table.current_index; i++){
-		//Grab it out
-		symtab_variable_record_t* var = dynamic_array_get_at(&(mutable_enum_type->internal_types.enumeration_table), i);
-
-		//
-		//
-		//
-		//
-		//TODO - we should probably be storing the enum type here
-		//
-		//
-		//
-		//
-
-		//Store the type that we have
-		var->type_defined_as = type_needed;
-	}
-
-	//Do the exact same for the immutable version
-	for(u_int16_t i = 0; i < immutable_enum_type->internal_types.enumeration_table.current_index; i++){
-		//Grab it out
-		symtab_variable_record_t* var = dynamic_array_get_at(&(immutable_enum_type->internal_types.enumeration_table), i);
-
-		//
-		//
-		//TODO - we should probably be storing the enum type here
-		//
-		//
-		//
-
-		//Store the type that we have
-		var->type_defined_as = type_needed;
-	}
-
 	//Now once we are here, we can optionally see an alias command. These alias commands are helpful and convenient
 	//for redefining variables immediately upon declaration. They are prefaced by the "As" keyword
 	//However, before we do that, we can first see if we have a semicol

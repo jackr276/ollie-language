@@ -2153,6 +2153,9 @@ u_int8_t add_enum_member(generic_type_t* enum_type, void* enum_member, u_int8_t 
 	//Just throw the member in
 	dynamic_array_add(&(enum_type->internal_types.enumeration_table), enum_member);
 
+	//The enum variable's type is the enum member
+	enum_variable->type_defined_as = enum_type;
+
 	//All went well
 	return SUCCESS;
 }
