@@ -3018,7 +3018,37 @@ static inline three_addr_var_t* emit_general_purpose_inc_code(basic_block_t* bas
  * to emit this as a var + 1.0 type statement
  */
 static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
-	//TODO	
+	//We need a "1" float constant
+	three_addr_var_t* constant_value;
+
+	//Emit the proper constant based on the type
+	switch(incrementee->type->basic_type_token){
+		case F32:
+			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F32);
+			break;
+
+		case F64:
+			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F64);
+			break;
+		
+		default:
+			printf("Fatal internal compiler error: invalid variable type for SSE load\n");
+			exit(1);
+	}
+
+	//Emit the final addition and get it into the block
+	instruction_t* final_addition = emit_binary_operation_instruction(incrementee, incrementee, PLUS, constant_value);
+	add_statement(basic_block, final_addition);
+
+	//This counts as a use
+	add_used_variable(basic_block, incrementee);
+	add_used_variable(basic_block, constant_value);
+
+	//And this is also an assignment
+	add_assigned_variable(basic_block, incrementee);
+
+	//Finally, the result that we give back is the incrementee
+	return incrementee;
 }
 
 
@@ -3760,9 +3790,10 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 					switch(assignee->type->basic_type_token){
 						case F32:
 						case F64:
-							printf("NOT YET IMPLEMENTED\n");
-							exit(1);
+							//Let the special helper deal with it
+							assignee = emit_sse_inc_code(current_block, assignee, is_branch_ending) ;
 							break;
+							
 						default:
 							//We really just have an "inc" instruction here
 							assignee = emit_general_purpose_inc_code(current_block, assignee, is_branch_ending);
@@ -3956,7 +3987,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							switch(assignee->type->basic_type_token){
 								case F32:
 								case F64:
+									//Let the special helper deal with it
+									assignee = emit_sse_inc_code(current_block, assignee, is_branch_ending) ;
 									break;
+
 								default:
 									//We really just have an "inc" instruction here
 									assignee = emit_general_purpose_inc_code(current_block, assignee, is_branch_ending);
