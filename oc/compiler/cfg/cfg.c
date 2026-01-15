@@ -2930,9 +2930,9 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 
 
 /**
- * Emit increment three adress code
+ * Emit increment three adress code for general purpose variables
  */
-static three_addr_var_t* emit_general_purpose_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
+static inline three_addr_var_t* emit_general_purpose_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
 	//Create the code
 	instruction_t* inc_code = emit_inc_instruction(incrementee);
 
@@ -2954,9 +2954,18 @@ static three_addr_var_t* emit_general_purpose_inc_code(basic_block_t* basic_bloc
 
 
 /**
+ * Emit increment code for an SSE variable. Since SSE variables are incompatible with standard "inc" instructions, we need
+ * to emit this as a var + 1.0 type statement
+ */
+static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
+	//TODO	
+}
+
+
+/**
  * Emit decrement three address code
  */
-static three_addr_var_t* emit_general_purpose_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
+static inline three_addr_var_t* emit_general_purpose_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
 	//Create the code
 	instruction_t* dec_code = emit_dec_instruction(decrementee);
 
@@ -2978,9 +2987,18 @@ static three_addr_var_t* emit_general_purpose_dec_code(basic_block_t* basic_bloc
 
 
 /**
+ * Emit increment decrement for an SSE variable. Since SSE variables are incompatible with standard "decrement" instructions, we need
+ * to emit this as a var - 1.0 type statement
+ */
+static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
+	//TODO	
+}
+
+
+/**
  * Emit a test instruction
  */
-static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_var_t* op1, three_addr_var_t* op2, u_int8_t is_branch_ending){
+static inline three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_var_t* op1, three_addr_var_t* op2, u_int8_t is_branch_ending){
 	//Emit the test statement based on the type
 	instruction_t* test_statement = emit_test_statement(emit_temp_var(op1->type), op1, op2);
 
@@ -3004,7 +3022,7 @@ static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_v
 /**
  * Emit a bitwise not statement 
  */
-static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, u_int8_t is_branch_ending){
+static inline three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, u_int8_t is_branch_ending){
 	//Emit a copy so that we are distinct
 	three_addr_var_t* assignee = emit_var_copy(var);
 
@@ -3872,13 +3890,35 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					//Go based on the op here
 					switch(unary_operator_node->unary_operator){
 						case PLUSPLUS:
-							//We really just have an "inc" instruction here
-							assignee = emit_general_purpose_inc_code(current_block, assignee, is_branch_ending);
+							//Go based on the basic type. Since SSE variables are not
+							//compatible with normal inc instructions, we need to
+							//break out like this
+							switch(assignee->type->basic_type_token){
+								case F32:
+								case F64:
+									break;
+								default:
+									//We really just have an "inc" instruction here
+									assignee = emit_general_purpose_inc_code(current_block, assignee, is_branch_ending);
+									break;
+							}
+
 							break;
 							
 						case MINUSMINUS:
-							//We really just have an "dec" instruction here
-							assignee = emit_general_purpose_dec_code(current_block, assignee, is_branch_ending);
+							//Go based on the basic type. Since SSE variables are not
+							//compatible with normal dec instructions, we need to
+							//break out like this
+							switch(assignee->type->basic_type_token){
+								case F32:
+								case F64:
+									break;
+								default:
+									//We really just have an "inc" instruction here
+									assignee = emit_general_purpose_dec_code(current_block, assignee, is_branch_ending);
+									break;
+							}
+
 							break;
 
 						//We shouldn't ever hit here
