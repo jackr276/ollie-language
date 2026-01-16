@@ -3059,6 +3059,8 @@ static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, th
 
 	//Emit the final addition and get it into the block
 	instruction_t* final_addition = emit_binary_operation_instruction(final_assignee, incrementee, PLUS, constant_value);
+	final_addition->is_branch_ending = is_branch_ending;
+
 	add_statement(basic_block, final_addition);
 
 	//This counts as a use
@@ -3127,6 +3129,8 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
 
 	//Emit the final addition and get it into the block
 	instruction_t* final_addition = emit_binary_operation_instruction(final_assignee, decrementee, MINUS, constant_value);
+	final_addition->is_branch_ending = is_branch_ending;
+
 	add_statement(basic_block, final_addition);
 
 	//This counts as a use
