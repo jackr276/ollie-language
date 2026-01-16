@@ -3056,7 +3056,7 @@ static void simplify(cfg_t* cfg){
  * placed in front of the instruction *if* the destination is an XMM register to maintain
  * this "clean" register idea
  */
-static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t source_clean, u_int8_t destination_signed){
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean){
 	//These two have the same size, we can select easily
 	//and be out of here
 	if(destination_size == source_size){
@@ -3232,247 +3232,6 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 	}
 }
 
-
-/**
- * Select a register movement SSE instruction based on source and destination sizes
- *
- * We need to know if the source is a known "clean" SSE value. SSE values are not known
- * to be clean unless we've made them ourselves in the function, so for example,
- * a register parameter in an XMM register would be assumed dirty. This affects whether
- * we use instructions like movss or movaps for floating point values
- *
- * Additionally, for any converting move instructions, we will need to have zeroing logic
- * placed in front of the instruction *if* the destination is an XMM register to maintain
- * this "clean" register idea
- */
-static instruction_type_t select_sse_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t source_clean){
-	//If these are a match, we don't have any
-	//kind of converting move here
-	if(destination_size == source_size){
-		switch(destination_size) {
-			case SINGLE_PRECISION:
-				if(source_clean == TRUE){
-					return MOVSS;
-				} else {
-					return MOVAPS;
-				}
-
-			case DOUBLE_PRECISION:
-				if(source_clean == TRUE){
-					return MOVSD;
-				} else {
-					return MOVAPD;
-				}
-
-			default:
-				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
-				exit(1);
-		}
-	}
-
-	//We know that we have a difference, so go based on the source size
-	switch(source_size){
-		case SINGLE_PRECISION:
-			switch(destination_size){
-				case DOUBLE_PRECISION:
-					return CVTSS2SD;
-
-				case DOUBLE_WORD:
-					return CVTTSS2SIL;
-
-				case QUAD_WORD:
-					return CVTTSS2SIQ;
-
-				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
-					exit(1);
-			}
-
-			break;
-
-		case DOUBLE_PRECISION:
-			switch(destination_size){
-				case SINGLE_PRECISION:
-					return CVTSD2SS;
-
-				case DOUBLE_WORD:
-					return CVTTSD2SIL;
-
-				case QUAD_WORD:
-					return CVTTSD2SIQ;
-
-				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
-					exit(1);
-			}
-
-			break;
-
-		case DOUBLE_WORD:
-			switch(destination_size){
-				case SINGLE_PRECISION:
-					return CVTSI2SSL;
-
-				case DOUBLE_PRECISION:
-					return CVTSI2SDL;
-
-				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
-					exit(1);
-			}
-
-			break;
-
-		case QUAD_WORD:
-			switch(destination_size){
-				case SINGLE_PRECISION:
-					return CVTSI2SSQ;
-
-				case DOUBLE_PRECISION:
-					return CVTSI2SDQ;
-
-				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
-					exit(1);
-			}
-
-			break;
-
-		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
-			exit(1);
-	}
-}
-
-
-/**
- * Select a register movement instruction based on the source and destination sizes
- */
-static instruction_type_t select_general_purpose_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
-	//If these are the exact same, then all we need to do is
-	//select a generic move here
-	if(destination_size == source_size){
-		//Go based on size
-		switch(destination_size){
-			case BYTE:
-				return MOVB;
-			case WORD:
-				return MOVW;
-			case DOUBLE_WORD:
-				return MOVL;
-			case QUAD_WORD:
-				return MOVQ;
-			default:
-				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in GP move selector\n");
-				exit(1);
-		}
-	}
-
-	//Select type based on signedness
-	if(is_signed == TRUE){
-		switch(source_size){
-			//Byte conversion
-			case BYTE:
-				//Go based on dest size now
-				switch(destination_size){
-					case WORD:
-						return MOVSBW;
-
-					case DOUBLE_WORD:
-						return MOVSBL;
-
-					case QUAD_WORD:
-						return MOVSBQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered for byte source\n");
-						exit(1);
-				}
-			
-			//Word conversion
-			case WORD:
-				//Go based on dest size now
-				switch(destination_size){
-					case DOUBLE_WORD:
-						return MOVSWL;
-
-					case QUAD_WORD:
-						return MOVSWQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered for word source\n");
-						exit(1);
-				}
-
-			//Long conversion
-			case DOUBLE_WORD:
-				//Go based on dest size now
-				switch(destination_size){
-					case QUAD_WORD:
-						return MOVSLQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered for long source\n");
-						exit(1);
-				}
-
-			//Unreachable
-			default:
-				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
-				exit(1);
-		}
-
-	//Otherwise, we'll need to work based on our unsigned(zX) instructions
-	} else {
-		switch(source_size){
-			//Byte conversion
-			case BYTE:
-				//Go based on dest size now
-				switch(destination_size){
-					case WORD:
-						return MOVZBW;
-
-					case DOUBLE_WORD:
-						return MOVZBL;
-
-					case QUAD_WORD:
-						return MOVZBQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered byte source\n");
-						exit(1);
-				}
-			
-			//Word conversion
-			case WORD:
-				//Go based on dest size now
-				switch(destination_size){
-					case DOUBLE_WORD:
-						return MOVZWL;
-
-					case QUAD_WORD:
-						return MOVZWQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered word source\n");
-						exit(1);
-				}
-
-			//If we have a double word, we don't need to emit anything besides
-			//a movq because we get the zero extension for free. This requires bookkeeping
-			//on the caller's end to make the source a 64 bit version
-			case DOUBLE_WORD:
-				return MOVQ;
-
-			//Unreachable
-			default:
-				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
-				exit(1);
-		}
-	}
-}
-
-
 /**
  * Emit a movX instruction
  *
@@ -3496,20 +3255,8 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 		source->variable_size = get_type_size(destination->type);
 	}
 
-
-	//
-	//
-	//
-	//
-	//
-	//TODO need float handling
-	//
-	//
-	//
-	//
-
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
+	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), is_source_register_clean(instruction->op1));
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -3533,26 +3280,29 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	variable_size_t destination_size = get_type_size(assignee->type);
 	variable_size_t source_size = get_type_size(op1->type);
 
+	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	//zero pad when 32 bit moves happen
+	if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
+		//Emit a variable copy of the source
+		op1 = emit_var_copy(op1);
+
+		//Reassign it's type to be the desired type
+		op1->type = assignee->type;
+
+		//Select the size appropriately after the type is reassigned
+		op1->variable_size = get_type_size(op1->type);
+	}
+
+	//Let the helper rule determine what our instruction is
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), is_source_register_clean(op1));
+
+
 	//If we have *at least one* floating point instruction, we need to use the specialized selector rule. Otherwise
 	//we use the generic rules
 	if(IS_FLOATING_POINT(assignee->type) == FALSE 
 		&& IS_FLOATING_POINT(op1->type) == FALSE){
-		//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-		//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-		//zero pad when 32 bit moves happen
-		if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
-			//Emit a variable copy of the source
-			op1 = emit_var_copy(op1);
-
-			//Reassign it's type to be the desired type
-			op1->type = assignee->type;
-
-			//Select the size appropriately after the type is reassigned
-			op1->variable_size = get_type_size(op1->type);
-		}
-
 		//Use the helper to get the right sized move instruction
-		instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
 
 	//Handle floating point move
 	} else {
@@ -3563,7 +3313,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 		 */
 
 		//Use the floating point selector here
-		instruction->instruction_type = select_sse_move_instruction(destination_size, source_size, is_source_register_clean(instruction->op1));
+		instruction->instruction_type = (destination_size, source_size, is_source_register_clean(instruction->op1));
 
 		/**
 		 * If we have a conversion instruction that has an SSE destination, we need to emit
