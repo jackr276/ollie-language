@@ -3044,19 +3044,60 @@ static void simplify(cfg_t* cfg){
 
 
 /**
+ * Select the appropriate move instruction based on the source & destination
+ * sizes, the destination signedness, and anything else that we may need
  *
+ * We need to know if the source is a known "clean" SSE value. SSE values are not known
+ * to be clean unless we've made them ourselves in the function, so for example,
+ * a register parameter in an XMM register would be assumed dirty. This affects whether
+ * we use instructions like movss or movaps for floating point values
  *
- * TODO - put everything into one big rule here that handles everything. 
+ * Additionally, for any converting move instructions, we will need to have zeroing logic
+ * placed in front of the instruction *if* the destination is an XMM register to maintain
+ * this "clean" register idea
  */
 static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t source_clean, u_int8_t destination_signed){
+	//These two have the same size, we can select easily
+	//and be out of here
 	if(destination_size == source_size){
+		switch(destination_size) {
+			case BYTE:
+				return MOVB;
 
+			case WORD:
+				return MOVW;
+
+			case DOUBLE_WORD:
+				return MOVL;
+
+			case QUAD_WORD:
+				return MOVQ;
+
+			case SINGLE_PRECISION:
+				if(source_clean == TRUE){
+					return MOVSS;
+				} else {
+					return MOVAPS;
+				}
+
+			case DOUBLE_PRECISION:
+				if(source_clean == TRUE){
+					return MOVSD;
+				} else {
+					return MOVAPD;
+				}
+
+			default:
+				printf("Fatal internal compiler error: undefined/invalid variable size encountered in move instruction selector\n");
+				exit(1);
+		}
 	}
+
+
 
 	switch (source_size) {
 	
 	}
-
 }
 
 
