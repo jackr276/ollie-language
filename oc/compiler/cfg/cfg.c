@@ -3101,8 +3101,43 @@ static inline three_addr_var_t* emit_general_purpose_dec_code(basic_block_t* bas
  * Emit increment decrement for an SSE variable. Since SSE variables are incompatible with standard "decrement" instructions, we need
  * to emit this as a var - 1.0 type statement
  */
-static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
-	//TODO	
+static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
+	//We need a "1" float constant
+	three_addr_var_t* constant_value;
+
+	//Emit the proper constant based on the type
+	switch(decrementee->type->basic_type_token){
+		case F32:
+			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F32);
+
+			break;
+
+		case F64:
+			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F64);
+			break;
+		
+		default:
+			printf("Fatal internal compiler error: invalid variable type for SSE load\n");
+			exit(1);
+	}
+
+	//The final assignee needs to be separate for SSA reasons. It will
+	//have a different "name" than the RHS one
+	three_addr_var_t* final_assignee = emit_var_copy(decrementee);
+
+	//Emit the final addition and get it into the block
+	instruction_t* final_addition = emit_binary_operation_instruction(final_assignee, decrementee, MINUS, constant_value);
+	add_statement(basic_block, final_addition);
+
+	//This counts as a use
+	add_used_variable(basic_block, decrementee);
+	add_used_variable(basic_block, constant_value);
+
+	//And this is also an assignment
+	add_assigned_variable(basic_block, final_assignee);
+
+	//Finally, the result that we give back is the incrementee
+	return final_assignee;
 }
 
 
@@ -3829,9 +3864,10 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 					switch(assignee->type->basic_type_token){
 						case F32:
 						case F64:
-							printf("NOT YET IMPLEMENTED\n");
-							exit(1);
+							//Call out to the helper to deal with the special float case
+							assignee = emit_sse_dec_code(current_block, assignee, is_branch_ending);
 							break;
+
 						default:
 							//We really just have an "inc" instruction here
 							assignee = emit_general_purpose_dec_code(current_block, assignee, is_branch_ending);
@@ -4027,7 +4063,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 							switch(assignee->type->basic_type_token){
 								case F32:
 								case F64:
+									//Call out to the helper to deal with the special float case
+									assignee = emit_sse_dec_code(current_block, assignee, is_branch_ending);
 									break;
+
 								default:
 									//We really just have an "inc" instruction here
 									assignee = emit_general_purpose_dec_code(current_block, assignee, is_branch_ending);
