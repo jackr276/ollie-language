@@ -197,7 +197,6 @@ static inline int32_t increment_and_get(){
  * floats in directly)
  */
 static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_t* block, symtab_function_record_t* function, double constant_value, ollie_token_t constant_type){
-	three_addr_var_t* final_assignee;
 	three_addr_var_t* local_constant_temp_var;
 	local_constant_t* local_constant;
 
@@ -211,14 +210,16 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			add_local_constant_to_function(function, local_constant);
 			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
 
-			//Final return variable
-			final_assignee = emit_temp_var(f32);
-
 			//Emit the load and add it into the block
-			instruction_t* f32_lea_load = emit_lea_rip_relative_constant(final_assignee, local_constant_temp_var, instruction_pointer_var);
+			instruction_t* f32_lea_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_temp_var, instruction_pointer_var);
 			add_statement(block, f32_lea_load);
 
-			break;
+			//Now that we have an address, we can get the actual constant out by doing a load
+			instruction_t* load_f32 = emit_load_ir_code(emit_temp_var(f32), f32_lea_load->assignee, f32);
+			add_statement(block, load_f32);
+
+			//Give back whatever assignee we've got
+			return load_f32->assignee;
 		
 		case F64:
 			//Emit the local constant
@@ -229,21 +230,21 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			add_local_constant_to_function(function, local_constant);
 			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
 
-			//Final return variable
-			final_assignee = emit_temp_var(f64);
-
-			instruction_t* f64_lea_load = emit_lea_rip_relative_constant(final_assignee, local_constant_temp_var, instruction_pointer_var);
+			//Emit the load and add it into the block
+			instruction_t* f64_lea_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_temp_var, instruction_pointer_var);
 			add_statement(block, f64_lea_load);
 
-			break;
+			//Now that we have an address, we can get the actual constant out by doing a load
+			instruction_t* load_f64 = emit_load_ir_code(emit_temp_var(f64), f64_lea_load->assignee, f64);
+			add_statement(block, f64_lea_load);
+
+			//Give back whatever assignee we've got
+			return load_f64->assignee;
 
 		default:
 			printf("Fatal internal compiler error: attempt to allocate a non-float constant in the floating point allocator\n");
 			exit(1);
 	}
-
-	//Give back the final assigned variable
-	return final_assignee;
 }
 
 
@@ -2842,7 +2843,15 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			local_constant_val = emit_f32_local_constant(current_function, constant_node);
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			//
+			//
+			//WRONG
 			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
+
+			//emit_load_ir_code(, three_addr_var_t *op1, generic_type_t *memory_read_type)
+
+			//TODO believe to be broken. These are not pointers. They are actual values that require a dereference
+
 			break;
 
 		//For double constants, we need to emit the local constant equivalent via the helper
@@ -2851,7 +2860,13 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			local_constant_val = emit_f64_local_constant(current_function, constant_node);
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			//
+			//
+			//WRONG
 			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
+
+			//TODO believe to be broken. These are not pointers. They are actual values that require a dereference
+			//emit_load_ir_code(, three_addr_var_t *op1, generic_type_t *memory_read_type)
 			break;
 
 		//Special case here - we need to emit a variable for the function pointer itself
