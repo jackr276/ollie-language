@@ -3232,6 +3232,7 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 	}
 }
 
+
 /**
  * Emit a movX instruction
  *
@@ -3297,36 +3298,17 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	//Let the helper rule determine what our instruction is
 	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), is_source_register_clean(op1));
 
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_conversion_with_sse_declaration(instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
 
-	//If we have *at least one* floating point instruction, we need to use the specialized selector rule. Otherwise
-	//we use the generic rules
-	if(IS_FLOATING_POINT(assignee->type) == FALSE 
-		&& IS_FLOATING_POINT(op1->type) == FALSE){
-		//Use the helper to get the right sized move instruction
-
-	//Handle floating point move
-	} else {
-		/**
-		 * An important concept for floating point movements is whether we have a "clean" source or not. Clean
-		 * source values mean that the entire register has been wiped. This will determine whether or not we use certain
-		 * types of move instructions and/or insert given clear instructions
-		 */
-
-		//Use the floating point selector here
-		instruction->instruction_type = (destination_size, source_size, is_source_register_clean(instruction->op1));
-
-		/**
-		 * If we have a conversion instruction that has an SSE destination, we need to emit
-		 * a special "pxor" statement beforehand to completely wipe out said register
-		 */
-		if(is_conversion_with_sse_declaration(instruction->instruction_type) == TRUE){
-			//We need to completely zero out the destination register here, so we will emit a pxor to do
-			//just that
-			instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
-
-			//Get this in right before the given
-			insert_instruction_before_given(pxor_instruction, instruction);
-		}
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, instruction);
 	}
 
 	//Set the sources and destinations
@@ -5474,7 +5456,7 @@ static void handle_test_instruction(instruction_t* instruction){
  *
  * This bypasses all register allocation entirely
  */
-static instruction_t* emit_general_purpose_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
+static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
 	//First allocate it
 	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
 
@@ -5487,7 +5469,7 @@ static instruction_t* emit_general_purpose_move_instruction_directly(three_addr_
 	generic_type_t* source_type = source_register->type;
 
 	//Now we will decide what the move instruction is
-	move_instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), is_source_register_clean(source_register));
 
 	//Give back the pointer
 	return move_instruction;
@@ -5545,7 +5527,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
 					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_general_purpose_move_instruction_directly(new_source, store_instruction->op1);
+					instruction_t* converting_move = emit_register_movement_instruction_directly(new_source, store_instruction->op1);
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
@@ -5609,7 +5591,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
 					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_general_purpose_move_instruction_directly(new_source, store_instruction->op2);
+					instruction_t* converting_move = emit_register_movement_instruction_directly(new_source, store_instruction->op2);
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
@@ -5643,8 +5625,8 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 			exit(1);
 	}
 
-	//Once we've done all the above assignments, we need to determine what our instruction type is
-	store_instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
+	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE);
 }
 
 
@@ -5697,8 +5679,8 @@ static void handle_load_instruction(instruction_t* instruction){
 	//For a load, the source size is stored in the instruction itself
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
-	//Let the helper select for us
-	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+	//Let the helper select for us. We are passing clean as true, since we are coming from memory
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -5775,8 +5757,8 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	//For a load, the source size is stored in the destination itself
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
-	//Let the helper decide for us
-	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+	//Let the helper decide for us. We are selecting clean as true, since we are coming from memory
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -5854,8 +5836,8 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	//For a load, the source size is stored in the destination itself
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
-	//Let the helper decide for us
-	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+	//Let the helper decide for us. We are selecting the source register as clean, since we're moving from memory
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 	//This is a read from memory type
 	instruction->memory_access_type = READ_FROM_MEMORY;
@@ -6159,8 +6141,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 	}
 	
 	//NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
-	//Let the helper decide for us
-	variable_offset_load->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+	//Let the helper decide for us. We are choosing the source as clean, since it is coming from memory
+	variable_offset_load->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 	//This is a read from memory type
 	variable_offset_load->memory_access_type = READ_FROM_MEMORY;
 	//Handle the destination assignment
@@ -6194,8 +6176,8 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			//For a load, the source size is stored in the instruction itself
 			source_size = get_type_size(load_statement->memory_read_write_type);
 
-			//Let the helper select for us. *This will change*
-			load_statement->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+			//Let the helper select for us. The source is guaranteed to be clean since it's coming from memory
+			load_statement->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 			//Let the helper deal with the load instruction's destination
 			handle_load_instruction_destination_assignment(load_statement);
