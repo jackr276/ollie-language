@@ -3257,7 +3257,7 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 	}
 
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), is_source_register_clean(instruction->op1));
+	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), is_source_register_clean(source));
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
