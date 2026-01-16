@@ -3044,6 +3044,23 @@ static void simplify(cfg_t* cfg){
 
 
 /**
+ *
+ *
+ * TODO - put everything into one big rule here that handles everything. 
+ */
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t source_clean, u_int8_t destination_signed){
+	if(destination_size == source_size){
+
+	}
+
+	switch (source_size) {
+	
+	}
+
+}
+
+
+/**
  * Select a register movement SSE instruction based on source and destination sizes
  *
  * We need to know if the source is a known "clean" SSE value. SSE values are not known
