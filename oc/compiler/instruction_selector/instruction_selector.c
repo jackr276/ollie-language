@@ -3276,7 +3276,6 @@ static instruction_type_t select_general_purpose_move_instruction(variable_size_
 
 			//Unreachable
 			default:
-				printf("HERE\n\n\n");
 				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
 				exit(1);
 		}
@@ -6233,6 +6232,27 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 
 
 /**
+ * Combine a lea with a regular load instruction. This is mainly intended to be used with the 
+ * rip relative constant addressing, but we may extend it in the future
+ */
+static void combine_lea_with_regular_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* load_statement){
+	switch(lea_statement->lea_statement_type){
+		/**
+		 * This is our main target with this rule
+		 */
+		case OIR_LEA_TYPE_RIP_RELATIVE:
+			break;
+
+		//By default, just do nothing and leave the instruction window
+		//as is. It will be picked up by the rest of the selector as
+		//normal
+		default:
+			break;
+	}
+}
+
+
+/**
  * Handle a store instruction. This will be reorganized into a memory accessing move.
  */
 static void handle_store_instruction(instruction_t* instruction){
@@ -6768,6 +6788,29 @@ static void select_instruction_patterns(instruction_window_t* window){
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
 		return;
+	}
+
+
+	/**
+	 * Compressing lea constant loads with the rip-relative addressing that
+	 * comes before them
+	 *
+	 * This would be something like:
+	 *  t4 <- .LC0(%rip)
+	 *  t5 <- load t4
+	 *
+	 *  We can combine this to be
+	 * 	t5 <- .LC0(%rip)
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction2->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
+
+		//Invoke a special helper here that will deal with the selection for us and also
+		//modify our window
+		combine_lea_with_regular_load_instruction(window, window->instruction1, window->instruction2);
 	}
 
 
