@@ -2821,6 +2821,7 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	three_addr_var_t* function_pointer_variable;
 	//Holder for the constant assignment
 	instruction_t* const_assignment;
+	instruction_t* address_load;
 
 	/**
 	 * Constants that are: strings, f32, f64, and function pointers require
@@ -2843,14 +2844,13 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			local_constant_val = emit_f32_local_constant(current_function, constant_node);
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			//
-			//
-			//WRONG
-			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
+			//This only gets the address, we still need to do extra work for our constants
+			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
+			//Add it into the block
+			add_statement(basic_block, address_load);
 
-			//emit_load_ir_code(, three_addr_var_t *op1, generic_type_t *memory_read_type)
-
-			//TODO believe to be broken. These are not pointers. They are actual values that require a dereference
+			//Emit a load instruction to grab the constant from said address
+			const_assignment = emit_load_ir_code(emit_temp_var(f32), address_load->assignee, f32);
 
 			break;
 
@@ -2860,13 +2860,14 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			local_constant_val = emit_f64_local_constant(current_function, constant_node);
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			//
-			//
-			//WRONG
-			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
+			//This only gets the address, we still need to do extra work for our constants
+			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
+			//Add it into the block
+			add_statement(basic_block, address_load);
 
-			//TODO believe to be broken. These are not pointers. They are actual values that require a dereference
-			//emit_load_ir_code(, three_addr_var_t *op1, generic_type_t *memory_read_type)
+			//Emit a load instruction to grab the constant from the above address
+			const_assignment = emit_load_ir_code(emit_temp_var(f64), address_load->assignee, f64);
+
 			break;
 
 		//Special case here - we need to emit a variable for the function pointer itself
