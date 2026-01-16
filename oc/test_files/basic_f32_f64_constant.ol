@@ -3,8 +3,6 @@
 * Test the most basic level of float constants
 */
 
-SABOTAGED
-
 
 pub fn ret_f32() -> f32 {
 	ret 3.33;
