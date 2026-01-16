@@ -3093,10 +3093,142 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 		}
 	}
 
+	/**
+	 * Since we know that the sizes are different, we will need to do some more complicated
+	 * switching logic in here
+	 */
+	switch(source_size){
+		case SINGLE_PRECISION:
+			switch(destination_size){
+				case DOUBLE_PRECISION:
+					return CVTSS2SD;
 
+				case DOUBLE_WORD:
+					return CVTTSS2SIL;
 
-	switch (source_size) {
-	
+				case QUAD_WORD:
+					return CVTTSS2SIQ;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in single precision move selector\n");
+					exit(1);
+			}
+
+			break;
+
+		case DOUBLE_PRECISION:
+			switch(destination_size){
+				case SINGLE_PRECISION:
+					return CVTSD2SS;
+
+				case DOUBLE_WORD:
+					return CVTTSD2SIL;
+
+				case QUAD_WORD:
+					return CVTTSD2SIQ;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in double precision move selector\n");
+					exit(1);
+			}
+
+			break;
+
+		case BYTE:
+			switch(destination_size){
+				case WORD:
+					if(destination_signed == TRUE){
+						return MOVSBW;
+					} else {
+						return MOVZBW;
+					}
+
+				case DOUBLE_WORD:
+					if(destination_signed == TRUE){
+						return MOVSBL;
+					} else {
+						return MOVZBL;
+					}
+
+				case QUAD_WORD:
+					if(destination_signed == TRUE){
+						return MOVSBQ;
+					} else{
+						return MOVZBQ;
+					}
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in byte move selector\n");
+					exit(1);
+			}
+
+			break;
+
+		case WORD:
+			switch(destination_size){
+				case DOUBLE_WORD:
+					if(destination_signed == TRUE){
+						return MOVSWL;
+					} else {
+						return MOVZWL;
+					}
+
+				case QUAD_WORD:
+					if(destination_signed == TRUE){
+						return MOVSWQ;
+					} else {
+						return MOVZWQ;
+					}
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in word move selector\n");
+					exit(1);
+			}
+
+			break;
+
+		case DOUBLE_WORD:
+			switch(destination_size){
+				case SINGLE_PRECISION:
+					return CVTSI2SSL;
+
+				case DOUBLE_PRECISION:
+					return CVTSI2SDL;
+
+				case QUAD_WORD:
+					if(destination_signed == TRUE){
+						return MOVSLQ;
+					} else {
+						//If it's unsigned, we are able to do the implicit
+						//conversion here
+						return MOVQ;
+					}
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in double word move selector\n");
+					exit(1);
+			}
+
+			break;
+
+		case QUAD_WORD:
+			switch(destination_size){
+				case SINGLE_PRECISION:
+					return CVTSI2SSQ;
+
+				case DOUBLE_PRECISION:
+					return CVTSI2SDQ;
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in quad word move selector\n");
+					exit(1);
+			}
+
+			break;
+
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in converting move selector\n");
+			exit(1);
 	}
 }
 

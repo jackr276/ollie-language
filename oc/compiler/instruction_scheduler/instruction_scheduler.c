@@ -361,7 +361,11 @@ static void schedule_instructions_in_block(basic_block_t* block, u_int8_t debug_
 	 * Step 6: use the list scheduler to reorder the entire block.
 	 * The algorithm is detailed in the function
 	 *
-	 * TODO
+	 * TODO - list scheduler needs to be added in
+	 *
+	 *
+	 *
+	 *
 	 */
 
 	//We're done with it, we can deallocate now
