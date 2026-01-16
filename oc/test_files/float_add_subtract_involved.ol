@@ -4,6 +4,8 @@
 * allocation
 */
 
+SABOTAGED
+
 fn float_add_tester(x:f32, y:f32, z:f32) -> f32 {
 	let result:mut f32 = x + y;
 

@@ -3075,7 +3075,7 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 				}
 
 			default:
-				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 				exit(1);
 		}
 	}
@@ -3094,7 +3094,7 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTTSS2SIQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 					exit(1);
 			}
 
@@ -3112,14 +3112,11 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTTSD2SIQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 					exit(1);
 			}
 
 			break;
-
-		//TODO - handling for smaller sources - we don't currently
-		//have this but it is possible in our paradigm
 
 		case DOUBLE_WORD:
 			switch(destination_size){
@@ -3130,7 +3127,7 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTSI2SDL;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 					exit(1);
 			}
 
@@ -3145,14 +3142,14 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTSI2SDQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 					exit(1);
 			}
 
 			break;
 
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
 			exit(1);
 	}
 }
@@ -3176,7 +3173,7 @@ static instruction_type_t select_general_purpose_move_instruction(variable_size_
 			case QUAD_WORD:
 				return MOVQ;
 			default:
-				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in GP move selector\n");
 				exit(1);
 		}
 	}
@@ -3425,7 +3422,7 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 			break;
 		//Should never reach this
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in constant move instruction\n");
 			exit(1);
 	}
 
@@ -3502,7 +3499,7 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
 			instruction->instruction_type = CBTW;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in conversion instruction\n");
 			exit(1);
 	}
 
@@ -3591,7 +3588,7 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 			instruction->instruction_type = ANDB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in and instruction\n");
 			exit(1);
 	}
 
@@ -3628,7 +3625,7 @@ static instruction_t* emit_or_instruction(three_addr_var_t* destination, three_a
 			instruction->instruction_type = ORB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in or instruction\n");
 			exit(1);
 	}
 
@@ -3690,7 +3687,7 @@ static instruction_t* emit_div_instruction(three_addr_var_t* assignee, three_add
 
 		//Should never reach this
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in division instrution\n");
 			exit(1);
 	}
 
@@ -3731,7 +3728,7 @@ static instruction_type_t select_add_instruction(variable_size_t size){
 		case DOUBLE_PRECISION:
 			return ADDSD;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in add instruction\n");
 			exit(1);
 	}
 }
@@ -3752,7 +3749,7 @@ static instruction_type_t select_lea_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return LEAQ;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in lea instruction\n");
 			exit(1);
 	}
 }
@@ -3778,7 +3775,7 @@ static instruction_type_t select_sub_instruction(variable_size_t size){
 		case DOUBLE_PRECISION:
 			return SUBSD;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in subtraction instruction\n");
 			exit(1);
 	}
 }
@@ -3800,7 +3797,7 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
 		case QUAD_WORD:
 			return CMPQ;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in cmp instruction\n");
 			exit(1);
 	}
 }
@@ -3991,7 +3988,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_t* instruction){
 			instruction->instruction_type = ORB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in or instruction\n");
 			exit(1);
 	}
 
@@ -4037,7 +4034,7 @@ static void handle_bitwise_and_instruction(instruction_t* instruction){
 			instruction->instruction_type = ANDB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in and instruction\n");
 			exit(1);
 	}
 
@@ -4083,7 +4080,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 			instruction->instruction_type = XORB;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in xor instruction\n");
 			exit(1);
 	}
 	
@@ -4424,7 +4421,7 @@ static void handle_unsigned_multiplication_instruction(instruction_window_t* win
 			break;
 		//Everything else falls here
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in multiplication instruction\n");
 			exit(1);
 	}
 
@@ -4882,7 +4879,7 @@ static void handle_constant_to_register_move_instruction(instruction_t* instruct
 			instruction->instruction_type = MOVQ;
 			break;
 		default:
-			printf("Fatal internal compiler error: undefined/incorrect variable size detected\n");
+			printf("Fatal internal compiler error: undefined/incorrect variable size detected in constant to register move instruction\n");
 			exit(1);
 	}
 	
@@ -5716,7 +5713,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
  * of a load instruction. This will also handle the edge case where we are
  * loading from a 32 bit memory region into an unsigned 64 bit region
  */
-static void handle_load_instruction_destination_assignment(instruction_t* load_instruction){
+static inline void handle_load_instruction_destination_assignment(instruction_t* load_instruction){
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
 
@@ -6231,6 +6228,64 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 
 	//The window always needs to be rebuilt around the last instruction that we touched
 	reconstruct_window(window, variable_offset_load);
+}
+
+
+/**
+ * Combine a lea with a regular load instruction. This is mainly intended to be used with the 
+ * rip relative constant addressing, but we may extend it in the future
+ */
+static void combine_lea_with_regular_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* load_statement){
+	//Local variable declarations
+	variable_size_t destination_size;
+	variable_size_t source_size;
+	u_int8_t is_destination_signed;
+	
+	//Go based on what kind of lea we have
+	switch(lea_statement->lea_statement_type){
+		/**
+		 * This is our main target with this rule
+		 */
+		case OIR_LEA_TYPE_RIP_RELATIVE:
+			//We need the destination and source sizes to determine our movement instruction
+			destination_size = get_type_size(load_statement->assignee->type);
+			//Is the destination signed? This is also required inof
+			is_destination_signed = is_type_signed(load_statement->assignee->type);
+			//For a load, the source size is stored in the instruction itself
+			source_size = get_type_size(load_statement->memory_read_write_type);
+
+			//Let the helper select for us. *This will change*
+			load_statement->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+
+			//Let the helper deal with the load instruction's destination
+			handle_load_instruction_destination_assignment(load_statement);
+
+			//We are reading from memory here
+			load_statement->memory_access_type = READ_FROM_MEMORY;
+
+			//This will be a rip-relative address
+			load_statement->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+
+			//The first thing we need is the %rip register
+			load_statement->address_calc_reg1 = instruction_pointer_variable;
+
+			//The rip offset variable is our .LCx value
+			load_statement->rip_offset_variable = lea_statement->op2;
+
+			//Now that we've gotten all we need from the lea, we can delete it
+			delete_statement(lea_statement);
+
+			//And we'll rebuild the window based on whatever comes after
+			reconstruct_window(window, load_statement->next_statement);
+
+			break;
+
+		//By default, just do nothing and leave the instruction window
+		//as is. It will be picked up by the rest of the selector as
+		//normal
+		default:
+			break;
+	}
 }
 
 
@@ -6770,6 +6825,29 @@ static void select_instruction_patterns(instruction_window_t* window){
 		//Reconstruct the window with instruction2 as the start
 		reconstruct_window(window, window->instruction2);
 		return;
+	}
+
+
+	/**
+	 * Compressing lea constant loads with the rip-relative addressing that
+	 * comes before them
+	 *
+	 * This would be something like:
+	 *  t4 <- .LC0(%rip)
+	 *  t5 <- load t4
+	 *
+	 *  We can combine this to be
+	 * 	t5 <- .LC0(%rip)
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
+		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
+		&& window->instruction2->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
+
+		//Invoke a special helper here that will deal with the selection for us and also
+		//modify our window
+		combine_lea_with_regular_load_instruction(window, window->instruction1, window->instruction2);
 	}
 
 

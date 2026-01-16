@@ -49,6 +49,8 @@ static generic_type_t* i32 = NULL;
 static generic_type_t* u32 = NULL;
 static generic_type_t* u64 = NULL;
 static generic_type_t* i64 = NULL;
+static generic_type_t* f32 = NULL;
+static generic_type_t* f64 = NULL;
 //The break and continue stack will
 //hold values that we can break & continue
 //to. This is done here to avoid the need
@@ -181,9 +183,68 @@ void reset_block_variable_tracking(basic_block_t* block){
  * A helper function that makes a new block id. This ensures we have an atomically
  * increasing block ID
  */
-static int32_t increment_and_get(){
+static inline int32_t increment_and_get(){
 	current_block_id++;
 	return current_block_id;
+}
+
+
+/**
+ * A helper function that will directly emit either an f32 or f64
+ * constant value and place said value into the appropriate location
+ * for a function. This will return a variable that corresponds
+ * to the address load for that new constant(remember we can't put
+ * floats in directly)
+ */
+static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_t* block, symtab_function_record_t* function, double constant_value, ollie_token_t constant_type){
+	three_addr_var_t* local_constant_temp_var;
+	local_constant_t* local_constant;
+
+	switch(constant_type){
+		case F32:
+			//Emit the local constant
+			local_constant = f32_local_constant_alloc(f32, constant_value);
+			local_constant->reference_count++;
+
+			//Add it to the function and emit a var for it
+			add_local_constant_to_function(function, local_constant);
+			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
+
+			//Emit the load and add it into the block
+			instruction_t* f32_lea_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_temp_var, instruction_pointer_var);
+			add_statement(block, f32_lea_load);
+
+			//Now that we have an address, we can get the actual constant out by doing a load
+			instruction_t* load_f32 = emit_load_ir_code(emit_temp_var(f32), f32_lea_load->assignee, f32);
+			add_statement(block, load_f32);
+
+			//Give back whatever assignee we've got
+			return load_f32->assignee;
+		
+		case F64:
+			//Emit the local constant
+			local_constant = f64_local_constant_alloc(f64, constant_value);
+			local_constant->reference_count++;
+
+			//Add it to the function and emit a var for it
+			add_local_constant_to_function(function, local_constant);
+			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
+
+			//Emit the load and add it into the block
+			instruction_t* f64_lea_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_temp_var, instruction_pointer_var);
+			add_statement(block, f64_lea_load);
+
+			//Now that we have an address, we can get the actual constant out by doing a load
+			instruction_t* load_f64 = emit_load_ir_code(emit_temp_var(f64), f64_lea_load->assignee, f64);
+			add_statement(block, f64_lea_load);
+
+			//Give back whatever assignee we've got
+			return load_f64->assignee;
+
+		default:
+			printf("Fatal internal compiler error: attempt to allocate a non-float constant in the floating point allocator\n");
+			exit(1);
+	}
 }
 
 
@@ -2760,6 +2821,7 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	three_addr_var_t* function_pointer_variable;
 	//Holder for the constant assignment
 	instruction_t* const_assignment;
+	instruction_t* address_load;
 
 	/**
 	 * Constants that are: strings, f32, f64, and function pointers require
@@ -2782,7 +2844,14 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			local_constant_val = emit_f32_local_constant(current_function, constant_node);
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
+			//This only gets the address, we still need to do extra work for our constants
+			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
+			//Add it into the block
+			add_statement(basic_block, address_load);
+
+			//Emit a load instruction to grab the constant from said address
+			const_assignment = emit_load_ir_code(emit_temp_var(f32), address_load->assignee, f32);
+
 			break;
 
 		//For double constants, we need to emit the local constant equivalent via the helper
@@ -2791,7 +2860,14 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			local_constant_val = emit_f64_local_constant(current_function, constant_node);
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
+			//This only gets the address, we still need to do extra work for our constants
+			address_load = emit_lea_rip_relative_constant(emit_temp_var(u64), local_constant_val, instruction_pointer_var);
+			//Add it into the block
+			add_statement(basic_block, address_load);
+
+			//Emit a load instruction to grab the constant from the above address
+			const_assignment = emit_load_ir_code(emit_temp_var(f64), address_load->assignee, f64);
+
 			break;
 
 		//Special case here - we need to emit a variable for the function pointer itself
@@ -2930,9 +3006,9 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 
 
 /**
- * Emit increment three adress code
+ * Emit increment three adress code for general purpose variables
  */
-static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
+static inline three_addr_var_t* emit_general_purpose_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
 	//Create the code
 	instruction_t* inc_code = emit_inc_instruction(incrementee);
 
@@ -2954,9 +3030,55 @@ static three_addr_var_t* emit_inc_code(basic_block_t* basic_block, three_addr_va
 
 
 /**
+ * Emit increment code for an SSE variable. Since SSE variables are incompatible with standard "inc" instructions, we need
+ * to emit this as a var + 1.0 type statement
+ */
+static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, three_addr_var_t* incrementee, u_int8_t is_branch_ending){
+	//We need a "1" float constant
+	three_addr_var_t* constant_value;
+
+	//Emit the proper constant based on the type
+	switch(incrementee->type->basic_type_token){
+		case F32:
+			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F32);
+
+			break;
+
+		case F64:
+			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F64);
+			break;
+		
+		default:
+			printf("Fatal internal compiler error: invalid variable type for SSE load\n");
+			exit(1);
+	}
+
+	//The final assignee needs to be separate for SSA reasons. It will
+	//have a different "name" than the RHS one
+	three_addr_var_t* final_assignee = emit_var_copy(incrementee);
+
+	//Emit the final addition and get it into the block
+	instruction_t* final_addition = emit_binary_operation_instruction(final_assignee, incrementee, PLUS, constant_value);
+	final_addition->is_branch_ending = is_branch_ending;
+
+	add_statement(basic_block, final_addition);
+
+	//This counts as a use
+	add_used_variable(basic_block, incrementee);
+	add_used_variable(basic_block, constant_value);
+
+	//And this is also an assignment
+	add_assigned_variable(basic_block, final_assignee);
+
+	//Finally, the result that we give back is the incrementee
+	return final_assignee;
+}
+
+
+/**
  * Emit decrement three address code
  */
-static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
+static inline three_addr_var_t* emit_general_purpose_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
 	//Create the code
 	instruction_t* dec_code = emit_dec_instruction(decrementee);
 
@@ -2978,9 +3100,55 @@ static three_addr_var_t* emit_dec_code(basic_block_t* basic_block, three_addr_va
 
 
 /**
+ * Emit increment decrement for an SSE variable. Since SSE variables are incompatible with standard "decrement" instructions, we need
+ * to emit this as a var - 1.0 type statement
+ */
+static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, three_addr_var_t* decrementee, u_int8_t is_branch_ending){
+	//We need a "1" float constant
+	three_addr_var_t* constant_value;
+
+	//Emit the proper constant based on the type
+	switch(decrementee->type->basic_type_token){
+		case F32:
+			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F32);
+
+			break;
+
+		case F64:
+			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F64);
+			break;
+		
+		default:
+			printf("Fatal internal compiler error: invalid variable type for SSE load\n");
+			exit(1);
+	}
+
+	//The final assignee needs to be separate for SSA reasons. It will
+	//have a different "name" than the RHS one
+	three_addr_var_t* final_assignee = emit_var_copy(decrementee);
+
+	//Emit the final addition and get it into the block
+	instruction_t* final_addition = emit_binary_operation_instruction(final_assignee, decrementee, MINUS, constant_value);
+	final_addition->is_branch_ending = is_branch_ending;
+
+	add_statement(basic_block, final_addition);
+
+	//This counts as a use
+	add_used_variable(basic_block, decrementee);
+	add_used_variable(basic_block, constant_value);
+
+	//And this is also an assignment
+	add_assigned_variable(basic_block, final_assignee);
+
+	//Finally, the result that we give back is the incrementee
+	return final_assignee;
+}
+
+
+/**
  * Emit a test instruction
  */
-static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_var_t* op1, three_addr_var_t* op2, u_int8_t is_branch_ending){
+static inline three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_var_t* op1, three_addr_var_t* op2, u_int8_t is_branch_ending){
 	//Emit the test statement based on the type
 	instruction_t* test_statement = emit_test_statement(emit_temp_var(op1->type), op1, op2);
 
@@ -3004,7 +3172,7 @@ static three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_v
 /**
  * Emit a bitwise not statement 
  */
-static three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, u_int8_t is_branch_ending){
+static inline three_addr_var_t* emit_bitwise_not_expr_code(basic_block_t* basic_block, three_addr_var_t* var, u_int8_t is_branch_ending){
 	//Emit a copy so that we are distinct
 	three_addr_var_t* assignee = emit_var_copy(var);
 
@@ -3677,13 +3845,39 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		case TYPE_CLASS_BASIC:
 			switch(node->unary_operator){
 				case PLUSPLUS:
-					//We really just have an "inc" instruction here
-					assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+					//Go based on the token type. If we have floating
+					//point operations here, we need special handling
+					switch(assignee->type->basic_type_token){
+						case F32:
+						case F64:
+							//Let the special helper deal with it
+							assignee = emit_sse_inc_code(current_block, assignee, is_branch_ending) ;
+							break;
+							
+						default:
+							//We really just have an "inc" instruction here
+							assignee = emit_general_purpose_inc_code(current_block, assignee, is_branch_ending);
+							break;
+					}
+
 					break;
 					
 				case MINUSMINUS:
-					//We really just have an "dec" instruction here
-					assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+					//Go based on the token type. If we have floating
+					//point operations here, we need special handling
+					switch(assignee->type->basic_type_token){
+						case F32:
+						case F64:
+							//Call out to the helper to deal with the special float case
+							assignee = emit_sse_dec_code(current_block, assignee, is_branch_ending);
+							break;
+
+						default:
+							//We really just have an "inc" instruction here
+							assignee = emit_general_purpose_dec_code(current_block, assignee, is_branch_ending);
+							break;
+					}
+
 					break;
 
 				//We shouldn't ever hit here
@@ -3845,33 +4039,44 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Go based on what we have here
 			switch(assignee->type->type_class){
 				case TYPE_CLASS_BASIC:
-					//If we have a temporary variable, then we need to perform
-					//a reassignment here for analysis purposes
-					if(unary_package.assignee->variable_type == VARIABLE_TYPE_TEMP){
-						//Emit the assignment
-						instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee);
-						temp_assignment->is_branch_ending = is_branch_ending;
-
-						//This now counts as a use
-						add_used_variable(current_block, assignee);
-
-						//Throw it in the block
-						add_statement(current_block, temp_assignment);
-
-						//Now the new assignee equals this new temp that we have
-						assignee = temp_assignment->assignee;
-					}
-					
 					//Go based on the op here
 					switch(unary_operator_node->unary_operator){
 						case PLUSPLUS:
-							//We really just have an "inc" instruction here
-							assignee = emit_inc_code(current_block, assignee, is_branch_ending);
+							//Go based on the basic type. Since SSE variables are not
+							//compatible with normal inc instructions, we need to
+							//break out like this
+							switch(assignee->type->basic_type_token){
+								case F32:
+								case F64:
+									//Let the special helper deal with it
+									assignee = emit_sse_inc_code(current_block, assignee, is_branch_ending) ;
+									break;
+
+								default:
+									//We really just have an "inc" instruction here
+									assignee = emit_general_purpose_inc_code(current_block, assignee, is_branch_ending);
+									break;
+							}
+
 							break;
 							
 						case MINUSMINUS:
-							//We really just have an "dec" instruction here
-							assignee = emit_dec_code(current_block, assignee, is_branch_ending);
+							//Go based on the basic type. Since SSE variables are not
+							//compatible with normal dec instructions, we need to
+							//break out like this
+							switch(assignee->type->basic_type_token){
+								case F32:
+								case F64:
+									//Call out to the helper to deal with the special float case
+									assignee = emit_sse_dec_code(current_block, assignee, is_branch_ending);
+									break;
+
+								default:
+									//We really just have an "inc" instruction here
+									assignee = emit_general_purpose_dec_code(current_block, assignee, is_branch_ending);
+									break;
+							}
+
 							break;
 
 						//We shouldn't ever hit here
@@ -8961,6 +9166,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	nesting_stack = nesting_stack_alloc();
 
 	//Keep these on hand
+	f64 = lookup_type_name_only(type_symtab, "f64", NOT_MUTABLE)->type;
+	f32 = lookup_type_name_only(type_symtab, "f32", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type;
 	i64 = lookup_type_name_only(type_symtab, "i64", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(type_symtab, "u32", NOT_MUTABLE)->type;
