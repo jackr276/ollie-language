@@ -5713,7 +5713,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
  * of a load instruction. This will also handle the edge case where we are
  * loading from a 32 bit memory region into an unsigned 64 bit region
  */
-static void handle_load_instruction_destination_assignment(instruction_t* load_instruction){
+static inline void handle_load_instruction_destination_assignment(instruction_t* load_instruction){
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
 
@@ -6236,11 +6236,48 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
  * rip relative constant addressing, but we may extend it in the future
  */
 static void combine_lea_with_regular_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* load_statement){
+	//Local variable declarations
+	variable_size_t destination_size;
+	variable_size_t source_size;
+	u_int8_t is_destination_signed;
+	
+	//Go based on what kind of lea we have
 	switch(lea_statement->lea_statement_type){
 		/**
 		 * This is our main target with this rule
 		 */
 		case OIR_LEA_TYPE_RIP_RELATIVE:
+			//We need the destination and source sizes to determine our movement instruction
+			destination_size = get_type_size(load_statement->assignee->type);
+			//Is the destination signed? This is also required inof
+			is_destination_signed = is_type_signed(load_statement->assignee->type);
+			//For a load, the source size is stored in the instruction itself
+			source_size = get_type_size(load_statement->memory_read_write_type);
+
+			//Let the helper select for us. *This will change*
+			load_statement->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+
+			//Let the helper deal with the load instruction's destination
+			handle_load_instruction_destination_assignment(load_statement);
+
+			//We are reading from memory here
+			load_statement->memory_access_type = READ_FROM_MEMORY;
+
+			//This will be a rip-relative address
+			load_statement->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+
+			//The first thing we need is the %rip register
+			load_statement->address_calc_reg1 = instruction_pointer_variable;
+
+			//The rip offset variable is our .LCx value
+			load_statement->rip_offset_variable = lea_statement->op2;
+
+			//Now that we've gotten all we need from the lea, we can delete it
+			delete_statement(lea_statement);
+
+			//And we'll rebuild the window based on whatever comes after
+			reconstruct_window(window, load_statement->next_statement);
+
 			break;
 
 		//By default, just do nothing and leave the instruction window
