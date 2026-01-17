@@ -180,7 +180,7 @@ static inline u_int8_t is_source_register_clean(three_addr_var_t* source_registe
  *
  * Examples are statements like CVTSI2SDL, which take an i32 and turn it into an f64 
  */
-static inline u_int8_t is_conversion_with_sse_declaration(instruction_type_t instruction_type){
+static inline u_int8_t is_integer_to_sse_conversion_instruction(instruction_type_t instruction_type){
 	switch(instruction_type){
 		case CVTSI2SDL:
 		case CVTSI2SDQ:
@@ -3302,7 +3302,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
 	 * a special "pxor" statement beforehand to completely wipe out said register
 	 */
-	if(is_conversion_with_sse_declaration(instruction->instruction_type) == TRUE){
+	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
 		//We need to completely zero out the destination register here, so we will emit a pxor to do
 		//just that
 		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
@@ -5689,6 +5689,19 @@ static void handle_load_instruction(instruction_t* instruction){
 	//Invoke the helper to handle the assignee and any edge cases
 	handle_load_instruction_destination_assignment(instruction);
 
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, instruction);
+	}
+
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
 	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
@@ -5766,6 +5779,19 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 
 	//Handle destination assignment based on op1
 	handle_load_instruction_destination_assignment(instruction);
+
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, instruction);
+	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -5845,6 +5871,19 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(instruction);
+
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, instruction);
+	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -6043,7 +6082,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 				variable_offset_load->address_calc_reg2 = create_and_insert_converting_move_instruction(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
 			}
 
-		//This one will have an addressing type of registers and offset
+			//This one will have an addressing type of registers and offset
 			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 			//The lea is now useless so get rid of it
@@ -6149,6 +6188,19 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(variable_offset_load);
 
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_integer_to_sse_conversion_instruction(variable_offset_load->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(variable_offset_load->destination_register);
+
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, variable_offset_load);
+	}
+
 	//The window always needs to be rebuilt around the last instruction that we touched
 	reconstruct_window(window, variable_offset_load);
 }
@@ -6182,6 +6234,19 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 
 			//Let the helper deal with the load instruction's destination
 			handle_load_instruction_destination_assignment(load_statement);
+
+			/**
+			 * If we have a conversion instruction that has an SSE destination, we need to emit
+			 * a special "pxor" statement beforehand to completely wipe out said register
+			 */
+			if(is_integer_to_sse_conversion_instruction(load_statement->instruction_type) == TRUE){
+				//We need to completely zero out the destination register here, so we will emit a pxor to do
+				//just that
+				instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_statement->destination_register);
+
+				//Get this in right before the given
+				insert_instruction_before_given(pxor_instruction, load_statement);
+			}
 
 			//We are reading from memory here
 			load_statement->memory_access_type = READ_FROM_MEMORY;
