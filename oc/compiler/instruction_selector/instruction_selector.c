@@ -4650,10 +4650,11 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 		 * leal t25, (t15, t17)
 		 */
 		case PLUS:
-			//This is our first case
-			if(variables_equal(instruction->op1, instruction->assignee, FALSE) == TRUE){
+			//This is our first case. Of course ignore SSA here
+			if(variables_equal_no_ssa(instruction->assignee, instruction->op1, FALSE) == TRUE){
 				//Let the helper do it
 				handle_addition_instruction(instruction);
+
 			//Otherwise we need to handle case 2
 			} else {
 				//Let this different version do it
@@ -6197,8 +6198,8 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			//Now that we've gotten all we need from the lea, we can delete it
 			delete_statement(lea_statement);
 
-			//And we'll rebuild the window based on whatever comes after
-			reconstruct_window(window, load_statement->next_statement);
+			//Rebuild the window based on the load statement
+			reconstruct_window(window, load_statement);
 
 			break;
 
@@ -6770,6 +6771,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 		//Invoke a special helper here that will deal with the selection for us and also
 		//modify our window
 		combine_lea_with_regular_load_instruction(window, window->instruction1, window->instruction2);
+		return;
 	}
 
 
