@@ -314,13 +314,13 @@ u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_t
 	if(destination_type->type_class == TYPE_CLASS_BASIC && source_type->type_class == TYPE_CLASS_BASIC){
 		switch(destination_type->basic_type_token){
 			//Destination is SSE, so is the source?
-			case SINGLE_PRECISION:
-			case DOUBLE_PRECISION:
+			case F32:
+			case F64:
 				//Go based on what the source is
 				switch(source_type->basic_type_token){
 					//Source is also a floating point value, so we're fine
-					case SINGLE_PRECISION:
-					case DOUBLE_PRECISION:
+					case F32:
+					case F64:
 						return FALSE;
 
 					//Otherwise it isn't, so we'll need to convert
@@ -335,14 +335,16 @@ u_int8_t is_converting_move_required(generic_type_t* destination_type, generic_t
 				//Go based on what the source is
 				switch(source_type->basic_type_token){
 					//Source is a float value, so we need to convert
-					case SINGLE_PRECISION:
-					case DOUBLE_PRECISION:
+					case F32:
+					case F64:
 						return TRUE;
 
 					//Otherwise it's not, so nothing is needed
 					default:
 						return FALSE;
 				}
+
+				break;
 		}
 	}
 
