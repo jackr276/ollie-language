@@ -64,14 +64,6 @@ typedef enum type_class_t {
 
 //========================= Utility Macros ============================
 /**
- * Determine whether a converting move is required between the source and
- * destination types. A converting move is only required when the destination
- * type is larger than the source
- */
-#define IS_CONVERTING_MOVE_REQUIRED(destination_type, source_type) \
-	((destination_type->type_size > source_type->type_size) ? TRUE : FALSE)
-
-/**
  * Determine whether a type is or is not a void type
  */
 #define IS_VOID_TYPE(type) \

@@ -364,14 +364,22 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 		case ADDL:
 		case ADDW:
 		case ADDQ:
+		case ADDSS:
+		case ADDSD:
 		case SUBB:
 		case SUBW:
 		case SUBL:
 		case SUBQ:
+		case SUBSS:
+		case SUBSD:
 		case IMULB:
 		case IMULW:
 		case IMULL:
 		case IMULQ:
+		case MULSS:
+		case MULSD:
+		case DIVSS:
+		case DIVSD:
 		case SHRW:
 		case SHRB:
 		case SHRL:
@@ -7152,6 +7160,7 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t igno
 		} else {
 			return FALSE;
 		}
+
 	//Otherwise, we're comparing two non-temp variables
 	} else {
 		//Do they reference the same overall variable?

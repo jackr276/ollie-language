@@ -180,7 +180,7 @@ static inline u_int8_t is_source_register_clean(three_addr_var_t* source_registe
  *
  * Examples are statements like CVTSI2SDL, which take an i32 and turn it into an f64 
  */
-static inline u_int8_t is_conversion_with_sse_declaration(instruction_type_t instruction_type){
+static inline u_int8_t is_integer_to_sse_conversion_instruction(instruction_type_t instruction_type){
 	switch(instruction_type){
 		case CVTSI2SDL:
 		case CVTSI2SDQ:
@@ -3044,7 +3044,8 @@ static void simplify(cfg_t* cfg){
 
 
 /**
- * Select a register movement SSE instruction based on source and destination sizes
+ * Select the appropriate move instruction based on the source & destination
+ * sizes, the destination signedness, and anything else that we may need
  *
  * We need to know if the source is a known "clean" SSE value. SSE values are not known
  * to be clean unless we've made them ourselves in the function, so for example,
@@ -3055,11 +3056,23 @@ static void simplify(cfg_t* cfg){
  * placed in front of the instruction *if* the destination is an XMM register to maintain
  * this "clean" register idea
  */
-static instruction_type_t select_sse_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t source_clean){
-	//If these are a match, we don't have any
-	//kind of converting move here
+static instruction_type_t select_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t destination_signed, u_int8_t source_clean){
+	//These two have the same size, we can select easily
+	//and be out of here
 	if(destination_size == source_size){
 		switch(destination_size) {
+			case BYTE:
+				return MOVB;
+
+			case WORD:
+				return MOVW;
+
+			case DOUBLE_WORD:
+				return MOVL;
+
+			case QUAD_WORD:
+				return MOVQ;
+
 			case SINGLE_PRECISION:
 				if(source_clean == TRUE){
 					return MOVSS;
@@ -3075,12 +3088,15 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 				}
 
 			default:
-				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
+				printf("Fatal internal compiler error: undefined/invalid variable size encountered in move instruction selector\n");
 				exit(1);
 		}
 	}
 
-	//We know that we have a difference, so go based on the source size
+	/**
+	 * Since we know that the sizes are different, we will need to do some more complicated
+	 * switching logic in here
+	 */
 	switch(source_size){
 		case SINGLE_PRECISION:
 			switch(destination_size){
@@ -3094,7 +3110,7 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTTSS2SIQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in single precision move selector\n");
 					exit(1);
 			}
 
@@ -3112,7 +3128,60 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTTSD2SIQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in double precision move selector\n");
+					exit(1);
+			}
+
+			break;
+
+		case BYTE:
+			switch(destination_size){
+				case WORD:
+					if(destination_signed == TRUE){
+						return MOVSBW;
+					} else {
+						return MOVZBW;
+					}
+
+				case DOUBLE_WORD:
+					if(destination_signed == TRUE){
+						return MOVSBL;
+					} else {
+						return MOVZBL;
+					}
+
+				case QUAD_WORD:
+					if(destination_signed == TRUE){
+						return MOVSBQ;
+					} else{
+						return MOVZBQ;
+					}
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in byte move selector\n");
+					exit(1);
+			}
+
+			break;
+
+		case WORD:
+			switch(destination_size){
+				case DOUBLE_WORD:
+					if(destination_signed == TRUE){
+						return MOVSWL;
+					} else {
+						return MOVZWL;
+					}
+
+				case QUAD_WORD:
+					if(destination_signed == TRUE){
+						return MOVSWQ;
+					} else {
+						return MOVZWQ;
+					}
+
+				default:
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in word move selector\n");
 					exit(1);
 			}
 
@@ -3126,8 +3195,17 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 				case DOUBLE_PRECISION:
 					return CVTSI2SDL;
 
+				case QUAD_WORD:
+					if(destination_signed == TRUE){
+						return MOVSLQ;
+					} else {
+						//If it's unsigned, we are able to do the implicit
+						//conversion here
+						return MOVQ;
+					}
+
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in double word move selector\n");
 					exit(1);
 			}
 
@@ -3142,143 +3220,15 @@ static instruction_type_t select_sse_move_instruction(variable_size_t destinatio
 					return CVTSI2SDQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in quad word move selector\n");
 					exit(1);
 			}
 
 			break;
 
 		default:
-			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in SSE move selector\n");
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in converting move selector\n");
 			exit(1);
-	}
-}
-
-
-/**
- * Select a register movement instruction based on the source and destination sizes
- */
-static instruction_type_t select_general_purpose_move_instruction(variable_size_t destination_size, variable_size_t source_size, u_int8_t is_signed){
-	//If these are the exact same, then all we need to do is
-	//select a generic move here
-	if(destination_size == source_size){
-		//Go based on size
-		switch(destination_size){
-			case BYTE:
-				return MOVB;
-			case WORD:
-				return MOVW;
-			case DOUBLE_WORD:
-				return MOVL;
-			case QUAD_WORD:
-				return MOVQ;
-			default:
-				printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in GP move selector\n");
-				exit(1);
-		}
-	}
-
-	//Select type based on signedness
-	if(is_signed == TRUE){
-		switch(source_size){
-			//Byte conversion
-			case BYTE:
-				//Go based on dest size now
-				switch(destination_size){
-					case WORD:
-						return MOVSBW;
-
-					case DOUBLE_WORD:
-						return MOVSBL;
-
-					case QUAD_WORD:
-						return MOVSBQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered for byte source\n");
-						exit(1);
-				}
-			
-			//Word conversion
-			case WORD:
-				//Go based on dest size now
-				switch(destination_size){
-					case DOUBLE_WORD:
-						return MOVSWL;
-
-					case QUAD_WORD:
-						return MOVSWQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered for word source\n");
-						exit(1);
-				}
-
-			//Long conversion
-			case DOUBLE_WORD:
-				//Go based on dest size now
-				switch(destination_size){
-					case QUAD_WORD:
-						return MOVSLQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered for long source\n");
-						exit(1);
-				}
-
-			//Unreachable
-			default:
-				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
-				exit(1);
-		}
-
-	//Otherwise, we'll need to work based on our unsigned(zX) instructions
-	} else {
-		switch(source_size){
-			//Byte conversion
-			case BYTE:
-				//Go based on dest size now
-				switch(destination_size){
-					case WORD:
-						return MOVZBW;
-
-					case DOUBLE_WORD:
-						return MOVZBL;
-
-					case QUAD_WORD:
-						return MOVZBQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered byte source\n");
-						exit(1);
-				}
-			
-			//Word conversion
-			case WORD:
-				//Go based on dest size now
-				switch(destination_size){
-					case DOUBLE_WORD:
-						return MOVZWL;
-
-					case QUAD_WORD:
-						return MOVZWQ;
-
-					default:
-						printf("Fatal internal compiler error: undefined variable size encountered word source\n");
-						exit(1);
-				}
-
-			//If we have a double word, we don't need to emit anything besides
-			//a movq because we get the zero extension for free. This requires bookkeeping
-			//on the caller's end to make the source a 64 bit version
-			case DOUBLE_WORD:
-				return MOVQ;
-
-			//Unreachable
-			default:
-				printf("Fatal internal compiler error: undefined/invalid variable size encountered\n");
-				exit(1);
-		}
 	}
 }
 
@@ -3306,20 +3256,8 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 		source->variable_size = get_type_size(destination->type);
 	}
 
-
-	//
-	//
-	//
-	//
-	//
-	//TODO need float handling
-	//
-	//
-	//
-	//
-
 	//Link to the helper to select the instruction
-	instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type));
+	instruction->instruction_type = select_move_instruction(get_type_size(destination->type), get_type_size(source->type), is_type_signed(destination->type), is_source_register_clean(source));
 
 	//Finally we set the destination
 	instruction->destination_register = destination;
@@ -3343,50 +3281,34 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	variable_size_t destination_size = get_type_size(assignee->type);
 	variable_size_t source_size = get_type_size(op1->type);
 
-	//If we have *at least one* floating point instruction, we need to use the specialized selector rule. Otherwise
-	//we use the generic rules
-	if(IS_FLOATING_POINT(assignee->type) == FALSE 
-		&& IS_FLOATING_POINT(op1->type) == FALSE){
-		//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-		//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-		//zero pad when 32 bit moves happen
-		if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
-			//Emit a variable copy of the source
-			op1 = emit_var_copy(op1);
+	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	//zero pad when 32 bit moves happen
+	if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
+		//Emit a variable copy of the source
+		op1 = emit_var_copy(op1);
 
-			//Reassign it's type to be the desired type
-			op1->type = assignee->type;
+		//Reassign it's type to be the desired type
+		op1->type = assignee->type;
 
-			//Select the size appropriately after the type is reassigned
-			op1->variable_size = get_type_size(op1->type);
-		}
+		//Select the size appropriately after the type is reassigned
+		op1->variable_size = get_type_size(op1->type);
+	}
 
-		//Use the helper to get the right sized move instruction
-		instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_type_signed(assignee->type));
+	//Let the helper rule determine what our instruction is
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), is_source_register_clean(op1));
 
-	//Handle floating point move
-	} else {
-		/**
-		 * An important concept for floating point movements is whether we have a "clean" source or not. Clean
-		 * source values mean that the entire register has been wiped. This will determine whether or not we use certain
-		 * types of move instructions and/or insert given clear instructions
-		 */
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
 
-		//Use the floating point selector here
-		instruction->instruction_type = select_sse_move_instruction(destination_size, source_size, is_source_register_clean(instruction->op1));
-
-		/**
-		 * If we have a conversion instruction that has an SSE destination, we need to emit
-		 * a special "pxor" statement beforehand to completely wipe out said register
-		 */
-		if(is_conversion_with_sse_declaration(instruction->instruction_type) == TRUE){
-			//We need to completely zero out the destination register here, so we will emit a pxor to do
-			//just that
-			instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
-
-			//Get this in right before the given
-			insert_instruction_before_given(pxor_instruction, instruction);
-		}
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, instruction);
 	}
 
 	//Set the sources and destinations
@@ -4728,10 +4650,11 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 		 * leal t25, (t15, t17)
 		 */
 		case PLUS:
-			//This is our first case
-			if(variables_equal(instruction->op1, instruction->assignee, FALSE) == TRUE){
+			//This is our first case. Of course ignore SSA here
+			if(variables_equal_no_ssa(instruction->assignee, instruction->op1, FALSE) == TRUE){
 				//Let the helper do it
 				handle_addition_instruction(instruction);
+
 			//Otherwise we need to handle case 2
 			} else {
 				//Let this different version do it
@@ -5534,7 +5457,7 @@ static void handle_test_instruction(instruction_t* instruction){
  *
  * This bypasses all register allocation entirely
  */
-static instruction_t* emit_general_purpose_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
+static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register){
 	//First allocate it
 	instruction_t* move_instruction = calloc(1, sizeof(instruction_t));
 
@@ -5547,7 +5470,7 @@ static instruction_t* emit_general_purpose_move_instruction_directly(three_addr_
 	generic_type_t* source_type = source_register->type;
 
 	//Now we will decide what the move instruction is
-	move_instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+	move_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), is_source_register_clean(source_register));
 
 	//Give back the pointer
 	return move_instruction;
@@ -5600,12 +5523,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				 * move in before the store instruction because x86 assembly does not allow us
 				 * to do *to memory* converting moves
 				 */
-				} else if(IS_CONVERTING_MOVE_REQUIRED(destination_type, source_type) == TRUE) {
+				} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
 					//Emit a temp var that is the destination's type
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
 					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_general_purpose_move_instruction_directly(new_source, store_instruction->op1);
+					instruction_t* converting_move = emit_register_movement_instruction_directly(new_source, store_instruction->op1);
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
@@ -5664,12 +5587,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				 * move in before the store instruction because x86 assembly does not allow us
 				 * to do *to memory* converting moves
 				 */
-				} else if(IS_CONVERTING_MOVE_REQUIRED(destination_type, source_type) == TRUE) {
+				} else if(is_converting_move_required(destination_type, source_type) == TRUE) {
 					//Emit a temp var that is the destination's type
 					three_addr_var_t* new_source = emit_temp_var(destination_type);
 
 					//Emit a move instruction where we send the old source(op1) into here
-					instruction_t* converting_move = emit_general_purpose_move_instruction_directly(new_source, store_instruction->op2);
+					instruction_t* converting_move = emit_register_movement_instruction_directly(new_source, store_instruction->op2);
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
@@ -5703,8 +5626,8 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 			exit(1);
 	}
 
-	//Once we've done all the above assignments, we need to determine what our instruction type is
-	store_instruction->instruction_type = select_general_purpose_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type));
+	//Once we've done all the above assignments, we need to determine what our instruction type is. The source here is always clean, we are moving to memory
+	store_instruction->instruction_type = select_move_instruction(get_type_size(destination_type), get_type_size(source_type), is_type_signed(destination_type), TRUE);
 }
 
 
@@ -5757,14 +5680,27 @@ static void handle_load_instruction(instruction_t* instruction){
 	//For a load, the source size is stored in the instruction itself
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
-	//Let the helper select for us
-	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+	//Let the helper select for us. We are passing clean as true, since we are coming from memory
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//Invoke the helper to handle the assignee and any edge cases
 	handle_load_instruction_destination_assignment(instruction);
+
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, instruction);
+	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -5835,14 +5771,27 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
 	//For a load, the source size is stored in the destination itself
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
-	//Let the helper decide for us
-	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+	//Let the helper decide for us. We are selecting clean as true, since we are coming from memory
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 	//Load is from memory
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//Handle destination assignment based on op1
 	handle_load_instruction_destination_assignment(instruction);
+
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, instruction);
+	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -5914,14 +5863,27 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 	//For a load, the source size is stored in the destination itself
 	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
 
-	//Let the helper decide for us
-	instruction->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+	//Let the helper decide for us. We are selecting the source register as clean, since we're moving from memory
+	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 	//This is a read from memory type
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(instruction);
+
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, instruction);
+	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -6120,7 +6082,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 				variable_offset_load->address_calc_reg2 = create_and_insert_converting_move_instruction(variable_offset_load, variable_offset_load->address_calc_reg2, variable_offset_load->address_calc_reg1->type);
 			}
 
-		//This one will have an addressing type of registers and offset
+			//This one will have an addressing type of registers and offset
 			variable_offset_load->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 			//The lea is now useless so get rid of it
@@ -6219,12 +6181,25 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 	}
 	
 	//NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
-	//Let the helper decide for us
-	variable_offset_load->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+	//Let the helper decide for us. We are choosing the source as clean, since it is coming from memory
+	variable_offset_load->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 	//This is a read from memory type
 	variable_offset_load->memory_access_type = READ_FROM_MEMORY;
 	//Handle the destination assignment
 	handle_load_instruction_destination_assignment(variable_offset_load);
+
+	/**
+	 * If we have a conversion instruction that has an SSE destination, we need to emit
+	 * a special "pxor" statement beforehand to completely wipe out said register
+	 */
+	if(is_integer_to_sse_conversion_instruction(variable_offset_load->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(variable_offset_load->destination_register);
+
+		//Get this in right before the given
+		insert_instruction_before_given(pxor_instruction, variable_offset_load);
+	}
 
 	//The window always needs to be rebuilt around the last instruction that we touched
 	reconstruct_window(window, variable_offset_load);
@@ -6254,11 +6229,24 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			//For a load, the source size is stored in the instruction itself
 			source_size = get_type_size(load_statement->memory_read_write_type);
 
-			//Let the helper select for us. *This will change*
-			load_statement->instruction_type = select_general_purpose_move_instruction(destination_size, source_size, is_destination_signed);
+			//Let the helper select for us. The source is guaranteed to be clean since it's coming from memory
+			load_statement->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 			//Let the helper deal with the load instruction's destination
 			handle_load_instruction_destination_assignment(load_statement);
+
+			/**
+			 * If we have a conversion instruction that has an SSE destination, we need to emit
+			 * a special "pxor" statement beforehand to completely wipe out said register
+			 */
+			if(is_integer_to_sse_conversion_instruction(load_statement->instruction_type) == TRUE){
+				//We need to completely zero out the destination register here, so we will emit a pxor to do
+				//just that
+				instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_statement->destination_register);
+
+				//Get this in right before the given
+				insert_instruction_before_given(pxor_instruction, load_statement);
+			}
 
 			//We are reading from memory here
 			load_statement->memory_access_type = READ_FROM_MEMORY;
@@ -6275,8 +6263,8 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 			//Now that we've gotten all we need from the lea, we can delete it
 			delete_statement(lea_statement);
 
-			//And we'll rebuild the window based on whatever comes after
-			reconstruct_window(window, load_statement->next_statement);
+			//Rebuild the window based on the load statement
+			reconstruct_window(window, load_statement);
 
 			break;
 
@@ -6842,12 +6830,13 @@ static void select_instruction_patterns(instruction_window_t* window){
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction2->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
 		//Invoke a special helper here that will deal with the selection for us and also
 		//modify our window
 		combine_lea_with_regular_load_instruction(window, window->instruction1, window->instruction2);
+		return;
 	}
 
 

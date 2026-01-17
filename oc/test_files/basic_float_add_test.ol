@@ -3,9 +3,6 @@
 * Test the most basic level of adding an f32 and an f64
 */
 
-
-SABOTAGED
-
 pub fn add_floats_direct() -> f32 {
 	let x:f32 = 3.33;
 	let y:f32 = 7.33;

@@ -4,8 +4,6 @@
 * than other operations
 */
 
-SABOTAGED
-
 
 fn preinc_floats(x:mut f32, y:mut f32) -> f32 {
 	++x;
