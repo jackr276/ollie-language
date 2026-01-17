@@ -6830,7 +6830,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_STATEMENT
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
-		&& window->instruction2->assignee->variable_type == VARIABLE_TYPE_TEMP
+		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, TRUE) == TRUE){
 
 		//Invoke a special helper here that will deal with the selection for us and also
