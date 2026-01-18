@@ -87,13 +87,6 @@ lexitem_t get_next_token(ollie_token_stream_t* stream);
 void push_back_token(ollie_token_stream_t* stream);
 
 /**
- * Special case -- hunting for assembly statements
- *
- * TODO deprecate
- */
-lexitem_t get_next_assembly_statement(FILE* fl);
-
-/**
  * Reset the stream to reconsume tokens from a given start point
  */
 void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsume_start);

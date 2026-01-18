@@ -84,7 +84,7 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
  */
 static inline void print_lexer_error(char* info, u_int32_t line_number){
 	//Print this out on a single line
-	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | TOKENIZER ERROR]: %s\n", file_name, line_num, info);
+	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | TOKENIZER ERROR]: %s\n", file_name, line_number, info);
 }
 
 
@@ -325,6 +325,8 @@ char* lexitem_to_string(lexitem_t* lexitem){
 		case L_NOT:
 			return "!";
 	}
+
+	return "";
 }
 
 
@@ -414,58 +416,6 @@ void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsu
 
 
 /**
- * A special case here where we get the next assembly inline statement. Assembly
- * inline statements are officially terminated by a backslash "\", so we 
- * will simply run through what we have here until we get to that backslash. We'll
- * then pack what we had into a lexer item and send it back to the caller
- */
-lexitem_t get_next_assembly_statement(FILE* fl){
-	/*
-	//We'll be giving this back
-	lexitem_t asm_statement;
-	asm_statement.tok = ASM_STATEMENT;
-
-	//The dynamic string for our assembly statement
-	dynamic_string_t asm_string = dynamic_string_alloc();
-
-	//Searching char
-	char ch;
-
-	//First pop off all of the tokens if there are any on the stack
-	while(lex_stack_is_empty(&pushed_back_tokens) == FALSE){
-		//Pop whatever we have off
-		lexitem_t token = pop_token(&pushed_back_tokens);
-
-		//Concatenate the string here
-		dynamic_string_concatenate(&asm_string, token.lexeme.string);
-	}
-
-	//So long as we don't see a backslash, we keep going
-	ch = GET_NEXT_CHAR(fl);
-
-	//So long as we don't see this move along, adding ch into 
-	//our lexeme
-	while(ch != ';'){
-		//In this case we'll add the char to the back
-		dynamic_string_add_char_to_back(&asm_string, ch);
-
-		//Refresh the char
-		ch = GET_NEXT_CHAR(fl);
-	}
-	
-	//Store the asm string as the lexeme
-	asm_statement.lexeme = asm_string;
-
-	//Otherwise we're done
-	return asm_statement;
-	*/
-
-	lexitem_t lex_item;
-	return lex_item;
-}
-
-
-/**
  * Generic function that grabs the next token out of the token stream
  */
 lexitem_t get_next_token(ollie_token_stream_t* stream){
@@ -473,7 +423,7 @@ lexitem_t get_next_token(ollie_token_stream_t* stream){
 	u_int32_t token_index = stream->token_pointer;
 
 	//Safe to read here
-	if(stream->token_pointer < token_index){
+	if(token_index < stream->current_token_index){
 		//Push up the pointer for the next call
 		(stream->token_pointer)++;
 
@@ -1358,7 +1308,7 @@ ollie_token_stream_t tokenize(FILE* fl, char* current_file_name){
 	ollie_token_stream_t token_stream;
 
 	//Initialize the internal storage for our token
-	token_stream.token_stream = calloc(DEFAULT_TOKEN_COUNT, sizeof(ollie_token_t));
+	token_stream.token_stream = calloc(DEFAULT_TOKEN_COUNT, sizeof(lexitem_t));
 	//Initialize to our default
 	token_stream.max_token_index = DEFAULT_TOKEN_COUNT;
 	//Initialize to 0

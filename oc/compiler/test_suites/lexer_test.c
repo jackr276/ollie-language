@@ -13,7 +13,7 @@
  * A small helper that prints the token out
 */
 static inline void print_token(lexitem_t* lexitem){
-	printf("LINE NUMBER %d: TOKEN %s", lexitem->line_num, lexitem_to_string(lexitem));
+	printf("LINE NUMBER %d: TOKEN %s\n", lexitem->line_num, lexitem_to_string(lexitem));
 }
 
 
@@ -26,6 +26,8 @@ int main(int argc, char** argv){
 	lexitem_t l;
 
 	for(int32_t i = 1; i < argc; i++){
+		printf("=============== LEXER TEST FOR FILE %s =================\n\n", argv[i]);
+
 		//Open the file for reading only
 		fl = fopen(argv[i], "r");
 	
@@ -37,8 +39,21 @@ int main(int argc, char** argv){
 		//Let the helper do all of the work
 		ollie_token_stream_t token_stream = tokenize(fl, argv[i]);
 
-		//Close the file when done
-		fclose(fl);
+		//Did we succeed or fail here
+		switch(token_stream.status){
+			case STREAM_STATUS_FAILURE:
+				printf("Tokenizing FAILED\n");
+				//Close the file when done
+				fclose(fl);
+
+				continue;
+
+			case STREAM_STATUS_SUCCESS:
+				//Close the file when done
+				fclose(fl);
+
+				break;
+		}
 
 		//This is usually how called functions will reference this
 		ollie_token_stream_t* token_stream_pointer = &token_stream;
@@ -77,7 +92,7 @@ int main(int argc, char** argv){
 		print_token(&l);
 
 		//Destroy the entire array
-		destroy_token_stream(&token_stream);
+		destroy_token_stream(token_stream_pointer);
 	}
 
 	return 0;
