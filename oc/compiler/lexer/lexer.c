@@ -324,9 +324,88 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "~";
 		case L_NOT:
 			return "!";
+		default:
+			return "UNKNOWN";
 	}
+}
 
-	return "";
+
+/**
+ * Convert specifically an operator token to a string for printing
+ */
+char* operator_token_to_string(ollie_token_t token){
+	switch(token){
+		case PLUSPLUS:
+			return "++";
+		case MINUSMINUS:
+			return "--";
+		case PLUS:
+			return "+";
+		case MINUS:
+			return "-";
+		case STAR:
+			return "*";
+		case F_SLASH:
+			return "/";
+		case MOD:
+			return "%";
+		case EQUALS:
+			return "=";
+		case PLUSEQ:
+			return "+=";
+		case MINUSEQ:
+			return "-=";
+		case STAREQ:
+			return "*=";
+		case SLASHEQ:
+			return "/=";
+		case SINGLE_AND:
+			return "&";
+		case ANDEQ:
+			return "&=";
+		case SINGLE_OR:
+			return "|";
+		case OREQ:
+			return "|=";
+		case MODEQ:
+			return "%=";
+		case COLON:
+			return ":";
+		case CARROT:
+			return "^";
+		case XOREQ:
+			return "^=";
+		case DOUBLE_OR:
+			return "||";
+		case DOUBLE_AND:
+			return "&&";
+		case L_SHIFT:
+			return "<<";
+		case LSHIFTEQ:
+			return "<<=";
+		case R_SHIFT:
+			return ">>";
+		case RSHIFTEQ:
+			return ">>=";
+		case G_THAN:
+			return ">";
+		case L_THAN:
+			return "<";
+		case G_THAN_OR_EQ:
+			return ">=";
+		case L_THAN_OR_EQ:
+			return "<=";
+		case DOUBLE_EQUALS:
+			return "==";
+		case NOT_EQUALS:
+			return "!=";
+		case B_NOT:
+			return "~";
+		case L_NOT:
+			return "!";
+		default:
+			return "UNKNOWN OPERATOR";
+	}
 }
 
 

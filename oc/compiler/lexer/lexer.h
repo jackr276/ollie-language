@@ -96,5 +96,9 @@ void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsu
  */
 char* lexitem_to_string(lexitem_t* lexitem);
 
+/**
+ * Convert specifically an operator token to a string for printing
+ */
+char* operator_token_to_string(ollie_token_t token);
 
 #endif /* LEXER_H */
