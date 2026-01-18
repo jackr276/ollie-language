@@ -938,83 +938,101 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 					case '<':
 						ch2 = GET_NEXT_CHAR(fl);
-						
-						if(ch2 == '<'){
-							ch3 = GET_NEXT_CHAR(fl);
 
-							if(ch3 == '='){
-								lex_item.tok = LSHIFTEQ;
+						switch(ch2){
+							case '<':
+								ch3 = GET_NEXT_CHAR(fl);
+
+								switch(ch3){
+									case '=':
+										lex_item.tok = LSHIFTEQ;
+										lex_item.line_num = line_num;
+										add_lexitem_to_stream(stream, lex_item);
+										break;
+									
+									default:
+										PUT_BACK_CHAR(fl);
+										lex_item.tok = L_SHIFT;
+										lex_item.line_num = line_num;
+										add_lexitem_to_stream(stream, lex_item);
+										break;
+								}
+
+								break;
+
+							case '=':
+								lex_item.tok = L_THAN_OR_EQ;
 								lex_item.line_num = line_num;
-								return lex_item;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 
-							} else {
+							default:
 								PUT_BACK_CHAR(fl);
-								lex_item.tok = L_SHIFT;
+								lex_item.tok = L_THAN;
 								lex_item.line_num = line_num;
-								return lex_item;
-							}
-
-						} else if(ch2 == '=') {
-							lex_item.tok = L_THAN_OR_EQ;
-							lex_item.line_num = line_num;
-							return lex_item;
-						} else {
-							PUT_BACK_CHAR(fl);
-							lex_item.tok = L_THAN;
-							lex_item.line_num = line_num;
-							return lex_item;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 						}
+						
 						break;
 
 					case '>':
-						//Grab the next char
 						ch2 = GET_NEXT_CHAR(fl);
-						if(ch2 == '>'){
-							ch3 = GET_NEXT_CHAR(fl);
-							if(ch3 == '='){
-								lex_item.tok = RSHIFTEQ;
-								lex_item.line_num = line_num;
-								return lex_item;
 
-							} else {
+						switch(ch2){
+							case '>':
+								ch3 = GET_NEXT_CHAR(fl);
+
+								switch(ch3){
+									case '=':
+										lex_item.tok = RSHIFTEQ;
+										lex_item.line_num = line_num;
+										add_lexitem_to_stream(stream, lex_item);
+										break;
+
+									default:
+										PUT_BACK_CHAR(fl);
+										lex_item.tok = R_SHIFT;
+										lex_item.line_num = line_num;
+										add_lexitem_to_stream(stream, lex_item);
+										break;
+								}
+
+								break;
+
+							case '=':
+								lex_item.tok = G_THAN_OR_EQ;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
+
+							default:
 								PUT_BACK_CHAR(fl);
-								lex_item.tok = R_SHIFT;
+								lex_item.tok = G_THAN;
 								lex_item.line_num = line_num;
-								return lex_item;
-							}
-
-						} else if(ch2 == '=') {
-							lex_item.tok = G_THAN_OR_EQ;
-							lex_item.line_num = line_num;
-							return lex_item;
-						} else {
-							PUT_BACK_CHAR(fl);
-							lex_item.tok = G_THAN;
-							lex_item.line_num = line_num;
-							return lex_item;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 						}
+
 						break;
 
 					default:
 						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#' || ch == '_'){
-							//Allocate the lexeme
 							lexeme = dynamic_string_alloc();
-							//Add the char in
 							dynamic_string_add_char_to_back(&lexeme, ch);
-							//We are now in an identifier
 							current_state = IN_IDENT;
+
 						//If we get here we have the start of either an int or a real
 						} else if(ch >= '0' && ch <= '9'){
-							//Allocate the lexeme
 							lexeme = dynamic_string_alloc();
-							//Add the character to the lexeme
 							dynamic_string_add_char_to_back(&lexeme, ch);
-							//We are not in an int
 							current_state = IN_INT;
+
 						} else {
 							lex_item.tok = ERROR;
 							lex_item.line_num = line_num;
-							return lex_item;
+							print_lexer_error("Invalid character found", line_num);
+							return FAILURE;
 						}
 				}
 
@@ -1024,14 +1042,13 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				//Is it a number, letter, or _ or $?. If so, we can have it in our ident
 				if(ch == '_' || ch == '$' || (ch >= 'a' && ch <= 'z') 
 				   || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')){
-					//Add the character to the lexeme
 					dynamic_string_add_char_to_back(&lexeme, ch);
+
 				} else {
-					//If we get here, we need to get out of the thing
-					//We'll put this back as we went too far
 					PUT_BACK_CHAR(fl);
-					//Return if we have ident or keyword
-					return identifier_or_keyword(lexeme, line_num);
+					//Invoke the helper, then add it in
+					lex_item = identifier_or_keyword(lexeme, line_num);
+					add_lexitem_to_stream(stream, lex_item);
 				}
 
 				break;
@@ -1254,6 +1271,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 	//Return this token
 	if(ch == EOF){
+
+
+		return SUCCESS;
+
 		lex_item.tok = DONE;
 		lex_item.line_num = *parser_line_num;
 	}
