@@ -81,6 +81,8 @@ int main(int argc, char** argv){
 	//Grab the options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
+	//TODO NEED TO RUN LEXER
+	
 	//Parse the file
 	parse(options);
 }

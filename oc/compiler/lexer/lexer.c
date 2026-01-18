@@ -44,7 +44,7 @@ u_int32_t line_num = 0;
 static char* file_name;
 
 //Token array, we will index using their enum values
-static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RET, JUMP, REQUIRE, REPLACE, 
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
@@ -164,7 +164,7 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "for";
 		case FN:
 			return "fn";
-		case RET:
+		case RETURN:
 			return "ret";
 		case JUMP:
 			return "jump";

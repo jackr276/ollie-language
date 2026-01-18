@@ -109,6 +109,13 @@ int main(int argc, char** argv){
 	//Start the timer
 	clock_t begin = clock();
 
+	//
+	//
+	//TODO need to lex
+	//
+	//
+	//
+
 	//Now that we can actually open the file, we'll parse
 	front_end_results_package_t* parse_results = parse(options);
 

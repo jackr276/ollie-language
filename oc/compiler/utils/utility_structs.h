@@ -8,6 +8,7 @@
 #define UTILITY_STRUCTS_H
 
 #include <sys/types.h>
+#include "../lexer/lexer.h"
 
 //Compiler option type
 typedef struct compiler_options_t compiler_options_t;
@@ -20,6 +21,8 @@ typedef struct module_times_t module_times_t;
  * to tell us what to print out
  */
 struct compiler_options_t {
+	//The token stream to read from
+	ollie_token_stream_t* token_stream;
 	//The name of the file(-f)
 	char* file_name;
 	//The name of the output file(-o )

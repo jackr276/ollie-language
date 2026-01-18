@@ -42,7 +42,7 @@ typedef enum {
 	TYPESIZE,
 	SIZEOF,
 	REQUIRE,
-	RET,
+	RETURN,
 	JUMP,
 	EXTERNAL,
 	DOUBLE_AND,
