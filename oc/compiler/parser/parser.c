@@ -1799,7 +1799,7 @@ loop_end:
 	asn_expr_node->line_number = current_line;
 
 	//We'll let this rule handle it
-	generic_ast_node_t* left_hand_unary = unary_expression(fl, SIDE_TYPE_LEFT);
+	generic_ast_node_t* left_hand_unary = unary_expression(token_stream, SIDE_TYPE_LEFT);
 
 	//Fail out here
 	if(left_hand_unary->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1922,13 +1922,13 @@ loop_end:
 
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", left_hand_type->type_name.string, lexitem_to_string(assignment_operator));
+			sprintf(info, "Type %s is invalid for operation %s", left_hand_type->type_name.string, operator_token_to_string(assignment_operator));
 			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Let's also see if the right hand type is valid
 		if(is_binary_operation_valid_for_type(right_hand_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", right_hand_type->type_name.string, lexitem_to_string(assignment_operator));
+			sprintf(info, "Type %s is invalid for operation %s", right_hand_type->type_name.string, operator_token_to_string(assignment_operator));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1944,7 +1944,7 @@ loop_end:
 
 				//If this fails, that means that we have an invalid operation
 				if(final_type == NULL){
-					sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, lexitem_to_string(binary_op));
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_token_to_string(binary_op));
 					return print_and_return_error(info, parser_line_num);
 				}
 				
@@ -1997,7 +1997,7 @@ loop_end:
 
 				//If this fails, that means that we have an invalid operation
 				if(final_type == NULL){
-					sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, lexitem_to_string(assignment_operator));
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_token_to_string(assignment_operator));
 					return print_and_return_error(info, parser_line_num);
 				}
 
@@ -2380,7 +2380,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
 	//Let's first check and see if this is valid. If it's not we fail out
 	if(is_unary_operation_valid_for_type(current_type, operator) == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", current_type->type_name.string, lexitem_to_string(operator));
+		sprintf(info, "Type %s is invalid for operator %s", current_type->type_name.string, operator_token_to_string(operator));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -2671,7 +2671,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, lexitem_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2729,7 +2729,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, lexitem_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2763,7 +2763,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, lexitem_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2782,7 +2782,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, lexitem_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2807,7 +2807,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, lexitem_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2844,7 +2844,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, lexitem_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -3116,7 +3116,7 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//Fail case here
 		if(temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, lexitem_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3157,7 +3157,7 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//Fail case here
 		if(right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, lexitem_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3166,7 +3166,7 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, lexitem_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3309,7 +3309,7 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		
 		//Fail out here
 		if(left_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, lexitem_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3331,7 +3331,7 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		
 		//Fail out here
 		if(right_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name.string, lexitem_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3344,7 +3344,7 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 
 				//If this fails, that means that we have an invalid operation
 				if(return_type == NULL){
-					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, lexitem_to_string(op.tok));
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 					return print_and_return_error(info, parser_line_num);
 				}
 
@@ -3365,7 +3365,7 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 
 				//If this fails, that means that we have an invalid operation
 				if(return_type == NULL){
-					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, lexitem_to_string(op.tok));
+					sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 					return print_and_return_error(info, parser_line_num);
 				}
 
@@ -3488,7 +3488,7 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid additive expression
-	generic_ast_node_t* sub_tree_root = additive_expression(fl, side);
+	generic_ast_node_t* sub_tree_root = additive_expression(token_stream, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -3524,7 +3524,7 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 			}
 
 			//Now we have no choice but to see a valid additive expression again
-			right_child = additive_expression(fl, side);
+			right_child = additive_expression(token_stream, side);
 
 			//If it's an error, just fail out
 			if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -3549,7 +3549,7 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, lexitem_to_string(op.tok));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -3647,7 +3647,7 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid shift expression
-	generic_ast_node_t* sub_tree_root = shift_expression(fl, side);
+	generic_ast_node_t* sub_tree_root = shift_expression(token_stream, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -3681,12 +3681,12 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 
 			//This is our fail case
 			if(is_temp_holder_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, lexitem_to_string(op.tok)); 
+				sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok)); 
 				return print_and_return_error(info, parser_line_num);
 			}
 
 			//Now we have no choice but to see a valid shift again
-			right_child = shift_expression(fl, side);
+			right_child = shift_expression(token_stream, side);
 
 			//If it's an error, just fail out
 			if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -3702,7 +3702,7 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 
 			//This is our fail case
 			if(is_right_child_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, lexitem_to_string(op.tok)); 
+				sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_token_to_string(op.tok)); 
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -3711,7 +3711,7 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, lexitem_to_string(op.tok));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -3836,7 +3836,7 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 
 		//If this fails, there's no point in going forward
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, lexitem_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3857,7 +3857,7 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 
 		//If this fails, there's no point in going forward
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, lexitem_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3866,7 +3866,7 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, lexitem_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -4113,7 +4113,7 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 		}
 
 		//Now we have no choice but to see a valid and expression again
-		right_child = and_expression(fl, side);
+		right_child = and_expression(token_stream, side);
 
 		//If it's an error, just fail out
 		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4185,7 +4185,7 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 
 	//If we get here, it means that we did not see the "SINGLE_AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -4213,7 +4213,7 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 	u_int8_t is_right_child_constant = FALSE;
 
 	//No matter what, we do need to first see a valid exclusive or expression
-	generic_ast_node_t* sub_tree_root = exclusive_or_expression(fl, side);
+	generic_ast_node_t* sub_tree_root = exclusive_or_expression(token_stream, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4244,7 +4244,7 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 		}
 
 		//Now we have no choice but to see a valid exclusive or expression again
-		right_child = exclusive_or_expression(fl, side);
+		right_child = exclusive_or_expression(token_stream, side);
 
 		//If it's an error, just fail out
 		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4317,7 +4317,7 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -4349,7 +4349,7 @@ static generic_ast_node_t* logical_and_expression(ollie_token_stream_t* token_st
 	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a valid inclusive or expression
-	generic_ast_node_t* sub_tree_root = inclusive_or_expression(fl, side);
+	generic_ast_node_t* sub_tree_root = inclusive_or_expression(token_stream, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4380,7 +4380,7 @@ static generic_ast_node_t* logical_and_expression(ollie_token_stream_t* token_st
 		}
 
 		//Now we have no choice but to see a valid inclusive or expression again
-		right_child = inclusive_or_expression(fl, side);
+		right_child = inclusive_or_expression(token_stream, side);
 
 		//If it's an error, just fail out
 		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4461,7 +4461,7 @@ static generic_ast_node_t* logical_and_expression(ollie_token_stream_t* token_st
 	
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -4499,7 +4499,7 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 	u_int8_t right_child_is_constant = FALSE;
 
 	//No matter what, we do need to first see a logical and expression
-	generic_ast_node_t* sub_tree_root = logical_and_expression(fl, side);
+	generic_ast_node_t* sub_tree_root = logical_and_expression(token_stream, side);
 
 	//Obvious fail case here
 	if(sub_tree_root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4530,7 +4530,7 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 		}
 
 		//Now we have no choice but to see a valid logical and expression again
-		right_child = logical_and_expression(fl, side);
+		right_child = logical_and_expression(token_stream, side);
 
 		//If it's an error, just fail out
 		if(right_child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4645,7 +4645,7 @@ static generic_ast_node_t* array_initializer(ollie_token_stream_t* token_stream,
 	//to process
 	do{
 		//We now must see an initializer node
-		generic_ast_node_t* initializer_node = initializer(fl, side);
+		generic_ast_node_t* initializer_node = initializer(token_stream, side);
 
 		//If this is an error, then the whole thing is invalid
 		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4698,7 +4698,7 @@ static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream
 	//to process
 	do{
 		//We now must see an initializer node
-		generic_ast_node_t* initializer_node = initializer(fl, side);
+		generic_ast_node_t* initializer_node = initializer(token_stream, side);
 
 		//If this is an error, then the whole thing is invalid
 		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4747,7 +4747,7 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
 			push_token(&grouping_stack, lookahead);
 
 			//Let the helper handle it
-			return array_initializer(fl, side);
+			return array_initializer(token_stream, side);
 
 		//An L_CURLY signifies the start of a struct initializer
 		case L_CURLY:
@@ -4755,13 +4755,13 @@ static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_
 			push_token(&grouping_stack, lookahead);
 
 			//Let the helper handle it
-			return struct_initializer(fl, side);
+			return struct_initializer(token_stream, side);
 
 		//By default, we haven't found anything in here that would indicate we'll need an initializer.
 		//As such, we'll push the token back and call the ternary expression rule
 		default:
-			push_back_token(lookahead);
-			return ternary_expression(fl, side);
+			push_back_token(token_stream);
+			return ternary_expression(token_stream, side);
 	}
 }
 
@@ -4778,7 +4778,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 
 	//We are first required to see a valid logical or expression. If we don't see this,
 	//then we fail
-	generic_ast_node_t* conditional = logical_or_expression(fl, side);
+	generic_ast_node_t* conditional = logical_or_expression(token_stream, side);
 
 	//If this is an error, then the whole thing is over - we're done here
 	if(conditional->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4791,7 +4791,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	//If this is not a question mark, then we are done here, and we should push this token
 	//back and return the conditional
 	if(lookahead.tok != QUESTION){
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//We'll just give back whatever this was
 		return conditional;
@@ -4812,7 +4812,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	add_child_node(ternary_expression_node, conditional);
 
 	//We must now see a valid top level expression
-	generic_ast_node_t* if_branch = ternary_expression(fl, side);
+	generic_ast_node_t* if_branch = ternary_expression(token_stream, side);
 
 	//If this is invalid, then we bail out
 	if(if_branch->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4831,7 +4831,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	}
 	
 	//We now must see another valid logical or expression 
-	generic_ast_node_t* else_branch = ternary_expression(fl, side);
+	generic_ast_node_t* else_branch = ternary_expression(token_stream, side);
 
 	//If this is invalid, then we bail out
 	if(else_branch->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4915,7 +4915,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	}
 
 	//Now we are required to see a valid type specifier
-	generic_type_t* type_spec = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(token_stream);
 
 	//If this is an error, the whole thing fails
 	if(type_spec == NULL){
@@ -4986,10 +4986,10 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
 	//We can see as many construct members as we please here, all delimited by semicols
 	do{
 		//Put what we saw back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//We must first see a valid construct member
-		u_int8_t status = struct_member(fl, mutable_struct_type, immutable_struct_type);
+		u_int8_t status = struct_member(token_stream, mutable_struct_type, immutable_struct_type);
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
@@ -5076,14 +5076,14 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 		default:
 			//If we hit the default, then we need to push the token back
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 			break;
 	}
 
 	//Keep processing so long as we keep seeing commas
 	do{
 		//Now we need to see a valid type
-		generic_type_t* type = type_specifier(fl);
+		generic_type_t* type = type_specifier(token_stream);
 
 		//If this is NULL, we'll error out
 		if(type == NULL){
@@ -5141,7 +5141,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	}
 
 	//Now we need to see a return type
-	generic_type_t* return_type = type_specifier(fl);
+	generic_type_t* return_type = type_specifier(token_stream);
 
 	//If this is NULL, then we have an invalid return type
 	if(return_type == NULL){
@@ -5293,7 +5293,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 	insert_type(type_symtab, create_type_record(mutable_struct_type));
 
 	//We are now required to see a valid construct member list
-	u_int8_t success = struct_member_list(fl, mutable_struct_type, immutable_struct_type);
+	u_int8_t success = struct_member_list(token_stream, mutable_struct_type, immutable_struct_type);
 
 	//Automatic fail case here
 	if(success == FAILURE){
@@ -5400,7 +5400,7 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
 	//return a record of the node that the type name has. If the type name function could not
 	//find the name, then it will send back an error that we can handle here
-	symtab_type_record_t* type = type_name(fl, mutability);
+	symtab_type_record_t* type = type_name(token_stream, mutability);
 
 	//We'll just fail here, no need for any error printing
 	if(type == NULL){
@@ -5487,11 +5487,11 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 		}
 
 		//Otherwise we need to put this token back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//The next thing that we absolutely must see is a constant. If we don't, we're
 		//done here
-		generic_ast_node_t* const_node = constant(fl, SIDE_TYPE_LEFT);
+		generic_ast_node_t* const_node = constant(token_stream, SIDE_TYPE_LEFT);
 
 		//If it failed, then we're done here
 		if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -5660,10 +5660,10 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 	 */
 
 	//Where did we start consuming from
-	int64_t type_start = GET_CURRENT_FILE_POSITION(fl);
+	u_int32_t type_start = GET_CURRENT_TOKEN_INDEX(token_stream);
 
 	//Now we need to see a valid type-specifier
-	generic_type_t* mutable_type = union_type_specifier(fl, MUTABLE);
+	generic_type_t* mutable_type = union_type_specifier(token_stream, MUTABLE);
 
 	//If this is NULL we've failed
 	if(mutable_type == NULL){
@@ -5681,11 +5681,11 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 	}
 
 	//Rewind our position
-	reconsume_tokens(fl, type_start);
+	reset_stream_to_given_index(token_stream, type_start);
 
 	//Now we do the exact same consumption for the immutable version. We don't need
 	//to do any of the checking, as it's the exact same type
-	generic_type_t* immutable_type = union_type_specifier(fl, NOT_MUTABLE);
+	generic_type_t* immutable_type = union_type_specifier(token_stream, NOT_MUTABLE);
 
 	//Now that we have the type as well, we can finally see the semicolon to close it off
 	lookahead = get_next_token(token_stream);
@@ -5746,10 +5746,10 @@ static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_ty
 	//Now we need to see union members so long as we don't hit the closing R_CURLY
 	do {
 		//Push the token back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//Call the helper union member function
-		u_int8_t status = union_member(fl, mutable_union_type, immutable_union_type);
+		u_int8_t status = union_member(token_stream, mutable_union_type, immutable_union_type);
 
 		//If one of them fails, then we're out
 		if(status == FAILURE){
@@ -5824,7 +5824,7 @@ static u_int8_t union_definer(ollie_token_stream_t* token_stream){
 
 	//Once we've created it, we can begin parsing the internals. We'll call the union member list 
 	//and let it handle everything else
-	u_int8_t status = union_member_list(fl, mutable_union_type, immutable_union_type);
+	u_int8_t status = union_member_list(token_stream, mutable_union_type, immutable_union_type);
 
 	//If this fails then we're done
 	if(status == FAILURE){
@@ -6476,13 +6476,13 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		mutability = MUTABLE;
 	} else {
 		//Put it back if not
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 	}
 
 	//Now we'll hand off the rule to the <type-name> function. The type name function will
 	//return a record of the node that the type name has. If the type name function could not
 	//find the name, then it will send back an error that we can handle here
-	symtab_type_record_t* type = type_name(fl, mutability);
+	symtab_type_record_t* type = type_name(token_stream, mutability);
 
 	//We'll just fail here, no need for any error printing
 	if(type == NULL){
@@ -6611,11 +6611,11 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		}
 
 		//Otherwise we need to put this token back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//The next thing that we absolutely must see is a constant. If we don't, we're
 		//done here
-		generic_ast_node_t* const_node = constant(fl, SIDE_TYPE_LEFT);
+		generic_ast_node_t* const_node = constant(token_stream, SIDE_TYPE_LEFT);
 
 		//If it failed, then we're done here
 		if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -6760,7 +6760,7 @@ static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stre
 	push_back_token(lookahead);
 	
 	//Now we know that it's not empty, so we have to see a valid expression
-	generic_ast_node_t* expr_node = assignment_expression(fl);
+	generic_ast_node_t* expr_node = assignment_expression(token_stream);
 
 	//If this fails, the whole thing is over
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -6906,7 +6906,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 	
 	//We now need to see a valid conditional expression
-	generic_ast_node_t* expression_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one
 	if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -6936,7 +6936,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	add_child_node(if_stmt, expression_node);
 
 	//Now following this, we need to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
 
 	//If this node fails, whole thing is bad
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -6969,7 +6969,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 		push_token(&grouping_stack, lookahead);
 	
 		//We now need to see a valid conditional expression
-		generic_ast_node_t* else_if_expression_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* else_if_expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 
 		//If we see an invalid one
 		if(else_if_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -6999,7 +6999,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 		add_child_node(else_if_node, else_if_expression_node);
 
 		//Now following this, we need to see a valid compound statement
-		generic_ast_node_t* else_if_compound_stmt_node = compound_statement(fl);
+		generic_ast_node_t* else_if_compound_stmt_node = compound_statement(token_stream);
 
 		//If this node fails, whole thing is bad
 		if(else_if_compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7021,12 +7021,12 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//If we get here, at the very least we know that lookahead2 is bad, so we'll put him back
-	push_back_token(lookahead2);
+	push_back_token(token_stream);
 
 	//We could've still had an else block here, so we'll check and handle it if we do
 	if(lookahead.tok == ELSE){
 		//We'll now handle the compound statement that comes with this
-		generic_ast_node_t* else_compound_stmt = compound_statement(fl);
+		generic_ast_node_t* else_compound_stmt = compound_statement(token_stream);
 		
 		//Let's see if it worked
 		if(else_compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7079,7 +7079,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Once we've made it, we need to see a valid label identifier
-	generic_ast_node_t* label_ident = identifier(fl, SIDE_TYPE_LEFT);
+	generic_ast_node_t* label_ident = identifier(token_stream, SIDE_TYPE_LEFT);
 
 	//If this failed, we're done
 	if(label_ident->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7109,7 +7109,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		push_token(&grouping_stack, lookahead);
 
 		//Now we need to see a valid conditional expression
-		generic_ast_node_t* conditional = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* conditional = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 
 		//If this is invalid, we fail out
 		if(conditional->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7222,7 +7222,7 @@ static generic_ast_node_t* continue_statement(ollie_token_stream_t* token_stream
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7313,7 +7313,7 @@ static generic_ast_node_t* break_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid expression
-	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If it failed, we also fail
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7399,11 +7399,11 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 		//Put it back if no
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7531,7 +7531,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Now we must see a valid ternary-level expression
-	generic_ast_node_t* expr_node = ternary_expression(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = ternary_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If we see an invalid one we fail right out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7629,7 +7629,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 			case CASE:
 				//Handle a case statement here. We'll need to pass
 				//the node in because of the type checking that we do
-				stmt = case_statement(fl, switch_stmt_node, values, &values_max_index);
+				stmt = case_statement(token_stream, switch_stmt_node, values, &values_max_index);
 
 				//Go based on what our class here
 				switch(stmt->ast_node_type){
@@ -7691,7 +7691,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 				}
 
 				//Handle a default statement
-				stmt = default_statement(fl);
+				stmt = default_statement(token_stream);
 
 				//Go based on what our class here
 				switch(stmt->ast_node_type){
@@ -7967,7 +7967,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* conditional_expr = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* conditional_expr = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
 	if(conditional_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7997,7 +7997,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Following this, we need to see a valid compound statement, and then we're done
-	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
 
 	//If this is invalid we fail
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8039,7 +8039,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 
 	//Remember by the time that we've gotten here, we have already seen the do keyword
 	//Let's first find a valid compound statement
-	generic_ast_node_t* compound_stmt = compound_statement(fl);
+	generic_ast_node_t* compound_stmt = compound_statement(token_stream);
 
 	//If we fail, then we are done here
 	if(compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8069,7 +8069,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 	push_token(&grouping_stack, lookahead);
 
 	//Now we need to see a valid conditional block in here
-	generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail out if this happens
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8160,7 +8160,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	if(lookahead.tok == LET){
 		//On the contrary, the let statement rule assumes that let has already been consumed, so we won't
 		//put it back here, we'll just call the rule
-		generic_ast_node_t* let_stmt = let_statement(fl, FALSE);
+		generic_ast_node_t* let_stmt = let_statement(token_stream, FALSE);
 
 		//If it fails, we also fail
 		if(let_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8184,7 +8184,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 		push_back_token(lookahead);
 
 		//Let the assignment expression handle this
-		generic_ast_node_t* asn_expr = assignment_expression(fl);
+		generic_ast_node_t* asn_expr = assignment_expression(token_stream);
 
 		//If it fails, we fail too
 		if(asn_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8227,7 +8227,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 		push_back_token(lookahead);
 
 		//Let this rule handle it
-		generic_ast_node_t* expr_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 
 		//If it fails, we fail too
 		if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8267,7 +8267,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 
 		//We now must see a valid conditional
 		//Let this rule handle it
-		generic_ast_node_t* expr_node = assignment_expression(fl);
+		generic_ast_node_t* expr_node = assignment_expression(token_stream);
 
 		//If it fails, we fail too
 		if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8301,7 +8301,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	}
 	
 	//Now that we're all done, we need to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
 
 	//If it's invalid, we'll fail out here
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8370,7 +8370,7 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 		push_back_token(lookahead);
 		
 		//We now need to see a valid statement that is allowed inside of a case block
-		generic_ast_node_t* stmt_node = statement(fl);
+		generic_ast_node_t* stmt_node = statement(token_stream);
 
 		//If this is null, which is possible, we'll just move along
 		//to the next one
@@ -8455,7 +8455,7 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
 		push_back_token(lookahead);
 
 		//We'll now need to consume an assembly statement
-		lookahead = get_next_assembly_statement(fl);
+		lookahead = get_next_assembly_statement(token_stream);
 
 		//If it's an error, we'll fail out here
 		if(lookahead.tok == ERROR){
@@ -8512,7 +8512,7 @@ static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//We now expect to see a compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
 
 	//If this fails, we bail
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8591,12 +8591,12 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 			push_back_token(lookahead);
 
 			//We now need to see a valid version
-			return declaration(fl, FALSE);
+			return declaration(token_stream, FALSE);
 
 		//Type definition
 		case DEFINE:
 			//Call the helper
-			status = definition(fl);
+			status = definition(token_stream);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
@@ -8609,7 +8609,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		//Type aliasing
 		case ALIAS:
 			//Call the helper
-			status = alias_statement(fl);
+			status = alias_statement(token_stream);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
@@ -8622,7 +8622,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		//If we see the pound symbol, we know that we are declaring a label
 		case POUND:
 			//Just return whatever the rule gives us
-			return labeled_statement(fl);
+			return labeled_statement(token_stream);
 
 		//We're seeing a compound statement
 		case L_CURLY:
@@ -8630,62 +8630,62 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 			push_back_token(lookahead);
 
 			//Return whatever the rule gives us
-			return compound_statement(fl);
+			return compound_statement(token_stream);
 	
 		//If we see for, we are seeing a for statement
 		case FOR:
 			//This rule relies on for already being consumed, so we won't put it back
-			return for_statement(fl);
+			return for_statement(token_stream);
 
 		//We can see a defer statement
 		case DEFER:
 			//This rule relies on the defer keyword already being consumed, so we won't put it back
-			return defer_statement(fl);
+			return defer_statement(token_stream);
 
 		//While statement
 		case WHILE:
 			//This rule relies on while already being consumed, so we won't put it back
-			return while_statement(fl);
+			return while_statement(token_stream);
 
 		//Idle statement
 		case IDLE:
 			//This rule just gives back an idle statement
-			return idle_statement(fl);
+			return idle_statement(token_stream);
 
 		//Do while statement
 		case DO:
 			//This rule relies on do already being consumed, so we won't put it back
-			return do_while_statement(fl);
+			return do_while_statement(token_stream);
 
 		//Switch statement
 		case SWITCH:
 			//This rule relies on switch already being consumed, so we won't put it back
-			return switch_statement(fl);
+			return switch_statement(token_stream);
 
 		//If statement
 		case IF:
 			//This rule relies on if already being consumed, so we won't put it back
-			return if_statement(fl);
+			return if_statement(token_stream);
 
 		//Handle a direct jump statement
 		case JUMP:
-			return jump_statement(fl);
+			return jump_statement(token_stream);
 
 		//Handle a return statement
 		case RET:
-			return return_statement(fl);
+			return return_statement(token_stream);
 
 		//Handle a break statement
 		case BREAK:
-			return break_statement(fl);
+			return break_statement(token_stream);
 
 		//And a continue statement
 		case CONTINUE:
-			return continue_statement(fl);
+			return continue_statement(token_stream);
 
 		//Inline assembly statement
 		case ASM:
-			return assembly_inline_statement(fl);
+			return assembly_inline_statement(token_stream);
 		
 		//Replace statement is an error here
 		case REPLACE:
@@ -8694,7 +8694,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		//By default push this back and return an expression statement
 		default:
 			push_back_token(lookahead);
-			return expression_statement(fl);
+			return expression_statement(token_stream);
 	}
 }
 
@@ -8725,7 +8725,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
 			push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 			//We'll let the helper deal with it
-			default_compound_statement = compound_statement(fl);
+			default_compound_statement = compound_statement(token_stream);
 
 			//If this is an error, we fail out
 			if(default_compound_statement != NULL && default_compound_statement->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8757,7 +8757,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
 				push_back_token(lookahead);
 
 				//Process the next statement
-				generic_ast_node_t* child = statement(fl);
+				generic_ast_node_t* child = statement(token_stream);
 
 				//If this is not null and in an error, we'll return that
 				if(child != NULL && child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8812,7 +8812,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 
 	//Let the binary expression helper deal with this. We know that ultimately, the only
 	//valid solution here is one where we end up with a constant in the end
-	generic_ast_node_t* constant_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* constant_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//There is only one valid result here - and that is a constant node
 	switch(constant_node->ast_node_type){
@@ -8898,7 +8898,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 			push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 			//We'll let the helper deal with it
-			switch_compound_statement = compound_statement(fl);
+			switch_compound_statement = compound_statement(token_stream);
 
 			//If this is an error, we fail out
 			if(switch_compound_statement != NULL && switch_compound_statement->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8930,7 +8930,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 				push_back_token(lookahead);
 
 				//Process the next statement
-				generic_ast_node_t* child = statement(fl);
+				generic_ast_node_t* child = statement(token_stream);
 
 				//If this is not null and in an error, we'll return that
 				if(child != NULL && child->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8995,7 +8995,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 			push_back_token(lookahead);
 			//Let this rule handle it
-			return function_predeclaration(fl);
+			return function_predeclaration(token_stream);
 	
 		//By default just leave
 		default:
@@ -9059,7 +9059,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	}
 	
 	//Now we are required to see a valid type specifier
-	generic_type_t* type_spec = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(token_stream);
 
 	//If this fails, the whole thing is bunk
 	if(type_spec == NULL){
@@ -9605,7 +9605,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	}
 
 	//Now we are required to see a valid type specifier
-	generic_type_t* type_spec = type_specifier(fl);
+	generic_type_t* type_spec = type_specifier(token_stream);
 
 	//If this fails, the whole thing is bunk
 	if(type_spec == NULL){
@@ -9634,7 +9634,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	}
 
 	//Now we need to see a valid initializer
-	generic_ast_node_t* initializer_node = initializer(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* initializer_node = initializer(token_stream, SIDE_TYPE_RIGHT);
 	
 	//Store the return type here after we do all needed validations. This rule allows 
 	//for recursive validation, so that we can handle recursive initialization
@@ -9757,7 +9757,7 @@ static u_int8_t alias_statement(ollie_token_stream_t* token_stream){
 	lexitem_t lookahead;
 
 	//We need to first see a valid type specifier
-	generic_type_t* type_spec= type_specifier(fl);
+	generic_type_t* type_spec= type_specifier(token_stream);
 
 	//If it is bad, we'll bail out
 	if(type_spec == NULL){
@@ -9848,13 +9848,13 @@ static u_int8_t definition(ollie_token_stream_t* token_stream){
 	//Go based on the lookahead
 	switch(lookahead.tok){
 		case STRUCT:
-			return struct_definer(fl);
+			return struct_definer(token_stream);
 		case UNION:
-			return union_definer(fl);
+			return union_definer(token_stream);
 		case ENUM:
-			return enum_definer(fl);
+			return enum_definer(token_stream);
 		case FN:
-			return function_pointer_definer(fl);
+			return function_pointer_definer(token_stream);
 
 		//Some failure here
 		default:
@@ -9884,9 +9884,9 @@ static generic_ast_node_t* declaration(ollie_token_stream_t* token_stream, u_int
 
 	switch(lookahead.tok){
 		case DECLARE:
-			return declare_statement(fl, is_global);
+			return declare_statement(token_stream, is_global);
 		case LET:	
-			return let_statement(fl, is_global);
+			return let_statement(token_stream, is_global);
 		default:
 			sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
 			return print_and_return_error(info, parser_line_num);
@@ -10076,7 +10076,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	}
 
 	//We are now required to see a valid type specifier node
-	generic_type_t* type = type_specifier(fl);
+	generic_type_t* type = type_specifier(token_stream);
 	
 	//If the node fails, we'll just send the error up the chain
 	if(type == NULL){
@@ -10247,7 +10247,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 	//We'll keep going as long as we see more commas
 	do{
 		//We must first see a valid parameter declaration
-		symtab_variable_record_t* parameter = parameter_declaration(fl, &general_purpose_parameter_number, &sse_parameter_number);
+		symtab_variable_record_t* parameter = parameter_declaration(token_stream, &general_purpose_parameter_number, &sse_parameter_number);
 
 		//It's invalid, we'll just send it up the chain
 		if(parameter == NULL){
@@ -10491,7 +10491,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//Keep processing so long as we keep seeing commas
 	do{
 		//Now we need to see a valid type
-		generic_type_t* type = type_specifier(fl);
+		generic_type_t* type = type_specifier(token_stream);
 
 		//If this is NULL, we'll error out
 		if(type == NULL){
@@ -10531,7 +10531,7 @@ after_rparen:
 	}
 
 	//Now we need to see a valid type specifier
-	generic_type_t* return_type = type_specifier(fl);
+	generic_type_t* return_type = type_specifier(token_stream);
 
 	//Fail out if bad
 	if(return_type == NULL){
@@ -10723,7 +10723,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Now we must ensure that we see a valid parameter list. It is important to note that
 	//parameter lists can be empty, but whatever we have here we'll have to add in
 	//Parameter list parent is the function node
-	u_int8_t status = parameter_list(fl, function_record, definining_predeclared_function);
+	u_int8_t status = parameter_list(token_stream, function_record, definining_predeclared_function);
 
 	//We have a bad parameter list, we just fail out
 	if(status == FAILURE){
@@ -10740,7 +10740,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//Now if we get here, we must see a valid type specifier
 	//The type specifier rule already does existence checking for us
-	generic_type_t* return_type = type_specifier(fl);
+	generic_type_t* return_type = type_specifier(token_stream);
 
 	//If we failed, bail out
 	if(return_type == NULL){
@@ -10785,7 +10785,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	deferred_stmts_node = NULL;
 
 	//We are finally required to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(fl);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
 
 	//If this fails we'll just pass it through
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -10923,7 +10923,7 @@ static u_int8_t replace_statement(ollie_token_stream_t* token_stream){
 	 * by the logical or expression parsing. If a user types something like typesize(int)
 	 * in, then that should still work for our replace statement
 	 */
-	generic_ast_node_t* constant_node = logical_or_expression(fl, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* constant_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	switch(constant_node->ast_node_type){
 		//THis is a straight failure, error has already happened
@@ -11002,12 +11002,12 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 
 			//We'll just let the function definition rule handle this. If it fails, 
 			//that will be caught above
-			return function_definition(fl);
+			return function_definition(token_stream);
 	
 		//Type definition
 		case DEFINE:
 			//Call the helper
-			status = definition(fl);
+			status = definition(token_stream);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
@@ -11020,7 +11020,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		//Type aliasing
 		case ALIAS:
 			//Call the helper
-			status = alias_statement(fl);
+			status = alias_statement(token_stream);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
@@ -11033,7 +11033,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		//Let the replace rule handle this
 		case REPLACE:	
 			//We don't need to put it back
-			status = replace_statement(fl);
+			status = replace_statement(token_stream);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
@@ -11057,7 +11057,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 
 			//We'll simply return whatever the product of the declaration function is
 			//Do note: these variables will all be global
-			return declaration(fl, TRUE);
+			return declaration(token_stream, TRUE);
 	}
 }
 
@@ -11110,7 +11110,7 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
 		push_back_token(lookahead);
 
 		//Call declaration partition
-		generic_ast_node_t* current = declaration_partition(fl);
+		generic_ast_node_t* current = declaration_partition(token_stream);
 
 		//If it was NULL, we had a define or alias statement or implicit function declaration, so we'll move along
 		if(current == NULL){
@@ -11200,7 +11200,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Global entry/run point, will give us a tree with
 	//the root being here
-	prog = program(fl);
+	prog = program(token_stream);
 
 	//We'll only perform these tests if we want debug printing enabled
 	if(prog->ast_node_type != AST_NODE_TYPE_ERR_NODE){
