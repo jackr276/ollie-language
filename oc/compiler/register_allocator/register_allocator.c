@@ -3477,7 +3477,7 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
  */
-static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* instruction){
+static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* instruction){
 	//If we get here we know that we have a call instruction. Let's
 	//grab whatever it's calling out. We're able to do this for a direct call,
 	//whereas in an indirect call we are not
@@ -3499,8 +3499,13 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
-	//Start off with this as the last instruction
+	//Keep pointers to the first/last instruction in our chain
+	instruction_t* first_instruction = instruction;
 	instruction_t* last_instruction = instruction;
+
+	//How big is the sub stack that we need to make to save
+	//any xmm/floating point registers?
+	u_int32_t xmm_caller_saving_stack_size = 0;
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
 	dynamic_array_t live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
@@ -3557,6 +3562,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 					//Insert the pop instruction directly after the last instruction
 					insert_instruction_after_given(pop_inst, instruction);
 
+					//If the first instruction still is the original instruction. That
+					//means that this is the first push instruction that we're inserting.
+					//As such, we'll set the first instruction to be this pushinstruction
+					//to save ourselves time down the line
+					if(first_instruction == instruction){
+						first_instruction = push_inst;
+					}
+
 					//If the last instruction still is the original instruction. That
 					//means that this is the first pop instruction that we're inserting.
 					//As such, we'll set the last instruction to be this pop instruction
@@ -3589,6 +3602,9 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 				 * value it has that we're relying on would not survive the call
 				 */
 				if(get_bitmap_at_index(callee->assigned_sse_registers, sse_reg - 1) == TRUE){
+					//We need to add this to our mini-stack here for the call
+
+
 					//Emit a direct push with this live range's register
 					instruction_t* push_inst = emit_direct_sse_register_push_instruction(sse_reg);
 
@@ -3612,6 +3628,11 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 
 				break;
 		}
+	}
+
+	//TODO
+	if(xmm_caller_saving_stack_size > 0){
+
 	}
 
 	//Free it up once done
@@ -3773,7 +3794,7 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 			switch(instruction->instruction_type){
 				//Use the helper for a direct call
 				case CALL:
-					instruction = insert_caller_saved_logic_for_direct_call(instruction);
+					instruction = insert_caller_saved_logic_for_direct_call(function, instruction);
 					break;
 					
 				//Use the helper for an indirect call. Indirect calls differ slightly
