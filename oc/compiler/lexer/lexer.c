@@ -102,14 +102,66 @@ static inline u_int8_t is_whitespace(char ch, u_int32_t* line_num, u_int32_t* pa
  * A utility function for error printing that converts any given token
  * into a string
  */
-char* token_to_string(ollie_token_t op){
-	switch(op){
+char* lexitem_to_string(lexitem_t* lexitem){
+	switch(lexitem->tok){
 		case BLANK:
 			return "blank";
 		case START:
 			return "start";
 		case ASM_STATEMENT:
 			return "Assembly Statement";
+		case AT:
+			return "@";
+		case COLONEQ:
+			return ":=";
+		case DOT:
+			return ".";
+		case POUND:
+			return "#";
+		case L_PAREN:
+			return "(";
+		case R_PAREN:
+			return ")";
+		case L_BRACKET:
+			return "[";
+		case R_BRACKET:
+			return "]";
+		case L_CURLY:
+			return "{";
+		case R_CURLY:
+			return "}";
+		case QUESTION:
+			return "?";
+		case COMMA:
+			return ",";
+		case SEMICOLON:
+			return ";";
+		case DOLLAR:
+			return "$";
+		case ARROW:
+			return "->";
+		case FAT_ARROW:
+			return "=>";
+		case ERROR:
+			return "ERROR";
+		case DONE:
+			return "DONE";
+		case IDENT:
+		case FUNC_CONST:
+		case HEX_CONST:
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+		case LONG_CONST_FORCE_U:
+		case SHORT_CONST_FORCE_U:
+		case SHORT_CONST:
+		case BYTE_CONST:
+		case BYTE_CONST_FORCE_U:
+		case LONG_CONST:
+		case DOUBLE_CONST:
+		case FLOAT_CONST:
+		case STR_CONST:
+		case CHAR_CONST:
+			return lexitem->lexeme.string;
 		case IF:
 			return "if";
 		case ELSE:
