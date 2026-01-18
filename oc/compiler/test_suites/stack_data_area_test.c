@@ -79,8 +79,6 @@ static compiler_options_t* parse_and_store_options(int argc, char** argv){
 }
 
 
-
-
 /**
  * We'll just have one big run through here
 */
@@ -90,6 +88,18 @@ int main(int argc, char** argv){
 
 	//Grab the compiler options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
+
+	//Invoke the tokenizer
+	ollie_token_stream_t stream = tokenize(options->file_name);
+
+	//If this fails, we need to leave
+	if(stream.status == STREAM_STATUS_FAILURE){
+		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
+		exit(1);
+	}
+	
+	//Store it inside of the token stream
+	options->token_stream = &stream;
 
 	//Leverage the parser to do all of the heavy lifting
 	front_end_results_package_t* results = parse(options);
