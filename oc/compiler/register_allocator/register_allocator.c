@@ -61,12 +61,33 @@ typedef enum {
 
 
 /**
+ * Crawl the data area and search for an exact pointer match. If there's not an exact
+ * match, then NULL will be returned
+ */
+static inline stack_region_t* get_stack_region_for_live_range(stack_data_area_t* data_area, live_range_t* lr){
+	for(u_int16_t i = 0; i < data_area->stack_regions.current_index; i++){
+		//Extract it
+		stack_region_t* region = dynamic_array_get_at(&(data_area->stack_regions), i);
+
+		//We need an exact memory address match. Anything short and
+		//this does not count
+		if(region->variable_referenced == lr){
+			return region;
+		}
+	}
+
+	//If we make it all the way down here, we found nothing so return NULL
+	return NULL;
+}
+
+
+/**
  * Does a live range for a given variable already exist? If so, we'll need to 
  * coalesce the two live ranges in a union
  *
  * Returns NULL if we found nothing
  */
-static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
+static inline live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
 	//Run through all of the live ranges that we currently have
 	for(u_int16_t _ = 0; _ < live_ranges->current_index; _++){
 		//Grab the given live range out
@@ -3598,18 +3619,17 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				 * value it has that we're relying on would not survive the call
 				 */
 				if(get_bitmap_at_index(callee->assigned_sse_registers, sse_reg - 1) == TRUE){
-					//Create the stack region that we need here
-					stack_region_t* spill_region = create_stack_region_for_type(&(caller->data_area), get_largest_type_in_live_range(lr));
+					//Do we already have a stack region for this exact LR? We will check and if
+					//so, we don't need to make any more room on the stack for it
+					stack_region_t* spill_region = get_stack_region_for_live_range(&(caller->data_area), lr);
 
+					//If we didn't have a spill region, then we'll make one
+					if(spill_region == NULL){
+						spill_region = create_stack_region_for_type(&(caller->data_area), get_largest_type_in_live_range(lr));
 
-					//
-					//
-					//TODO - make this reusable if need be
-					//
-					//
-					//
-					//
-					spill_region->variable_referenced = lr;
+						//Cache this for later
+						spill_region->variable_referenced = lr;
+					}
 
 					//Emit the store instruction and load instruction
 					instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, spill_region->base_address);

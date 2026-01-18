@@ -4980,6 +4980,12 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 		case QUAD_WORD:
 			stmt->instruction_type = MOVQ;
 			break;
+		case SINGLE_PRECISION:
+			stmt->instruction_type = MOVSS;
+			break;
+		case DOUBLE_PRECISION:
+			stmt->instruction_type = MOVSD;
+			break;
 		default:
 			break;
 	}
