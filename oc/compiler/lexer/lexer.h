@@ -69,33 +69,33 @@ ollie_token_stream_t tokenize(FILE* fl, char* current_file_name);
 void destroy_token_stream(ollie_token_stream_t* stream);
 
 /**
- * Convert a token into a string for error printing purposes
- */
-char* lexitem_to_string(lexitem_t* lexitem);
-
-/**
- * Reconsume the tokens starting from a given seek
- */
-void reconsume_tokens(FILE* fl, int64_t reconsume_start);
-
-/**
- * Special case -- hunting for assembly statements
- */
-lexitem_t get_next_assembly_statement(FILE* fl);
-
-/**
  * Generic token grabbing function
  */
-lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num);
+lexitem_t get_next_token(ollie_token_stream_t* stream);
 
 /**
  * Push a token back to the stream
  */
-void push_back_token(lexitem_t l);
+void push_back_token(ollie_token_stream_t* stream);
 
 /**
- * Developer utility for token printing
+ * Special case -- hunting for assembly statements
+ *
+ * TODO deprecate
  */
-void print_token(lexitem_t* l);
+lexitem_t get_next_assembly_statement(FILE* fl);
+
+/**
+ * Reconsume the tokens starting from a given seek
+ *
+ * TODO rethink
+ */
+void reconsume_tokens(FILE* fl, int64_t reconsume_start);
+
+/**
+ * Convert a token into a string for error printing purposes
+ */
+char* lexitem_to_string(lexitem_t* lexitem);
+
 
 #endif /* LEXER_H */

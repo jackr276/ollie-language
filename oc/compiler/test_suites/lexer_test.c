@@ -9,13 +9,18 @@
 //Link to the lexer
 #include "../lexer/lexer.h"
 
+/**
+ * A small helper that prints the token out
+*/
+static inline void print_token(lexitem_t* lexitem){
+	printf("LINE NUMBER %d: TOKEN %s", lexitem->line_num, lexitem_to_string(lexitem));
+}
+
+
 int main(int argc, char** argv){
 	if(argc < 2){
 		fprintf(stderr, "A filename must be provided\n");
 	}
-
-	//Initialize the lexer
-	initialize_lexer();
 
 	FILE* fl;
 	lexitem_t l;
@@ -31,8 +36,14 @@ int main(int argc, char** argv){
 			return 1;
 		}
 
+		//Let the helper do all of the work
+		ollie_token_stream_t token_stream = tokenize(fl, argv[i]);
+
+		//Close the file when done
+		fclose(fl);
+
 		//Grab the first one
-		l = get_next_token(fl, &parser_line_num);
+		l = get_next_token(&token_stream);
 
 		//Print it
 		print_token(&l);
@@ -64,12 +75,10 @@ int main(int argc, char** argv){
 		//Print the last one
 		print_token(&l);
 
-		//Close the file when done
-		fclose(fl);
-	}
 
-	//Deinitialize the lexer
-	deinitialize_lexer();
+		//Destroy the entire array
+		destroy_token_stream(&token_stream);
+	}
 
 	return 0;
 }

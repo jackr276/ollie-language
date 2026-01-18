@@ -19,7 +19,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
-#include "../utils/stack/lexstack.h"
 #include "../utils/constants.h"
 
 //Total number of keywords
@@ -422,6 +421,7 @@ void reconsume_tokens(FILE* fl, int64_t reconsume_start){
  * then pack what we had into a lexer item and send it back to the caller
  */
 lexitem_t get_next_assembly_statement(FILE* fl){
+	/*
 	//We'll be giving this back
 	lexitem_t asm_statement;
 	asm_statement.tok = ASM_STATEMENT;
@@ -459,28 +459,34 @@ lexitem_t get_next_assembly_statement(FILE* fl){
 
 	//Otherwise we're done
 	return asm_statement;
+	*/
+
+	lexitem_t lex_item;
+	return lex_item;
 }
 
 
 /**
- * Constantly iterate through the file and grab the next token that we have
-*/
-lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num){
-	//
-	//
-	//
-	//
-	//TODO
-	//
-	//
-	//
-}
-
-
-/**
- * Push a token back by moving the seek head back appropriately
+ * Generic function that grabs the next token out of the token stream
  */
-void push_back_token(lexitem_t l){
+lexitem_t get_next_token(ollie_token_stream_t* stream){
+	//Grab the current token index
+	u_int32_t token_index = stream->token_pointer;
+
+	//Push up the pointer for the next call
+	(stream->token_pointer)++;
+
+	//Give back the token at this given index
+	return stream->token_stream[token_index];
+}
+
+
+/**
+ * Push a token back. In reality, all that this does is
+ * derement the token pointer
+ */
+void push_back_token(ollie_token_stream_t* stream){
+	(stream->token_pointer)--;
 }
 
 
@@ -1365,24 +1371,10 @@ ollie_token_stream_t tokenize(FILE* fl, char* current_file_name){
 	return token_stream;
 }
 
-
 /**
- * Print out a token and it's associated line number
-*/
-void print_token(lexitem_t* l){
-	if(l->lexeme.string == NULL){
-		//Print out with nice formatting
-		printf("TOKEN: %3d, Lexeme %15s, Line: %4d\n", l->tok, "NONE", l->line_num);
-	} else {
-		//Print out with nice formatting
-		printf("TOKEN: %3d, Lexeme: %15s, Line: %4d\n", l->tok, l->lexeme.string, l->line_num);
-	}
-}
-
-
-/**
- * Deinitialize the entire lexer
+ * Deallocate the entire token stream. In reality this
+ * just means freeing the array
  */
-void deinitialize_lexer(){
-
+void destroy_token_stream(ollie_token_stream_t* stream){
+	free(stream->token_stream);
 }
