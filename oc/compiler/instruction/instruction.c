@@ -1079,50 +1079,6 @@ instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_
 
 
 /**
- * Sometimes we just want to push a given register. We're able to do this
- * by directly emitting a push instruction with the register in it. This
- * saves us allocation overhead
- *
- * This rule is explicitly for SSE registers
- */
-instruction_t* emit_direct_sse_register_push_instruction(sse_register_t reg){
-	//First allocate
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the type
-	instruction->instruction_type = PUSH_DIRECT_SSE;
-
-	//Now we'll set the register
-	instruction->push_or_pop_reg.sse_register = reg;
-
-	//Now give it back
-	return instruction;
-}
-
-
-/**
- * Sometimes we just want to pop a given register. We're able to do this
- * by directly emitting a pop instruction with the register in it. This
- * saves us allocation overhead
- *
- * This rule is explicitly for SSE registers
- */
-instruction_t* emit_direct_sse_register_pop_instruction(sse_register_t reg){
-	//First allocate
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//Set the type
-	instruction->instruction_type = POP_DIRECT_SSE;
-
-	//Now we'll set the register
-	instruction->push_or_pop_reg.sse_register = reg;
-
-	//Now give it back
-	return instruction;
-}
-
-
-/**
  * Emit a PXOR instruction that's already been instruction selected. This is intended to
  * be used by the instruction selector when we need to insert pxor functions for clearing
  * SSE registers
