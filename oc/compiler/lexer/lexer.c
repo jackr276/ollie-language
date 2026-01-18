@@ -14,6 +14,7 @@
 */
 
 #include "lexer.h"
+#include <bits/types/cookie_io_functions_t.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
@@ -107,6 +108,8 @@ char* token_to_string(ollie_token_t op){
 			return "blank";
 		case START:
 			return "start";
+		case ASM_STATEMENT:
+			return "Assembly Statement";
 		case IF:
 			return "if";
 		case ELSE:
@@ -127,14 +130,90 @@ char* token_to_string(ollie_token_t op){
 			return "require";
 		case REPLACE:
 			return "replace";
-
-
-					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
-					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
-					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
-				    EXTERNAL, TRUE_CONST, FALSE_CONST
-
-
+		case U8:
+			return "u8";
+		case I8:
+			return "i8";
+		case U16:
+			return "u16";
+		case I16:
+			return "i16";
+		case U32:
+			return "u32";
+		case I32:
+			return "i32";
+		case U64:
+			return "u64";
+		case I64:
+			return "i64";
+		case F32:
+			return "f32";
+		case F64:
+			return "f64";
+		case CHAR:
+			return "char";
+		case DEFINE:
+			return "define";
+		case ENUM:
+			return "enum";
+		case REGISTER:
+			return "register";
+		case CONSTANT:
+			return "constant";
+		case VOID:
+			return "void";
+		case TYPESIZE:
+			return "typesize";
+		case LET:
+			return "let";
+		case DECLARE:
+			return "declare";
+		case WHEN:
+			return "when";
+		case CASE:
+			return "case";
+		case DEFAULT:
+			return "default";
+		case SWITCH:
+			return "switch";
+		case BREAK:
+			return "break";
+		case CONTINUE:
+			return "continue";
+		case STRUCT:
+			return "struct";
+		case AS:
+			return "AS";
+		case ALIAS:
+			return "alias";
+		case SIZEOF:
+			return "sizeof";
+		case DEFER:
+			return "defer";
+		case MUT:
+			return "mut";
+		case DEPENDENCIES:
+			return "dependencies";
+		case ASM:
+			return "asm";
+		case WITH:
+			return "with";
+		case LIB:
+			return "lib";
+		case IDLE:
+			return "idle";
+		case PUB:
+			return "pub";
+		case UNION:
+			return "union";
+		case BOOL:
+			return "bool";
+		case EXTERNAL:
+			return "external";
+		case TRUE_CONST:
+			return "true";
+		case FALSE_CONST:
+			return "const";
 		case PLUSPLUS:
 			return "++";
 		case MINUSMINUS:
