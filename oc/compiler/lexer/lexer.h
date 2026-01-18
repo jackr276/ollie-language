@@ -61,7 +61,7 @@ struct ollie_token_stream_t {
  * The tokenizer assumes that the fl file pointer
  * is 100% valid
  */
-ollie_token_stream_t tokenize(FILE* fl);
+ollie_token_stream_t tokenize(FILE* fl, char* current_file_name);
 
 /**
  * Deallocate the entire token stream

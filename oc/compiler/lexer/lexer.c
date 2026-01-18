@@ -41,6 +41,9 @@ typedef enum {
 //Current line num
 u_int32_t line_num = 0;
 
+//For the file name
+static char* file_name;
+
 //Token array, we will index using their enum values
 static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RET, JUMP, REQUIRE, REPLACE, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
@@ -70,12 +73,20 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
  */
 #define GET_NEXT_CHAR(fl) fgetc(fl)
 
-
 /**
  * Put back the char and update the token char num appropriately
  */
 #define PUT_BACK_CHAR(fl) fseek(fl, -1, SEEK_CUR)
 //=============================== Private Utility Macros ================================
+
+
+/**
+ * Print a lexer message in a nicely formatted way
+ */
+static inline void print_lexer_error(char* info, u_int32_t line_number){
+	//Print this out on a single line
+	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | TOKENIZER ERROR]: %s\n", file_name, line_num, info);
+}
 
 
 /**
@@ -500,7 +511,7 @@ static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t
  * this function returns, we will either have a good stream with everything
  * needed in it or a stream in an error state
  */
-static void generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
+static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	//Local variables for consuming
 	char ch;
 	char ch2;
@@ -864,33 +875,36 @@ static void generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					case ',':
 						lex_item.tok = COMMA;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case '~':
 						lex_item.tok = B_NOT;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case '!':
 						ch2 = GET_NEXT_CHAR(fl);
-						if(ch2 == '='){
-							//Prepare and return
-							lex_item.tok = NOT_EQUALS;
-							lex_item.line_num = line_num;
-							return lex_item;
-						} else {
-							//Put it back
-							PUT_BACK_CHAR(fl);
-							lex_item.tok = L_NOT;
-							lex_item.line_num = line_num;
-							return lex_item;
+
+						switch(ch2) {
+							case '=':
+								lex_item.tok = NOT_EQUALS;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
+
+							default:
+								PUT_BACK_CHAR(fl);
+								lex_item.tok = L_NOT;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 						}
 
 					//Beginning of a string literal
 					case '"':
-						//Say that we're in a string
 						current_state = IN_STRING;
-						//Allocate the lexeme
 						lexeme = dynamic_string_alloc();
 						break;
 
@@ -908,23 +922,23 @@ static void generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						//Now we must see another single quote
 						ch2 = GET_NEXT_CHAR(fl);
 
-						//If this is the case, then we've messed up
+						//This is a failure, we need to leave out
 						if(ch2 != '\''){
 							lex_item.tok = ERROR;
 							lex_item.line_num = line_num;
-							return lex_item;
+							print_lexer_error("Chars can only be one character in length. For a string constant, use double quotes(\")", line_num);
+							return FAILURE;
 						}
 
-						//Package and return
 						lex_item.tok = CHAR_CONST;
-						//Add the dynamic string in
 						lex_item.lexeme = lexeme;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case '<':
-						//Grab the next char
 						ch2 = GET_NEXT_CHAR(fl);
+						
 						if(ch2 == '<'){
 							ch3 = GET_NEXT_CHAR(fl);
 
@@ -1026,10 +1040,12 @@ static void generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				//Add it in and move along
 				if(ch >= '0' && ch <= '9'){
 					dynamic_string_add_char_to_back(&lexeme, ch);
+
 				//If we see hex and we're in hex, it's also fine
 				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == TRUE) 
 						|| ((ch >= 'A' && ch <= 'F') && seen_hex == TRUE)){
 					dynamic_string_add_char_to_back(&lexeme, ch);
+
 				} else {
 					switch(ch){
 						case 'x':
@@ -1243,14 +1259,17 @@ static void generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	}
 
 	return lex_item;
-
 }
+
 
 /**
  * Initialize the lexer by dynamically allocating the lexstack
  * and any other needed data structures
  */
-ollie_token_stream_t tokenize(FILE* fl){
+ollie_token_stream_t tokenize(FILE* fl, char* current_file_name){
+	//Store the file name for any error printing
+	file_name = current_file_name;
+
 	//Stack allocate
 	ollie_token_stream_t token_stream;
 
@@ -1264,7 +1283,10 @@ ollie_token_stream_t tokenize(FILE* fl){
 	token_stream.token_pointer = 0;
 
 	//Consume all of the tokens here using the helper
-	generate_all_tokens(fl, &token_stream);
+	u_int8_t result = generate_all_tokens(fl, &token_stream);
+
+	//Update the status accordingly
+	token_stream.status = result == SUCCESS ? STREAM_STATUS_SUCCESS : STREAM_STATUS_FAILURE;
 
 	//Give it back
 	return token_stream;
