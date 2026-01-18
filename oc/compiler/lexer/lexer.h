@@ -17,9 +17,10 @@
 
 //The lexitem_t struct
 typedef struct lexitem_t lexitem_t;
+//The overall token stream value
+typedef struct ollie_token_stream_t ollie_token_stream_t;
 
-
-struct lexitem_t{
+struct lexitem_t {
 	//The string(lexeme) that got us this token
 	dynamic_string_t lexeme;
 	//The line number of the source that we found it on
@@ -27,6 +28,16 @@ struct lexitem_t{
 	//The token associated with this item
 	ollie_token_t tok;
 };
+
+struct ollie_token_stream_t {
+	//Array of tokens
+	lexitem_t* token_stream;
+	//Current token index
+	u_int32_t current_token_index;
+	//Max index, needed to know when we resize
+	u_int32_t max_token_index;
+} ;
+
 
 //======================== Public utility macros ========================
 /**
@@ -70,12 +81,12 @@ void print_token(lexitem_t* l);
  * Initialize the lexer by dynamically allocating the lexstack
  * and any other needed data structures
  */
-void initialize_lexer();
+ollie_token_stream_t intialize_token_stream();
 
 /**
- * Deinitialize the entire lexer
+ * Deallocate the entire token string
  */
-void deinitialize_lexer();
+void destroy_token_stream(ollie_token_stream_t* stream);
 
 /**
  * A utility function for error printing that converts an operator to a string
