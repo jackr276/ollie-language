@@ -24,7 +24,7 @@ typedef struct ollie_token_stream_t ollie_token_stream_t;
 /**
  * Get the index of the current stream seek head
  */
-#define GET_CURRENT_TOKEN_INDEX(stream) stream->current_token_index
+#define GET_CURRENT_TOKEN_INDEX(stream) stream->token_pointer
 
 //=================================== Public utility macros ==============================
 
