@@ -79,12 +79,12 @@ void destroy_token_stream(ollie_token_stream_t* stream);
 /**
  * Generic token grabbing function
  */
-lexitem_t get_next_token(ollie_token_stream_t* stream);
+lexitem_t get_next_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number);
 
 /**
  * Push a token back to the stream
  */
-void push_back_token(ollie_token_stream_t* stream);
+void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number);
 
 /**
  * Reset the stream to reconsume tokens from a given start point

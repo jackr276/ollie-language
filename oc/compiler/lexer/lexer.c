@@ -37,9 +37,6 @@ typedef enum {
 
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
-//Current line num
-u_int32_t line_num = 0;
-
 //For the file name
 static char* file_name;
 
@@ -412,11 +409,11 @@ char* operator_token_to_string(ollie_token_t token){
 /**
  * Helper that will determine if we have whitespace(ws) 
  */
-static inline u_int8_t is_whitespace(char ch, u_int32_t* line_num){
+static inline u_int8_t is_whitespace(char ch, u_int32_t* line_number){
 	switch(ch){
 		//Unique case - we'll bump our line number counts
 		case '\n':
-			(*line_num)++;
+			(*line_number)++;
 			return TRUE;
 
 		case ' ':
@@ -497,7 +494,7 @@ void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsu
 /**
  * Generic function that grabs the next token out of the token stream
  */
-lexitem_t get_next_token(ollie_token_stream_t* stream){
+lexitem_t get_next_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number){
 	//Grab the current token index
 	u_int32_t token_index = stream->token_pointer;
 
@@ -505,6 +502,9 @@ lexitem_t get_next_token(ollie_token_stream_t* stream){
 	if(token_index < stream->current_token_index){
 		//Push up the pointer for the next call
 		(stream->token_pointer)++;
+
+		//Update the parser line number in here as well
+		*parser_line_number = stream->token_stream[token_index].line_num;
 
 		//Give back the token at this given index
 		return stream->token_stream[token_index];
@@ -521,8 +521,11 @@ lexitem_t get_next_token(ollie_token_stream_t* stream){
  * Push a token back. In reality, all that this does is
  * derement the token pointer
  */
-void push_back_token(ollie_token_stream_t* stream){
+void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number){
 	(stream->token_pointer)--;
+
+	//Revert the line number to be whatever this current token's line number is
+	*parser_line_number = stream->token_stream[stream->token_pointer].line_num;
 }
 
 
@@ -554,6 +557,9 @@ static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t
  * needed in it or a stream in an error state
  */
 static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
+	//Start the line number off at 1
+	u_int32_t line_number = 1;
+
 	//Local variables for consuming
 	char ch;
 	char ch2;
@@ -577,7 +583,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 		switch(current_state){
 			case IN_START:
 				//If we see whitespace we just get out
-				if(is_whitespace(ch, &line_num) == TRUE){
+				if(is_whitespace(ch, &line_number) == TRUE){
 					continue;
 				}
 
@@ -601,7 +607,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							case '=':
 								//Prepare the token and put it in the stream
 								lex_item.tok = SLASHEQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
@@ -611,7 +617,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 								//Prepare the token and return it
 								lex_item.tok = F_SLASH;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -624,20 +630,20 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2){
 							case '+':
 								lex_item.tok = PLUSPLUS;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							case '=':
 								lex_item.tok = PLUSEQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);	
 								lex_item.tok = PLUS;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -647,14 +653,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					//Pound for label identifiers
 					case '#':
 						lex_item.tok = POUND;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
 					//Question mark for ternary operations
 					case '?':
 						lex_item.tok = QUESTION;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
@@ -664,26 +670,26 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2){
 							case '-':
 								lex_item.tok = MINUSMINUS;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							case '=':
 								lex_item.tok = MINUSEQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 								
 							case '>':
 								lex_item.tok = ARROW;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = MINUS;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -696,14 +702,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2){
 							case '=':
 								lex_item.tok = STAREQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = STAR;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -716,20 +722,20 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2){
 							case '=':
 								lex_item.tok = DOUBLE_EQUALS;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							case '>':
 								lex_item.tok = FAT_ARROW;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = EQUALS;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -742,20 +748,20 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2){
 							case '&':
 								lex_item.tok = DOUBLE_AND;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							case '=':
 								lex_item.tok = ANDEQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = SINGLE_AND;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -768,20 +774,20 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2){
 							case '|':
 								lex_item.tok = DOUBLE_OR;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							case '=':
 								lex_item.tok = OREQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = SINGLE_OR;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -790,7 +796,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 					case ';':
 						lex_item.tok = SEMICOLON;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
@@ -800,14 +806,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2) {
 							case '=':
 								lex_item.tok = MODEQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = MOD;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -820,14 +826,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2) {
 							case '=':
 								lex_item.tok = COLONEQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = COLON;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -836,13 +842,13 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 					case '(':
 						lex_item.tok = L_PAREN;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
 					case ')':
 						lex_item.tok = R_PAREN;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
@@ -852,14 +858,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2) {
 							case '=':
 								lex_item.tok = XOREQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = CARROT;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -868,31 +874,31 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 					case '{':
 						lex_item.tok = L_CURLY;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
 					case '}':
 						lex_item.tok = R_CURLY;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
 					case '[':
 						lex_item.tok = L_BRACKET;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
 					case ']':
 						lex_item.tok = R_BRACKET;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
 					case '@':
 						lex_item.tok = AT;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
@@ -926,7 +932,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = DOT;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -935,13 +941,13 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					
 					case ',':
 						lex_item.tok = COMMA;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
 					case '~':
 						lex_item.tok = B_NOT;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
@@ -951,14 +957,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						switch(ch2) {
 							case '=':
 								lex_item.tok = NOT_EQUALS;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = L_NOT;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -988,14 +994,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						//This is a failure, we need to leave out
 						if(ch2 != '\''){
 							lex_item.tok = ERROR;
-							lex_item.line_num = line_num;
-							print_lexer_error("Chars can only be one character in length. For a string constant, use double quotes(\")", line_num);
+							lex_item.line_num = line_number;
+							print_lexer_error("Chars can only be one character in length. For a string constant, use double quotes(\")", line_number);
 							return FAILURE;
 						}
 
 						lex_item.tok = CHAR_CONST;
 						lex_item.lexeme = lexeme;
-						lex_item.line_num = line_num;
+						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
 						break;
 
@@ -1009,14 +1015,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								switch(ch3){
 									case '=':
 										lex_item.tok = LSHIFTEQ;
-										lex_item.line_num = line_num;
+										lex_item.line_num = line_number;
 										add_lexitem_to_stream(stream, lex_item);
 										break;
 									
 									default:
 										PUT_BACK_CHAR(fl);
 										lex_item.tok = L_SHIFT;
-										lex_item.line_num = line_num;
+										lex_item.line_num = line_number;
 										add_lexitem_to_stream(stream, lex_item);
 										break;
 								}
@@ -1025,14 +1031,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							case '=':
 								lex_item.tok = L_THAN_OR_EQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = L_THAN;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -1049,14 +1055,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								switch(ch3){
 									case '=':
 										lex_item.tok = RSHIFTEQ;
-										lex_item.line_num = line_num;
+										lex_item.line_num = line_number;
 										add_lexitem_to_stream(stream, lex_item);
 										break;
 
 									default:
 										PUT_BACK_CHAR(fl);
 										lex_item.tok = R_SHIFT;
-										lex_item.line_num = line_num;
+										lex_item.line_num = line_number;
 										add_lexitem_to_stream(stream, lex_item);
 										break;
 								}
@@ -1065,14 +1071,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							case '=':
 								lex_item.tok = G_THAN_OR_EQ;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 
 							default:
 								PUT_BACK_CHAR(fl);
 								lex_item.tok = G_THAN;
-								lex_item.line_num = line_num;
+								lex_item.line_num = line_number;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
@@ -1092,7 +1098,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							current_state = IN_INT;
 
 						} else {
-							print_lexer_error("Invalid character found", line_num);
+							print_lexer_error("Invalid character found", line_number);
 							return FAILURE;
 						}
 				}
@@ -1108,7 +1114,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				} else {
 					PUT_BACK_CHAR(fl);
 					//Invoke the helper, then add it in
-					lex_item = identifier_or_keyword(lexeme, line_num);
+					lex_item = identifier_or_keyword(lexeme, line_number);
 					add_lexitem_to_stream(stream, lex_item);
 
 					//IMPORTANT - reset the state here
@@ -1133,13 +1139,13 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						case 'X':
 							//If we've already seen the hex code this is bad
 							if(seen_hex == TRUE){
-								print_lexer_error("Hexadecimal numbers cannot have 'x' or 'X' in them twice", line_num);
+								print_lexer_error("Hexadecimal numbers cannot have 'x' or 'X' in them twice", line_number);
 								return FAILURE;
 							}
 
 							//If we haven't seen the 0 here it's bad
 							if(*(lexeme.string) != '0'){
-								print_lexer_error("Hexadecimal 'x' or 'X' must be preceeded by a '0'", line_num);
+								print_lexer_error("Hexadecimal 'x' or 'X' must be preceeded by a '0'", line_number);
 								return FAILURE;
 							}
 
@@ -1162,7 +1168,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						//The 'l' or 'L' tells us that we're forcing to long
 						case 'l':
 						case 'L':
-							lex_item.line_num = line_num;
+							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = LONG_CONST;
 							add_lexitem_to_stream(stream, lex_item);
@@ -1175,7 +1181,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						//Forcing to short
 						case 's':
 						case 'S':
-							lex_item.line_num = line_num;
+							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = LONG_CONST;
 							add_lexitem_to_stream(stream, lex_item);
@@ -1188,7 +1194,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						//Forcing to Byte
 						case 'b':
 						case 'B':
-							lex_item.line_num = line_num;
+							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = BYTE_CONST;
 							add_lexitem_to_stream(stream, lex_item);
@@ -1233,7 +1239,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							//Pack everything up and return
 							lex_item.lexeme = lexeme;
-							lex_item.line_num = line_num;
+							lex_item.line_num = line_number;
 							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
@@ -1254,7 +1260,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							}
 
 							lex_item.lexeme = lexeme;
-							lex_item.line_num = line_num;
+							lex_item.line_num = line_number;
 							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
@@ -1278,7 +1284,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					//Give this back as a double CONST
 					lex_item.tok = DOUBLE_CONST;
 					lex_item.lexeme = lexeme;
-					lex_item.line_num = line_num;
+					lex_item.line_num = line_number;
 					add_lexitem_to_stream(stream, lex_item);
 
 					//IMPORTANT - reset the state here
@@ -1291,7 +1297,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					//We'll give this back now
 					lex_item.tok = FLOAT_CONST;
 					lex_item.lexeme = lexeme;
-					lex_item.line_num = line_num;
+					lex_item.line_num = line_number;
 					add_lexitem_to_stream(stream, lex_item);
 
 					//IMPORTANT - reset the state here
@@ -1305,7 +1311,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				if(ch == '"'){ 
 					lex_item.tok = STR_CONST;
 					lex_item.lexeme = lexeme;
-					lex_item.line_num = line_num;
+					lex_item.line_num = line_number;
 					add_lexitem_to_stream(stream, lex_item);
 
 					//IMPORTANT - reset the state here
@@ -1314,12 +1320,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				//Escape char
 				} else if (ch == '\\'){
 					//Consume the next character, whatever it is
-					is_whitespace(fgetc(fl), &line_num);
+					is_whitespace(fgetc(fl), &line_number);
 
 				} else {
 					//Otherwise we'll just keep adding here
 					//Just for line counting
-					is_whitespace(ch, &line_num);
+					is_whitespace(ch, &line_number);
 					dynamic_string_add_char_to_back(&lexeme, ch);
 				}
 
@@ -1341,7 +1347,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					}
 				}
 				//Otherwise just check for whitespace
-				is_whitespace(ch, &line_num);
+				is_whitespace(ch, &line_number);
 				break;
 
 			//If we're in a single line comment
@@ -1349,7 +1355,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				//Are we at the start of the escape sequence
 				//Newline means we get out
 				if(ch == '\n'){
-					line_num++;
+					line_number++;
 					current_state = IN_START;
 				} 
 
@@ -1358,7 +1364,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 			//Some very weird error here
 			default:
-				print_lexer_error("Found a stateless token", line_num);
+				print_lexer_error("Found a stateless token", line_number);
 				return FAILURE;
 		}
 	}
@@ -1366,7 +1372,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	//Return this token
 	if(ch == EOF){
 		lex_item.tok = DONE;
-		lex_item.line_num = line_num;
+		lex_item.line_num = line_number;
 		add_lexitem_to_stream(stream, lex_item);
 		return SUCCESS;
 	}

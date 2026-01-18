@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "ast/ast.h"
+#include "lexer/lexer.h"
 #include "parser/parser.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
@@ -197,28 +198,19 @@ static u_int8_t compile(compiler_options_t* options){
 		begin = clock();
 	}
 
-	//
-	//
-	//
-	//TODO 
-	//
-	//
-	//
-	//
+	//Invoke the lexer. This handles all file IO
+	ollie_token_stream_t token_stream = tokenize(options->file_name);
 
-	//Open the file up
-	FILE* fl = fopen(options->file_name, "r");
-
-	//Error out if it's null
-	if(fl == NULL){
-		sprintf(info, "The file %s could not be found or opened", options->file_name);
-		results->root = print_and_return_error(info, 0);
-		//Give back the results structure
-		return results;
+	//If it failed, we need to leave immediately
+	if(token_stream.status == STREAM_STATUS_FAILURE){
+		print_parse_message(PARSE_ERROR, "Tokenizing failed. Please remedy the tokenizer errors and recompiler", 0);
+		//1 - it failed
+		return 1;
 	}
 
-	//Close the file once done, we've finished it
-	fclose(fl);
+	//Now we cache the token stream reference inside of the options. The parser will reference this for
+	//all of its operations
+	options->token_stream = &token_stream;
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);

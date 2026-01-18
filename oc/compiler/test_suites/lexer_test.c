@@ -23,6 +23,9 @@ int main(int argc, char** argv){
 
 	lexitem_t l;
 
+	//Initialize the line number here
+	u_int32_t parser_line_num = 1;
+
 	for(int32_t i = 1; i < argc; i++){
 		printf("=============== LEXER TEST FOR FILE %s =================\n\n", argv[i]);
 
@@ -39,7 +42,7 @@ int main(int argc, char** argv){
 		ollie_token_stream_t* token_stream_pointer = &token_stream;
 
 		//Grab the first one
-		l = get_next_token(token_stream_pointer);
+		l = get_next_token(token_stream_pointer, &parser_line_num);
 
 		//Print it
 		print_token(&l);
@@ -48,7 +51,7 @@ int main(int argc, char** argv){
 		u_int32_t first_token_index = GET_CURRENT_TOKEN_INDEX(token_stream_pointer);
 
 		//Very rudimentary here
-		while((l = get_next_token(token_stream_pointer)).tok != DONE){
+		while((l = get_next_token(token_stream_pointer, &parser_line_num)).tok != DONE){
 			print_token(&l);
 		}
 
@@ -59,7 +62,7 @@ int main(int argc, char** argv){
 		reset_stream_to_given_index(token_stream_pointer, first_token_index);
 
 		//Very rudimentary here
-		while((l = get_next_token(token_stream_pointer)).tok != DONE){
+		while((l = get_next_token(token_stream_pointer, &parser_line_num)).tok != DONE){
 			print_token(&l);
 		}
 		//Print the last one
