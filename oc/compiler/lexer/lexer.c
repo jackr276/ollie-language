@@ -673,65 +673,74 @@ static void generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					case '&':
 						ch2 = GET_NEXT_CHAR(fl);
 
-						if(ch2 == '&'){
-							//Prepare and return
-							lex_item.tok = DOUBLE_AND;
-							lex_item.line_num = line_num;
-							return lex_item;
+						switch(ch2){
+							case '&':
+								lex_item.tok = DOUBLE_AND;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 
-						//We could see &=
-						} else if (ch2 == '=') {
-							//Prepare and return
-							lex_item.tok = ANDEQ;
-							lex_item.line_num = line_num;
-							return lex_item;
+							case '=':
+								lex_item.tok = ANDEQ;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 
-						} else {
-							PUT_BACK_CHAR(fl);
-							lex_item.tok = SINGLE_AND;
-							lex_item.line_num = line_num;
-							return lex_item;
+							default:
+								PUT_BACK_CHAR(fl);
+								lex_item.tok = SINGLE_AND;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 						}
 
 					case '|':
 						ch2 = GET_NEXT_CHAR(fl);
-						//If we get this then it's +=
-						if(ch2 == '|'){
-							//Prepare and return
-							lex_item.tok = DOUBLE_OR;
-							lex_item.line_num = line_num;
-							return lex_item;
-						//We could also see |=
-						} else if(ch2 == '='){
-							//Prepare and return
-							lex_item.tok = OREQ;
-							lex_item.line_num = line_num;
-							return lex_item;
-						} else {
-							//"Put back" the char
-							PUT_BACK_CHAR(fl);
-							lex_item.tok = SINGLE_OR;
-							lex_item.line_num = line_num;
-							return lex_item;
+
+						switch(ch2){
+							case '|':
+								lex_item.tok = DOUBLE_OR;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
+
+							case '=':
+								lex_item.tok = OREQ;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
+
+							default:
+								PUT_BACK_CHAR(fl);
+								lex_item.tok = SINGLE_OR;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 						}
 
 					case ';':
 						lex_item.tok = SEMICOLON;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case '%':
 						ch2 = GET_NEXT_CHAR(fl);
 
-						//We could see %=
-						if(ch2 == '='){
-							lex_item.tok = MODEQ;
-							lex_item.line_num = line_num;
-							return lex_item;
-						} else {
-							lex_item.tok = MOD;
-							lex_item.line_num = line_num;
-							return lex_item;
+						switch(ch2) {
+							case '=':
+								lex_item.tok = MODEQ;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
+
+							default:
+								PUT_BACK_CHAR(fl);
+								lex_item.tok = MOD;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
+
 						}
 
 					case ':':
