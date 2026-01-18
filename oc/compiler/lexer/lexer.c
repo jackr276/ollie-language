@@ -517,22 +517,21 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	char ch2;
 	char ch3;
 
+	//Current state always begins in START
+	lex_state current_state = IN_START;
+
+	//Initialize here. We have the ERROR token as our sane default
+	lexitem_t lex_item = {{NULL, 0, 0}, 0, ERROR};
+
+	//For eventual use down the road. We will not allocate here because this
+	//is not always needed
+	dynamic_string_t lexeme;
+
+	//Have we seen a hex? Assume no by default
+	u_int8_t seen_hex = FALSE;
+
 	//We'll run through character by character until we hit EOF
 	while((ch = GET_NEXT_CHAR(fl)) != EOF){
-		//Initialize here. We have the ERROR token as our sane default
-		lexitem_t lex_item = {{NULL, 0, 0}, 0, ERROR};
-
-		//For eventual use down the road. We will not allocate here because this
-		//is not always needed
-		dynamic_string_t lexeme;
-
-		//Have we seen a hex?
-		u_int8_t seen_hex;
-
-		//Current state always begins in START
-		lex_state current_state = IN_START;
-
-		//Switch on the current state
 		switch(current_state){
 			case IN_START:
 				//If we see whitespace we just get out
@@ -575,6 +574,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								break;
 						}
 
+						break;
+
 					case '+':
 						ch2 = GET_NEXT_CHAR(fl);
 
@@ -598,6 +599,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
+
+						break;
 
 					//Pound for label identifiers
 					case '#':
@@ -643,6 +646,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								break;
 						}
 
+						break;
+
 					case '*':
 						ch2 = GET_NEXT_CHAR(fl);
 
@@ -660,6 +665,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
+
+						break;
 
 					case '=':
 						ch2 = GET_NEXT_CHAR(fl);
@@ -685,6 +692,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								break;
 						}
 
+						break;
+
 					case '&':
 						ch2 = GET_NEXT_CHAR(fl);
 
@@ -708,6 +717,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
+
+						break;
 
 					case '|':
 						ch2 = GET_NEXT_CHAR(fl);
@@ -733,6 +744,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								break;
 						}
 
+						break;
+
 					case ';':
 						lex_item.tok = SEMICOLON;
 						lex_item.line_num = line_num;
@@ -757,6 +770,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								break;
 						}
 
+						break;
+
 					case ':':
 						ch2 = GET_NEXT_CHAR(fl);
 
@@ -774,6 +789,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
+
+						break;
 
 					case '(':
 						lex_item.tok = L_PAREN;
@@ -804,6 +821,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
+
+						break;
 
 					case '{':
 						lex_item.tok = L_CURLY;
@@ -901,6 +920,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								add_lexitem_to_stream(stream, lex_item);
 								break;
 						}
+
+						break;
 
 					//Beginning of a string literal
 					case '"':
@@ -1049,6 +1070,9 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					//Invoke the helper, then add it in
 					lex_item = identifier_or_keyword(lexeme, line_num);
 					add_lexitem_to_stream(stream, lex_item);
+
+					//IMPORTANT - reset the state here
+					current_state = IN_START;
 				}
 
 				break;
@@ -1067,19 +1091,16 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					switch(ch){
 						case 'x':
 						case 'X':
-							//Have we seen the hex code?
-							//Fail case here
+							//If we've already seen the hex code this is bad
 							if(seen_hex == TRUE){
-								lexitem_t err;
-								err.tok = ERROR;
-								return err;
+								print_lexer_error("Hexadecimal numbers cannot have 'x' or 'X' in them twice", line_num);
+								return FAILURE;
 							}
 
 							//If we haven't seen the 0 here it's bad
 							if(*(lexeme.string) != '0'){
-								lexitem_t err;
-								err.tok = ERROR;
-								return err;
+								print_lexer_error("Hexadecimal 'x' or 'X' must be preceeded by a '0'", line_num);
+								return FAILURE;
 							}
 
 							//Otherwise set this and add it in
@@ -1104,7 +1125,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.line_num = line_num;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = LONG_CONST;
-							return lex_item;
+							add_lexitem_to_stream(stream, lex_item);
+
+							//IMPORTANT - reset the state here
+							current_state = IN_START;
+
+							break;
 
 						//Forcing to short
 						case 's':
@@ -1112,7 +1138,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.line_num = line_num;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = LONG_CONST;
-							return lex_item;
+							add_lexitem_to_stream(stream, lex_item);
+
+							//IMPORTANT - reset the state here
+							current_state = IN_START;
+
+							break;
 
 						//Forcing to Byte
 						case 'b':
@@ -1120,7 +1151,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.line_num = line_num;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = BYTE_CONST;
-							return lex_item;
+							add_lexitem_to_stream(stream, lex_item);
+
+							//IMPORTANT - reset the state here
+							current_state = IN_START;
+
+							break;
 
 						//If we see this it means we're forcing to unsigned
 						case 'u':
@@ -1158,8 +1194,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							//Pack everything up and return
 							lex_item.lexeme = lexeme;
 							lex_item.line_num = line_num;
+							add_lexitem_to_stream(stream, lex_item);
 
-							return lex_item;
+							//IMPORTANT - reset the state here
+							current_state = IN_START;
+
+							break;
 
 						default:
 							//Otherwise we're out
@@ -1175,7 +1215,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							lex_item.lexeme = lexeme;
 							lex_item.line_num = line_num;
-							return lex_item;
+							add_lexitem_to_stream(stream, lex_item);
+
+							//IMPORTANT - reset the state here
+							current_state = IN_START;
+
+							break;
 					}
 				}
 
@@ -1194,7 +1239,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					lex_item.tok = DOUBLE_CONST;
 					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_num;
-					return lex_item;
+					add_lexitem_to_stream(stream, lex_item);
+
+					//IMPORTANT - reset the state here
+					current_state = IN_START;
 
 				} else {
 					//Put back the char
@@ -1204,7 +1252,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					lex_item.tok = FLOAT_CONST;
 					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_num;
-					return lex_item;
+					add_lexitem_to_stream(stream, lex_item);
+
+					//IMPORTANT - reset the state here
+					current_state = IN_START;
 				}
 
 				break;
@@ -1212,20 +1263,23 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 			case IN_STRING:
 				//If we see the end of the string
 				if(ch == '"'){ 
-					//Set the token
 					lex_item.tok = STR_CONST;
-					//Set the lexeme & line num
 					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_num;
-					return lex_item;
+					add_lexitem_to_stream(stream, lex_item);
+
+					//IMPORTANT - reset the state here
+					current_state = IN_START;
+
 				//Escape char
 				} else if (ch == '\\'){
 					//Consume the next character, whatever it is
-					is_whitespace(fgetc(fl), &line_num, parser_line_num);
+					is_whitespace(fgetc(fl), &line_num);
+
 				} else {
 					//Otherwise we'll just keep adding here
 					//Just for line counting
-					is_whitespace(ch, &line_num, parser_line_num);
+					is_whitespace(ch, &line_num);
 					dynamic_string_add_char_to_back(&lexeme, ch);
 				}
 
@@ -1247,7 +1301,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					}
 				}
 				//Otherwise just check for whitespace
-				is_whitespace(ch, &line_num, parser_line_num);
+				is_whitespace(ch, &line_num);
 				break;
 
 			//If we're in a single line comment
@@ -1256,30 +1310,28 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				//Newline means we get out
 				if(ch == '\n'){
 					line_num++;
-					(*parser_line_num)++;
 					current_state = IN_START;
 				} 
+
 				//Otherwise just go forward
 				break;
 
 			//Some very weird error here
 			default:
-				fprintf(stderr, "[LEXER ERROR]: Found a stateless token\n");
-				return lex_item;
+				print_lexer_error("Found a stateless token", line_num);
+				return FAILURE;
 		}
 	}
 
 	//Return this token
 	if(ch == EOF){
-
-
-		return SUCCESS;
-
 		lex_item.tok = DONE;
-		lex_item.line_num = *parser_line_num;
+		lex_item.line_num = line_num;
+		add_lexitem_to_stream(stream, lex_item);
+		return SUCCESS;
 	}
 
-	return lex_item;
+	return SUCCESS;
 }
 
 
