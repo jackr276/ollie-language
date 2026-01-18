@@ -61,12 +61,33 @@ typedef enum {
 
 
 /**
+ * Crawl the data area and search for an exact pointer match. If there's not an exact
+ * match, then NULL will be returned
+ */
+static inline stack_region_t* get_stack_region_for_live_range(stack_data_area_t* data_area, live_range_t* lr){
+	for(u_int16_t i = 0; i < data_area->stack_regions.current_index; i++){
+		//Extract it
+		stack_region_t* region = dynamic_array_get_at(&(data_area->stack_regions), i);
+
+		//We need an exact memory address match. Anything short and
+		//this does not count
+		if(region->variable_referenced == lr){
+			return region;
+		}
+	}
+
+	//If we make it all the way down here, we found nothing so return NULL
+	return NULL;
+}
+
+
+/**
  * Does a live range for a given variable already exist? If so, we'll need to 
  * coalesce the two live ranges in a union
  *
  * Returns NULL if we found nothing
  */
-static live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
+static inline live_range_t* find_live_range_with_variable(dynamic_array_t* live_ranges, three_addr_var_t* variable){
 	//Run through all of the live ranges that we currently have
 	for(u_int16_t _ = 0; _ < live_ranges->current_index; _++){
 		//Grab the given live range out
@@ -3477,7 +3498,7 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
  */
-static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* instruction){
+static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* instruction){
 	//If we get here we know that we have a call instruction. Let's
 	//grab whatever it's calling out. We're able to do this for a direct call,
 	//whereas in an indirect call we are not
@@ -3499,7 +3520,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
-	//Start off with this as the last instruction
+	//Keep pointers to the first/last instruction in our chain
+	instruction_t* first_instruction = instruction;
 	instruction_t* last_instruction = instruction;
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
@@ -3557,6 +3579,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 					//Insert the pop instruction directly after the last instruction
 					insert_instruction_after_given(pop_inst, instruction);
 
+					//If the first instruction still is the original instruction. That
+					//means that this is the first push instruction that we're inserting.
+					//As such, we'll set the first instruction to be this pushinstruction
+					//to save ourselves time down the line
+					if(first_instruction == instruction){
+						first_instruction = push_inst;
+					}
+
 					//If the last instruction still is the original instruction. That
 					//means that this is the first pop instruction that we're inserting.
 					//As such, we'll set the last instruction to be this pop instruction
@@ -3589,25 +3619,33 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
 				 * value it has that we're relying on would not survive the call
 				 */
 				if(get_bitmap_at_index(callee->assigned_sse_registers, sse_reg - 1) == TRUE){
-					//Emit a direct push with this live range's register
-					instruction_t* push_inst = emit_direct_sse_register_push_instruction(sse_reg);
+					//Do we already have a stack region for this exact LR? We will check and if
+					//so, we don't need to make any more room on the stack for it
+					stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->data_area), lr);
 
-					//Emit the pop instruction for this
-					instruction_t* pop_inst = emit_direct_sse_register_pop_instruction(sse_reg);
+					//If we didn't have a spill region, then we'll make one
+					if(stack_region == NULL){
+						stack_region = create_stack_region_for_type(&(caller->data_area), get_largest_type_in_live_range(lr));
+
+						//Cache this for later
+						stack_region->variable_referenced = lr;
+					}
+
+					//Emit the store instruction and load instruction
+					instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
+					instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
 
 					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(push_inst, instruction);
+					insert_instruction_before_given(store_instruction, first_instruction);
+
+					//The first instruction now is the store
+					first_instruction = store_instruction;
 
 					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(pop_inst, instruction);
+					insert_instruction_after_given(load_instruction, last_instruction);
 
-					//If the last instruction still is the original instruction. That
-					//means that this is the first pop instruction that we're inserting.
-					//As such, we'll set the last instruction to be this pop instruction
-					//to save ourselves time down the line
-					if(last_instruction == instruction){
-						last_instruction = pop_inst;
-					}
+					//And the last one now is the load
+					last_instruction = load_instruction;
 				}
 
 				break;
@@ -3630,7 +3668,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(instruction_t* i
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
  */
-static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t* instruction){
+static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* caller, instruction_t* instruction){
 	//Get the destination LR. Remember that this is nullable
 	live_range_t* destination_lr = NULL;
 
@@ -3647,6 +3685,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 
 	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
 	//have, but will change to be the first pop instruction that we make 
+	instruction_t* first_instruction = instruction;
 	instruction_t* last_instruction = instruction;
 
 	//Grab the live_after array for up to but not including the actual call
@@ -3695,6 +3734,14 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 				//Insert the pop instruction directly after the last instruction
 				insert_instruction_after_given(pop_inst_gp, instruction);
 
+				//If the first instruction still is the original instruction. That
+				//means that this is the first push instruction that we're inserting.
+				//As such, we'll set the first instruction to be this pushinstruction
+				//to save ourselves time down the line
+				if(first_instruction == instruction){
+					first_instruction = push_inst_gp;
+				}
+
 				//If the last instruction still is the original instruction. That
 				//means that this is the first pop instruction that we're inserting.
 				//As such, we'll set the last instruction to be this pop instruction
@@ -3710,7 +3757,6 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 				//do not need to check for that
 				sse_reg = lr->reg.sse_reg;
 
-
 				//Let's now check to see if it matches the function destination's register. If it
 				//does, we'll bail
 				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
@@ -3719,25 +3765,33 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 					}
 				}
 
-				//Emit a direct push with this live range's register
-				instruction_t* push_inst_sse = emit_direct_sse_register_push_instruction(sse_reg);
+				//By the time we get here, we know that we need to save this
+				//First check if this has already been saved before
+				stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->data_area), lr);
 
-				//Emit the pop instruction for this
-				instruction_t* pop_inst_sse = emit_direct_sse_register_pop_instruction(sse_reg);
+				//If it's NULL, we need to make one ourselves
+				if(stack_region == NULL){
+					stack_region = create_stack_region_for_type(&(caller->data_area), get_largest_type_in_live_range(lr));
+
+					//Cache this for later
+					stack_region->variable_referenced = lr;
+				}
+
+				//Emit the store instruction and load instruction
+				instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
+				instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
 
 				//Insert the push instruction directly before the call instruction
-				insert_instruction_before_given(push_inst_sse, instruction);
+				insert_instruction_before_given(store_instruction, first_instruction);
+
+				//The first instruction now is the store
+				first_instruction = store_instruction;
 
 				//Insert the pop instruction directly after the last instruction
-				insert_instruction_after_given(pop_inst_sse, instruction);
+				insert_instruction_after_given(load_instruction, last_instruction);
 
-				//If the last instruction still is the original instruction. That
-				//means that this is the first pop instruction that we're inserting.
-				//As such, we'll set the last instruction to be this pop instruction
-				//to save ourselves time down the line
-				if(last_instruction == instruction){
-					last_instruction = pop_inst_sse;
-				}
+				//And the last one now is the load
+				last_instruction = load_instruction;
 
 				break;
 		}
@@ -3773,14 +3827,14 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 			switch(instruction->instruction_type){
 				//Use the helper for a direct call
 				case CALL:
-					instruction = insert_caller_saved_logic_for_direct_call(instruction);
+					instruction = insert_caller_saved_logic_for_direct_call(function, instruction);
 					break;
 					
 				//Use the helper for an indirect call. Indirect calls differ slightly
 				//from direct ones because we have less information, so we'll need a different
 				//helper here
 				case INDIRECT_CALL:
-					instruction = insert_caller_saved_logic_for_indirect_call(instruction);
+					instruction = insert_caller_saved_logic_for_indirect_call(function, instruction);
 					break;
 
 				//By default we leave and just advance
@@ -3930,12 +3984,13 @@ static void insert_saving_logic(cfg_t* cfg){
 		//Grab out the function exit and entry blocks
 		basic_block_t* current_function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 		basic_block_t* current_function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
-
-		//We'll first insert the callee-saved stack and register logic
-		insert_stack_and_callee_saving_logic(cfg, current_function_entry, current_function_exit);
-
-		//And now we'll let the helper insert all of the caller-saved register logic
+		
+		//We'll first insert the caller saved logic. This logic has the potential to
+		//generate stack allocations for XMM registers so it needs to come first
 		insert_caller_saved_register_logic(current_function_entry);
+
+		//Then we'll do all callee saving
+		insert_stack_and_callee_saving_logic(cfg, current_function_entry, current_function_exit);
 	}
 }
 
