@@ -14,7 +14,6 @@
 */
 
 #include "lexer.h"
-#include <bits/types/cookie_io_functions_t.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
