@@ -54,7 +54,9 @@ struct compiler_options_t {
  * that we could have for the compiler
 */
 struct module_times_t {
-	//Parser & lexer
+	//Lexer
+	double lexer_time;
+	//Parser
 	double parser_time;
 	//Control flow graph constructor
 	double cfg_time;

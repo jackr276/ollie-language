@@ -146,6 +146,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
 
 	//If we want module specific timing, we'll print out here
 	if(options->module_specific_timing == TRUE){
+		printf("Lexer took: %.8f seconds\n", times->lexer_time);
 		printf("Parser took: %.8f seconds\n", times->parser_time);
 		printf("CFG constuctor took: %.8f seconds\n", times->cfg_time);
 		printf("Optimizer took: %.8f seconds\n", times->optimizer_time);
@@ -171,7 +172,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
  */
 static u_int8_t compile(compiler_options_t* options){
 	//Declare our times and set all to 0
-	module_times_t times = {0, 0, 0, 0, 0, 0, 0};
+	module_times_t times = {0, 0, 0, 0, 0, 0, 0, 0};
 
 	//Print out the file name if we're debug printing
 	printf("Compiling source file: %s\n\n\n", options->file_name);
@@ -183,6 +184,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//And we'll keep track of everything we have here
 	clock_t begin = 0;
+	clock_t lexer_end = 0;
 	clock_t parser_end = 0;
 	clock_t cfg_end = 0;
 	clock_t optimizer_end = 0;
@@ -203,9 +205,18 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//If it failed, we need to leave immediately
 	if(token_stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(PARSE_ERROR, "Tokenizing failed. Please remedy the tokenizer errors and recompiler", 0);
+		print_parse_message(PARSE_ERROR, "Tokenizing failed. Please remedy the tokenizer errors and recompile", 0);
 		//1 - it failed
 		return 1;
+	}
+
+	//If we are doing module specific timing, store the lexer time
+	if(options->module_specific_timing == TRUE){
+		//End the parser timer
+		lexer_end = clock();
+
+		//Crude time calculation
+		times.lexer_time = (double)(lexer_end - begin) / CLOCKS_PER_SEC;
 	}
 
 	//Now we cache the token stream reference inside of the options. The parser will reference this for
@@ -248,9 +259,8 @@ static u_int8_t compile(compiler_options_t* options){
 		parser_end = clock();
 
 		//Crude time calculation
-		times.parser_time = (double)(parser_end - begin) / CLOCKS_PER_SEC;
+		times.parser_time = (double)(parser_end - lexer_end) / CLOCKS_PER_SEC;
 	}
-
 
 	//Now we'll build the cfg using our results
 	cfg_t* cfg = build_cfg(results, &num_errors, &num_warnings);

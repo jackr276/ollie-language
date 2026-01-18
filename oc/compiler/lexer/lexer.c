@@ -40,6 +40,9 @@ typedef enum {
 //For the file name
 static char* file_name;
 
+//For any/all error printing
+static char info[2000];
+
 //Token array, we will index using their enum values
 static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
@@ -582,6 +585,9 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	while((ch = GET_NEXT_CHAR(fl)) != EOF){
 		switch(current_state){
 			case IN_START:
+				//Reset the seen_hex flag since we're now in the start state
+				seen_hex = FALSE;
+
 				//If we see whitespace we just get out
 				if(is_whitespace(ch, &line_number) == TRUE){
 					continue;
@@ -1407,7 +1413,6 @@ ollie_token_stream_t tokenize(char* current_file_name){
 
 	//If we can't open, it's an autofailure
 	if(fl == NULL){
-		char info[2000];
 		sprintf(info, "Failed to open file %s", file_name);
 		print_lexer_error(info, 0);
 
@@ -1428,6 +1433,7 @@ ollie_token_stream_t tokenize(char* current_file_name){
 	//Give it back
 	return token_stream;
 }
+
 
 /**
  * Deallocate the entire token stream. In reality this
