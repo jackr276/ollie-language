@@ -477,7 +477,7 @@ void push_back_token(lexitem_t l){
  * Add a token into the stream. This also handles dynamic resizing if
  * it's needed
  */
-static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t token){
+static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t lexitem){
 	//Dynamic resize for the token stream
 	if(stream->current_token_index == stream->max_token_index){
 		//Double it
@@ -488,7 +488,7 @@ static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t
 	}
 
 	//Add it into the stream
-	stream->token_stream[stream->current_token_index] = token;
+	stream->token_stream[stream->current_token_index] = lexitem;
 
 	//Update the index for next time
 	(stream->current_token_index)++;
@@ -510,6 +510,10 @@ static void generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	while((ch = GET_NEXT_CHAR(fl)) != EOF){
 		//Initialize here. We have the ERROR token as our sane default
 		lexitem_t lex_item = {{NULL, 0, 0}, 0, ERROR};
+
+		//For eventual use down the road. We will not allocate here because this
+		//is not always needed
+		dynamic_string_t lexeme;
 
 		//Have we seen a hex?
 		u_int8_t seen_hex;
@@ -740,96 +744,119 @@ static void generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								lex_item.line_num = line_num;
 								add_lexitem_to_stream(stream, lex_item);
 								break;
-
 						}
 
 					case ':':
 						ch2 = GET_NEXT_CHAR(fl);
 
-						//We have a ":="
-						if(ch2 == '='){
-							//Prepare and return
-							lex_item.tok = COLONEQ;
-							lex_item.line_num = line_num;
-							return lex_item;
-						} else {
-							//Put it back
-							PUT_BACK_CHAR(fl);
-							lex_item.tok = COLON;
-							lex_item.line_num = line_num;
-							return lex_item;
+						switch(ch2) {
+							case '=':
+								lex_item.tok = COLONEQ;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
+
+							default:
+								PUT_BACK_CHAR(fl);
+								lex_item.tok = COLON;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 						}
 
 					case '(':
 						lex_item.tok = L_PAREN;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case ')':
 						lex_item.tok = R_PAREN;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case '^':
 						ch2 = GET_NEXT_CHAR(fl);
 
-						if(ch2 == '='){
-							lex_item.tok = XOREQ;
-							lex_item.line_num = line_num;
-							return lex_item;
+						switch(ch2) {
+							case '=':
+								lex_item.tok = XOREQ;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 
-						} else {
-							PUT_BACK_CHAR(fl);
-							lex_item.tok = CARROT;
-							lex_item.line_num = line_num;
-							return lex_item;
+							default:
+								PUT_BACK_CHAR(fl);
+								lex_item.tok = CARROT;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 						}
 
 					case '{':
 						lex_item.tok = L_CURLY;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case '}':
 						lex_item.tok = R_CURLY;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case '[':
 						lex_item.tok = L_BRACKET;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case ']':
 						lex_item.tok = R_BRACKET;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case '@':
 						lex_item.tok = AT;
 						lex_item.line_num = line_num;
-						return lex_item;
+						add_lexitem_to_stream(stream, lex_item);
+						break;
 
 					case '.':
 						//Let's see what we have here
 						ch2 = GET_NEXT_CHAR(fl);
-						if(ch2 >= '0' && ch2 <= '9'){
-							//Allocate the string
-							lexeme = dynamic_string_alloc();
+						
+						switch(ch2){
+							case '0':
+							case '1':
+							case '2':
+							case '3':
+							case '4':
+							case '5':
+							case '6':
+							case '7':
+							case '8':
+							case '9':
+								//Allocate the string
+								lexeme = dynamic_string_alloc();
 
-							//Add both of these in
-							dynamic_string_add_char_to_back(&lexeme, ch);
-							dynamic_string_add_char_to_back(&lexeme, ch2);
+								//Add both of these in
+								dynamic_string_add_char_to_back(&lexeme, ch);
+								dynamic_string_add_char_to_back(&lexeme, ch2);
 
-							//We are not in an int
-							current_state = IN_FLOAT;
+								//We are not in an int
+								current_state = IN_FLOAT;
 
-						} else {
-							//Put back ch2
-							PUT_BACK_CHAR(fl);
-							lex_item.tok = DOT;
-							lex_item.line_num = line_num;
-							return lex_item;
+								break;
+
+							default:
+								PUT_BACK_CHAR(fl);
+								lex_item.tok = DOT;
+								lex_item.line_num = line_num;
+								add_lexitem_to_stream(stream, lex_item);
+								break;
 						}
 
 						break;
