@@ -15,6 +15,7 @@
 
 #include "lexer.h"
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -63,6 +64,11 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 
 //=============================== Private Utility Macros ================================
 /**
+ * The minimum token amount is 200
+ */
+#define DEFAULT_TOKEN_COUNT 200
+
+/**
  * Grab the next char in the stream
  */
 #define GET_NEXT_CHAR(fl) fgetc(fl)
@@ -73,6 +79,7 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
  */
 #define PUT_BACK_CHAR(fl) fseek(fl, -1, SEEK_CUR)
 //=============================== Private Utility Macros ================================
+
 
 
 /**
@@ -1194,6 +1201,31 @@ void push_back_token(lexitem_t l){
 
 
 /**
+ * Initialize the lexer by dynamically allocating the lexstack
+ * and any other needed data structures
+ */
+ollie_token_stream_t tokenize(){
+	//Stack allocate
+	ollie_token_stream_t token_stream;
+
+	//Initialize the internal storage for our token
+	token_stream.token_stream = calloc(DEFAULT_TOKEN_COUNT, sizeof(ollie_token_t));
+
+	//Initialize to our default
+	token_stream.max_token_index = DEFAULT_TOKEN_COUNT;
+
+	//Initialize to 0
+	token_stream.current_token_index = 0;
+
+	//From the parsing perspective
+	token_stream.token_pointer = 0;
+
+	//Give it back
+	return token_stream;
+}
+
+
+/**
  * Print out a token and it's associated line number
 */
 void print_token(lexitem_t* l){
@@ -1204,16 +1236,6 @@ void print_token(lexitem_t* l){
 		//Print out with nice formatting
 		printf("TOKEN: %3d, Lexeme: %15s, Line: %4d\n", l->tok, l->lexeme.string, l->line_num);
 	}
-}
-
-
-/**
- * Initialize the lexer by dynamically allocating the lexstack
- * and any other needed data structures
- */
-void initialize_lexer(){
-	//Allocate this
-	pushed_back_tokens = lex_stack_alloc();
 }
 
 

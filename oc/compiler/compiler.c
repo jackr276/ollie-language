@@ -197,6 +197,27 @@ static u_int8_t compile(compiler_options_t* options){
 		begin = clock();
 	}
 
+	//
+	//
+	//
+	//TODO 
+	//
+	//
+	//
+	//
+
+	//Open the file up
+	FILE* fl = fopen(options->file_name, "r");
+
+	//Error out if it's null
+	if(fl == NULL){
+		sprintf(info, "The file %s could not be found or opened", options->file_name);
+		results->root = print_and_return_error(info, 0);
+		//Give back the results structure
+		return results;
+	}
+
+
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
 	front_end_results_package_t* results = parse(options);

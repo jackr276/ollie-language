@@ -11141,9 +11141,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Initialize our results package here
 	front_end_results_package_t* results = calloc(1, sizeof(front_end_results_package_t));
 
-	//Initialize the lexer first
-	initialize_lexer();
-
 	//Initialize the AST system as well
 	initialize_ast_system();
 
@@ -11155,17 +11152,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	current_file_name = options->file_name;
 	//Store whether or not we want to do any debug printing
 	enable_debug_printing = options->enable_debug_printing;
-
-	//Open the file up
-	FILE* fl = fopen(options->file_name, "r");
-
-	//Error out if it's null
-	if(fl == NULL){
-		sprintf(info, "The file %s could not be found or opened", options->file_name);
-		results->root = print_and_return_error(info, 0);
-		//Give back the results structure
-		return results;
-	}
 
 	function_symtab = function_symtab_alloc();
 	variable_symtab = variable_symtab_alloc();

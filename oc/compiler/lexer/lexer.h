@@ -20,37 +20,50 @@ typedef struct lexitem_t lexitem_t;
 //The overall token stream value
 typedef struct ollie_token_stream_t ollie_token_stream_t;
 
+/**
+ * Tokenization status
+ */
+enum token_stream_status_t {
+	STREAM_STATUS_FAILURE,
+	STREAM_STATUS_SUCCESS
+};
+
+
 struct lexitem_t {
 	//The string(lexeme) that got us this token
 	dynamic_string_t lexeme;
 	//The line number of the source that we found it on
-	u_int16_t line_num;
+	u_int32_t line_num;
 	//The token associated with this item
 	ollie_token_t tok;
 };
+
 
 struct ollie_token_stream_t {
 	//Array of tokens
 	lexitem_t* token_stream;
 	//Current token index
 	u_int32_t current_token_index;
+	//This is the value that we're looking
+	//at from the parser perspective
+	u_int32_t token_pointer;
 	//Max index, needed to know when we resize
 	u_int32_t max_token_index;
-} ;
+	//Let the caller know if this worked or not
+	token_stream_status_t status;
+};
 
-
-//======================== Public utility macros ========================
-/**
- * Reset the file pointer to go back to the start
- */
-#define RESET_FILE(fl) fseek(fl, 0, SEEK_SET)
 
 /**
- * Get the current file pointer position
+ * Tokenzie an entire file and return a token
+ * stream item that the parser can use as it wishes
  */
-#define GET_CURRENT_FILE_POSITION(fl) ftell(fl)
+ollie_token_stream_t tokenize(FILE* fl);
 
-//======================== Public utility macros ========================
+/**
+ * Deallocate the entire token stream
+ */
+void destroy_token_stream(ollie_token_stream_t* stream);
 
 /**
  * Convert a token into a string for error printing purposes
@@ -81,17 +94,5 @@ void push_back_token(lexitem_t l);
  * Developer utility for token printing
  */
 void print_token(lexitem_t* l);
-
-/**
- * Initialize the lexer by dynamically allocating the lexstack
- * and any other needed data structures
- */
-ollie_token_stream_t intialize_token_stream();
-
-/**
- * Deallocate the entire token string
- */
-void destroy_token_stream(ollie_token_stream_t* stream);
-
 
 #endif /* LEXER_H */
