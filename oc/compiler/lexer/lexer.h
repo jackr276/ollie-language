@@ -20,6 +20,14 @@ typedef struct lexitem_t lexitem_t;
 //The overall token stream value
 typedef struct ollie_token_stream_t ollie_token_stream_t;
 
+//=================================== Public utility macros ==============================
+/**
+ * Get the index of the current stream seek head
+ */
+#define GET_CURRENT_TOKEN_INDEX(stream) stream->current_token_index
+
+//=================================== Public utility macros ==============================
+
 /**
  * Tokenization status
  */
@@ -86,11 +94,9 @@ void push_back_token(ollie_token_stream_t* stream);
 lexitem_t get_next_assembly_statement(FILE* fl);
 
 /**
- * Reconsume the tokens starting from a given seek
- *
- * TODO rethink
+ * Reset the stream to reconsume tokens from a given start point
  */
-void reconsume_tokens(FILE* fl, int64_t reconsume_start);
+void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsume_start);
 
 /**
  * Convert a token into a string for error printing purposes

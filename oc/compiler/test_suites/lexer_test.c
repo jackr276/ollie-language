@@ -24,8 +24,6 @@ int main(int argc, char** argv){
 
 	FILE* fl;
 	lexitem_t l;
-	//Line number must be 32 bit
-	u_int32_t parser_line_num;
 
 	for(int32_t i = 1; i < argc; i++){
 		//Open the file for reading only
@@ -42,28 +40,31 @@ int main(int argc, char** argv){
 		//Close the file when done
 		fclose(fl);
 
+		//This is usually how called functions will reference this
+		ollie_token_stream_t* token_stream_pointer = &token_stream;
+
 		//Grab the first one
-		l = get_next_token(&token_stream);
+		l = get_next_token(token_stream_pointer);
 
 		//Print it
 		print_token(&l);
 
-		//The current seek head
-		int64_t first_token_seek = GET_CURRENT_FILE_POSITION(fl);
+		//The first token's seek
+		u_int32_t first_token_index = GET_CURRENT_TOKEN_INDEX(token_stream_pointer);
 
 		//Very rudimentary here
-		while((l = get_next_token(fl, &parser_line_num)).tok != DONE){
+		while((l = get_next_token(token_stream_pointer)).tok != DONE){
 			print_token(&l);
 		}
 
 		//Let's see if we can now "Reconsume" the tokens starting at a given position
-		printf("=============== RECONSUMING FROM %ld ====================\n", first_token_seek);
+		printf("=============== RECONSUMING FROM %d ====================\n", first_token_index);
 
-		//Invoke the reconsumer
-		reconsume_tokens(fl, first_token_seek);
+		//Reset the stream to the very start
+		reset_stream_to_given_index(token_stream_pointer, first_token_index);
 
 		//Very rudimentary here
-		while((l = get_next_token(fl, &parser_line_num)).tok != DONE){
+		while((l = get_next_token(token_stream_pointer)).tok != DONE){
 			print_token(&l);
 		}
 		//Print the last one
@@ -74,7 +75,6 @@ int main(int argc, char** argv){
 
 		//Print the last one
 		print_token(&l);
-
 
 		//Destroy the entire array
 		destroy_token_stream(&token_stream);

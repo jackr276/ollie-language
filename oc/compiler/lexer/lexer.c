@@ -406,11 +406,10 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int32_t line_n
 
 
 /**
- * Reconsume the tokens starting from a given seek
+ * Reset the stream to a given token index
  */
-void reconsume_tokens(FILE* fl, int64_t reconsume_start){
-	//Seek back to where the user wanted to reconsume from
-	fseek(fl, reconsume_start, SEEK_SET);
+void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsume_start){
+	stream->token_pointer = reconsume_start;
 }
 
 
@@ -473,11 +472,19 @@ lexitem_t get_next_token(ollie_token_stream_t* stream){
 	//Grab the current token index
 	u_int32_t token_index = stream->token_pointer;
 
-	//Push up the pointer for the next call
-	(stream->token_pointer)++;
+	//Safe to read here
+	if(stream->token_pointer < token_index){
+		//Push up the pointer for the next call
+		(stream->token_pointer)++;
 
-	//Give back the token at this given index
-	return stream->token_stream[token_index];
+		//Give back the token at this given index
+		return stream->token_stream[token_index];
+
+	//This should never happen in normal operation
+	} else {
+		fprintf(stdout, "Fatal internal compiler error. Attempt to read past the token stream endpoint\n");
+		exit(1);
+	}
 }
 
 
@@ -1056,8 +1063,6 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							current_state = IN_INT;
 
 						} else {
-							lex_item.tok = ERROR;
-							lex_item.line_num = line_num;
 							print_lexer_error("Invalid character found", line_num);
 							return FAILURE;
 						}
