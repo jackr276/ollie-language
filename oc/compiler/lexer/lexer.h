@@ -23,10 +23,10 @@ typedef struct ollie_token_stream_t ollie_token_stream_t;
 /**
  * Tokenization status
  */
-enum token_stream_status_t {
+typedef enum {
 	STREAM_STATUS_FAILURE,
 	STREAM_STATUS_SUCCESS
-};
+} token_stream_status_t;
 
 
 struct lexitem_t {
@@ -57,6 +57,9 @@ struct ollie_token_stream_t {
 /**
  * Tokenzie an entire file and return a token
  * stream item that the parser can use as it wishes
+ *
+ * The tokenizer assumes that the fl file pointer
+ * is 100% valid
  */
 ollie_token_stream_t tokenize(FILE* fl);
 

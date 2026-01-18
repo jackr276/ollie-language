@@ -217,6 +217,8 @@ static u_int8_t compile(compiler_options_t* options){
 		return results;
 	}
 
+	//Close the file once done, we've finished it
+	fclose(fl);
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);

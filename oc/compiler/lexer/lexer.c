@@ -41,9 +41,6 @@ typedef enum {
 //Current line num
 u_int32_t line_num = 0;
 
-//Our lexer stack
-static lex_stack_t pushed_back_tokens;
-
 //Token array, we will index using their enum values
 static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RET, JUMP, REQUIRE, REPLACE, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
@@ -64,9 +61,9 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 
 //=============================== Private Utility Macros ================================
 /**
- * The minimum token amount is 200
+ * The minimum token amount is 256
  */
-#define DEFAULT_TOKEN_COUNT 200
+#define DEFAULT_TOKEN_COUNT 256
 
 /**
  * Grab the next char in the stream
@@ -79,29 +76,6 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
  */
 #define PUT_BACK_CHAR(fl) fseek(fl, -1, SEEK_CUR)
 //=============================== Private Utility Macros ================================
-
-
-
-/**
- * Helper that will determine if we have whitespace(ws) 
- */
-static inline u_int8_t is_whitespace(char ch, u_int32_t* line_num, u_int32_t* parser_line_num){
-	switch(ch){
-		//Unique case - we'll bump our line number counts
-		case '\n':
-			(*line_num)++;
-			(*parser_line_num)++;
-			return TRUE;
-
-		case ' ':
-		case '\t':
-			return TRUE;
-
-		//Anything else just fall right out
-		default:
-			return FALSE;
-	}
-}
 
 
 /**
@@ -345,9 +319,30 @@ char* lexitem_to_string(lexitem_t* lexitem){
 
 
 /**
+ * Helper that will determine if we have whitespace(ws) 
+ */
+static inline u_int8_t is_whitespace(char ch, u_int32_t* line_num){
+	switch(ch){
+		//Unique case - we'll bump our line number counts
+		case '\n':
+			(*line_num)++;
+			return TRUE;
+
+		case ' ':
+		case '\t':
+			return TRUE;
+
+		//Anything else just fall right out
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Determines if an identifier is a keyword or some user-written identifier
  */
-static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int16_t line_number){
+static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int32_t line_number){
 	lexitem_t lex_item;
 
 	//Assign our line number;
@@ -406,12 +401,6 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int16_t line_n
 void reconsume_tokens(FILE* fl, int64_t reconsume_start){
 	//Seek back to where the user wanted to reconsume from
 	fseek(fl, reconsume_start, SEEK_SET);
-
-	//We need to clear the stack out too. We can do this by
-	//deallocating and reallocating it
-	lex_stack_dealloc(&pushed_back_tokens);
-	//Reallocate it
-	pushed_back_tokens = lex_stack_alloc();
 }
 
 
@@ -466,13 +455,6 @@ lexitem_t get_next_assembly_statement(FILE* fl){
  * Constantly iterate through the file and grab the next token that we have
 */
 lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num){
-	//IF we have pushed back tokens, we need to return them first
-	if(lex_stack_is_empty(&pushed_back_tokens) == FALSE){
-		//Just pop this and leave
-		return pop_token(&pushed_back_tokens);
-	}
-
-
 	//We'll eventually return this
 	lexitem_t lex_item;
 
@@ -481,12 +463,6 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num){
 
 	//Have we seen hexadecimal?
 	u_int8_t seen_hex = FALSE;
-
-	//If we're at the start -- added to avoid overcounts
-	if(ftell(fl) == 0){
-		line_num = 1;
-		*parser_line_num = 1;
-	}
 
 	//We begin in the start state
 	lex_state current_state = IN_START;
@@ -1195,30 +1171,753 @@ lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num){
  * Push a token back by moving the seek head back appropriately
  */
 void push_back_token(lexitem_t l){
-	//All that we need to do here is push the token onto the stack
-	push_token(&pushed_back_tokens, l);
 }
 
+
+/**
+ * Generate the next token and store it inside of the token stream
+ */
+static u_int8_t generate_next_token(FILE* fl, ollie_token_stream_t* stream){
+	//Dynamic resize for the token stream
+	if(stream->current_token_index == stream->max_token_index){
+		//Double it
+		stream->max_token_index *= 2;
+
+		//Reallocate the entire array
+		stream->token_stream = realloc(stream->token_stream, sizeof(lexitem_t) * stream->max_token_index);
+	}
+
+	//We'll eventually return this
+	lexitem_t lex_item;
+
+	//By default it's an error
+	lex_item.tok = ERROR;
+
+	//Have we seen hexadecimal?
+	u_int8_t seen_hex = FALSE;
+
+	//We begin in the start state
+	lex_state current_state = IN_START;
+
+	//Current char we have
+	char ch;
+	char ch2;
+	char ch3;
+
+	//Store the lexeme in a dynamically resizing string. It will only be allocated
+	//by the lexer at the instance when we need it
+	dynamic_string_t lexeme = {NULL, 0, 0};
+	//Store this completely blank copy in here at first
+	lex_item.lexeme = lexeme;
+
+	//We'll run through character by character until we hit EOF
+	while((ch = GET_NEXT_CHAR(fl)) != EOF){
+		//Switch on the current state
+		switch(current_state){
+			case IN_START:
+				//If we see whitespace we just get out
+				if(is_whitespace(ch, &line_num, parser_line_num) == TRUE){
+					continue;
+				}
+
+				//Let's see what we have here
+				switch(ch){
+					//We could be seeing a comment here
+					case '/':
+						//Grab the next char, if we see a '*' then we're in a comment
+						ch2 = GET_NEXT_CHAR(fl);
+							
+						//If we're here we have a comment
+						if(ch2 == '*'){
+							current_state = IN_MULTI_COMMENT;
+							break;
+						} else if(ch2 == '/'){
+							current_state = IN_SINGLE_COMMENT;
+							break;
+
+						} else if(ch2 == '='){
+							//Prepare the token and return it
+							lex_item.tok = SLASHEQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+	
+						} else {
+							//"Put back" the char
+							PUT_BACK_CHAR(fl);
+
+							//Prepare the token and return it
+							lex_item.tok = F_SLASH;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					case '+':
+						ch2 = GET_NEXT_CHAR(fl);
+						
+						//We could see++
+						if(ch2 == '+'){
+							//Prepare and return
+							lex_item.tok = PLUSPLUS;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						//We could also see +=
+						} else if(ch2 == '='){
+							//Prepare and return
+							lex_item.tok = PLUSEQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							//"Put back" the char
+							PUT_BACK_CHAR(fl);	
+							lex_item.tok = PLUS;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					//Pound for label identifiers
+					case '#':
+						lex_item.tok = POUND;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					//Question mark for ternary operations
+					case '?':
+						lex_item.tok = QUESTION;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '-':
+						ch2 = GET_NEXT_CHAR(fl);
+
+						if(ch2 == '-'){
+							//Prepare and return
+							lex_item.tok = MINUSMINUS;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						//We could also see -=
+						} else if(ch2 == '='){
+							//Prepare and return
+							lex_item.tok = MINUSEQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						//We can also have an arrow
+						} else if(ch2 == '>'){
+							//Prepare and return
+							lex_item.tok = ARROW;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						//Otherwise we didn't find anything here
+						} else {
+							//"Put back" the char
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = MINUS;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					case '*':
+						ch2 = GET_NEXT_CHAR(fl);
+
+						if(ch2 == '='){
+							lex_item.tok = STAREQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = STAR;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					case '=':
+						ch2 = GET_NEXT_CHAR(fl);
+						
+						//If we get this then it's +=
+						if(ch2 == '='){
+							//Prepare and return
+							lex_item.tok = DOUBLE_EQUALS;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						//We could also have a fat arrow here
+						} else if (ch2 == '>'){
+							//Prepare and return
+							lex_item.tok = FAT_ARROW;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						} else {
+							//"Put back" the char
+							PUT_BACK_CHAR(fl);
+
+							lex_item.tok = EQUALS;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					case '&':
+						ch2 = GET_NEXT_CHAR(fl);
+
+						if(ch2 == '&'){
+							//Prepare and return
+							lex_item.tok = DOUBLE_AND;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						//We could see &=
+						} else if (ch2 == '=') {
+							//Prepare and return
+							lex_item.tok = ANDEQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						} else {
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = SINGLE_AND;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					case '|':
+						ch2 = GET_NEXT_CHAR(fl);
+						//If we get this then it's +=
+						if(ch2 == '|'){
+							//Prepare and return
+							lex_item.tok = DOUBLE_OR;
+							lex_item.line_num = line_num;
+							return lex_item;
+						//We could also see |=
+						} else if(ch2 == '='){
+							//Prepare and return
+							lex_item.tok = OREQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							//"Put back" the char
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = SINGLE_OR;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					case ';':
+						lex_item.tok = SEMICOLON;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '%':
+						ch2 = GET_NEXT_CHAR(fl);
+
+						//We could see %=
+						if(ch2 == '='){
+							lex_item.tok = MODEQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							lex_item.tok = MOD;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					case ':':
+						ch2 = GET_NEXT_CHAR(fl);
+
+						//We have a ":="
+						if(ch2 == '='){
+							//Prepare and return
+							lex_item.tok = COLONEQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							//Put it back
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = COLON;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					case '(':
+						lex_item.tok = L_PAREN;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case ')':
+						lex_item.tok = R_PAREN;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '^':
+						ch2 = GET_NEXT_CHAR(fl);
+
+						if(ch2 == '='){
+							lex_item.tok = XOREQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+
+						} else {
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = CARROT;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					case '{':
+						lex_item.tok = L_CURLY;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '}':
+						lex_item.tok = R_CURLY;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '[':
+						lex_item.tok = L_BRACKET;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case ']':
+						lex_item.tok = R_BRACKET;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '@':
+						lex_item.tok = AT;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '.':
+						//Let's see what we have here
+						ch2 = GET_NEXT_CHAR(fl);
+						if(ch2 >= '0' && ch2 <= '9'){
+							//Allocate the string
+							lexeme = dynamic_string_alloc();
+
+							//Add both of these in
+							dynamic_string_add_char_to_back(&lexeme, ch);
+							dynamic_string_add_char_to_back(&lexeme, ch2);
+
+							//We are not in an int
+							current_state = IN_FLOAT;
+
+						} else {
+							//Put back ch2
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = DOT;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+						break;
+					
+					case ',':
+						lex_item.tok = COMMA;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '~':
+						lex_item.tok = B_NOT;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '!':
+						ch2 = GET_NEXT_CHAR(fl);
+						if(ch2 == '='){
+							//Prepare and return
+							lex_item.tok = NOT_EQUALS;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							//Put it back
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = L_NOT;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+					//Beginning of a string literal
+					case '"':
+						//Say that we're in a string
+						current_state = IN_STRING;
+						//Allocate the lexeme
+						lexeme = dynamic_string_alloc();
+						break;
+
+					//Beginning of a char const
+					case '\'':
+						//Grab the next char
+						ch2 = GET_NEXT_CHAR(fl);
+
+						//Allocate the lexeme here
+						lexeme = dynamic_string_alloc();
+
+						//Add our char const ch2 in
+						dynamic_string_add_char_to_back(&lexeme, ch2);
+
+						//Now we must see another single quote
+						ch2 = GET_NEXT_CHAR(fl);
+
+						//If this is the case, then we've messed up
+						if(ch2 != '\''){
+							lex_item.tok = ERROR;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+
+						//Package and return
+						lex_item.tok = CHAR_CONST;
+						//Add the dynamic string in
+						lex_item.lexeme = lexeme;
+						lex_item.line_num = line_num;
+						return lex_item;
+
+					case '<':
+						//Grab the next char
+						ch2 = GET_NEXT_CHAR(fl);
+						if(ch2 == '<'){
+							ch3 = GET_NEXT_CHAR(fl);
+
+							if(ch3 == '='){
+								lex_item.tok = LSHIFTEQ;
+								lex_item.line_num = line_num;
+								return lex_item;
+
+							} else {
+								PUT_BACK_CHAR(fl);
+								lex_item.tok = L_SHIFT;
+								lex_item.line_num = line_num;
+								return lex_item;
+							}
+
+						} else if(ch2 == '=') {
+							lex_item.tok = L_THAN_OR_EQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = L_THAN;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+						break;
+
+					case '>':
+						//Grab the next char
+						ch2 = GET_NEXT_CHAR(fl);
+						if(ch2 == '>'){
+							ch3 = GET_NEXT_CHAR(fl);
+							if(ch3 == '='){
+								lex_item.tok = RSHIFTEQ;
+								lex_item.line_num = line_num;
+								return lex_item;
+
+							} else {
+								PUT_BACK_CHAR(fl);
+								lex_item.tok = R_SHIFT;
+								lex_item.line_num = line_num;
+								return lex_item;
+							}
+
+						} else if(ch2 == '=') {
+							lex_item.tok = G_THAN_OR_EQ;
+							lex_item.line_num = line_num;
+							return lex_item;
+						} else {
+							PUT_BACK_CHAR(fl);
+							lex_item.tok = G_THAN;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+						break;
+
+					default:
+						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#' || ch == '_'){
+							//Allocate the lexeme
+							lexeme = dynamic_string_alloc();
+							//Add the char in
+							dynamic_string_add_char_to_back(&lexeme, ch);
+							//We are now in an identifier
+							current_state = IN_IDENT;
+						//If we get here we have the start of either an int or a real
+						} else if(ch >= '0' && ch <= '9'){
+							//Allocate the lexeme
+							lexeme = dynamic_string_alloc();
+							//Add the character to the lexeme
+							dynamic_string_add_char_to_back(&lexeme, ch);
+							//We are not in an int
+							current_state = IN_INT;
+						} else {
+							lex_item.tok = ERROR;
+							lex_item.line_num = line_num;
+							return lex_item;
+						}
+				}
+
+				break;
+
+			case IN_IDENT:
+				//Is it a number, letter, or _ or $?. If so, we can have it in our ident
+				if(ch == '_' || ch == '$' || (ch >= 'a' && ch <= 'z') 
+				   || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')){
+					//Add the character to the lexeme
+					dynamic_string_add_char_to_back(&lexeme, ch);
+				} else {
+					//If we get here, we need to get out of the thing
+					//We'll put this back as we went too far
+					PUT_BACK_CHAR(fl);
+					//Return if we have ident or keyword
+					return identifier_or_keyword(lexeme, line_num);
+				}
+
+				break;
+
+			case IN_INT:
+				//Add it in and move along
+				if(ch >= '0' && ch <= '9'){
+					dynamic_string_add_char_to_back(&lexeme, ch);
+				//If we see hex and we're in hex, it's also fine
+				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == TRUE) 
+						|| ((ch >= 'A' && ch <= 'F') && seen_hex == TRUE)){
+					dynamic_string_add_char_to_back(&lexeme, ch);
+				} else {
+					switch(ch){
+						case 'x':
+						case 'X':
+							//Have we seen the hex code?
+							//Fail case here
+							if(seen_hex == TRUE){
+								lexitem_t err;
+								err.tok = ERROR;
+								return err;
+							}
+
+							//If we haven't seen the 0 here it's bad
+							if(*(lexeme.string) != '0'){
+								lexitem_t err;
+								err.tok = ERROR;
+								return err;
+							}
+
+							//Otherwise set this and add it in
+							seen_hex = TRUE;
+
+							//Add the character dynamically
+							dynamic_string_add_char_to_back(&lexeme, ch);
+
+							break;
+
+						case '.':
+							//We're actually in a float const
+							current_state = IN_FLOAT;
+							//Add the character dynamically
+							dynamic_string_add_char_to_back(&lexeme, ch);
+
+							break;
+
+						//The 'l' or 'L' tells us that we're forcing to long
+						case 'l':
+						case 'L':
+							lex_item.line_num = line_num;
+							lex_item.lexeme = lexeme;
+							lex_item.tok = LONG_CONST;
+							return lex_item;
+
+						//Forcing to short
+						case 's':
+						case 'S':
+							lex_item.line_num = line_num;
+							lex_item.lexeme = lexeme;
+							lex_item.tok = LONG_CONST;
+							return lex_item;
+
+						//Forcing to Byte
+						case 'b':
+						case 'B':
+							lex_item.line_num = line_num;
+							lex_item.lexeme = lexeme;
+							lex_item.tok = BYTE_CONST;
+							return lex_item;
+
+						//If we see this it means we're forcing to unsigned
+						case 'u':
+						case 'U':
+							//We are forcing this to be unsigned
+							//We can still see "l", so let's check
+							ch2 = GET_NEXT_CHAR(fl);
+
+							//We can still see more qualifiers
+							switch(ch2){
+								case 'l':
+								case 'L':
+									lex_item.tok = LONG_CONST_FORCE_U;
+									break;
+
+								case 's':
+								case 'S':
+									lex_item.tok = SHORT_CONST_FORCE_U;
+									break;
+
+								case 'b':
+								case 'B':
+									lex_item.tok = BYTE_CONST_FORCE_U;
+									break;
+
+								default:
+									//Put it back
+									PUT_BACK_CHAR(fl);
+									lex_item.tok = INT_CONST_FORCE_U;
+
+									break;
+							}
+
+
+							//Pack everything up and return
+							lex_item.lexeme = lexeme;
+							lex_item.line_num = line_num;
+
+							return lex_item;
+
+						default:
+							//Otherwise we're out
+							//"Put back" the char
+							PUT_BACK_CHAR(fl);
+
+							//Populate and return
+							if(seen_hex == TRUE){
+								lex_item.tok = HEX_CONST;
+							} else {
+								lex_item.tok = INT_CONST;
+							}
+
+							lex_item.lexeme = lexeme;
+							lex_item.line_num = line_num;
+							return lex_item;
+					}
+				}
+
+				break;
+
+			case IN_FLOAT:
+				//We're just in a regular float here
+				if(ch >= '0' && ch <= '9'){
+					//Add the character in
+					dynamic_string_add_char_to_back(&lexeme, ch);
+
+				//We can now see a D or d here that tells
+				//us to force this to double precision
+				} else if(ch == 'd' || ch == 'D'){
+					//Give this back as a double CONST
+					lex_item.tok = DOUBLE_CONST;
+					lex_item.lexeme = lexeme;
+					lex_item.line_num = line_num;
+					return lex_item;
+
+				} else {
+					//Put back the char
+					PUT_BACK_CHAR(fl);
+					
+					//We'll give this back now
+					lex_item.tok = FLOAT_CONST;
+					lex_item.lexeme = lexeme;
+					lex_item.line_num = line_num;
+					return lex_item;
+				}
+
+				break;
+
+			case IN_STRING:
+				//If we see the end of the string
+				if(ch == '"'){ 
+					//Set the token
+					lex_item.tok = STR_CONST;
+					//Set the lexeme & line num
+					lex_item.lexeme = lexeme;
+					lex_item.line_num = line_num;
+					return lex_item;
+				//Escape char
+				} else if (ch == '\\'){
+					//Consume the next character, whatever it is
+					is_whitespace(fgetc(fl), &line_num, parser_line_num);
+				} else {
+					//Otherwise we'll just keep adding here
+					//Just for line counting
+					is_whitespace(ch, &line_num, parser_line_num);
+					dynamic_string_add_char_to_back(&lexeme, ch);
+				}
+
+				break;
+
+			//If we're in a comment, we can escape if we see "*/"
+			case IN_MULTI_COMMENT:
+				//Are we at the start of an escape sequence?
+				if(ch == '*'){
+					ch2 = GET_NEXT_CHAR(fl);
+					if(ch2 == '/'){
+						//We are now out of the comment
+						current_state = IN_START;
+						//Reset the char count
+						break;
+					} else {
+						PUT_BACK_CHAR(fl);
+						break;
+					}
+				}
+				//Otherwise just check for whitespace
+				is_whitespace(ch, &line_num, parser_line_num);
+				break;
+
+			//If we're in a single line comment
+			case IN_SINGLE_COMMENT:
+				//Are we at the start of the escape sequence
+				//Newline means we get out
+				if(ch == '\n'){
+					line_num++;
+					(*parser_line_num)++;
+					current_state = IN_START;
+				} 
+				//Otherwise just go forward
+				break;
+
+			//Some very weird error here
+			default:
+				fprintf(stderr, "[LEXER ERROR]: Found a stateless token\n");
+				return lex_item;
+		}
+	}
+
+	//Return this token
+	if(ch == EOF){
+		lex_item.tok = DONE;
+		lex_item.line_num = *parser_line_num;
+	}
+
+	return lex_item;
+
+}
 
 /**
  * Initialize the lexer by dynamically allocating the lexstack
  * and any other needed data structures
  */
-ollie_token_stream_t tokenize(){
+ollie_token_stream_t tokenize(FILE* fl){
 	//Stack allocate
 	ollie_token_stream_t token_stream;
 
 	//Initialize the internal storage for our token
 	token_stream.token_stream = calloc(DEFAULT_TOKEN_COUNT, sizeof(ollie_token_t));
-
 	//Initialize to our default
 	token_stream.max_token_index = DEFAULT_TOKEN_COUNT;
-
 	//Initialize to 0
 	token_stream.current_token_index = 0;
-
 	//From the parsing perspective
 	token_stream.token_pointer = 0;
+
+	//Run through the entire file, generating and storing
+	//tokens as we go along
 
 	//Give it back
 	return token_stream;
@@ -1243,6 +1942,5 @@ void print_token(lexitem_t* l){
  * Deinitialize the entire lexer
  */
 void deinitialize_lexer(){
-	//Deallocate the lexstack
-	lex_stack_dealloc(&pushed_back_tokens);
+
 }

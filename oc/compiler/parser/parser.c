@@ -11227,9 +11227,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	lex_stack_dealloc(&grouping_stack);
 	nesting_stack_dealloc(&nesting_stack);
 
-	//Close the file out
-	fclose(fl);
-
 	//Once we're done, deinitialize the lexer
 	deinitialize_lexer();
 
