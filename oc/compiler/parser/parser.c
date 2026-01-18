@@ -8669,7 +8669,7 @@ static generic_ast_node_t* statement(FILE* fl){
 			return jump_statement(fl);
 
 		//Handle a return statement
-		case RETURN:
+		case RET:
 			return return_statement(fl);
 
 		//Handle a break statement

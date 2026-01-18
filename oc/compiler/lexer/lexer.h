@@ -53,6 +53,11 @@ struct ollie_token_stream_t {
 //======================== Public utility macros ========================
 
 /**
+ * Convert a token into a string for error printing purposes
+ */
+char* token_to_string(ollie_token_t token);
+
+/**
  * Reconsume the tokens starting from a given seek
  */
 void reconsume_tokens(FILE* fl, int64_t reconsume_start);
@@ -88,9 +93,5 @@ ollie_token_stream_t intialize_token_stream();
  */
 void destroy_token_stream(ollie_token_stream_t* stream);
 
-/**
- * A utility function for error printing that converts an operator to a string
- */
-char* operator_to_string(ollie_token_t op);
 
 #endif /* LEXER_H */

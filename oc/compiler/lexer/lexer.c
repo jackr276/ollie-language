@@ -44,7 +44,7 @@ u_int32_t line_num = 0;
 static lex_stack_t pushed_back_tokens;
 
 //Token array, we will index using their enum values
-static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RET, JUMP, REQUIRE, REPLACE, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
@@ -78,7 +78,7 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 /**
  * Helper that will determine if we have whitespace(ws) 
  */
-static u_int8_t is_whitespace(char ch, u_int32_t* line_num, u_int32_t* parser_line_num){
+static inline u_int8_t is_whitespace(char ch, u_int32_t* line_num, u_int32_t* parser_line_num){
 	switch(ch){
 		//Unique case - we'll bump our line number counts
 		case '\n':
@@ -93,6 +93,116 @@ static u_int8_t is_whitespace(char ch, u_int32_t* line_num, u_int32_t* parser_li
 		//Anything else just fall right out
 		default:
 			return FALSE;
+	}
+}
+
+
+/**
+ * A utility function for error printing that converts any given token
+ * into a string
+ */
+char* token_to_string(ollie_token_t op){
+	switch(op){
+		case BLANK:
+			return "blank";
+		case START:
+			return "start";
+		case IF:
+			return "if";
+		case ELSE:
+			return "else";
+		case DO:
+			return "do";
+		case WHILE:
+			return "while";
+		case FOR:
+			return "for";
+		case FN:
+			return "fn";
+		case RET:
+			return "ret";
+		case JUMP:
+			return "jump";
+		case REQUIRE:
+			return "require";
+		case REPLACE:
+			return "replace";
+
+
+					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
+					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
+					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
+				    EXTERNAL, TRUE_CONST, FALSE_CONST
+
+
+		case PLUSPLUS:
+			return "++";
+		case MINUSMINUS:
+			return "--";
+		case PLUS:
+			return "+";
+		case MINUS:
+			return "-";
+		case STAR:
+			return "*";
+		case F_SLASH:
+			return "/";
+		case MOD:
+			return "%";
+		case EQUALS:
+			return "=";
+		case PLUSEQ:
+			return "+=";
+		case MINUSEQ:
+			return "-=";
+		case STAREQ:
+			return "*=";
+		case SLASHEQ:
+			return "/=";
+		case SINGLE_AND:
+			return "&";
+		case ANDEQ:
+			return "&=";
+		case SINGLE_OR:
+			return "|";
+		case OREQ:
+			return "|=";
+		case MODEQ:
+			return "%=";
+		case COLON:
+			return ":";
+		case CARROT:
+			return "^";
+		case XOREQ:
+			return "^=";
+		case DOUBLE_OR:
+			return "||";
+		case DOUBLE_AND:
+			return "&&";
+		case L_SHIFT:
+			return "<<";
+		case LSHIFTEQ:
+			return "<<=";
+		case R_SHIFT:
+			return ">>";
+		case RSHIFTEQ:
+			return ">>=";
+		case G_THAN:
+			return ">";
+		case L_THAN:
+			return "<";
+		case G_THAN_OR_EQ:
+			return ">=";
+		case L_THAN_OR_EQ:
+			return "<=";
+		case DOUBLE_EQUALS:
+			return "==";
+		case NOT_EQUALS:
+			return "!=";
+		case B_NOT:
+			return "~";
+		case L_NOT:
+			return "!";
 	}
 }
 
@@ -963,86 +1073,6 @@ void print_token(lexitem_t* l){
 	} else {
 		//Print out with nice formatting
 		printf("TOKEN: %3d, Lexeme: %15s, Line: %4d\n", l->tok, l->lexeme.string, l->line_num);
-	}
-}
-
-
-/**
- * A utility function for error printing that converts an operator to a string
- */
-char* operator_to_string(ollie_token_t op){
-	switch(op){
-		case PLUSPLUS:
-			return "++";
-		case MINUSMINUS:
-			return "--";
-		case PLUS:
-			return "+";
-		case MINUS:
-			return "-";
-		case STAR:
-			return "*";
-		case F_SLASH:
-			return "/";
-		case MOD:
-			return "%";
-		case EQUALS:
-			return "=";
-		case PLUSEQ:
-			return "+=";
-		case MINUSEQ:
-			return "-=";
-		case STAREQ:
-			return "*=";
-		case SLASHEQ:
-			return "/=";
-		case SINGLE_AND:
-			return "&";
-		case ANDEQ:
-			return "&=";
-		case SINGLE_OR:
-			return "|";
-		case OREQ:
-			return "|=";
-		case MODEQ:
-			return "%=";
-		case COLON:
-			return ":";
-		case CARROT:
-			return "^";
-		case XOREQ:
-			return "^=";
-		case DOUBLE_OR:
-			return "||";
-		case DOUBLE_AND:
-			return "&&";
-		case L_SHIFT:
-			return "<<";
-		case LSHIFTEQ:
-			return "<<=";
-		case R_SHIFT:
-			return ">>";
-		case RSHIFTEQ:
-			return ">>=";
-		case G_THAN:
-			return ">";
-		case L_THAN:
-			return "<";
-		case G_THAN_OR_EQ:
-			return ">=";
-		case L_THAN_OR_EQ:
-			return "<=";
-		case DOUBLE_EQUALS:
-			return "==";
-		case NOT_EQUALS:
-			return "!=";
-		case B_NOT:
-			return "~";
-		case L_NOT:
-			return "!";
-
-		default:
-			return NULL;
 	}
 }
 
