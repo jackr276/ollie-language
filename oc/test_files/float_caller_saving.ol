@@ -4,7 +4,6 @@
 * allocation
 */
 
-SABOTAGED - this is WRONG
 
 fn manipulate_float_values(x:f32, y:f32) -> f32 {
 	let result:mut f32 = x + y;

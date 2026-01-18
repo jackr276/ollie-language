@@ -3503,10 +3503,6 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	instruction_t* first_instruction = instruction;
 	instruction_t* last_instruction = instruction;
 
-	//How big is the sub stack that we need to make to save
-	//any xmm/floating point registers?
-	u_int32_t xmm_caller_saving_stack_size = 0;
-
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
 	dynamic_array_t live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
 	//We can remove the destination LR from here, there's no point in keeping it in
@@ -3602,37 +3598,38 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				 * value it has that we're relying on would not survive the call
 				 */
 				if(get_bitmap_at_index(callee->assigned_sse_registers, sse_reg - 1) == TRUE){
-					//We need to add this to our mini-stack here for the call
+					//Create the stack region that we need here
+					stack_region_t* spill_region = create_stack_region_for_type(&(caller->data_area), get_largest_type_in_live_range(lr));
 
 
-					//Emit a direct push with this live range's register
-					instruction_t* push_inst = emit_direct_sse_register_push_instruction(sse_reg);
+					//
+					//
+					//TODO - make this reusable if need be
+					//
+					//
+					//
+					//
+					spill_region->variable_referenced = lr;
 
-					//Emit the pop instruction for this
-					instruction_t* pop_inst = emit_direct_sse_register_pop_instruction(sse_reg);
+					//Emit the store instruction and load instruction
+					instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, spill_region->base_address);
+					instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, spill_region->base_address);
 
 					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(push_inst, instruction);
+					insert_instruction_before_given(store_instruction, first_instruction);
+
+					//The first instruction now is the store
+					first_instruction = store_instruction;
 
 					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(pop_inst, instruction);
+					insert_instruction_after_given(load_instruction, last_instruction);
 
-					//If the last instruction still is the original instruction. That
-					//means that this is the first pop instruction that we're inserting.
-					//As such, we'll set the last instruction to be this pop instruction
-					//to save ourselves time down the line
-					if(last_instruction == instruction){
-						last_instruction = pop_inst;
-					}
+					//And the last one now is the load
+					last_instruction = load_instruction;
 				}
 
 				break;
 		}
-	}
-
-	//TODO
-	if(xmm_caller_saving_stack_size > 0){
-
 	}
 
 	//Free it up once done
@@ -3741,6 +3738,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 				}
 
 				//Emit a direct push with this live range's register
+				/*
 				instruction_t* push_inst_sse = emit_direct_sse_register_push_instruction(sse_reg);
 
 				//Emit the pop instruction for this
@@ -3759,6 +3757,16 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(instruction_t*
 				if(last_instruction == instruction){
 					last_instruction = pop_inst_sse;
 				}
+				*/
+
+				//
+				//
+				//
+				//TODO
+				//
+				//
+				//
+				//
 
 				break;
 		}
@@ -3951,12 +3959,13 @@ static void insert_saving_logic(cfg_t* cfg){
 		//Grab out the function exit and entry blocks
 		basic_block_t* current_function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 		basic_block_t* current_function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
-
-		//We'll first insert the callee-saved stack and register logic
-		insert_stack_and_callee_saving_logic(cfg, current_function_entry, current_function_exit);
-
-		//And now we'll let the helper insert all of the caller-saved register logic
+		
+		//We'll first insert the caller saved logic. This logic has the potential to
+		//generate stack allocations for XMM registers so it needs to come first
 		insert_caller_saved_register_logic(current_function_entry);
+
+		//Then we'll do all callee saving
+		insert_stack_and_callee_saving_logic(cfg, current_function_entry, current_function_exit);
 	}
 }
 
