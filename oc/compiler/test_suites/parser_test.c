@@ -81,7 +81,17 @@ int main(int argc, char** argv){
 	//Grab the options
 	compiler_options_t* options = parse_and_store_options(argc, argv);
 
-	//TODO NEED TO RUN LEXER
+	//First things first - run the lexer
+	ollie_token_stream_t token_stream = tokenize(options->file_name);
+
+	//If this fails, we need to leave
+	if(token_stream.status == STREAM_STATUS_FAILURE){
+		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
+		exit(1);
+	}
+
+	//Store it and invoke the parser
+	options->token_stream = &token_stream;
 	
 	//Parse the file
 	parse(options);

@@ -4,7 +4,6 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <sys/types.h>
 //Link to the lexer
 #include "../lexer/lexer.h"
@@ -22,37 +21,18 @@ int main(int argc, char** argv){
 		fprintf(stderr, "A filename must be provided\n");
 	}
 
-	FILE* fl;
 	lexitem_t l;
 
 	for(int32_t i = 1; i < argc; i++){
 		printf("=============== LEXER TEST FOR FILE %s =================\n\n", argv[i]);
 
-		//Open the file for reading only
-		fl = fopen(argv[i], "r");
-	
-		if(fl == NULL){
-			fprintf(stderr, "FILE could not be opened\n");
-			return 1;
-		}
-
 		//Let the helper do all of the work
-		ollie_token_stream_t token_stream = tokenize(fl, argv[i]);
+		ollie_token_stream_t token_stream = tokenize(argv[i]);
 
-		//Did we succeed or fail here
-		switch(token_stream.status){
-			case STREAM_STATUS_FAILURE:
-				printf("Tokenizing FAILED\n");
-				//Close the file when done
-				fclose(fl);
-
-				continue;
-
-			case STREAM_STATUS_SUCCESS:
-				//Close the file when done
-				fclose(fl);
-
-				break;
+		//If we failed, we move on to the next file
+		if(token_stream.status == STREAM_STATUS_FAILURE){
+			printf("Tokenizing FAILED\n");
+			continue;
 		}
 
 		//This is usually how called functions will reference this

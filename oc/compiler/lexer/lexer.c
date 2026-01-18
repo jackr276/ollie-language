@@ -1378,14 +1378,15 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 /**
  * Initialize the lexer by dynamically allocating the lexstack
  * and any other needed data structures
+ *
+ * The tokenizer also handles all file input
  */
-ollie_token_stream_t tokenize(FILE* fl, char* current_file_name){
+ollie_token_stream_t tokenize(char* current_file_name){
 	//Store the file name for any error printing
 	file_name = current_file_name;
 
 	//Stack allocate
 	ollie_token_stream_t token_stream;
-
 	//Initialize the internal storage for our token
 	token_stream.token_stream = calloc(DEFAULT_TOKEN_COUNT, sizeof(lexitem_t));
 	//Initialize to our default
@@ -1395,8 +1396,25 @@ ollie_token_stream_t tokenize(FILE* fl, char* current_file_name){
 	//From the parsing perspective
 	token_stream.token_pointer = 0;
 
+	//Attempt to open the file
+	FILE* fl = fopen(current_file_name, "r");
+
+	//If we can't open, it's an autofailure
+	if(fl == NULL){
+		char info[2000];
+		sprintf(info, "Failed to open file %s", file_name);
+		print_lexer_error(info, 0);
+
+		//Print the failure out and leave
+		token_stream.status = STREAM_STATUS_FAILURE;
+		return token_stream;
+	}
+
 	//Consume all of the tokens here using the helper
 	u_int8_t result = generate_all_tokens(fl, &token_stream);
+
+	//Once we're done, we close the file
+	fclose(fl);
 
 	//Update the status accordingly
 	token_stream.status = result == SUCCESS ? STREAM_STATUS_SUCCESS : STREAM_STATUS_FAILURE;

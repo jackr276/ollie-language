@@ -1782,6 +1782,8 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 
 			//Otherwise we must keep searching
 			default:
+				//Bump it up
+				token_pointer++;
 				break;
 		}
 	}
@@ -2531,7 +2533,7 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 			//When we hit this, it means that we're done. We return the parent
 			//node in this case
 			default:
-				push_back_token(lookahead);
+				push_back_token(token_stream);
 				//Store the variable too
 				parent->variable = primary_expression_node->variable;
 
@@ -3451,7 +3453,7 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 
 	//If we get here, it means that we did not see the token we need, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -3602,7 +3604,7 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 
 		default:
 			//Otherwise just push the token back
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 			break;
 	}
 
@@ -3773,7 +3775,7 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 
 		//By default, all we do is scrap this and get out
 		default:
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 			break;
 	}
 
@@ -3924,7 +3926,7 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -4054,7 +4056,7 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
 
 	//If we get here, it means that we did not see the "DOUBLE AND" token, so we are done. We'll put
 	//the token back and return our subtree
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -4611,7 +4613,7 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 
 	//If we get here, it means that we did not see the "DOUBLE OR" token, so we are done. We'll put
 	//the token back and add this in as a subtree of the parent
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 	//Store the line number
 	sub_tree_root->line_number = parser_line_num;
 
@@ -5447,7 +5449,7 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 	//If we don't see an array here, we can just leave now
 	if(lookahead.tok != L_BRACKET){
 		//Put it back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//It is not possible to have a void type as a union member
 		if(current_type_record->type == immut_void
@@ -5548,7 +5550,7 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 	}
 
 	//Since we made it down here, we need to push the token back
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 
 	//Now we'll go back through and unwind the lightstack
 	while(lightstack_is_empty(&lightstack) == FALSE){
@@ -6566,7 +6568,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	//If we don't see an array here, we can just leave now
 	if(lookahead.tok != L_BRACKET){
 		//Put it back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		/**
 		 * This is a very unique case. Internally, the system needs to have
@@ -6672,7 +6674,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	}
 
 	//Since we made it down here, we need to push the token back
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 
 	//Now we'll go back through and unwind the lightstack
 	while(lightstack_is_empty(&lightstack) == FALSE){
@@ -6757,7 +6759,7 @@ static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stre
 	}
 
 	//Otherwise, put it back and call expression
-	push_back_token(lookahead);
+	push_back_token(token_stream);
 	
 	//Now we know that it's not empty, so we have to see a valid expression
 	generic_ast_node_t* expr_node = assignment_expression(token_stream);
@@ -7038,7 +7040,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 		add_child_node(if_stmt, else_compound_stmt);
 	} else {
 		//Otherwise there was no else token, so put it back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 	}
 
 	//Store the line number
@@ -8181,7 +8183,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	} else if(lookahead.tok != SEMICOLON){
 		//If it isn't a semicolon, then we must have some kind of assignment op here
 		//Push the token back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//Let the assignment expression handle this
 		generic_ast_node_t* asn_expr = assignment_expression(token_stream);
@@ -8224,7 +8226,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	//If it's not a semicolon, we need to see a valid conditional expression
 	if(lookahead.tok != SEMICOLON){
 		//Push whatever it is back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//Let this rule handle it
 		generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
@@ -8263,7 +8265,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	//If it isn't an R_PAREN
 	if(lookahead.tok != R_PAREN){
 		//Put it back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//We now must see a valid conditional
 		//Let this rule handle it
@@ -8367,7 +8369,7 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	//So long as we don't reach the end
 	while(lookahead.tok != R_CURLY){
 		//Put whatever we saw back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 		
 		//We now need to see a valid statement that is allowed inside of a case block
 		generic_ast_node_t* stmt_node = statement(token_stream);
@@ -8452,10 +8454,20 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
 	//So long as we don't see this
 	while(lookahead.tok != R_CURLY){
 		//Put it back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
+
+		printf("TODO NOT YET SUPPORTED\n");
+		exit(1);
 
 		//We'll now need to consume an assembly statement
-		lookahead = get_next_assembly_statement(token_stream);
+		//lookahead = get_next_assembly_statement(token_stream);
+		//
+		//
+		//
+		//TODO
+		//
+		//
+		//
 
 		//If it's an error, we'll fail out here
 		if(lookahead.tok == ERROR){
@@ -8588,7 +8600,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		case DECLARE:
 		case LET:
 			//We'll let the actual rule handle it, so push the token back
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 
 			//We now need to see a valid version
 			return declaration(token_stream, FALSE);
@@ -8627,7 +8639,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		//We're seeing a compound statement
 		case L_CURLY:
 			//The rule relies on it, so put it back
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 
 			//Return whatever the rule gives us
 			return compound_statement(token_stream);
@@ -8672,7 +8684,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 			return jump_statement(token_stream);
 
 		//Handle a return statement
-		case RET:
+		case RETURN:
 			return return_statement(token_stream);
 
 		//Handle a break statement
@@ -8693,7 +8705,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 
 		//By default push this back and return an expression statement
 		default:
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 			return expression_statement(token_stream);
 	}
 }
@@ -8754,7 +8766,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
 			//processing statements and adding them as children
 			while(lookahead.tok != CASE && lookahead.tok != DEFAULT && lookahead.tok != R_CURLY){
 				//Put the token back
-				push_back_token(lookahead);
+				push_back_token(token_stream);
 
 				//Process the next statement
 				generic_ast_node_t* child = statement(token_stream);
@@ -8772,7 +8784,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
 			}
 
 			//Push it back for something else to process
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 
 			break;
 
@@ -8927,7 +8939,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 			//processing statements and adding them as children
 			while(lookahead.tok != CASE && lookahead.tok != DEFAULT && lookahead.tok != R_CURLY){
 				//Put the token back
-				push_back_token(lookahead);
+				push_back_token(token_stream);
 
 				//Process the next statement
 				generic_ast_node_t* child = statement(token_stream);
@@ -8945,7 +8957,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 			}
 
 			//Push it back for something else to process
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 
 			break;
 
@@ -8993,7 +9005,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 				return print_and_return_error("Function predeclarations must occur in global scope", parser_line_num);
 			}
 
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 			//Let this rule handle it
 			return function_predeclaration(token_stream);
 	
@@ -10234,7 +10246,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			
 		//By default just put it back and get out
 		default:
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 			break;
 	}
 
@@ -10484,7 +10496,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 
 		//By default we can just leave
 		default:
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 			break;
 	}
 
@@ -10998,7 +11010,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		case PUB:
 		case FN:
 			//Put the token back, we'll let the rule handle it
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 
 			//We'll just let the function definition rule handle this. If it fails, 
 			//that will be caught above
@@ -11053,7 +11065,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 
 		default:
 			//Put the token back
-			push_back_token(lookahead);
+			push_back_token(token_stream);
 
 			//We'll simply return whatever the product of the declaration function is
 			//Do note: these variables will all be global
@@ -11101,13 +11113,13 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
 
 	} else {
 		//Put it back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 	}
 	
 	//As long as we aren't done
 	while((lookahead = get_next_token(token_stream)).tok != DONE){
 		//Put the token back
-		push_back_token(lookahead);
+		push_back_token(token_stream);
 
 		//Call declaration partition
 		generic_ast_node_t* current = declaration_partition(token_stream);
@@ -11143,6 +11155,9 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
 front_end_results_package_t* parse(compiler_options_t* options){
 	//Initialize our results package here
 	front_end_results_package_t* results = calloc(1, sizeof(front_end_results_package_t));
+
+	//Extract the token stream from the compiler options
+	ollie_token_stream_t* token_stream = options->token_stream;
 
 	//Initialize the AST system as well
 	initialize_ast_system();
@@ -11230,8 +11245,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	lex_stack_dealloc(&grouping_stack);
 	nesting_stack_dealloc(&nesting_stack);
 
-	//Once we're done, deinitialize the lexer
-	deinitialize_lexer();
+	//Once we're done, destroy the token stream
+	destroy_token_stream(token_stream);
 
+	//Give back the overall result
 	return results;
 }
