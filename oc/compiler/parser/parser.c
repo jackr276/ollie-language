@@ -98,7 +98,6 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 static u_int8_t alias_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* declaration(ollie_token_stream_t* token_stream, u_int8_t is_global);
 static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global);
@@ -8997,7 +8996,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
- * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? {mut}? <identifier> : <type-specifier>} ;
+ * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? {mut}? <identifier> : <type-specifier>}
  */
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//Freeze the current line number
@@ -9873,58 +9872,6 @@ static u_int8_t definition(ollie_token_stream_t* token_stream){
 			num_errors++;
 			return FAILURE;
 	}
-}
-
-
-/**
- * A declaration is a pass through rule that does not itself initialize a node. Instead, it will pass down to
- * the appropriate rule here and let them initialize the rule. Like all rules in a system, the declaration returns
- * a reference to the root node that it created
- *
- * <declaration> ::= <declare-statement> 
- * 				   | <let-statement> 
- */
-static generic_ast_node_t* declaration(ollie_token_stream_t* token_stream, u_int8_t is_global){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//We will multiplex based on what we see with the lookahead
-	//This rule also consumes the first token that it sees, so all downstream
-	//rules must account for that
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//To hold our result
-	generic_ast_node_t* declaration_node;
-
-	//Go based on the token
-	switch(lookahead.tok){
-		case DECLARE:
-			declaration_node = declare_statement(token_stream, is_global);
-			break;
-		case LET:	
-			declaration_node = let_statement(token_stream, is_global);
-			break;
-		default:
-			sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
-			return print_and_return_error(info, parser_line_num);
-	}
-
-	//If it's an error send it up the chain
-	if(declaration_node != NULL 
-		&& declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return declaration_node;
-	}
-
-	//Now we're required to see a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Fail out if bad
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon required after declaration", parser_line_num);
-	}
-
-	//Otherwise we're good so give back the node
-	return declaration_node;
 }
 
 
@@ -11000,6 +10947,65 @@ static u_int8_t replace_statement(ollie_token_stream_t* token_stream){
 
 
 /**
+ * Handle a global declare statement. Note that be the time we arrive here, we've
+ * already seen and consumed the DECLARE token
+ */
+static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_stream){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//Onvoke the helper
+	generic_ast_node_t* declaration_node = declare_statement(token_stream, TRUE);
+
+	//If it's an error send it up the chain
+	if(declaration_node != NULL 
+		&& declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return declaration_node;
+	}
+
+	//Now we're required to see a semicolon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if bad
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon required after declare statement", parser_line_num);
+	}
+
+	//Otherwise we're good so give back the node
+	return declaration_node;
+}
+
+
+/**
+ * Handle a global declare statement. Note that be the time we arrive here, we've
+ * already seen and consumed the DECLARE token
+ */
+static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stream){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//Onvoke the helper
+	generic_ast_node_t* let_node = let_statement(token_stream, TRUE);
+
+	//If it's an error send it up the chain
+	if(let_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return let_node;
+	}
+
+	//Now we're required to see a semicolon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if bad
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon required after let statement", parser_line_num);
+	}
+
+	//Otherwise we're good so give back the node
+	return let_node;
+}
+
+
+/**
  * Here we can either have a function definition or a declaration
  *
  * Like all other functions, this function returns a pointer to the 
@@ -11085,21 +11091,14 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		case REQUIRE:
 			return print_and_return_error("Any require statements must be nested in a top level #dependencies block", parser_line_num);
 
+		case LET:
+			return global_let_statement(token_stream);
+
+		case DECLARE:
+			return global_declare_statement(token_stream);
+
 		default:
-			//Put the token back
-			push_back_token(token_stream, &parser_line_num);
-
-			//Invoke the helper here
-			generic_ast_node_t* declaration_node = declaration(token_stream, TRUE);
-
-			//If this is an error, we fail out
-			if(declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return print_and_return_error("Invalid declaration found in declaration partition", parser_line_num);
-			}
-
-			//We'll simply return whatever the product of the declaration function is
-			//Do note: these variables will all be global
-			return declaration_node;
+			return print_and_return_error("Invalid/unknown expression type encountered in the top level scope", parser_line_num);
 	}
 }
 

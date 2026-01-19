@@ -5953,9 +5953,12 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	basic_block_t* for_stmt_update_block = basic_block_alloc_and_estimate();
 
 	//If this isn't a compound statement, we're good to go
-	if(cursor->next_sibling->ast_node_type != AST_NODE_TYPE_COMPOUND_STMT){
+	if(cursor->ast_node_type != AST_NODE_TYPE_COMPOUND_STMT){
 		//Emit the update expression
 		emit_expression(for_stmt_update_block, cursor, FALSE, FALSE);
+
+		//Bump it up now
+		cursor = cursor->next_sibling;
 	}
 	
 	//Unconditional jump to condition block
@@ -5963,9 +5966,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//All continues will go to the update block
 	push(&continue_stack, for_stmt_update_block);
-
-	//Push it up one final time
-	cursor = cursor->next_sibling;
 	
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
