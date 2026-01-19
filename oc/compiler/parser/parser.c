@@ -6761,8 +6761,8 @@ static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stre
 		push_back_token(token_stream, &parser_line_num);
 	}
 
-	//Top level node is NULL
-	generic_ast_node_t* expression_node = NULL;
+	//The top level node is the special statement chain node
+	generic_ast_node_t* top_level_node = ast_node_alloc(AST_NODE_TYPE_EXPR_CHAIN, SIDE_TYPE_LEFT);
 
 	//So long as we keep seeing commas, we keep going
 	do {
@@ -6797,16 +6797,9 @@ static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stre
 			return current_expression_node;
 		}
 
-		//We now need to decide how to attach things here. The expression
-		//nodes will be returned as a chain of sibling nodes
-
-		//Easiest case, this just becomes the node
-		if(expression_node == NULL) {
-			expression_node = current_expression_node;
-		
-		//Otherwise, this will get attached to the end as a new sibling node
-		} else {
-			add_sibling_node(expression_node, current_expression_node);
+		//So long as we have something to add we'll add it
+		if(current_expression_node != NULL){
+			add_child_node(top_level_node, current_expression_node);
 		}
 
 		//Refresh our token. If it's a comma - great. If not, we leave
@@ -6820,7 +6813,7 @@ static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stre
 	}
 
 	//Otherwise we're all set
-	return expression_node;
+	return top_level_node;
 }
 
 

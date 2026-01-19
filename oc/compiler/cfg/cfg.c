@@ -5035,8 +5035,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
  * Emit abstract machine code for an expression. This is a top level statement.
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
- *
- * TODO UPDATE
  */
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_conditional){
 	//Declare and initialize the results
@@ -5085,6 +5083,45 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 	return result_package;
 }
+
+
+/**
+ * Emit abstract machine code for a comma separated expression chain. This rule mainly just involves
+ * invoking the lower level "emit-expression" over and over until we're done
+ */
+static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node, u_int8_t is_branch_ending, u_int8_t is_conditional){
+	cfg_result_package_t result_package;
+
+	//Maintain a pointer to the current block
+	basic_block_t* current_block = basic_block;
+
+	//Grab a cursor to the first child
+	generic_ast_node_t* expression_cursor = expression_chain_node->first_child;
+
+	//The current expression result
+	cfg_result_package_t expression_result;
+
+	while(expression_cursor != NULL){
+		//Let the helper emit it
+		expression_result = emit_expression(current_block, expression_cursor, is_branch_ending, is_conditional);
+
+		//Update the current block
+		current_block = expression_result.final_block;
+
+		//Push the cursor up
+		expression_cursor = expression_cursor->next_sibling;
+	}
+
+	//Package and return our valies. Note that we are always
+	//biased towards the *last* expression we saw
+	result_package.starting_block = basic_block;
+	result_package.final_block = current_block;
+	result_package.operator = expression_result.operator;
+	result_package.assignee = expression_result.assignee;
+
+	return result_package;
+}
+
 
 
 /**
@@ -5829,6 +5866,14 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 /**
  * A for-statement is another kind of control flow construct
+ *
+ * 	For statement architecture
+ *
+ * 							<top-level>
+ * 	      /						|			\ 
+ * 	 0 or more expressions condition node  0 or 1 update nodes
+ * 	 							|
+ * 	 						logical or statement
  */
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Initialize the return package
@@ -5849,11 +5894,17 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	result_package.starting_block = for_stmt_entry_block;
 	result_package.final_block = for_stmt_exit_block;
 	
-	//Grab the reference to the for statement node
-	generic_ast_node_t* for_stmt_node = root_node;
+	//Grab a cursor for our traversal
+	generic_ast_node_t* cursor = root_node->first_child;
 
-	//Grab a cursor for walking the sub-tree
-	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
+	//The first thing that we are able to see is a chain of statements that may
+	//or may not be there. We will let our given rule handle it
+	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
+
+
+		//Push the cusor up now that we're done with the expression chain
+		cursor = cursor->next_sibling;
+	}
 
 	//If the very first one is not blank
 	if(ast_cursor->first_child != NULL){
