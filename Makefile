@@ -44,14 +44,20 @@ ltest: lexer_test
 lexer_test: lexer.o lexer_test.o lexstack.o dynamic_string.o
 	$(CC) -o $(OUT_LOCAL)/lexer_test $(OUT_LOCAL)/lexer_test.o $(OUT_LOCAL)/lexer.o $(OUT_LOCAL)/lexstack.o $(OUT_LOCAL)/dynamic_string.o
 
+lexer_testd: lexerd.o lexer_testd.o lexstackd.o dynamic_stringd.o
+	$(CC) -o $(OUT_LOCAL)/lexer_testd $(OUT_LOCAL)/lexer_testd.o $(OUT_LOCAL)/lexerd.o $(OUT_LOCAL)/lexstackd.o $(OUT_LOCAL)/dynamic_stringd.o
+
 lexer_test.o: $(TEST_SUITE_PATH)/lexer_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/lexer_test.c -o $(OUT_LOCAL)/lexer_test.o
+
+lexer_testd.o: $(TEST_SUITE_PATH)/lexer_test.c
+	$(CC) -g $(CFLAGS) $(TEST_SUITE_PATH)/lexer_test.c -o $(OUT_LOCAL)/lexer_testd.o
 
 lexer.o: $(LEX_PATH)/lexer.c
 	$(CC) $(CFLAGS) $(LEX_PATH)/lexer.c -o $(OUT_LOCAL)/lexer.o
 
 lexerd.o: $(LEX_PATH)/lexer.c
-	$(CC) $(CFLAGS) $(LEX_PATH)/lexer.c -o $(OUT_LOCAL)/lexerd.o
+	$(CC) -g $(CFLAGS) $(LEX_PATH)/lexer.c -o $(OUT_LOCAL)/lexerd.o
 
 heapstack.o: $(STACK_PATH)/heapstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/heapstack.c -o $(OUT_LOCAL)/heapstack.o

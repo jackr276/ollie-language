@@ -17,69 +17,88 @@
 
 //The lexitem_t struct
 typedef struct lexitem_t lexitem_t;
+//The overall token stream value
+typedef struct ollie_token_stream_t ollie_token_stream_t;
+
+//=================================== Public utility macros ==============================
+/**
+ * Get the index of the current stream seek head
+ */
+#define GET_CURRENT_TOKEN_INDEX(stream) stream->token_pointer
+
+//=================================== Public utility macros ==============================
+
+/**
+ * Tokenization status
+ */
+typedef enum {
+	STREAM_STATUS_FAILURE,
+	STREAM_STATUS_SUCCESS
+} token_stream_status_t;
 
 
-struct lexitem_t{
+struct lexitem_t {
 	//The string(lexeme) that got us this token
 	dynamic_string_t lexeme;
 	//The line number of the source that we found it on
-	u_int16_t line_num;
+	u_int32_t line_num;
 	//The token associated with this item
 	ollie_token_t tok;
 };
 
-//======================== Public utility macros ========================
-/**
- * Reset the file pointer to go back to the start
- */
-#define RESET_FILE(fl) fseek(fl, 0, SEEK_SET)
+
+struct ollie_token_stream_t {
+	//Array of tokens
+	lexitem_t* token_stream;
+	//Current token index
+	u_int32_t current_token_index;
+	//This is the value that we're looking
+	//at from the parser perspective
+	u_int32_t token_pointer;
+	//Max index, needed to know when we resize
+	u_int32_t max_token_index;
+	//Let the caller know if this worked or not
+	token_stream_status_t status;
+};
+
 
 /**
- * Get the current file pointer position
+ * Tokenzie an entire file and return a token
+ * stream item that the parser can use as it wishes
+ *
+ * The tokenizer assumes that the fl file pointer
+ * is 100% valid
  */
-#define GET_CURRENT_FILE_POSITION(fl) ftell(fl)
-
-//======================== Public utility macros ========================
-
-/**
- * Reconsume the tokens starting from a given seek
- */
-void reconsume_tokens(FILE* fl, int64_t reconsume_start);
+ollie_token_stream_t tokenize(char* current_file_name);
 
 /**
- * Special case -- hunting for assembly statements
+ * Deallocate the entire token stream
  */
-lexitem_t get_next_assembly_statement(FILE* fl);
+void destroy_token_stream(ollie_token_stream_t* stream);
 
 /**
  * Generic token grabbing function
  */
-lexitem_t get_next_token(FILE* fl, u_int32_t* parser_line_num);
+lexitem_t get_next_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number);
 
 /**
  * Push a token back to the stream
  */
-void push_back_token(lexitem_t l);
+void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number);
 
 /**
- * Developer utility for token printing
+ * Reset the stream to reconsume tokens from a given start point
  */
-void print_token(lexitem_t* l);
+void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsume_start);
 
 /**
- * Initialize the lexer by dynamically allocating the lexstack
- * and any other needed data structures
+ * Convert a token into a string for error printing purposes
  */
-void initialize_lexer();
+char* lexitem_to_string(lexitem_t* lexitem);
 
 /**
- * Deinitialize the entire lexer
+ * Convert specifically an operator token to a string for printing
  */
-void deinitialize_lexer();
-
-/**
- * A utility function for error printing that converts an operator to a string
- */
-char* operator_to_string(ollie_token_t op);
+char* operator_token_to_string(ollie_token_t token);
 
 #endif /* LEXER_H */

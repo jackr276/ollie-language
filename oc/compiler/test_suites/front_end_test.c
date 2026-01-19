@@ -109,6 +109,18 @@ int main(int argc, char** argv){
 	//Start the timer
 	clock_t begin = clock();
 
+	//Invoke the tokenizer
+	ollie_token_stream_t stream = tokenize(options->file_name);
+
+	//If this fails, we need to leave
+	if(stream.status == STREAM_STATUS_FAILURE){
+		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
+		exit(1);
+	}
+	
+	//Store it inside of the token stream
+	options->token_stream = &stream;
+
 	//Now that we can actually open the file, we'll parse
 	front_end_results_package_t* parse_results = parse(options);
 
