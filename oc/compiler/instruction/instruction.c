@@ -2411,7 +2411,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
 			//Should already have a trailing newline
-			fprintf(fl, "%s", stmt->inlined_assembly.string);
+			fprintf(fl, "%s\n", stmt->inlined_assembly.string);
 			break;
 
 		case THREE_ADDR_CODE_IDLE_STMT:
@@ -4070,7 +4070,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "jbe .L%d\n", jumping_to_block->block_id);
 			break;
 		case ASM_INLINE:
-			fprintf(fl, "%s", instruction->inlined_assembly.string);
+			fprintf(fl, "%s\n", instruction->inlined_assembly.string);
 			break;
 		case CALL:
 			fprintf(fl, "call %s", instruction->called_function->func_name.string);

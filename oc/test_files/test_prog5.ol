@@ -53,7 +53,7 @@ pub fn main() -> i32{
 	defer {
 		asm{"
 			push %rax
-			push %rbx 
+			push %rbx
 			mov $2, %rax
 			addl $3, %rax
 			pop %rbx
