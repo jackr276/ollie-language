@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
@@ -657,7 +658,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
  * BNF "Rule": <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
  * Note all actual string parsing and validation is handled by the lexer
  */
-static generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_type_t side){
+static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_type_t side){
 	//Grab the next token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	
@@ -687,7 +688,7 @@ static generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_t
  * jump, and allows us to make every user-defined jump a direct jump when(1) jump. This greatly
  * simplifies our development processes
  */
-static generic_ast_node_t* emit_direct_constant(int32_t constant){
+static inline generic_ast_node_t* emit_direct_constant(int32_t constant){
 	//Create our constant node
 	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
 	//Add the line number
@@ -6738,76 +6739,81 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 
 
 /**
- * In ollie, you are able to chain expression statements using commas(",") between them
- * before seeing a semicolon. As such, we will handle such chaining in this top down rule
+ * An expression statement can chain one or more assignment expressions together using commas
  *
- * BNF Rule: <expression-statement-chain> ::= <expression-statement>{, <expression-statement>}*;
- */
-static generic_ast_node_t* expression_statement_chain(ollie_token_stream_t* token_stream){
-
-	//TODO not implemented
-	return NULL;
-}
-
-
-/**
- * An expression statement can optionally have an expression in it. Like all rules, it returns 
- * a reference to the root of the subtree it creates
+ * Note that this
  *
- * BNF Rule: <expression-statement> ::= {<assignment-expression> | <let-statement> | <declare-statement>}?;
+ * BNF Rule: <expression-statement> ::= {<assignment-expression> | <let-statement> | <declare-statement>}?; 
+ * 										| {<assignment-expression> | <let-statement> | <declare-statement>}{, {<assignment-expression> | <let-statement> | <declare-statement>}}*;
  */
 static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stream){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
 
 	//Let's see if we have a semicolon. If we do, we'll just jump right out
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Empty expression, we're done here
+	//There is the chance that we have a completely empty expression(just a semicolon). If
+	//we do then we catch it here and just leave
 	if(lookahead.tok == SEMICOLON){
-		//Blank statement, simply leave
 		return NULL;
+	} else {
+		//Otherwise push it back so we don't mess with the search
+		push_back_token(token_stream, &parser_line_num);
 	}
 
-	//Holder for the node
-	generic_ast_node_t* expression_node;
+	//Top level node is NULL
+	generic_ast_node_t* expression_node = NULL;
 
-	//Go based on what we see up ahead of us
-	switch (lookahead.tok) {
-		case DECLARE:
-			//TODO - need to not be searching for a semicol
-			expression_node = declare_statement(token_stream, FALSE);
-			break;
+	//So long as we keep seeing commas, we keep going
+	do {
+		//Extract the first token in our search
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		
+		//Holder for the current expression
+		generic_ast_node_t* current_expression_node = NULL;
+		
+		//Go based on what we see up ahead of us
+		switch (lookahead.tok) {
+			case DECLARE:
+				current_expression_node = declare_statement(token_stream, FALSE);
+				break;
 
-		case LET:
-			//TODO - need to not be searching for a semicol
-			expression_node = let_statement(token_stream, FALSE);
-			break;
+			case LET:
+				current_expression_node = let_statement(token_stream, FALSE);
+				break;
 
-		//If we don't see declare or let, we push it back
-		default:
-			push_back_token(token_stream, &parser_line_num);
-			expression_node = assignment_expression(token_stream);
-			break;
-	}
+			//If we don't see declare or let, we push it back
+			default:
+				push_back_token(token_stream, &parser_line_num);
+				current_expression_node = assignment_expression(token_stream);
+				break;
+		}
 
-	//If this fails, the whole thing is over
-	if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		//It's already an error, so just send it back up
-		return expression_node;
-	}
+		//If this fails, the whole thing is over
+		if(current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			//It's already an error, so just send it back up
+			return current_expression_node;
+		}
 
-	//Now to close out we must see a semicolon
-	//Let's see if we have a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
+		//We now need to decide how to attach things here. The expression
+		//nodes will be returned as a chain of sibling nodes
 
-	//TODO - we're going to drop this
+		//Easiest case, this just becomes the node
+		if(expression_node == NULL) {
+			expression_node = current_expression_node;
+		} else {
+
+		}
+
+		//Refresh our token. If it's a comma - great. If not, we leave
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+	} while(lookahead.tok == COMMA);
 
 	//Empty expression, we're done here
 	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon expected after statement", current_line);
+		return print_and_return_error("Semicolon expected after statement", parser_line_num);
 	}
 
 	//Otherwise we're all set
@@ -9198,14 +9204,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
-	//The last thing that we are required to see before final assembly is a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//No semicolon, we fail out
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon required at the end of declaration statement", parser_line_num);
-	}
-
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
 	//Initialize the record
@@ -9641,7 +9639,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {register | static}? <identifier> : <type-specifier> := <ternary_expression>;
+ * BNF Rule: <let-statement> ::= let {register | static}? <identifier> : <type-specifier> := <ternary_expression>
  */
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//The line number
@@ -9762,14 +9760,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Otherwise it worked, so we'll add it in as a child
 	add_child_node(let_stmt_node, initializer_node);
-
-	//The last thing that we are required to see before final assembly is a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Last possible tripping point
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon required at the end of let statement", parser_line_num);
-	}
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
@@ -9987,15 +9977,37 @@ static generic_ast_node_t* declaration(ollie_token_stream_t* token_stream, u_int
 	//rules must account for that
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
+	//To hold our result
+	generic_ast_node_t* declaration_node;
+
+	//Go based on the token
 	switch(lookahead.tok){
 		case DECLARE:
-			return declare_statement(token_stream, is_global);
+			declaration_node = declare_statement(token_stream, is_global);
+			break;
 		case LET:	
-			return let_statement(token_stream, is_global);
+			declaration_node = let_statement(token_stream, is_global);
+			break;
 		default:
 			sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
 			return print_and_return_error(info, parser_line_num);
 	}
+
+	//If it's an error send it up the chain
+	if(declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return declaration_node;
+	}
+
+	//Now we're required to see a semicolon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if bad
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon required after declaration", parser_line_num);
+	}
+
+	//Otherwise we're good so give back the node
+	return declaration_node;
 }
 
 
@@ -11160,9 +11172,17 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 			//Put the token back
 			push_back_token(token_stream, &parser_line_num);
 
+			//Invoke the helper here
+			generic_ast_node_t* declaration_node = declaration(token_stream, TRUE);
+
+			//If this is an error, we fail out
+			if(declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Invalid declaration found in declaration partition", parser_line_num);
+			}
+
 			//We'll simply return whatever the product of the declaration function is
 			//Do note: these variables will all be global
-			return declaration(token_stream, TRUE);
+			return declaration_node;
 	}
 }
 
