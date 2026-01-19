@@ -8164,11 +8164,9 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
- * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; <logical-or-expression> ; {<assignment-expression>}? ) <compound-statement>
+ * BNF Rule: <for-statement> ::= for({expression-statement} <logical-or-expression> ; {<assignment-expression>}? ) <compound-statement>
  */
 static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
-	//Freeze the current line number
-	u_int16_t current_line = parser_line_num; 
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -8177,6 +8175,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 
 	//We've already seen the for keyword, so let's create the root level node
 	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_TYPE_FOR_STMT, SIDE_TYPE_LEFT);
+	for_stmt_node->line_number = parser_line_num; 
 
 	//We now need to first see a left paren
  	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8194,114 +8193,47 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	 * for variables. As such, we will initialize a new variable scope when we get here
 	 */
 	initialize_variable_scope(variable_symtab);
+	
+	//Let's see if we've got anything. Invoke the expression statement rule here
+	generic_ast_node_t* statement_chain = expression_statement(token_stream);
 
-	//Now we have the option of seeing an assignment expression, a let statement, or nothing
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//TODO - this needs an overhaul
-
-	//We could also see the let keyword for a let_stmt
-	if(lookahead.tok == LET){
-		//On the contrary, the let statement rule assumes that let has already been consumed, so we won't
-		//put it back here, we'll just call the rule
-		generic_ast_node_t* let_stmt = let_statement(token_stream, FALSE);
-
-		//If it fails, we also fail
-		if(let_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid let statement given to for loop", current_line);
-		}
-
-		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		//Add this in as a child
-		add_child_node(for_loop_cond_node, let_stmt);
-
-		//Otherwise if we get here it worked, so we'll add it in as a child
-		add_child_node(for_stmt_node, for_loop_cond_node);
-		
-		//Remember -- let statements handle semicolons for us, so we don't need to check
-
-	//Otherwise it had to be a semicolon, so if it isn't we fail
-	} else if(lookahead.tok != SEMICOLON){
-		//If it isn't a semicolon, then we must have some kind of assignment op here
-		//Push the token back
-		push_back_token(token_stream, &parser_line_num);
-
-		//Let the assignment expression handle this
-		generic_ast_node_t* asn_expr = assignment_expression(token_stream);
-
+	//Remember - it's totally possible for this to be NULL
+	if(statement_chain != NULL){
 		//If it fails, we fail too
-		if(asn_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid assignment expression given to for loop", current_line);
+		if(statement_chain->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid statement(s) found in for loop", parser_line_num);
 		}
 
-		//This actually must be an assignment expression, so if it isn't we fail 
-		if(asn_expr->ast_node_type != AST_NODE_TYPE_ASNMNT_EXPR){
-			return print_and_return_error("Invalid assignment expression given to for loop", current_line);
-		}
-
-		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		//Add this in as a child
-		add_child_node(for_loop_cond_node, asn_expr);
-
-		//Otherwise it worked, so we'll add it in as a child
-		add_child_node(for_stmt_node, for_loop_cond_node);
-
-		//We'll refresh the lookahead for the eventual next step
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//The assignment expression won't check semicols for us, so we'll do it here
-		if(lookahead.tok != SEMICOLON){
-			return print_and_return_error("Semicolon expected in for statement declaration", parser_line_num);
-		}
-
-	//Just add in a blank node as a placeholder
-	} else {
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		add_child_node(for_stmt_node, for_loop_cond_node);
+		//Otherwise, we should be fine to just add it in
+		add_child_node(for_stmt_node, statement_chain);
 	}
 
-	//Now we're in the middle of the for statement. We can optionally see a conditional expression here
+	//Allocate the condition node
+	generic_ast_node_t* condition_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
+	
+	//This is the next child for the for loop
+	add_child_node(for_stmt_node, condition_node);
+
+	//Following that, we must see a logical or expression here
+	generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+
+	//If it fails, we fail too
+	if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid conditional expression in for loop", parser_line_num);
+	}
+
+	//Otherwise it worked, so this is the child node for conditional
+	add_child_node(condition_node, expression_node);
+
+	//We now must see a semicolon
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//If it's not a semicolon, we need to see a valid conditional expression
+	//No semicolon means we fail
 	if(lookahead.tok != SEMICOLON){
-		//Push whatever it is back
-		push_back_token(token_stream, &parser_line_num);
-
-		//Let this rule handle it
-		generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
-
-		//If it fails, we fail too
-		if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid conditional expression in for loop middle", parser_line_num);
-		}
-
-		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		//Add this in as a child
-		add_child_node(for_loop_cond_node, expr_node);
-
-		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, for_loop_cond_node);
-
-		//Now once we get here, we need to see a valid semicolon
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	
-		//If it isn't one, we fail out
-		if(lookahead.tok != SEMICOLON){
-			return print_and_return_error("Semicolon expected after conditional expression in for loop", parser_line_num);
-		}
-
-	//Create a blank node as a placeholder
-	} else {
-		return print_and_return_error("For loops must have the second condition occupied", parser_line_num);
+		return print_and_return_error("Semicolon required after for loop conditional", parser_line_num);
 	}
 
-	//Once we make it here, we know that either the inside was blank and we saw a semicolon or it wasn't and we saw a valid conditional 
-	
-	//As our last step, we can see another conditional expression. If the lookahead isn't a rparen, we must see one
+	//As our last step, we can see another conditional expression. If the lookahead isn't an rparen, we must see one
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//If it isn't an R_PAREN
@@ -8309,29 +8241,19 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 		//Put it back
 		push_back_token(token_stream, &parser_line_num);
 
-		//We now must see a valid conditional
-		//Let this rule handle it
-		generic_ast_node_t* expr_node = assignment_expression(token_stream);
+		//Now we need to see a valid assignment expression
+		generic_ast_node_t* final_expression = assignment_expression(token_stream);
 
 		//If it fails, we fail too
-		if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid conditional expression in for loop", parser_line_num);
+		if(final_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid final expression in for loop", parser_line_num);
 		}
 
-		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		//Add this in as a child
-		add_child_node(for_loop_cond_node, expr_node);
-
 		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, for_loop_cond_node);
+		add_child_node(for_stmt_node, final_expression);
 
 		//We'll refresh the lookahead for our search here
 		lookahead = get_next_token(token_stream, &parser_line_num);
-	//Create a blank node here as a placeholder
-	} else {
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
 	//Now if we make it down here no matter what it must be an R_Paren
@@ -8358,8 +8280,6 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 
 	//At the end, we'll finalize the lexical scope
 	finalize_variable_scope(variable_symtab);
-	//Store the line number
-	for_stmt_node->line_number = current_line;
 
 	//Now that we're done, pop this off of the stack
 	pop_nesting_level(&nesting_stack);

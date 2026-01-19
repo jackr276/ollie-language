@@ -5035,6 +5035,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
  * Emit abstract machine code for an expression. This is a top level statement.
  * These statements almost always involve some kind of assignment "<-" and generate temporary
  * variables
+ *
+ * TODO UPDATE
  */
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node, u_int8_t is_branch_ending, u_int8_t is_conditional){
 	//Declare and initialize the results
@@ -5857,6 +5859,8 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	if(ast_cursor->first_child != NULL){
 		//Create this for our results here
 		cfg_result_package_t first_child_result_package = {NULL, NULL, NULL, BLANK};
+
+		//TODO UPDATE
 
 		switch(ast_cursor->first_child->ast_node_type){
 			//We could have a let statement
