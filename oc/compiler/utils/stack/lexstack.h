@@ -57,6 +57,12 @@ lexitem_t pop_token(lex_stack_t* stack);
 lexitem_t peek_token(lex_stack_t* stack);
 
 /**
+ * Completely reset the internal storage of the 
+ * lexstack
+ */
+void reset_lexstack(lex_stack_t* stack);
+
+/**
  * Destroy the stack with a proper cleanup
  */
 void lex_stack_dealloc(lex_stack_t* stack);

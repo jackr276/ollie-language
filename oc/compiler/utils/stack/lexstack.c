@@ -6,6 +6,7 @@
 #include "lexstack.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 //For the constants that we need
 #include "../constants.h"
@@ -131,6 +132,19 @@ lexitem_t peek_token(lex_stack_t* stack){
 
 	//Return 
 	return stack->tokens[stack->num_tokens - 1];
+}
+
+
+/**
+ * Completely reset the internal storage of the 
+ * lexstack
+ */
+void reset_lexstack(lex_stack_t* stack){
+	//Wipe the tokens out
+	memset(stack->tokens, 0, sizeof(lexitem_t) * stack->current_max_size);
+
+	//Reset the index to 0
+	stack->num_tokens = 0;
 }
 
 
