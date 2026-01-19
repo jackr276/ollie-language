@@ -8421,10 +8421,10 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
  */
 static inline void strip_tabs_from_string_constant(dynamic_string_t* dynamic_string){
 	//This length is going to change
-	u_int16_t total_length = dynamic_string->current_length;
+	int16_t total_length = dynamic_string->current_length;
 
 	//Run through all of the characters
-	for(u_int16_t i = 0; i < total_length; i++){
+	for(int16_t i = 0; i < total_length; i++){
 		//Not a tab character, so move along
 		if(dynamic_string->string[i] != '\t'){
 			continue;
@@ -8433,7 +8433,21 @@ static inline void strip_tabs_from_string_constant(dynamic_string_t* dynamic_str
 		//Otherwise, it is a tab character. We'll need to shift
 		//everything over by 1 to effectively overwrite this tab
 		//character
+		for(int16_t j = i; j < total_length - 1; j++){
+			//Shift everything back by 1
+			dynamic_string->string[j] = dynamic_string->string[j + 1];
+		}
 
+		//Add the null terminator in
+		dynamic_string->string[total_length - 1] = '\0';
+		
+		//We need to reprocess the character that was next. We'll
+		//decrement i here so that it reincrements at the end of
+		//the block and reprocesses
+		i--;
+
+		//Total length is now one less
+		total_length--;
 	}
 }
 
@@ -8484,6 +8498,11 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
 
 	//Store this too
 	assembly_node->line_number = lookahead.line_num;
+
+	//To keep things neat in the final assembly, we will go through here and strip all of the tab
+	//characters out. These are not needed by us so we'll get rid of them with a special
+	//processing method
+	strip_tabs_from_string_constant(&(assembly_node->string_value));
 
 	//Now we need to see a curly brace
 	lookahead = get_next_token(token_stream, &parser_line_num);
