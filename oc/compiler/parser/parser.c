@@ -6762,6 +6762,8 @@ static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stre
 
 	//The top level node is the special statement chain node
 	generic_ast_node_t* top_level_node = ast_node_alloc(AST_NODE_TYPE_EXPR_CHAIN, SIDE_TYPE_LEFT);
+	//Cache the line number
+	top_level_node->line_number = parser_line_num;
 
 	//So long as we keep seeing commas, we keep going
 	do {
@@ -10359,7 +10361,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * promise that a function of this signature will exist at 
  * some point
  *
- * <function_predeclaration> ::= declare {pub}? fn <identifier>({param_declaration | void} {, <param_declaration}*) -> <type-specifier> ;
+ * <function_predeclaration> ::= declare {pub}? fn <identifier>({param_declaration | void} {, <param_declaration}*) -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
@@ -10522,14 +10524,6 @@ after_rparen:
 	//Otherwise, this is the return type
 	function_record->return_type = return_type;
 	function_record->signature->internal_types.function_type->return_type = return_type;
-
-	//One last thing, we need to see a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Fail out
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon required at the end of function predeclaration", parser_line_num);
-	}
 
 	//Otherwise this all worked. We can add this function to the symtab
 	insert_function(function_symtab, function_record);
