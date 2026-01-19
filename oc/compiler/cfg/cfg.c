@@ -110,7 +110,7 @@ typedef enum{
 //We predeclare up here to avoid needing any rearrangements
 static void visit_declaration_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
-static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
+static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t is_branch_ending);
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node);
@@ -5043,6 +5043,17 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 	//We'll process based on the class of our expression node
 	switch(expr_node->ast_node_type){
+		case AST_NODE_TYPE_DECL_STMT:
+			visit_declaration_statement(expr_node);
+
+			result_package.starting_block = basic_block;
+			result_package.final_block = basic_block;
+			break;
+
+		case AST_NODE_TYPE_LET_STMT:
+			result_package = visit_let_statement(basic_block, expr_node, FALSE);
+			break;
+
 		//Handle an assignment expression
 		case AST_NODE_TYPE_ASNMNT_EXPR:
 			//Let the helper deal with it
@@ -7128,33 +7139,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
-			case AST_NODE_TYPE_DECL_STMT:
-				//Let the helper rule handle it
-				visit_declaration_statement(ast_cursor);
-				break;
-
-			case AST_NODE_TYPE_LET_STMT:
-				//We'll visit the block here
-				generic_results = visit_let_statement(ast_cursor, FALSE);
-
-				//If this is not null, then we're just adding onto something
-				if(starting_block != NULL){
-					//Merge the two together
-					current_block = merge_blocks(current_block, generic_results.starting_block); 
-
-					//If these are not equal, we can reassign the current block to be the final block
-					if(generic_results.starting_block != generic_results.final_block){
-						current_block = generic_results.final_block;
-					}
-
-				//Otherwise this is the very first thing
-				} else {
-					starting_block = generic_results.starting_block;
-					current_block = generic_results.final_block;
-				}
-
-				break;
-
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
@@ -7564,7 +7548,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 
 			//This means that we have some kind of expression statement
-			default:
+			case AST_NODE_TYPE_EXPR_CHAIN:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -7572,9 +7556,17 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 				
 				//Also emit the simplified machine code
-				emit_expression(current_block, ast_cursor, FALSE, FALSE);
+				generic_results = emit_expression_chain(current_block, ast_cursor, FALSE, FALSE);
+
+				//Update the end block
+				current_block = generic_results.final_block;
 				
 				break;
+				
+			//Shouldn't ever happen
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in CFG\n");
+				exit(1);
 		}
 
 		//If this is the exit block, it means that we returned through every control path
@@ -7632,33 +7624,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
-			case AST_NODE_TYPE_DECL_STMT:
-				//Let the helper rule handle it
-				visit_declaration_statement(ast_cursor);
-				break;
-
-			case AST_NODE_TYPE_LET_STMT:
-				//We'll visit the block here
-				generic_results = visit_let_statement(ast_cursor, FALSE);
-
-				//If this is not null, then we're just adding onto something
-				if(starting_block != NULL){
-					//Merge the two together
-					current_block = merge_blocks(current_block, generic_results.starting_block); 
-
-					//If these are not equal, we can reassign the current block to be the final block
-					if(generic_results.starting_block != generic_results.final_block){
-						current_block = generic_results.final_block;
-					}
-
-				//Otherwise this is the very first thing
-				} else {
-					starting_block = generic_results.starting_block;
-					current_block = generic_results.final_block;
-				}
-
-				break;
-
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
@@ -8071,7 +8036,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				break;
 
 			//This means that we have some kind of expression statement
-			default:
+			case AST_NODE_TYPE_EXPR_CHAIN:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -8079,9 +8044,17 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 				
 				//Also emit the simplified machine code
-				emit_expression(current_block, ast_cursor, FALSE, FALSE);
+				generic_results = emit_expression_chain(current_block, ast_cursor, FALSE, FALSE);
+
+				//Update the end block
+				current_block = generic_results.final_block;
 				
 				break;
+				
+			//Shouldn't ever happen
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in CFG\n");
+				exit(1);
 		}
 
 		//If this is the exit block, it means that we returned through every control path
@@ -8926,12 +8899,12 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 /**
  * Visit a let statement
  */
-static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
+static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Create the return package here
-	cfg_result_package_t let_results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t let_results = {starting_block, starting_block, NULL, BLANK};
 
-	//What block are we emitting to?
-	basic_block_t* current_block = basic_block_alloc_and_estimate();
+	//The current block is the start block
+	basic_block_t* current_block = starting_block;
 
 	//Extract the type here
 	generic_type_t* type = node->inferred_type;
