@@ -63,9 +63,10 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 
 //=============================== Private Utility Macros ================================
 /**
- * The minimum token amount is 256
+ * The minimum token amount is 512. This is considered
+ * a sane starting amount
  */
-#define DEFAULT_TOKEN_COUNT 256
+#define DEFAULT_TOKEN_COUNT 512
 
 /**
  * Grab the next char in the stream

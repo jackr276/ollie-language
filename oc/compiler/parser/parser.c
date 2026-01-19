@@ -8419,10 +8419,12 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
  * directly into a file. This assembly will be inserted, in the exact logical control 
  * flow where it came from, and will not be altered or analyzed by oc.
  *
+ * In order to insert this assembly, the programmer will have to use a string literal("")
+ *
  * Recall: By the time that we reach this, we'll have already seen the asm
  * keyword
  *
- * BNF Rule: <assembly-statement> ::= #asm{{assembly-statement}+};
+ * BNF Rule: <assembly-statement> ::= #asm{<string literal>};
  */
 static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token_stream){
 	//The next token
@@ -8436,59 +8438,35 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
 		return print_and_return_error("Assembly insertion statements must be wrapped in curly braces({})", parser_line_num);
 	}
 
+	//Push it onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
 	//Let's warn the user. Assembly inline statements are a great way to shoot yourself in the foot
 	print_parse_message(INFO, "Assembly inline statements are not analyzed by OC. Whatever is written will be executed verbatim. Please double check your assembly statements.", parser_line_num);
 
-	//Otherwise we're presumably good, so we can start hunting for assembly statements
-	generic_ast_node_t* assembly_node = ast_node_alloc(AST_NODE_TYPE_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
-
-	//Create the memory for the assembly
-	assembly_node->string_value = dynamic_string_alloc();
-
-	//Store this too
-	assembly_node->line_number = parser_line_num;
-
-	//We keep going here as long as we don't see the closing curly brace
+	//Grab the string constant
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//So long as we don't see this
-	while(lookahead.tok != R_CURLY){
-		//Put it back
-		push_back_token(token_stream, &parser_line_num);
-
-		printf("TODO NOT YET SUPPORTED\n");
-		exit(0);
-
-		//We'll now need to consume an assembly statement
-		//lookahead = get_next_assembly_statement(token_stream);
-		//
-		//
-		//
-		//TODO
-		//
-		//
-		//
-
-		//If it's an error, we'll fail out here
-		if(lookahead.tok == ERROR){
-			return print_and_return_error("Unable to parse assembly statement. Did you enclose the whole block in curly braces({})?", parser_line_num);
-		}
-
-		//Concatenate this in
-		dynamic_string_concatenate(&(assembly_node->string_value), lookahead.lexeme.string);
-
-		//Add the newline character for readability
-		dynamic_string_add_char_to_back(&(assembly_node->string_value), '\n');
-
-		//Now we'll refresh the lookahead token
-		lookahead = get_next_token(token_stream, &parser_line_num);
+	//If it's not a string constant, we have a failure
+	if(lookahead.tok != STR_CONST){
+		return print_and_return_error("Assembly inline statements must have one string constant containing all of the assembly code", parser_line_num);
 	}
 
-	//Now we just need to see one last thing -- the closing semicolon
+	//Otherwise it's presumably good, so we can allocate the node
+	generic_ast_node_t* assembly_node = ast_node_alloc(AST_NODE_TYPE_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
+
+	//Copy the dynamic string over
+	assembly_node->string_value = lookahead.lexeme;
+
+	//Store this too
+	assembly_node->line_number = lookahead.line_num;
+
+	//Now we need to see a curly brace
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Expected semicolon after assembly statement", parser_line_num);
+	//First we need to validate that this is an R_CURLY
+	if(lookahead.tok != R_CURLY){
+		return print_and_return_error("Assembly inline statements must be enclosed in curly braces", parser_line_num);
 	}
 
 	//Once we escape out here, we've seen the whole thing, so we're done
