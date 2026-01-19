@@ -8415,6 +8415,30 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 
 
 /**
+ * A special helper function that crawls a dynamic string and removes any tab
+ * characters that it sees. This is useful for our assembly inline statements
+ * because we don't need any of these tabs in there
+ */
+static inline void strip_tabs_from_string_constant(dynamic_string_t* dynamic_string){
+	//This length is going to change
+	u_int16_t total_length = dynamic_string->current_length;
+
+	//Run through all of the characters
+	for(u_int16_t i = 0; i < total_length; i++){
+		//Not a tab character, so move along
+		if(dynamic_string->string[i] != '\t'){
+			continue;
+		}
+
+		//Otherwise, it is a tab character. We'll need to shift
+		//everything over by 1 to effectively overwrite this tab
+		//character
+
+	}
+}
+
+
+/**
  * Assembly inline statements allow the programmer to write assembly
  * directly into a file. This assembly will be inserted, in the exact logical control 
  * flow where it came from, and will not be altered or analyzed by oc.
@@ -8467,6 +8491,18 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
 	//First we need to validate that this is an R_CURLY
 	if(lookahead.tok != R_CURLY){
 		return print_and_return_error("Assembly inline statements must be enclosed in curly braces", parser_line_num);
+	}
+
+	//Now make sure that we can match the two
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
+	}
+
+	//Finally if we make it all the way down here, we need to see a semicolon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon expected after statement", parser_line_num);
 	}
 
 	//Once we escape out here, we've seen the whole thing, so we're done
