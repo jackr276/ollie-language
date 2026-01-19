@@ -8415,6 +8415,40 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 
 
 /**
+ * Remove any leading/trailing newlines in a string constant. Used for ASM inline statements
+ */
+static inline void strip_leading_trailing_newlines_from_string_constant(dynamic_string_t* dynamic_string){
+	//Cache the length
+	int16_t total_length = dynamic_string->current_length;
+
+	//We have a leading newline, let's remove it
+	if(dynamic_string->string[0] == '\n'){
+		//We need to shift everything over by 1 to
+		//overwrite the entire thing
+		for(int16_t i = 0; i < total_length - 1; i++){
+			//Shift everything back by 1
+			dynamic_string->string[i] = dynamic_string->string[i + 1];
+		}
+
+		//Ensure that the null terminator is still there
+		dynamic_string->string[total_length - 1] = '\0';
+
+		//The length is now one less
+		total_length--;
+		dynamic_string->current_length--;
+	}
+
+	//If this is a newline, we can just make it a '\0'
+	if(dynamic_string->string[total_length - 1]  == '\n'){
+		dynamic_string->string[total_length - 1] = '\0';
+
+		//Decrement this length
+		dynamic_string->length--;
+	}
+}
+
+
+/**
  * A special helper function that crawls a dynamic string and removes any tab
  * characters that it sees. This is useful for our assembly inline statements
  * because we don't need any of these tabs in there
@@ -8446,8 +8480,10 @@ static inline void strip_tabs_from_string_constant(dynamic_string_t* dynamic_str
 		//the block and reprocesses
 		i--;
 
-		//Total length is now one less
+		//Total length is now one less. Modify it here and in the string
+		//as well
 		total_length--;
+		dynamic_string->current_length--;
 	}
 }
 
@@ -8503,6 +8539,7 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
 	//characters out. These are not needed by us so we'll get rid of them with a special
 	//processing method
 	strip_tabs_from_string_constant(&(assembly_node->string_value));
+	strip_leading_trailing_newlines_from_string_constant(&(assembly_node->string_value));
 
 	//Now we need to see a curly brace
 	lookahead = get_next_token(token_stream, &parser_line_num);
