@@ -5883,7 +5883,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  *
  * 							<top-level>
  * 	      /						|			\ 
- * 	 0 or more expressions condition node  0 or 1 update nodes
+ * 	 0 or more expressions condition node  0 or more expressions
  * 	 							|
  * 	 						logical or statement
  */
@@ -5951,18 +5951,22 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//Create the update block
 	basic_block_t* for_stmt_update_block = basic_block_alloc_and_estimate();
+	//In case stuff gets pushed around
+	basic_block_t* for_stmt_update_block_end = for_stmt_update_block;
 
-	//If this isn't a compound statement, we're good to go
-	if(cursor->ast_node_type != AST_NODE_TYPE_COMPOUND_STMT){
-		//Emit the update expression
-		emit_expression(for_stmt_update_block, cursor, FALSE, FALSE);
+	//If we see an expression chain, we need 
+	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
+		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_update_block, cursor, FALSE, FALSE);
 
-		//Bump it up now
+		//Update the block if need be
+		for_stmt_update_block_end = expression_chain_result.final_block;
+
+		//Push the cusor up now that we're done with the expression chain
 		cursor = cursor->next_sibling;
 	}
 	
 	//Unconditional jump to condition block
-	emit_jump(for_stmt_update_block, condition_block);
+	emit_jump(for_stmt_update_block_end, condition_block);
 
 	//All continues will go to the update block
 	push(&continue_stack, for_stmt_update_block);

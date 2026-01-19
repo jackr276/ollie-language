@@ -6737,6 +6737,70 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 
 
 /**
+ * Special handler for for-loops where we don't require that a semicolon
+ * be shown
+ */
+static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie_token_stream_t* token_stream){
+	//The lookahead token
+	lexitem_t lookahead;
+
+	//The top level node is the special statement chain node
+	generic_ast_node_t* top_level_node = ast_node_alloc(AST_NODE_TYPE_EXPR_CHAIN, SIDE_TYPE_LEFT);
+	//Cache the line number
+	top_level_node->line_number = parser_line_num;
+
+	//So long as we keep seeing commas, we keep going
+	do {
+		//Extract the first token in our search
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		
+		//Holder for the current expression
+		generic_ast_node_t* current_expression_node = NULL;
+		
+		//Go based on what we see up ahead of us
+		switch (lookahead.tok) {
+			case DECLARE:
+				//IMPORTANT - declares can/will be null if they're declaring a primitive type
+				current_expression_node = declare_statement(token_stream, FALSE);
+				break;
+
+			case LET:
+				current_expression_node = let_statement(token_stream, FALSE);
+				break;
+
+			//If we don't see declare or let, we push it back
+			default:
+				push_back_token(token_stream, &parser_line_num);
+				current_expression_node = assignment_expression(token_stream);
+				break;
+		}
+
+		//If this fails, the whole thing is over
+		if(current_expression_node != NULL
+			&& current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			//It's already an error, so just send it back up
+			return current_expression_node;
+		}
+
+		//So long as we have something to add we'll add it
+		if(current_expression_node != NULL){
+			add_child_node(top_level_node, current_expression_node);
+		}
+
+		//Refresh our token. If it's a comma - great. If not, we leave
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+	} while(lookahead.tok == COMMA);
+
+	//Push back the token
+	push_back_token(token_stream, &parser_line_num);
+
+	//Give back the top level node
+	return top_level_node;
+}
+
+
+/**
  * An expression statement can chain one or more assignment expressions together using commas
  *
  * Note that this
@@ -6744,7 +6808,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
  * BNF Rule: <expression-statement> ::= {<assignment-expression> | <let-statement> | <declare-statement>}?; 
  * 										| {<assignment-expression> | <let-statement> | <declare-statement>}{, {<assignment-expression> | <let-statement> | <declare-statement>}}*;
  */
-static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stream){
+static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stream){
 	//The lookahead token
 	lexitem_t lookahead;
 
@@ -8158,7 +8222,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
- * BNF Rule: <for-statement> ::= for({expression-statement} <logical-or-expression> ; {<assignment-expression>}? ) <compound-statement>
+ * BNF Rule: <for-statement> ::= for({expression-statement} <logical-or-expression> ; {expression-statement-no-semicolon}) <compound-statement>
  */
 static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	//Lookahead token
@@ -8235,8 +8299,8 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 		//Put it back
 		push_back_token(token_stream, &parser_line_num);
 
-		//Now we need to see a valid assignment expression
-		generic_ast_node_t* final_expression = assignment_expression(token_stream);
+		//We now need to see a valid expression chain
+		generic_ast_node_t* final_expression = expression_statement_no_ending_semicolon(token_stream);
 
 		//If it fails, we fail too
 		if(final_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
