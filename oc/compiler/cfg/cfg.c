@@ -120,6 +120,7 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node);
 
+static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node, u_int8_t is_branch_ending, u_int8_t is_conditional);
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant, u_int8_t is_branch_ending);
@@ -5900,48 +5901,14 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//The first thing that we are able to see is a chain of statements that may
 	//or may not be there. We will let our given rule handle it
 	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
+		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_entry_block, cursor, FALSE, FALSE);
 
+		//Update the block if need be
+		for_stmt_entry_block = expression_chain_result.final_block;
 
 		//Push the cusor up now that we're done with the expression chain
 		cursor = cursor->next_sibling;
 	}
-
-	//If the very first one is not blank
-	if(ast_cursor->first_child != NULL){
-		//Create this for our results here
-		cfg_result_package_t first_child_result_package = {NULL, NULL, NULL, BLANK};
-
-		//TODO UPDATE
-
-		switch(ast_cursor->first_child->ast_node_type){
-			//We could have a let statement
-			case AST_NODE_TYPE_LET_STMT:
-				//Let the subrule handle this
-				first_child_result_package = visit_let_statement(ast_cursor->first_child, FALSE);
-				//We'll need to merge the entry block here due to the way that let statements work
-				for_stmt_entry_block = merge_blocks(for_stmt_entry_block, first_child_result_package.starting_block);
-
-				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
-				//This is a special way of working things due to how let statements work
-				if(first_child_result_package.starting_block != first_child_result_package.final_block){
-				//Make this the new end
-					for_stmt_entry_block = first_child_result_package.final_block;
-				}
-		
-				break;
-			default:
-				//Let the subrule handle this
-				first_child_result_package = emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
-
-				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
-				if(first_child_result_package.final_block != for_stmt_entry_block){
-				//Make this the new end
-					for_stmt_entry_block = first_child_result_package.final_block;
-				}
-
-				break;
-			}
-		}
 
 	//Once we reach here, we are officially in the loop. Everything beyond this point
 	//is going to happen repeatedly
@@ -5957,11 +5924,8 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//We will now emit a jump from the entry block, to the condition block
 	emit_jump(for_stmt_entry_block, condition_block);
 
-	//Move along to the next node
-	ast_cursor = ast_cursor->next_sibling;
-
-	//The condition block values package
-	cfg_result_package_t condition_block_vals = emit_expression(condition_block, ast_cursor->first_child, TRUE, TRUE);
+	//The condition block values package. This is just a regular expression
+	cfg_result_package_t condition_block_vals = emit_expression(condition_block, cursor->first_child, TRUE, TRUE);
 
 	//Store this for later
 	three_addr_var_t* conditional_decider = condition_block_vals.assignee;
@@ -5971,16 +5935,16 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		conditional_decider = emit_test_code(condition_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
 	}
 
-	//Now move it along to the third condition
-	ast_cursor = ast_cursor->next_sibling;
+	//Now push up to the third condition
+	cursor = cursor->next_sibling;
 
 	//Create the update block
 	basic_block_t* for_stmt_update_block = basic_block_alloc_and_estimate();
 
-	//If the third one is not blank
-	if(ast_cursor->first_child != NULL){
+	//If this isn't a compound statement, we're good to go
+	if(cursor->next_sibling->ast_node_type != AST_NODE_TYPE_COMPOUND_STMT){
 		//Emit the update expression
-		emit_expression(for_stmt_update_block, ast_cursor->first_child, FALSE, FALSE);
+		emit_expression(for_stmt_update_block, cursor, FALSE, FALSE);
 	}
 	
 	//Unconditional jump to condition block
@@ -5988,13 +5952,13 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//All continues will go to the update block
 	push(&continue_stack, for_stmt_update_block);
-	
-	//Advance to the next sibling
-	ast_cursor = ast_cursor->next_sibling;
+
+	//Push it up one final time
+	cursor = cursor->next_sibling;
 	
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
-	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
+	cfg_result_package_t compound_statement_results = visit_compound_statement(cursor);
 
 	//Once we're done with the compound statement, we are no longer in the loop
 	pop_nesting_level(&nesting_stack);
