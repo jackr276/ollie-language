@@ -179,6 +179,11 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side);
 void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child);
 
 /**
+ * A helper function that will add a sibling node to the given node
+ */
+void add_sibling_node(generic_ast_node_t* node, generic_ast_node_t* new_sibling);
+
+/**
  * Global tree deallocation function
  */
 void ast_dealloc();

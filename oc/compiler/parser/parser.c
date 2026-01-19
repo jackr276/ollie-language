@@ -11,7 +11,6 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
@@ -6776,6 +6775,7 @@ static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stre
 		//Go based on what we see up ahead of us
 		switch (lookahead.tok) {
 			case DECLARE:
+				//IMPORTANT - declares can/will be null if they're declaring a primitive type
 				current_expression_node = declare_statement(token_stream, FALSE);
 				break;
 
@@ -6791,7 +6791,8 @@ static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stre
 		}
 
 		//If this fails, the whole thing is over
-		if(current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		if(current_expression_node != NULL
+			&& current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			//It's already an error, so just send it back up
 			return current_expression_node;
 		}
@@ -6802,8 +6803,10 @@ static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stre
 		//Easiest case, this just becomes the node
 		if(expression_node == NULL) {
 			expression_node = current_expression_node;
+		
+		//Otherwise, this will get attached to the end as a new sibling node
 		} else {
-
+			add_sibling_node(expression_node, current_expression_node);
 		}
 
 		//Refresh our token. If it's a comma - great. If not, we leave
@@ -9994,7 +9997,8 @@ static generic_ast_node_t* declaration(ollie_token_stream_t* token_stream, u_int
 	}
 
 	//If it's an error send it up the chain
-	if(declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(declaration_node != NULL 
+		&& declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return declaration_node;
 	}
 
