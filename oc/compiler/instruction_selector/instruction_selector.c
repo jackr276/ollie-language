@@ -4516,9 +4516,30 @@ static void handle_division_instruction(instruction_window_t* window){
  * Handle an SSE multiplication instruction. By the time we get here, we already
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
+ *
+ * NOTE: this assumes that "instruction1" is what we're after. This will slide the window
+ * as needed
  */
-static void handle_sse_division_instruction(instruction_window_t* window){
-	//TODO
+static inline void handle_sse_division_instruction(instruction_window_t* window){
+	//Handle using instruction 1
+	instruction_t* instruction = window->instruction1;
+
+	//Go based on what the assignee's type is
+	switch(instruction->assignee->type->type_size){
+		case SINGLE_PRECISION:
+			instruction->instruction_type = DIVSS;
+			break;
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = DIVSD;
+			break;
+		default:
+			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction");
+	}
+
+	//The source register is the op1 and the destination is the assignee. There is never a case where we
+	//will have a constant source, it is not possible for sse operations
+	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op1;
 }
 
 
@@ -4527,7 +4548,7 @@ static void handle_sse_division_instruction(instruction_window_t* window){
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
  */
-static void handle_sse_multiplication_instruction(instruction_window_t* window){
+static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
 	//TODO
 }
 
@@ -6923,7 +6944,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 				//Otherwise we have a floating point multiplication here so we need
 				//to handle it appropriately
 				} else {
-					handle_sse_multiplication_instruction(window);
+					handle_sse_multiplication_instruction(window->instruction1);
 				}
 
 				break;
