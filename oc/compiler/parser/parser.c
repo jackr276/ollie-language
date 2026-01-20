@@ -50,6 +50,7 @@ static heap_queue_t current_function_jump_statements;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
+static lex_stack_t assignment_grouping_stack;
 
 //Generic types here for us to repeatedly reference
 static generic_type_t* immut_char = NULL;
@@ -98,7 +99,6 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 static u_int8_t alias_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* declaration(ollie_token_stream_t* token_stream, u_int8_t is_global);
 static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global);
@@ -657,7 +657,7 @@ static generic_ast_node_t* generate_pointer_arithmetic(generic_ast_node_t* point
  * BNF "Rule": <identifier> ::= (<letter> | <digit> | _ | $){(<letter>) | <digit> | _ | $}*
  * Note all actual string parsing and validation is handled by the lexer
  */
-static generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_type_t side){
+static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_type_t side){
 	//Grab the next token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	
@@ -687,7 +687,7 @@ static generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_t
  * jump, and allows us to make every user-defined jump a direct jump when(1) jump. This greatly
  * simplifies our development processes
  */
-static generic_ast_node_t* emit_direct_constant(int32_t constant){
+static inline generic_ast_node_t* emit_direct_constant(int32_t constant){
 	//Create our constant node
 	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, SIDE_TYPE_RIGHT);
 	//Add the line number
@@ -1374,7 +1374,7 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
  *
  * BNF Rule: <primary-expression> ::= <identifier>
  * 									| <constant> 
- * 									| (<ternary_expression>)
+ * 									| (<assignment_expression>)
  * 									| sizeof(<logical-or-expression>)
  * 									| typesize(<type-name>)
  * 									| <function-call>
@@ -1565,7 +1565,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 			push_token(&grouping_stack, lookahead);
 
 			//We are now required to see a valid ternary expression
-			generic_ast_node_t* expr = ternary_expression(token_stream, side);
+			generic_ast_node_t* expr = assignment_expression(token_stream);
 
 			//If it's an error, just give the node back
 			if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1753,6 +1753,9 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 	//This will hold onto the assignment operator for us
 	ollie_token_t assignment_operator = BLANK;
 
+	//Wipe out whatever run came before us on the lexstack
+	reset_lexstack(&assignment_grouping_stack);
+
 	//Let's now seek ahead in the token stream until we either find an assignment operator or the 
 	//end of a statement
 	u_int32_t token_pointer = token_stream->token_pointer;
@@ -1763,9 +1766,14 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		//If we see an assignment operator or something that indicates the end
 		//of a statement, we're done here
 		switch(lookahead.tok){
+			//For these instances, there's no chance of us being caught
+			//inside of a nested expression
 			case SEMICOLON:
 			case L_CURLY:
 			case R_CURLY:
+				assignment_operator = lookahead.tok;
+				goto loop_end;
+
 			case EQUALS:
 			case LSHIFTEQ:
 			case RSHIFTEQ:
@@ -1777,8 +1785,42 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 			case STAREQ:
 			case SLASHEQ:
 			case MODEQ:
-				assignment_operator = lookahead.tok;
-				goto loop_end;
+				/**
+				 * When we encounter this, we need to know
+				 * if we're actually seeing an equals sign or
+				 * if we're trapped inside of a parenthesized expression.
+				 * We'll be able to tell if we can peek the private
+				 * stack and not see anything
+				 */
+				if(peek_token(&assignment_grouping_stack).tok != L_PAREN){
+					assignment_operator = lookahead.tok;
+					goto loop_end;
+				}
+
+				//If we got here, it means we saw an assignment operator but we
+				//were stuck inside of a parenthesis, so we can't actually
+				//escape here
+				token_pointer++;
+				break;
+
+			//Put it onto the stack
+			case L_PAREN:
+				push_token(&assignment_grouping_stack, lookahead);
+				token_pointer++;
+				break;
+
+			//Pop it off of the stack
+			case R_PAREN:
+				//If we don't have an L_PAREN on here, it means we hit
+				//the end of some barrier and cannot escape
+				if(peek_token(&assignment_grouping_stack).tok != L_PAREN){
+					assignment_operator = lookahead.tok;
+					goto loop_end;
+				}
+
+				pop_token(&assignment_grouping_stack);
+				token_pointer++;
+				break;
 
 			//Otherwise we must keep searching
 			default:
@@ -1906,6 +1948,12 @@ loop_end:
 		//Otherwise the overall type is the final type
 		asn_expr_node->inferred_type = final_type;
 
+		//Assignment expressions themselves are not assignable
+		asn_expr_node->is_assignable = FALSE;
+
+		//This will always share the unary expression's variable
+		asn_expr_node->variable = left_hand_unary->variable;
+
 		//Otherwise we know it worked, so we'll add the expression in as the right child
 		add_child_node(asn_expr_node, expr);
 
@@ -2014,6 +2062,15 @@ loop_end:
 				//Now we'll add the duplicates in as children
 				add_child_node(binary_op_node, left_hand_duplicate);
 				add_child_node(binary_op_node, expr);
+
+				//Assignment expressions themselves are not assignable
+				asn_expr_node->is_assignable = FALSE;
+				
+				//Store the final type
+				asn_expr_node->inferred_type = final_type;
+
+				//This will always share the unary expression's variable
+				asn_expr_node->variable = left_hand_unary->variable;
 
 				//This is an overall child of the assignment expression
 				add_child_node(asn_expr_node, binary_op_node);
@@ -6738,49 +6795,149 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 
 
 /**
- * An expression statement can optionally have an expression in it. Like all rules, it returns 
- * a reference to the root of the subtree it creates
- *
- * BNF Rule: <expression-statement> ::= {<assignment-expression>}?;
+ * Special handler for for-loops where we don't require that a semicolon
+ * be shown
  */
-static generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stream){
-	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie_token_stream_t* token_stream){
+	//The lookahead token
+	lexitem_t lookahead;
+
+	//The top level node is the special statement chain node
+	generic_ast_node_t* top_level_node = ast_node_alloc(AST_NODE_TYPE_EXPR_CHAIN, SIDE_TYPE_LEFT);
+	//Cache the line number
+	top_level_node->line_number = parser_line_num;
+
+	//So long as we keep seeing commas, we keep going
+	do {
+		//Extract the first token in our search
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		
+		//Holder for the current expression
+		generic_ast_node_t* current_expression_node = NULL;
+		
+		//Go based on what we see up ahead of us
+		switch (lookahead.tok) {
+			case DECLARE:
+				//IMPORTANT - declares can/will be null if they're declaring a primitive type
+				current_expression_node = declare_statement(token_stream, FALSE);
+				break;
+
+			case LET:
+				current_expression_node = let_statement(token_stream, FALSE);
+				break;
+
+			//If we don't see declare or let, we push it back
+			default:
+				push_back_token(token_stream, &parser_line_num);
+				current_expression_node = assignment_expression(token_stream);
+				break;
+		}
+
+		//If this fails, the whole thing is over
+		if(current_expression_node != NULL
+			&& current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			//It's already an error, so just send it back up
+			return current_expression_node;
+		}
+
+		//So long as we have something to add we'll add it
+		if(current_expression_node != NULL){
+			add_child_node(top_level_node, current_expression_node);
+		}
+
+		//Refresh our token. If it's a comma - great. If not, we leave
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+	} while(lookahead.tok == COMMA);
+
+	//Push back the token
+	push_back_token(token_stream, &parser_line_num);
+
+	//Give back the top level node
+	return top_level_node;
+}
+
+
+/**
+ * An expression statement can chain one or more assignment expressions together using commas
+ *
+ * Note that this
+ *
+ * BNF Rule: <expression-statement> ::= {<assignment-expression> | <let-statement> | <declare-statement>}?; 
+ * 										| {<assignment-expression> | <let-statement> | <declare-statement>}{, {<assignment-expression> | <let-statement> | <declare-statement>}}*;
+ */
+static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* token_stream){
 	//The lookahead token
 	lexitem_t lookahead;
 
 	//Let's see if we have a semicolon. If we do, we'll just jump right out
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Empty expression, we're done here
+	//There is the chance that we have a completely empty expression(just a semicolon). If
+	//we do then we catch it here and just leave
 	if(lookahead.tok == SEMICOLON){
-		//Blank statement, simply leave
 		return NULL;
+	} else {
+		//Otherwise push it back so we don't mess with the search
+		push_back_token(token_stream, &parser_line_num);
 	}
 
-	//Otherwise, put it back and call expression
-	push_back_token(token_stream, &parser_line_num);
-	
-	//Now we know that it's not empty, so we have to see a valid expression
-	generic_ast_node_t* expr_node = assignment_expression(token_stream);
+	//The top level node is the special statement chain node
+	generic_ast_node_t* top_level_node = ast_node_alloc(AST_NODE_TYPE_EXPR_CHAIN, SIDE_TYPE_LEFT);
+	//Cache the line number
+	top_level_node->line_number = parser_line_num;
 
-	//If this fails, the whole thing is over
-	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		//It's already an error, so just send it back up
-		return expr_node;
-	}
+	//So long as we keep seeing commas, we keep going
+	do {
+		//Extract the first token in our search
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		
+		//Holder for the current expression
+		generic_ast_node_t* current_expression_node = NULL;
+		
+		//Go based on what we see up ahead of us
+		switch (lookahead.tok) {
+			case DECLARE:
+				//IMPORTANT - declares can/will be null if they're declaring a primitive type
+				current_expression_node = declare_statement(token_stream, FALSE);
+				break;
 
-	//Now to close out we must see a semicolon
-	//Let's see if we have a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
+			case LET:
+				current_expression_node = let_statement(token_stream, FALSE);
+				break;
+
+			//If we don't see declare or let, we push it back
+			default:
+				push_back_token(token_stream, &parser_line_num);
+				current_expression_node = assignment_expression(token_stream);
+				break;
+		}
+
+		//If this fails, the whole thing is over
+		if(current_expression_node != NULL
+			&& current_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			//It's already an error, so just send it back up
+			return current_expression_node;
+		}
+
+		//So long as we have something to add we'll add it
+		if(current_expression_node != NULL){
+			add_child_node(top_level_node, current_expression_node);
+		}
+
+		//Refresh our token. If it's a comma - great. If not, we leave
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+	} while(lookahead.tok == COMMA);
 
 	//Empty expression, we're done here
 	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon expected after statement", current_line);
+		sprintf(info, "Expected semicolon after expression statement but saw %s", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Otherwise we're all set
-	return expr_node;
+	return top_level_node;
 }
 
 
@@ -8124,11 +8281,9 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
- * BNF Rule: <for-statement> ::= for( {<assignment-expression> | <let-statement>}? ; <logical-or-expression> ; {<assignment-expression>}? ) <compound-statement>
+ * BNF Rule: <for-statement> ::= for({expression-statement} <logical-or-expression> ; {expression-statement-no-semicolon}) <compound-statement>
  */
 static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
-	//Freeze the current line number
-	u_int16_t current_line = parser_line_num; 
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -8137,6 +8292,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 
 	//We've already seen the for keyword, so let's create the root level node
 	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_TYPE_FOR_STMT, SIDE_TYPE_LEFT);
+	for_stmt_node->line_number = parser_line_num; 
 
 	//We now need to first see a left paren
  	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8154,112 +8310,47 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	 * for variables. As such, we will initialize a new variable scope when we get here
 	 */
 	initialize_variable_scope(variable_symtab);
+	
+	//Let's see if we've got anything. Invoke the expression statement rule here
+	generic_ast_node_t* statement_chain = expression_statement(token_stream);
 
-	//Now we have the option of seeing an assignment expression, a let statement, or nothing
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//We could also see the let keyword for a let_stmt
-	if(lookahead.tok == LET){
-		//On the contrary, the let statement rule assumes that let has already been consumed, so we won't
-		//put it back here, we'll just call the rule
-		generic_ast_node_t* let_stmt = let_statement(token_stream, FALSE);
-
-		//If it fails, we also fail
-		if(let_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid let statement given to for loop", current_line);
-		}
-
-		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		//Add this in as a child
-		add_child_node(for_loop_cond_node, let_stmt);
-
-		//Otherwise if we get here it worked, so we'll add it in as a child
-		add_child_node(for_stmt_node, for_loop_cond_node);
-		
-		//Remember -- let statements handle semicolons for us, so we don't need to check
-
-	//Otherwise it had to be a semicolon, so if it isn't we fail
-	} else if(lookahead.tok != SEMICOLON){
-		//If it isn't a semicolon, then we must have some kind of assignment op here
-		//Push the token back
-		push_back_token(token_stream, &parser_line_num);
-
-		//Let the assignment expression handle this
-		generic_ast_node_t* asn_expr = assignment_expression(token_stream);
-
+	//Remember - it's totally possible for this to be NULL
+	if(statement_chain != NULL){
 		//If it fails, we fail too
-		if(asn_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid assignment expression given to for loop", current_line);
+		if(statement_chain->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid statement(s) found in for loop", parser_line_num);
 		}
 
-		//This actually must be an assignment expression, so if it isn't we fail 
-		if(asn_expr->ast_node_type != AST_NODE_TYPE_ASNMNT_EXPR){
-			return print_and_return_error("Invalid assignment expression given to for loop", current_line);
-		}
-
-		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		//Add this in as a child
-		add_child_node(for_loop_cond_node, asn_expr);
-
-		//Otherwise it worked, so we'll add it in as a child
-		add_child_node(for_stmt_node, for_loop_cond_node);
-
-		//We'll refresh the lookahead for the eventual next step
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//The assignment expression won't check semicols for us, so we'll do it here
-		if(lookahead.tok != SEMICOLON){
-			return print_and_return_error("Semicolon expected in for statement declaration", parser_line_num);
-		}
-
-	//Just add in a blank node as a placeholder
-	} else {
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		add_child_node(for_stmt_node, for_loop_cond_node);
+		//Otherwise, we should be fine to just add it in
+		add_child_node(for_stmt_node, statement_chain);
 	}
 
-	//Now we're in the middle of the for statement. We can optionally see a conditional expression here
+	//Allocate the condition node
+	generic_ast_node_t* condition_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
+	
+	//This is the next child for the for loop
+	add_child_node(for_stmt_node, condition_node);
+
+	//Following that, we must see a logical or expression here
+	generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+
+	//If it fails, we fail too
+	if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid conditional expression in for loop", parser_line_num);
+	}
+
+	//Otherwise it worked, so this is the child node for conditional
+	add_child_node(condition_node, expression_node);
+
+	//We now must see a semicolon
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//If it's not a semicolon, we need to see a valid conditional expression
+	//No semicolon means we fail
 	if(lookahead.tok != SEMICOLON){
-		//Push whatever it is back
-		push_back_token(token_stream, &parser_line_num);
-
-		//Let this rule handle it
-		generic_ast_node_t* expr_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
-
-		//If it fails, we fail too
-		if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid conditional expression in for loop middle", parser_line_num);
-		}
-
-		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		//Add this in as a child
-		add_child_node(for_loop_cond_node, expr_node);
-
-		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, for_loop_cond_node);
-
-		//Now once we get here, we need to see a valid semicolon
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	
-		//If it isn't one, we fail out
-		if(lookahead.tok != SEMICOLON){
-			return print_and_return_error("Semicolon expected after conditional expression in for loop", parser_line_num);
-		}
-
-	//Create a blank node as a placeholder
-	} else {
-		return print_and_return_error("For loops must have the second condition occupied", parser_line_num);
+		return print_and_return_error("Semicolon required after for loop conditional", parser_line_num);
 	}
 
-	//Once we make it here, we know that either the inside was blank and we saw a semicolon or it wasn't and we saw a valid conditional 
-	
-	//As our last step, we can see another conditional expression. If the lookahead isn't a rparen, we must see one
+	//As our last step, we can see another conditional expression. If the lookahead isn't an rparen, we must see one
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//If it isn't an R_PAREN
@@ -8267,29 +8358,19 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 		//Put it back
 		push_back_token(token_stream, &parser_line_num);
 
-		//We now must see a valid conditional
-		//Let this rule handle it
-		generic_ast_node_t* expr_node = assignment_expression(token_stream);
+		//We now need to see a valid expression chain
+		generic_ast_node_t* final_expression = expression_statement_no_ending_semicolon(token_stream);
 
 		//If it fails, we fail too
-		if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid conditional expression in for loop", parser_line_num);
+		if(final_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid final expression in for loop", parser_line_num);
 		}
 
-		//Create the wrapper node for CFG creation later on
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		//Add this in as a child
-		add_child_node(for_loop_cond_node, expr_node);
-
 		//Otherwise it did work, so we'll add it as a child node
-		add_child_node(for_stmt_node, for_loop_cond_node);
+		add_child_node(for_stmt_node, final_expression);
 
 		//We'll refresh the lookahead for our search here
 		lookahead = get_next_token(token_stream, &parser_line_num);
-	//Create a blank node here as a placeholder
-	} else {
-		generic_ast_node_t* for_loop_cond_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-		add_child_node(for_stmt_node, for_loop_cond_node);
 	}
 
 	//Now if we make it down here no matter what it must be an R_Paren
@@ -8316,8 +8397,6 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 
 	//At the end, we'll finalize the lexical scope
 	finalize_variable_scope(variable_symtab);
-	//Store the line number
-	for_stmt_node->line_number = current_line;
 
 	//Now that we're done, pop this off of the stack
 	pop_nesting_level(&nesting_stack);
@@ -8663,18 +8742,8 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 	//Status variable for certain rules
 	u_int8_t status;
 
-
 	//Switch based on the token
 	switch(lookahead.tok){
-		//Declare or let, we'll let that rule handle it
-		case DECLARE:
-		case LET:
-			//We'll let the actual rule handle it, so push the token back
-			push_back_token(token_stream, &parser_line_num);
-
-			//We now need to see a valid version
-			return declaration(token_stream, FALSE);
-
 		//Type definition
 		case DEFINE:
 			//Call the helper
@@ -9052,7 +9121,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  * 
  * NOTE: We have already seen and consume the "declare" keyword by the time that we get here
  *
- * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? {mut}? <identifier> : <type-specifier>} ;
+ * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? {mut}? <identifier> : <type-specifier>}
  */
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//Freeze the current line number
@@ -9173,14 +9242,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	//One thing here, we aren't allowed to see void
 	if(strcmp(type_spec->type_name.string, "void") == 0){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
-	}
-
-	//The last thing that we are required to see before final assembly is a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//No semicolon, we fail out
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon required at the end of declaration statement", parser_line_num);
 	}
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
@@ -9618,7 +9679,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {register | static}? <identifier> : <type-specifier> := <ternary_expression>;
+ * BNF Rule: <let-statement> ::= let {register | static}? <identifier> : <type-specifier> := <ternary_expression>
  */
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//The line number
@@ -9739,14 +9800,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Otherwise it worked, so we'll add it in as a child
 	add_child_node(let_stmt_node, initializer_node);
-
-	//The last thing that we are required to see before final assembly is a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Last possible tripping point
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon required at the end of let statement", parser_line_num);
-	}
 
 	//Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
 	//now create the variable record for this function
@@ -9943,35 +9996,6 @@ static u_int8_t definition(ollie_token_stream_t* token_stream){
 			print_parse_message(PARSE_ERROR, "Expected \"union\", \"struct\", \"fn\" or \"enum\" definer keywords", parser_line_num);
 			num_errors++;
 			return FAILURE;
-	}
-}
-
-
-/**
- * A declaration is a pass through rule that does not itself initialize a node. Instead, it will pass down to
- * the appropriate rule here and let them initialize the rule. Like all rules in a system, the declaration returns
- * a reference to the root node that it created
- *
- * <declaration> ::= <declare-statement> 
- * 				   | <let-statement> 
- */
-static generic_ast_node_t* declaration(ollie_token_stream_t* token_stream, u_int8_t is_global){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//We will multiplex based on what we see with the lookahead
-	//This rule also consumes the first token that it sees, so all downstream
-	//rules must account for that
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	switch(lookahead.tok){
-		case DECLARE:
-			return declare_statement(token_stream, is_global);
-		case LET:	
-			return let_statement(token_stream, is_global);
-		default:
-			sprintf(info, "Saw \"%s\" when let or declare was expected", lookahead.lexeme.string);
-			return print_and_return_error(info, parser_line_num);
 	}
 }
 
@@ -10460,7 +10484,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * promise that a function of this signature will exist at 
  * some point
  *
- * <function_predeclaration> ::= declare {pub}? fn <identifier>({param_declaration | void} {, <param_declaration}*) -> <type-specifier> ;
+ * <function_predeclaration> ::= declare {pub}? fn <identifier>({param_declaration | void} {, <param_declaration}*) -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
@@ -10623,14 +10647,6 @@ after_rparen:
 	//Otherwise, this is the return type
 	function_record->return_type = return_type;
 	function_record->signature->internal_types.function_type->return_type = return_type;
-
-	//One last thing, we need to see a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Fail out
-	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon required at the end of function predeclaration", parser_line_num);
-	}
 
 	//Otherwise this all worked. We can add this function to the symtab
 	insert_function(function_symtab, function_record);
@@ -11048,6 +11064,65 @@ static u_int8_t replace_statement(ollie_token_stream_t* token_stream){
 
 
 /**
+ * Handle a global declare statement. Note that be the time we arrive here, we've
+ * already seen and consumed the DECLARE token
+ */
+static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_stream){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//Onvoke the helper
+	generic_ast_node_t* declaration_node = declare_statement(token_stream, TRUE);
+
+	//If it's an error send it up the chain
+	if(declaration_node != NULL 
+		&& declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return declaration_node;
+	}
+
+	//Now we're required to see a semicolon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if bad
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon required after declare statement", parser_line_num);
+	}
+
+	//Otherwise we're good so give back the node
+	return declaration_node;
+}
+
+
+/**
+ * Handle a global declare statement. Note that be the time we arrive here, we've
+ * already seen and consumed the DECLARE token
+ */
+static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stream){
+	//Lookahead token
+	lexitem_t lookahead;
+
+	//Onvoke the helper
+	generic_ast_node_t* let_node = let_statement(token_stream, TRUE);
+
+	//If it's an error send it up the chain
+	if(let_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return let_node;
+	}
+
+	//Now we're required to see a semicolon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Fail out if bad
+	if(lookahead.tok != SEMICOLON){
+		return print_and_return_error("Semicolon required after let statement", parser_line_num);
+	}
+
+	//Otherwise we're good so give back the node
+	return let_node;
+}
+
+
+/**
  * Here we can either have a function definition or a declaration
  *
  * Like all other functions, this function returns a pointer to the 
@@ -11133,13 +11208,14 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		case REQUIRE:
 			return print_and_return_error("Any require statements must be nested in a top level #dependencies block", parser_line_num);
 
-		default:
-			//Put the token back
-			push_back_token(token_stream, &parser_line_num);
+		case LET:
+			return global_let_statement(token_stream);
 
-			//We'll simply return whatever the product of the declaration function is
-			//Do note: these variables will all be global
-			return declaration(token_stream, TRUE);
+		case DECLARE:
+			return global_declare_statement(token_stream);
+
+		default:
+			return print_and_return_error("Invalid/unknown expression type encountered in the top level scope", parser_line_num);
 	}
 }
 
@@ -11280,6 +11356,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = lex_stack_alloc();
+	assignment_grouping_stack = lex_stack_alloc();
 	//Create a stack for recording our depth/nesting levels
 	nesting_stack = nesting_stack_alloc();
 
@@ -11313,6 +11390,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Deallocate these when done
 	lex_stack_dealloc(&grouping_stack);
+	lex_stack_dealloc(&assignment_grouping_stack);
 	nesting_stack_dealloc(&nesting_stack);
 
 	//Once we're done, destroy the token stream

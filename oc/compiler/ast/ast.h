@@ -37,6 +37,7 @@ typedef enum ast_node_type_t{
 	AST_NODE_TYPE_FUNC_DEF,
 	AST_NODE_TYPE_CONSTANT,
 	AST_NODE_TYPE_IDENTIFIER,
+	AST_NODE_TYPE_EXPR_CHAIN, //For comma separated expressions
 	AST_NODE_TYPE_ASNMNT_EXPR,
 	AST_NODE_TYPE_BINARY_EXPR,
 	AST_NODE_TYPE_POSTFIX_EXPR,
@@ -177,6 +178,11 @@ generic_ast_node_t* duplicate_node(generic_ast_node_t* node, side_type_t side);
  * A helper function that will appropriately add a child node into the parent
  */
 void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child);
+
+/**
+ * A helper function that will add a sibling node to the given node
+ */
+void add_sibling_node(generic_ast_node_t* node, generic_ast_node_t* new_sibling);
 
 /**
  * Global tree deallocation function

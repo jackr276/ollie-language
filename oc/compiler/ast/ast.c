@@ -7656,6 +7656,28 @@ void add_child_node(generic_ast_node_t* parent, generic_ast_node_t* child){
 
 
 /**
+ * A helper function that will add a sibling node to the given node
+ */
+void add_sibling_node(generic_ast_node_t* node, generic_ast_node_t* new_sibling){
+	//This can happen. If it does we just leave
+	if(new_sibling == NULL){
+		return;
+	}
+
+	//Grab a cursor to the node
+	generic_ast_node_t* node_cursor = node;
+
+	//Keep going until we find the last sibling
+	while(node_cursor->next_sibling != NULL){
+		node_cursor = node_cursor->next_sibling;
+	}
+
+	//Once we get here, we have the last sibling so we're safe to add in
+	node_cursor->next_sibling = new_sibling;
+}
+
+
+/**
  * Global tree deallocation function
  */
 void ast_dealloc(){

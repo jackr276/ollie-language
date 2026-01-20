@@ -110,7 +110,7 @@ typedef enum{
 //We predeclare up here to avoid needing any rearrangements
 static void visit_declaration_statement(generic_ast_node_t* node);
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
-static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending);
+static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node, u_int8_t is_branch_ending);
 static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_node);
@@ -120,6 +120,7 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node);
 
+static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node, u_int8_t is_branch_ending, u_int8_t is_conditional);
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr, u_int8_t is_branch_ending);
 static cfg_result_package_t emit_ternary_expression(basic_block_t* basic_block, generic_ast_node_t* ternary_operation, u_int8_t is_branch_ending);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant, u_int8_t is_branch_ending);
@@ -5042,6 +5043,17 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 	//We'll process based on the class of our expression node
 	switch(expr_node->ast_node_type){
+		case AST_NODE_TYPE_DECL_STMT:
+			visit_declaration_statement(expr_node);
+
+			result_package.starting_block = basic_block;
+			result_package.final_block = basic_block;
+			break;
+
+		case AST_NODE_TYPE_LET_STMT:
+			result_package = visit_let_statement(basic_block, expr_node, FALSE);
+			break;
+
 		//Handle an assignment expression
 		case AST_NODE_TYPE_ASNMNT_EXPR:
 			//Let the helper deal with it
@@ -5083,6 +5095,45 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 
 	return result_package;
 }
+
+
+/**
+ * Emit abstract machine code for a comma separated expression chain. This rule mainly just involves
+ * invoking the lower level "emit-expression" over and over until we're done
+ */
+static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, generic_ast_node_t* expression_chain_node, u_int8_t is_branch_ending, u_int8_t is_conditional){
+	cfg_result_package_t result_package;
+
+	//Maintain a pointer to the current block
+	basic_block_t* current_block = basic_block;
+
+	//Grab a cursor to the first child
+	generic_ast_node_t* expression_cursor = expression_chain_node->first_child;
+
+	//The current expression result
+	cfg_result_package_t expression_result;
+
+	while(expression_cursor != NULL){
+		//Let the helper emit it
+		expression_result = emit_expression(current_block, expression_cursor, is_branch_ending, is_conditional);
+
+		//Update the current block
+		current_block = expression_result.final_block;
+
+		//Push the cursor up
+		expression_cursor = expression_cursor->next_sibling;
+	}
+
+	//Package and return our valies. Note that we are always
+	//biased towards the *last* expression we saw
+	result_package.starting_block = basic_block;
+	result_package.final_block = current_block;
+	result_package.operator = expression_result.operator;
+	result_package.assignee = expression_result.assignee;
+
+	return result_package;
+}
+
 
 
 /**
@@ -5827,6 +5878,14 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 
 /**
  * A for-statement is another kind of control flow construct
+ *
+ * 	For statement architecture
+ *
+ * 							<top-level>
+ * 	      /						|			\ 
+ * 	 0 or more expressions condition node  0 or more expressions
+ * 	 							|
+ * 	 						logical or statement
  */
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Initialize the return package
@@ -5847,46 +5906,20 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	result_package.starting_block = for_stmt_entry_block;
 	result_package.final_block = for_stmt_exit_block;
 	
-	//Grab the reference to the for statement node
-	generic_ast_node_t* for_stmt_node = root_node;
+	//Grab a cursor for our traversal
+	generic_ast_node_t* cursor = root_node->first_child;
 
-	//Grab a cursor for walking the sub-tree
-	generic_ast_node_t* ast_cursor = for_stmt_node->first_child;
+	//The first thing that we are able to see is a chain of statements that may
+	//or may not be there. We will let our given rule handle it
+	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
+		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_entry_block, cursor, FALSE, FALSE);
 
-	//If the very first one is not blank
-	if(ast_cursor->first_child != NULL){
-		//Create this for our results here
-		cfg_result_package_t first_child_result_package = {NULL, NULL, NULL, BLANK};
+		//Update the block if need be
+		for_stmt_entry_block = expression_chain_result.final_block;
 
-		switch(ast_cursor->first_child->ast_node_type){
-			//We could have a let statement
-			case AST_NODE_TYPE_LET_STMT:
-				//Let the subrule handle this
-				first_child_result_package = visit_let_statement(ast_cursor->first_child, FALSE);
-				//We'll need to merge the entry block here due to the way that let statements work
-				for_stmt_entry_block = merge_blocks(for_stmt_entry_block, first_child_result_package.starting_block);
-
-				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
-				//This is a special way of working things due to how let statements work
-				if(first_child_result_package.starting_block != first_child_result_package.final_block){
-				//Make this the new end
-					for_stmt_entry_block = first_child_result_package.final_block;
-				}
-		
-				break;
-			default:
-				//Let the subrule handle this
-				first_child_result_package = emit_expression(for_stmt_entry_block, ast_cursor->first_child, TRUE, FALSE);
-
-				//If these aren't equal, that means that we saw a ternary of some kind, and need to reassign
-				if(first_child_result_package.final_block != for_stmt_entry_block){
-				//Make this the new end
-					for_stmt_entry_block = first_child_result_package.final_block;
-				}
-
-				break;
-			}
-		}
+		//Push the cusor up now that we're done with the expression chain
+		cursor = cursor->next_sibling;
+	}
 
 	//Once we reach here, we are officially in the loop. Everything beyond this point
 	//is going to happen repeatedly
@@ -5902,11 +5935,8 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//We will now emit a jump from the entry block, to the condition block
 	emit_jump(for_stmt_entry_block, condition_block);
 
-	//Move along to the next node
-	ast_cursor = ast_cursor->next_sibling;
-
-	//The condition block values package
-	cfg_result_package_t condition_block_vals = emit_expression(condition_block, ast_cursor->first_child, TRUE, TRUE);
+	//The condition block values package. This is just a regular expression
+	cfg_result_package_t condition_block_vals = emit_expression(condition_block, cursor->first_child, TRUE, TRUE);
 
 	//Store this for later
 	three_addr_var_t* conditional_decider = condition_block_vals.assignee;
@@ -5916,30 +5946,34 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		conditional_decider = emit_test_code(condition_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
 	}
 
-	//Now move it along to the third condition
-	ast_cursor = ast_cursor->next_sibling;
+	//Now push up to the third condition
+	cursor = cursor->next_sibling;
 
 	//Create the update block
 	basic_block_t* for_stmt_update_block = basic_block_alloc_and_estimate();
+	//In case stuff gets pushed around
+	basic_block_t* for_stmt_update_block_end = for_stmt_update_block;
 
-	//If the third one is not blank
-	if(ast_cursor->first_child != NULL){
-		//Emit the update expression
-		emit_expression(for_stmt_update_block, ast_cursor->first_child, FALSE, FALSE);
+	//If we see an expression chain, we need 
+	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
+		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_update_block, cursor, FALSE, FALSE);
+
+		//Update the block if need be
+		for_stmt_update_block_end = expression_chain_result.final_block;
+
+		//Push the cusor up now that we're done with the expression chain
+		cursor = cursor->next_sibling;
 	}
 	
 	//Unconditional jump to condition block
-	emit_jump(for_stmt_update_block, condition_block);
+	emit_jump(for_stmt_update_block_end, condition_block);
 
 	//All continues will go to the update block
 	push(&continue_stack, for_stmt_update_block);
 	
-	//Advance to the next sibling
-	ast_cursor = ast_cursor->next_sibling;
-	
 	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
 	//because that is what repeats on continue
-	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
+	cfg_result_package_t compound_statement_results = visit_compound_statement(cursor);
 
 	//Once we're done with the compound statement, we are no longer in the loop
 	pop_nesting_level(&nesting_stack);
@@ -7109,33 +7143,6 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
-			case AST_NODE_TYPE_DECL_STMT:
-				//Let the helper rule handle it
-				visit_declaration_statement(ast_cursor);
-				break;
-
-			case AST_NODE_TYPE_LET_STMT:
-				//We'll visit the block here
-				generic_results = visit_let_statement(ast_cursor, FALSE);
-
-				//If this is not null, then we're just adding onto something
-				if(starting_block != NULL){
-					//Merge the two together
-					current_block = merge_blocks(current_block, generic_results.starting_block); 
-
-					//If these are not equal, we can reassign the current block to be the final block
-					if(generic_results.starting_block != generic_results.final_block){
-						current_block = generic_results.final_block;
-					}
-
-				//Otherwise this is the very first thing
-				} else {
-					starting_block = generic_results.starting_block;
-					current_block = generic_results.final_block;
-				}
-
-				break;
-
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
@@ -7545,7 +7552,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 
 			//This means that we have some kind of expression statement
-			default:
+			case AST_NODE_TYPE_EXPR_CHAIN:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -7553,9 +7560,17 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				}
 				
 				//Also emit the simplified machine code
-				emit_expression(current_block, ast_cursor, FALSE, FALSE);
+				generic_results = emit_expression_chain(current_block, ast_cursor, FALSE, FALSE);
+
+				//Update the end block
+				current_block = generic_results.final_block;
 				
 				break;
+				
+			//Shouldn't ever happen
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in CFG\n");
+				exit(1);
 		}
 
 		//If this is the exit block, it means that we returned through every control path
@@ -7613,33 +7628,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	while(ast_cursor != NULL){
 		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
-			case AST_NODE_TYPE_DECL_STMT:
-				//Let the helper rule handle it
-				visit_declaration_statement(ast_cursor);
-				break;
-
-			case AST_NODE_TYPE_LET_STMT:
-				//We'll visit the block here
-				generic_results = visit_let_statement(ast_cursor, FALSE);
-
-				//If this is not null, then we're just adding onto something
-				if(starting_block != NULL){
-					//Merge the two together
-					current_block = merge_blocks(current_block, generic_results.starting_block); 
-
-					//If these are not equal, we can reassign the current block to be the final block
-					if(generic_results.starting_block != generic_results.final_block){
-						current_block = generic_results.final_block;
-					}
-
-				//Otherwise this is the very first thing
-				} else {
-					starting_block = generic_results.starting_block;
-					current_block = generic_results.final_block;
-				}
-
-				break;
-
 			case AST_NODE_TYPE_RET_STMT:
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
@@ -8052,7 +8040,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				break;
 
 			//This means that we have some kind of expression statement
-			default:
+			case AST_NODE_TYPE_EXPR_CHAIN:
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -8060,9 +8048,17 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 				
 				//Also emit the simplified machine code
-				emit_expression(current_block, ast_cursor, FALSE, FALSE);
+				generic_results = emit_expression_chain(current_block, ast_cursor, FALSE, FALSE);
+
+				//Update the end block
+				current_block = generic_results.final_block;
 				
 				break;
+				
+			//Shouldn't ever happen
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in CFG\n");
+				exit(1);
 		}
 
 		//If this is the exit block, it means that we returned through every control path
@@ -8907,12 +8903,12 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 /**
  * Visit a let statement
  */
-static cfg_result_package_t visit_let_statement(generic_ast_node_t* node, u_int8_t is_branch_ending){
+static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node, u_int8_t is_branch_ending){
 	//Create the return package here
-	cfg_result_package_t let_results = {NULL, NULL, NULL, BLANK};
+	cfg_result_package_t let_results = {starting_block, starting_block, NULL, BLANK};
 
-	//What block are we emitting to?
-	basic_block_t* current_block = basic_block_alloc_and_estimate();
+	//The current block is the start block
+	basic_block_t* current_block = starting_block;
 
 	//Extract the type here
 	generic_type_t* type = node->inferred_type;
