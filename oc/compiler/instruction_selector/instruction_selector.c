@@ -4516,14 +4516,8 @@ static void handle_division_instruction(instruction_window_t* window){
  * Handle an SSE multiplication instruction. By the time we get here, we already
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
- *
- * NOTE: this assumes that "instruction1" is what we're after. This will slide the window
- * as needed
  */
-static inline void handle_sse_division_instruction(instruction_window_t* window){
-	//Handle using instruction 1
-	instruction_t* instruction = window->instruction1;
-
+static inline void handle_sse_division_instruction(instruction_t* instruction){
 	//Go based on what the assignee's type is
 	switch(instruction->assignee->type->type_size){
 		case SINGLE_PRECISION:
@@ -4539,7 +4533,7 @@ static inline void handle_sse_division_instruction(instruction_window_t* window)
 	//The source register is the op1 and the destination is the assignee. There is never a case where we
 	//will have a constant source, it is not possible for sse operations
 	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op1;
+	instruction->source_register = instruction->op2;
 }
 
 
@@ -4688,15 +4682,6 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 			//Let the helper do it
 			handle_subtraction_instruction(instruction);
 			break;
-		/**
-		 * NOTE: By the time that we reach here, we know that any unsigned multiplication will
-		 * have already been dealt with. As such, we know for a fact that this will be the signed
-		 * version
-		 */
-		case STAR:
-			//Let the helper do it
-			handle_signed_multiplication_instruction(instruction);
-			break;
 		//Hanlde a left shift instruction
 		case L_SHIFT:
 			handle_left_shift_instruction(instruction);
@@ -4727,7 +4712,8 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 			handle_cmp_instruction(instruction);
 			break;
 		default:
-			break;
+			printf("Fatal internal compiler error: unreachable path hit for binary operation selection");
+			exit(1);
 	}
 }
 
@@ -6912,14 +6898,15 @@ static void select_instruction_patterns(instruction_window_t* window){
 
 			//Handle division
 			case F_SLASH:
-				//Likely the most common case - it's not a float
+				//Likely the most common case - it's not a float. We invoke the special
+				//helper for this
 				if(IS_FLOATING_POINT(window->instruction1->assignee->type) == FALSE){
 					handle_division_instruction(window);
 
 				//Otherwise we have a floating point division here so we need
 				//to handle it appropriately
 				} else {
-					handle_sse_division_instruction(window);
+					handle_sse_division_instruction(window->instruction1);
 				}
 
 				return;
@@ -6938,7 +6925,9 @@ static void select_instruction_patterns(instruction_window_t* window){
 					if(is_type_signed(window->instruction1->assignee->type) == FALSE){
 						//Let the helper deal with it
 						handle_unsigned_multiplication_instruction(window);
-						return;
+
+					} else  {
+						handle_signed_multiplication_instruction(window->instruction1);
 					}
 
 				//Otherwise we have a floating point multiplication here so we need
@@ -6947,7 +6936,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 					handle_sse_multiplication_instruction(window->instruction1);
 				}
 
-				break;
+				return;
 
 			default:
 				break;
