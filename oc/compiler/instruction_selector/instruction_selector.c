@@ -4543,7 +4543,22 @@ static inline void handle_sse_division_instruction(instruction_t* instruction){
  * converting moves if such moves are required
  */
 static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
-	//TODO
+	//Go based on what the assignee's type is
+	switch(instruction->assignee->type->type_size){
+		case SINGLE_PRECISION:
+			instruction->instruction_type = MULSS;
+			break;
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = MULSD;
+			break;
+		default:
+			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction");
+	}
+
+	//The source register is the op1 and the destination is the assignee. There is never a case where we
+	//will have a constant source, it is not possible for sse operations
+	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op2;
 }
 
 
@@ -6898,15 +6913,15 @@ static void select_instruction_patterns(instruction_window_t* window){
 
 			//Handle division
 			case F_SLASH:
-				//Likely the most common case - it's not a float. We invoke the special
-				//helper for this
-				if(IS_FLOATING_POINT(window->instruction1->assignee->type) == FALSE){
-					handle_division_instruction(window);
+				switch(window->instruction1->assignee->type->basic_type_token){
+					case F32:
+					case F64:
+						handle_sse_division_instruction(window->instruction1);
+						break;
 
-				//Otherwise we have a floating point division here so we need
-				//to handle it appropriately
-				} else {
-					handle_sse_division_instruction(window->instruction1);
+					default:
+						handle_division_instruction(window);
+						break;
 				}
 
 				return;
@@ -6919,21 +6934,25 @@ static void select_instruction_patterns(instruction_window_t* window){
 
 			//If we have a multiplication *and* it's unsigned, we go here
 			case STAR:
-				//Likely the most common case - it's not a float
-				if(IS_FLOATING_POINT(window->instruction1->assignee->type) == FALSE){
-					//Only do this if we're unsigned
-					if(is_type_signed(window->instruction1->assignee->type) == FALSE){
-						//Let the helper deal with it
-						handle_unsigned_multiplication_instruction(window);
+				switch(window->instruction1->assignee->type->basic_type_token){
+					//Floating point instruction, let the helper deal with it
+					case F32:
+					case F64:
+						handle_sse_multiplication_instruction(window->instruction1);
+						break;
 
-					} else  {
+					//Signed mult, so we let the signed rule handle it
+					case I8:
+					case I16:
+					case I32:
+					case I64:
 						handle_signed_multiplication_instruction(window->instruction1);
-					}
+						break;
 
-				//Otherwise we have a floating point multiplication here so we need
-				//to handle it appropriately
-				} else {
-					handle_sse_multiplication_instruction(window->instruction1);
+					//Everything else counts as unsigned
+					default:
+						handle_unsigned_multiplication_instruction(window);
+						break;
 				}
 
 				return;
