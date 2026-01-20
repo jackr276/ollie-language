@@ -1951,6 +1951,9 @@ loop_end:
 		//Assignment expressions themselves are not assignable
 		asn_expr_node->is_assignable = FALSE;
 
+		//This will always share the unary expression's variable
+		asn_expr_node->variable = left_hand_unary->variable;
+
 		//Otherwise we know it worked, so we'll add the expression in as the right child
 		add_child_node(asn_expr_node, expr);
 
@@ -2065,6 +2068,9 @@ loop_end:
 				
 				//Store the final type
 				asn_expr_node->inferred_type = final_type;
+
+				//This will always share the unary expression's variable
+				asn_expr_node->variable = left_hand_unary->variable;
 
 				//This is an overall child of the assignment expression
 				add_child_node(asn_expr_node, binary_op_node);
