@@ -50,6 +50,7 @@ static heap_queue_t current_function_jump_statements;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
+static lex_stack_t assignment_grouping_stack;
 
 //Generic types here for us to repeatedly reference
 static generic_type_t* immut_char = NULL;
@@ -1564,7 +1565,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 			push_token(&grouping_stack, lookahead);
 
 			//We are now required to see a valid ternary expression
-			generic_ast_node_t* expr = ternary_expression(token_stream, side);
+			generic_ast_node_t* expr = assignment_expression(token_stream);
 
 			//If it's an error, just give the node back
 			if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1752,6 +1753,9 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 	//This will hold onto the assignment operator for us
 	ollie_token_t assignment_operator = BLANK;
 
+	//Wipe out whatever run came before us on the lexstack
+	reset_lexstack(&assignment_grouping_stack);
+
 	//Let's now seek ahead in the token stream until we either find an assignment operator or the 
 	//end of a statement
 	u_int32_t token_pointer = token_stream->token_pointer;
@@ -1762,9 +1766,14 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		//If we see an assignment operator or something that indicates the end
 		//of a statement, we're done here
 		switch(lookahead.tok){
+			//For these instances, there's no chance of us being caught
+			//inside of a nested expression
 			case SEMICOLON:
 			case L_CURLY:
 			case R_CURLY:
+				assignment_operator = lookahead.tok;
+				goto loop_end;
+
 			case EQUALS:
 			case LSHIFTEQ:
 			case RSHIFTEQ:
@@ -1776,8 +1785,42 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 			case STAREQ:
 			case SLASHEQ:
 			case MODEQ:
-				assignment_operator = lookahead.tok;
-				goto loop_end;
+				/**
+				 * When we encounter this, we need to know
+				 * if we're actually seeing an equals sign or
+				 * if we're trapped inside of a parenthesized expression.
+				 * We'll be able to tell if we can peek the private
+				 * stack and not see anything
+				 */
+				if(peek_token(&assignment_grouping_stack).tok != L_PAREN){
+					assignment_operator = lookahead.tok;
+					goto loop_end;
+				}
+
+				//If we got here, it means we saw an assignment operator but we
+				//were stuck inside of a parenthesis, so we can't actually
+				//escape here
+				token_pointer++;
+				break;
+
+			//Put it onto the stack
+			case L_PAREN:
+				push_token(&assignment_grouping_stack, lookahead);
+				token_pointer++;
+				break;
+
+			//Pop it off of the stack
+			case R_PAREN:
+				//If we don't have an L_PAREN on here, it means we hit
+				//the end of some barrier and cannot escape
+				if(peek_token(&assignment_grouping_stack).tok != L_PAREN){
+					assignment_operator = lookahead.tok;
+					goto loop_end;
+				}
+
+				pop_token(&assignment_grouping_stack);
+				token_pointer++;
+				break;
 
 			//Otherwise we must keep searching
 			default:
@@ -1905,6 +1948,9 @@ loop_end:
 		//Otherwise the overall type is the final type
 		asn_expr_node->inferred_type = final_type;
 
+		//Assignment expressions themselves are not assignable
+		asn_expr_node->is_assignable = FALSE;
+
 		//Otherwise we know it worked, so we'll add the expression in as the right child
 		add_child_node(asn_expr_node, expr);
 
@@ -2013,6 +2059,9 @@ loop_end:
 				//Now we'll add the duplicates in as children
 				add_child_node(binary_op_node, left_hand_duplicate);
 				add_child_node(binary_op_node, expr);
+
+				//Assignment expressions themselves are not assignable
+				asn_expr_node->is_assignable = FALSE;
 
 				//This is an overall child of the assignment expression
 				add_child_node(asn_expr_node, binary_op_node);
@@ -6874,7 +6923,8 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 
 	//Empty expression, we're done here
 	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon expected after statement", parser_line_num);
+		sprintf(info, "Expected semicolon after expression statement but saw %s", lexitem_to_string(&lookahead));
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	//Otherwise we're all set
@@ -11297,6 +11347,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = lex_stack_alloc();
+	assignment_grouping_stack = lex_stack_alloc();
 	//Create a stack for recording our depth/nesting levels
 	nesting_stack = nesting_stack_alloc();
 
@@ -11330,6 +11381,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Deallocate these when done
 	lex_stack_dealloc(&grouping_stack);
+	lex_stack_dealloc(&assignment_grouping_stack);
 	nesting_stack_dealloc(&nesting_stack);
 
 	//Once we're done, destroy the token stream
