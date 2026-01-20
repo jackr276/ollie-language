@@ -3640,10 +3640,10 @@ static void print_not_instruction(FILE* fl, instruction_t* instruction, variable
 
 
 /**
- * Print a cmp instruction. These instructions can have two registers or
+ * Print a gp cmp instruction. These instructions can have two registers or
  * one register and one immediate value
  */
-static void print_cmp_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static inline void print_general_purpose_cmp_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	switch(instruction->instruction_type){
 		case CMPQ:
 			fprintf(fl, "cmpq ");
@@ -3667,6 +3667,41 @@ static void print_cmp_instruction(FILE* fl, instruction_t* instruction, variable
 	} else {
 		print_variable(fl, instruction->source_register2, mode);
 	}
+
+	fprintf(fl, ",");
+
+	//Now we'll need the source register. This may never be null
+	print_variable(fl, instruction->source_register, mode);
+
+	//And give it a newline and we're done
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Print an sse cmp instruction. These instructions can have two registers or
+ * one register and one immediate value
+ */
+static inline void print_sse_cmp_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	switch(instruction->instruction_type){
+		case COMISS:
+			fprintf(fl, "comiss ");
+			break;
+		case UCOMISS:
+			fprintf(fl, "ucomiss ");
+			break;
+		case COMISD:
+			fprintf(fl, "comisd ");
+			break;
+		case UCOMISD:
+			fprintf(fl, "ucomisd ");
+			break;
+		default:
+			break;
+	}
+
+	//No immediate values here, only ever a register
+	print_variable(fl, instruction->source_register2, mode);
 
 	fprintf(fl, ",");
 
@@ -4263,7 +4298,14 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case CMPW:
 		case CMPL:
 		case CMPQ:
-			print_cmp_instruction(fl, instruction, mode);
+			print_general_purpose_cmp_instruction(fl, instruction, mode);
+			break;
+
+		case UCOMISD:
+		case UCOMISS:
+		case COMISS:
+		case COMISD:
+			print_sse_cmp_instruction(fl, instruction, mode);
 			break;
 
 		//Handle a simple sete instruction

@@ -189,6 +189,10 @@ typedef enum{
 	MULSD, //Multiply scalar f64
 	MOVSS, //Move f32 -> f32
 	MOVSD, //Move f64 -> f64
+	COMISS, //Ordered compare of f32(throws FP exception)
+	COMISD, //Ordered compare of f64(throw FP exception)
+	UCOMISS, //Unordered compare of f32
+	UCOMISD, //Unordered compare of f64
 	MOVAPS, //Move aligned packed f32 -> used if we need to clear out the whole thing
 	MOVAPD, //Move aligned packed f64 -> used if we need to clear out the whole thing
 	CVTSS2SD, //Convert scalar f32 to scalar f64
