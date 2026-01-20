@@ -3742,6 +3742,9 @@ static void print_set_instruction(FILE* fl, instruction_t* instruction, variable
 		case SETA:
 			fprintf(fl, "seta ");
 			break;
+		case SETP:
+			fprintf(fl, "setp ");
+			break;
 		case SETBE:
 			fprintf(fl, "setbe ");
 			break;
@@ -4103,6 +4106,9 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			break;
 		case JBE:
 			fprintf(fl, "jbe .L%d\n", jumping_to_block->block_id);
+			break;
+		case JP:
+			fprintf(fl, "jp .L%d\n", jumping_to_block->block_id);
 			break;
 		case ASM_INLINE:
 			fprintf(fl, "%s\n", instruction->inlined_assembly.string);

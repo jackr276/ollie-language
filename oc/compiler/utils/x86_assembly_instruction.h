@@ -82,6 +82,7 @@ typedef enum{
 	JLE, //Jump LE(SIGNED)
 	JL, //JUMP LT(SIGNED)
 	JA, //JUMP GT(UNSIGNED)
+	JP, //Jump is Parity
 	JAE, //JUMP GE(UNSIGNED)
 	JB, //JUMP LT(UNSIGNED)
 	JBE, //JUMP LE(UNSIGNED)
@@ -178,6 +179,7 @@ typedef enum{
 	SETA, //Set > unsigned
 	SETBE, //Set <= unsigned
 	SETB, //Set < unsigned
+	SETP, //Set if parity
 	// ============= Begin specialized floating point instructions ==============
 	ADDSD, //Add scalar f64
 	SUBSD, //Subtract scalar f64
