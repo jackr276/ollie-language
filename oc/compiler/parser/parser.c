@@ -1374,7 +1374,7 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
  *
  * BNF Rule: <primary-expression> ::= <identifier>
  * 									| <constant> 
- * 									| (<ternary_expression>)
+ * 									| (<assignment_expression>)
  * 									| sizeof(<logical-or-expression>)
  * 									| typesize(<type-name>)
  * 									| <function-call>
@@ -2062,6 +2062,9 @@ loop_end:
 
 				//Assignment expressions themselves are not assignable
 				asn_expr_node->is_assignable = FALSE;
+				
+				//Store the final type
+				asn_expr_node->inferred_type = final_type;
 
 				//This is an overall child of the assignment expression
 				add_child_node(asn_expr_node, binary_op_node);
