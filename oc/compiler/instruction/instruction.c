@@ -7043,6 +7043,9 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
 
 /**
  * Select the appropriate set type given the circumstances, including the operand and the signedness
+ *
+ *
+ * TODO - we need to determine what this is for floats with something like "SETP"
  */
 instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed){
 	if(is_signed == TRUE){

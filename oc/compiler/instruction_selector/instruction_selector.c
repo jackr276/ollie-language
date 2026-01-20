@@ -3361,7 +3361,7 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
  * Create and insert a converting move operation where the destination's type is the desired type. This handles all of the overhead of creating,
  * finding the converting moves, and inserting
  */
-static three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
+static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
 	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
 	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
 	//zero pad when 32 bit moves happen
@@ -3387,6 +3387,19 @@ static three_addr_var_t* create_and_insert_converting_move_instruction(instructi
 
 	//Put it in where we want in the CFG
 	insert_instruction_before_given(move_instruction, after_instruction);
+
+	/**
+	 * For floating point destinations after conversion, we need to completely "0" out the destination
+	 * register before the conversion. We will check this here and insert it only if need be
+	 */
+	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(destination_variable);
+
+		//Get this in right before the move instruction
+		insert_instruction_before_given(pxor_instruction, move_instruction);
+	}
 
 	//Give back what the final assignee is
 	return destination_variable;
@@ -4041,24 +4054,31 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	/**
 	 * First step - determine if this cmp instruction is *exclusively* used
 	 * by a branch statement or if we are going to need to expand it out
-	 * more. By default, we assume that we're going to have to expand it out
+	 * more. By default, we assume it is just being used by a branch
 	 */
-	u_int8_t used_by_branch = FALSE;
+	u_int8_t used_by_branch_only = TRUE;
 
 	//Grab a cursor to the next statement
 	instruction_t* cursor = instruction->next_statement;
 
-	//So long as the cursor is not NULL, keep
-	//crawling
+	//So long as the cursor is not NULL, keep crawling
 	while(cursor != NULL){
-		//If we find out that this is a branch statement
-		if(cursor->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
-			//This is the case that we're after. If we find that the branch relies
-			//on this, then we can just get out
-			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
-				used_by_branch = TRUE;
+		//This is the case that we're after. If we find that the branch relies
+		//on this, then we can just get out
+		if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
+			//This means that we are *not* exclusively used by a branch
+			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+				used_by_branch_only = FALSE;
 				break;
 			}
+
+		//We could also be used by op2. If this is the case, then it's definitely not just
+		//being used by a branch
+		} else if (variables_equal(cursor->op2, instruction->assignee, FALSE) == TRUE){
+			//Branches never have dependencies stored in op2. As such if we see this,
+			//it's an automatic false
+			used_by_branch_only = FALSE;
+			break;
 		}
 
 		//If we get to the end and it's not used by a branch, that is fine. The only
@@ -4111,7 +4131,7 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	//We expect that this is the likely case. Usually
 	//a programmer is putting in comparisons to determine a branch
 	//in some way
-	if(used_by_branch == TRUE){
+	if(used_by_branch_only == TRUE){
 		//Just give back the instruction we modified
 		return instruction;
 
