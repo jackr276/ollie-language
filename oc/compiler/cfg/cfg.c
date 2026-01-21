@@ -203,6 +203,9 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 
 	switch(constant_type){
 		case F32:
+			//Let's first see if we're able to extract the local constant
+			local_constant = get_f32_local_constant(function, constant_value);
+
 			//Emit the local constant
 			local_constant = f32_local_constant_alloc(f32, constant_value);
 			local_constant->reference_count++;
@@ -223,6 +226,9 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			return load_f32->assignee;
 		
 		case F64:
+			//Let's first see if we're able to extract the local constant
+			local_constant = get_local_constant_from_function(function, local_constant);
+
 			//Emit the local constant
 			local_constant = f64_local_constant_alloc(f64, constant_value);
 			local_constant->reference_count++;
