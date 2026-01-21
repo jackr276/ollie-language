@@ -777,6 +777,9 @@ three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant)
 	//Store the local constant inside of the memory region slot
 	var->associated_memory_region.local_constant = local_constant;
 
+	//We've used this more than one time
+	local_constant->reference_count++;
+
 	//Store the type
 	var->type = local_constant->type;
 

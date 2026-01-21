@@ -206,12 +206,16 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			//Let's first see if we're able to extract the local constant
 			local_constant = get_f32_local_constant(function, constant_value);
 
-			//Emit the local constant
-			local_constant = f32_local_constant_alloc(f32, constant_value);
-			local_constant->reference_count++;
+			//We had a miss here, so this is a never before seen value that
+			//we need to create ourselves
+			if(local_constant == NULL){
+				//Allocate and add it in
+				local_constant = f32_local_constant_alloc(f32, constant_value);
+				add_local_constant_to_function(function, local_constant);
+			}
 
-			//Add it to the function and emit a var for it
-			add_local_constant_to_function(function, local_constant);
+			//Emit the temp var for this local function. Note that this temp
+			//var is also how we deal with reference counting for it
 			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
 
 			//Emit the load and add it into the block
@@ -226,15 +230,17 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			return load_f32->assignee;
 		
 		case F64:
-			//Let's first see if we're able to extract the local constant
-			local_constant = get_local_constant_from_function(function, local_constant);
+			//Like above let's first try to extract it
+			local_constant = get_f64_local_constant(function, constant_value);
 
-			//Emit the local constant
-			local_constant = f64_local_constant_alloc(f64, constant_value);
-			local_constant->reference_count++;
+			//If we couldn't find it, then we must add it ourselves
+			if(local_constant == NULL){
+				local_constant = f64_local_constant_alloc(f64, constant_value);
+				add_local_constant_to_function(function, local_constant);
+			}
 
-			//Add it to the function and emit a var for it
-			add_local_constant_to_function(function, local_constant);
+			//Emit the temp var for it. This temp var will also handle all of our
+			//reference count tracking
 			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
 
 			//Emit the load and add it into the block
