@@ -1661,10 +1661,31 @@ local_constant_t* get_string_local_constant(symtab_function_record_t* record, ch
 
 
 /**
+ * Get an f32 local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float float_value){
+	//Run through all of the local constants
+	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
+		//Extract the candidate
+		local_constant_t* candidate = dynamic_array_get_at(&(record->local_string_constants), i);
+
+		//We will be comparing the values at a byte level. We do not compare the raw values because
+		//that would use FP comparison
+		if(candidate->local_constant_value.float_bit_equivalent == *((u_int32_t*)&float_value)){
+			return candidate;
+		}
+	}
+
+	//If we get here we didn't find it
+	return NULL;
+}
+
+
+/**
  * Part of optimizer's mark and sweep - remove any local constants
  * with a reference count of 0
- *
- * TODO UPDATE REFERENCE COUNT HANDLING
  */
 void sweep_local_constants(symtab_function_record_t* record){
 	//An array that marks given constants for deletion
