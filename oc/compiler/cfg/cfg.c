@@ -5986,7 +5986,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 		//If this is blank, we need to change this
 		if(conditional_operator == BLANK){
-			conditional_decider = emit_test_code(condition_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
+			conditional_decider = emit_test_code(condition_block_vals.final_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
 		}
 	}
 
@@ -5998,7 +5998,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//In case stuff gets pushed around
 	basic_block_t* for_stmt_update_block_end = for_stmt_update_block;
 
-	//If we see an expression chain, we need 
+	//If we see an expression chain, we need to parse it out there
 	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
 		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_update_block, cursor, FALSE, FALSE);
 

@@ -8336,6 +8336,9 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	//If it's not a semicolon, then it has to be a valid logical or expression which is then
 	//followed up by a semicolon
 	if(lookahead.tok != SEMICOLON){
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
+
 		//Following that, we must see a logical or expression here
 		generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
 

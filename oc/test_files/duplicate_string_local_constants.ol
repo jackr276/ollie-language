@@ -8,13 +8,11 @@
 pub fn string_length(str:char*) -> i32 {
 	let x:mut i32 = 0;
 
-	for(let i:mut i32 = 0; ;i++){
-		//Means we hit the end
+	for(let i:mut i32 = 0; i < 100; i++){
 		if(str[i] == '\0'){
 			break;
 		}
 
-		//Otherwise bump the index
 		x++;
 	}
 
