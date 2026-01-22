@@ -2862,8 +2862,15 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 		//For float constants, we need to emit the local constant equivalent via the helper
 		case FLOAT_CONST:
-			//Here's our constant value
-			local_constant_val = emit_f32_local_constant(current_function, constant_node);
+			//Let's first see if we can find it
+			local_constant = get_f32_local_constant(current_function, constant_node->constant_value.float_value);
+
+			//Either create a new local constant or update it accordingly
+			if(local_constant == NULL){
+				local_constant_val = emit_f32_local_constant(current_function, constant_node);
+			} else {
+				local_constant_val = emit_local_constant_temp_var(local_constant);
+			}
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
 			//This only gets the address, we still need to do extra work for our constants
@@ -2878,8 +2885,15 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 		//For double constants, we need to emit the local constant equivalent via the helper
 		case DOUBLE_CONST:
-			//Here's our constant value
-			local_constant_val = emit_f64_local_constant(current_function, constant_node);
+			//Let's first see if we can find it
+			local_constant = get_f64_local_constant(current_function, constant_node->constant_value.double_value);
+
+			//Either create a new local constant or update it accordingly
+			if(local_constant == NULL){
+				local_constant_val = emit_f64_local_constant(current_function, constant_node);
+			} else {
+				local_constant_val = emit_local_constant_temp_var(local_constant);
+			}
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
 			//This only gets the address, we still need to do extra work for our constants
