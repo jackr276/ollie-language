@@ -85,13 +85,6 @@ typedef struct{
  */
 #define IS_SSA_VARIABLE_TYPE(variable) ((variable->variable_type == VARIABLE_TYPE_NON_TEMP || variable->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS) ? TRUE : FALSE)
 
-/**
- * Determine whether a given block needs to have a jump appended to it
- * If the block is empty *or* it doesn't end in a return, we need a jump
- */
-#define DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(block) (((block->exit_statement == NULL)\
-		|| (block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT)) ? TRUE : FALSE)
-
 //Are we emitting the dominance frontier or not?
 typedef enum{
 	EMIT_DOMINANCE_FRONTIER,
@@ -187,6 +180,29 @@ void reset_block_variable_tracking(basic_block_t* block){
 static inline int32_t increment_and_get(){
 	current_block_id++;
 	return current_block_id;
+}
+
+
+/**
+ * A helper that determines if a block ends in a statement that would
+ * exclude us from putting another jump right after it. Such
+ * blocks end in: ret, branch, or jmp statements
+ */
+static inline u_int8_t does_block_end_in_terminal_statement(basic_block_t* basic_block){
+	//Just a catch here if it's null
+	if(basic_block->exit_statement == NULL){
+		return FALSE;
+	}
+
+	//Just checking for these 3
+	switch(basic_block->exit_statement->statement_type){
+		case THREE_ADDR_CODE_JUMP_STMT:
+		case THREE_ADDR_CODE_RET_STMT:
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
 }
 
 
@@ -6053,7 +6069,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
-	if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(compound_stmt_end) == TRUE){
+	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
 		//We also need an uncoditional jump right to the update block
 		emit_jump(compound_stmt_end, for_stmt_update_block);
 	}
@@ -6245,7 +6261,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If the block is empty *or* it doesn't end in a return, we need a jump
-	if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(compound_stmt_end) == TRUE){
+	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
 		//The compound statement end will jump right back up to the entry block
 		emit_jump(compound_stmt_end, while_statement_entry_block);
 	}
@@ -6317,7 +6333,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	basic_block_t* if_compound_stmt_end = if_compound_statement_results.final_block;
 
 	//If the block is empty *or* it doesn't end in a return, we add a jump
-	if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(if_compound_stmt_end) == TRUE){
+	if(does_block_end_in_terminal_statement(if_compound_stmt_end) == FALSE){
 		//The successor to the if-stmt end path is the if statement end block
 		emit_jump(if_compound_stmt_end, exit_block);
 	}
@@ -6398,7 +6414,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
 
 		//If the block is empty *or* it doesn't end in a return, we need the jump
-		if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(else_if_compound_stmt_exit) == TRUE){
+		if(does_block_end_in_terminal_statement(else_if_compound_stmt_exit) == FALSE){
 			//The successor to the if-stmt end path is the if statement end block
 			emit_jump(else_if_compound_stmt_exit, exit_block);
 		}
@@ -6437,7 +6453,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			basic_block_t* else_compound_statement_exit = else_compound_statement_values.final_block;
 
 			//If the block is empty *or* it doesn't end in a return, we need the jump
-			if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(else_compound_statement_exit) == TRUE){
+			if(does_block_end_in_terminal_statement(else_compound_statement_exit) == FALSE){
 				//The successor to the if-stmt end path is the if statement end block
 				emit_jump(else_compound_statement_exit, exit_block);
 			}
@@ -7041,7 +7057,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		current_block = case_default_results.final_block;
 
 		//If the block is empty *or* it doesn't end in a return, add the jump
-		if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(current_block) == TRUE){
+		if(does_block_end_in_terminal_statement(current_block) == FALSE){
 			//We will always emit a direct jump from this block to the ending block
 			emit_jump(current_block, ending_block);
 		}
@@ -8156,7 +8172,9 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
 		//If the exit statement is not a return statement, we need to know what's happening here
-		if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(block) == TRUE){
+		if(does_block_end_in_terminal_statement(block) == FALSE){
+			//TODO
+			//
 			//If this isn't void, then we need to throw a warning
 			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
 				|| function_defined_in->return_type->basic_type_token != VOID)

@@ -8,12 +8,12 @@
 pub fn string_length(str:char*) -> i32 {
 	let x:mut i32 = 0;
 
-	for(let i:mut i32 = 0; i < 100; i++){
+	for(let i:mut i32 = 0;; i++, x++){
+		//TODO it is this break
+
 		if(str[i] == '\0'){
 			break;
 		}
-
-		x++;
 	}
 
 	ret x;
