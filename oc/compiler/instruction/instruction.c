@@ -778,7 +778,7 @@ three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant)
 	var->associated_memory_region.local_constant = local_constant;
 
 	//We've used this more than one time
-	local_constant->reference_count++;
+	(local_constant->reference_count)++;
 
 	//Store the type
 	var->type = local_constant->type;
@@ -4816,9 +4816,6 @@ three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function,
 	//Now allocate the variable that will hold this
 	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
 
-	//Increment the reference count
-	(local_constant->reference_count)++;
-
 	//And give this back
 	return local_constant_variable;
 }
@@ -4838,9 +4835,6 @@ three_addr_var_t* emit_f32_local_constant(symtab_function_record_t* function, ge
 	//Now allocate the variable that will hold this
 	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
 
-	//Increment the reference count
-	(local_constant->reference_count)++;
-
 	//And give this back
 	return local_constant_variable;
 }
@@ -4859,9 +4853,6 @@ three_addr_var_t* emit_f64_local_constant(symtab_function_record_t* function, ge
 
 	//Now allocate the variable that will hold this
 	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//Increment the reference count
-	(local_constant->reference_count)++;
 
 	//And give this back
 	return local_constant_variable;

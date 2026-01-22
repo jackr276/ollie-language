@@ -2832,6 +2832,7 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	three_addr_const_t* const_val;
 	three_addr_var_t* local_constant_val;
 	three_addr_var_t* function_pointer_variable;
+	local_constant_t* local_constant;
 	//Holder for the constant assignment
 	instruction_t* const_assignment;
 	instruction_t* address_load;
@@ -2844,8 +2845,16 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	 */
 	switch(constant_node->constant_type){
 		case STR_CONST:
-			//Here's our constant value
-			local_constant_val = emit_string_local_constant(current_function, constant_node);
+			//Let's first see if we already have it
+			local_constant = get_string_local_constant(current_function, constant_node->string_value.string);
+
+			//If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
+			//to get our temp var
+			if(local_constant == NULL){
+				local_constant_val = emit_string_local_constant(current_function, constant_node);
+			} else {
+				local_constant_val = emit_local_constant_temp_var(local_constant);
+			}
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
 			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
