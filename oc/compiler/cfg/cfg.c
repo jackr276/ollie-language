@@ -8171,8 +8171,8 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 		//Grab the predecessor out
 		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
-		//If the exit statement is not a return statement, we need to know what's happening here
-		if(block->exit_statement != NULL && block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
+		//If the exit statement is not a return statement or is null, we need to know what's happening here
+		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 			//If this isn't void, then we need to throw a warning
 			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
 				|| function_defined_in->return_type->basic_type_token != VOID)
