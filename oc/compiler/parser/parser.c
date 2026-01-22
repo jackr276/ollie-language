@@ -8281,7 +8281,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
  * 
  * NOTE: By the the time we get here, we assume that we've already seen the "for" keyword
  *
- * BNF Rule: <for-statement> ::= for({expression-statement} <logical-or-expression> ; {expression-statement-no-semicolon}) <compound-statement>
+ * BNF Rule: <for-statement> ::= for({expression-statement} <logical-or-expression>? ; {expression-statement-no-semicolon}) <compound-statement>
  */
 static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	//Lookahead token
@@ -8327,27 +8327,33 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 
 	//Allocate the condition node
 	generic_ast_node_t* condition_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
-	
 	//This is the next child for the for loop
 	add_child_node(for_stmt_node, condition_node);
 
-	//Following that, we must see a logical or expression here
-	generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
-
-	//If it fails, we fail too
-	if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid conditional expression in for loop", parser_line_num);
-	}
-
-	//Otherwise it worked, so this is the child node for conditional
-	add_child_node(condition_node, expression_node);
-
-	//We now must see a semicolon
+	//We can optionally see a logical expression here, or we can see nothing
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//No semicolon means we fail
+	//If it's not a semicolon, then it has to be a valid logical or expression which is then
+	//followed up by a semicolon
 	if(lookahead.tok != SEMICOLON){
-		return print_and_return_error("Semicolon required after for loop conditional", parser_line_num);
+		//Following that, we must see a logical or expression here
+		generic_ast_node_t* expression_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+
+		//If it fails, we fail too
+		if(expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid conditional expression in for loop", parser_line_num);
+		}
+
+		//Otherwise it worked, so this is the child node for conditional
+		add_child_node(condition_node, expression_node);
+
+		//We now must see a semicolon
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//No semicolon means we fail
+		if(lookahead.tok != SEMICOLON){
+			return print_and_return_error("Semicolon required after for loop conditional", parser_line_num);
+		}
 	}
 
 	//As our last step, we can see another conditional expression. If the lookahead isn't an rparen, we must see one

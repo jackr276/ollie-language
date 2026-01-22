@@ -5920,7 +5920,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  * 	      /						|			\ 
  * 	 0 or more expressions condition node  0 or more expressions
  * 	 							|
- * 	 						logical or statement
+ * 	 					logical or statement?
  */
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Initialize the return package
@@ -5969,16 +5969,25 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//We will now emit a jump from the entry block, to the condition block
 	emit_jump(for_stmt_entry_block, condition_block);
+	
+	//For later branching - null by default
+	three_addr_var_t* conditional_decider = NULL;
+	//What is the conditional operator?
+	ollie_token_t conditional_operator = BLANK;
 
-	//The condition block values package. This is just a regular expression
-	cfg_result_package_t condition_block_vals = emit_expression(condition_block, cursor->first_child, TRUE, TRUE);
+	//*if* we have a condition block we will emit it now - remember that this is not a strict requirement
+	if(cursor->first_child != NULL){
+		//The condition block values package. This is just a regular expression
+		cfg_result_package_t condition_block_vals = emit_expression(condition_block, cursor->first_child, TRUE, TRUE);
 
-	//Store this for later
-	three_addr_var_t* conditional_decider = condition_block_vals.assignee;
+		//Store this for later
+		conditional_decider = condition_block_vals.assignee;
+		conditional_operator = condition_block_vals.operator;	
 
-	//If this is blank, we need to change this
-	if(condition_block_vals.operator == BLANK){
-		conditional_decider = emit_test_code(condition_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
+		//If this is blank, we need to change this
+		if(conditional_operator == BLANK){
+			conditional_decider = emit_test_code(condition_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
+		}
 	}
 
 	//Now push up to the third condition
@@ -6020,18 +6029,26 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
-	//Determine the kind of branch that we'll need here
-	branch_type_t branch_type = select_appropriate_branch_statement(condition_block_vals.operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
+	//If we have a conditional at all, we will emit appropriate branch
+	//logic
+	if(conditional_decider != NULL){
+		//Determine the kind of branch that we'll need here
+		branch_type_t branch_type = select_appropriate_branch_statement(conditional_operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
 
-	/**
-	 * Inverse jumping logic so
-	 *
-	 * if not condition 
-	 * 	goto exit
-	 * else
-	 * 	goto update
-	 */
-	emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
+		/**
+		 * Inverse jumping logic so
+		 *
+		 * if not condition 
+		 * 	goto exit
+		 * else
+		 * 	goto update
+		 */
+		emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
+
+	//Otherwise - we're doing as the user wants here and just emitting a straight jump from this block to the body
+	} else {
+		emit_jump(condition_block, compound_statement_results.starting_block);
+	}
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;

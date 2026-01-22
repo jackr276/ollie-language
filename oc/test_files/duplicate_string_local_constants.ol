@@ -5,7 +5,7 @@
 */
 
 //Dummy string length function
-pub fn string_length(str:mut char*) -> i32 {
+pub fn string_length(str:char*) -> i32 {
 	let x:mut i32 = 0;
 
 	for(let i:mut i32 = 0; ;i++){
@@ -17,6 +17,8 @@ pub fn string_length(str:mut char*) -> i32 {
 		//Otherwise bump the index
 		x++;
 	}
+
+	ret x;
 }
 
 
@@ -24,8 +26,8 @@ pub fn main() -> i32 {
 	//The compiler should recognize that "Hello"
 	//is a complete duplicate and we should only see
 	//one ".LC" value in the final assembly
-	let x:i32 = @string_length(<mut char*>("Hello"));
-	let y:i32 = @string_length(<mut char*>("Hello"));
+	let x:i32 = @string_length("Hello");
+	let y:i32 = @string_length("Hello");
 
 	ret x + y;
 }
