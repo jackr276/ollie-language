@@ -992,6 +992,13 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						//Allocate the lexeme here
 						lexeme = dynamic_string_alloc();
 
+						//If this is the escape character, then
+						//we need to consume the next token
+						if(ch2 == '\\'){
+							dynamic_string_add_char_to_back(&lexeme, ch2);
+							ch2 = GET_NEXT_CHAR(fl);
+						}
+
 						//Add our char const ch2 in
 						dynamic_string_add_char_to_back(&lexeme, ch2);
 

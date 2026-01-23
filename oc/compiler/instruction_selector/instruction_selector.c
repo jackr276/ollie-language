@@ -3284,7 +3284,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
 	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
 	//zero pad when 32 bit moves happen
-	if(is_type_unsigned_64_bit(op1->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
+	if(is_type_unsigned_64_bit(assignee->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
 		//Emit a variable copy of the source
 		op1 = emit_var_copy(op1);
 
@@ -3313,7 +3313,8 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 
 	//Set the sources and destinations
 	instruction->destination_register = instruction->assignee;
-	instruction->source_register = instruction->op1;
+	//We need to ensure that we're using the real op1 here
+	instruction->source_register = op1;
 }
 
 
