@@ -3678,9 +3678,45 @@ static inline void print_sse_cmp_instruction(FILE* fl, instruction_t* instructio
 /**
  * Print the specialized CMPSS or CMPSD instructions along with their comparison
  * selectors for SSE. We will handle all of the comparions selector logic here
+ *
+ * These instructions go like cmpss <option_code>, source register, destination
  */
 static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//TODO
+	switch (instruction->instruction_type){
+		case CMPSS:
+			fprintf(fl, "cmpss ");
+			break;
+		case CMPSD:
+			fprintf(fl, "cmpsd ");
+			break;
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
+	}
+
+	switch(instruction->op){
+		case L_THAN:
+			break;
+
+		case L_THAN_OR_EQ:
+			break;
+
+		case G_THAN:
+			break;
+
+		case G_THAN_OR_EQ:
+			break;
+
+		case EQUALS:
+			break;
+		
+		case NOT_EQUALS:
+			break;
+
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
+	}
 
 }
 
