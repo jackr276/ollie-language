@@ -52,6 +52,7 @@ typedef enum{
 	MOVW, //Regular register-to-register or immediate to register
 	MOVL,
 	MOVQ,
+	MOVD, //Move doubleword, really only used for transferring XMM to eXX registers
 	MOVSBW, //Move signed byte to word
 	MOVSBL, //Move signed byte to long 
 	MOVSBQ, //Move signed byte to quad 

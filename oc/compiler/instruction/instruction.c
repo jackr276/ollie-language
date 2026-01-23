@@ -427,6 +427,7 @@ u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction){
 		case MOVL:
 		case MOVW:
 		case MOVB:
+		case MOVD:
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:
@@ -2809,6 +2810,9 @@ static void print_general_purpose_register_to_register_move(FILE* fl, instructio
 		case MOVW:
 			fprintf(fl, "movw ");
 			break;
+		case MOVD:
+			fprintf(fl, "movd ");
+			break;
 		case MOVB:
 			fprintf(fl, "movb ");
 			break;
@@ -4268,6 +4272,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVW:
 		case MOVL:
 		case MOVQ:
+		case MOVD:
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:

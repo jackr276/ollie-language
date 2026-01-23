@@ -4130,6 +4130,19 @@ static inline instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_
 
 
 /**
+ * Emit a special kind of move instruction that takes a value out of SSE(xmm) registers and puts it into a 32 bit GP register.
+ * In practice this is only used by ollie for moving masks around after FP comparisons. It would look something
+ * like:
+ * 	movd %xmm0, %eax
+ *
+ * In practice
+ */
+static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_purpose_destination, three_addr_var_t* sse_source){
+
+}
+
+
+/**
  * Handle a cmp operation. This is used whenever we have
  * relational operation.
  *
