@@ -4153,6 +4153,11 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	//Get the signedness and the floating point status
 	u_int8_t type_signed = is_type_signed(instruction->assignee->type);
 	u_int8_t is_floating_point = (size == SINGLE_PRECISION || size == DOUBLE_PRECISION) ? TRUE : FALSE;
+	
+	//Extract these for convenience
+	generic_type_t* left_hand_type = instruction->op1->type;
+	//For the right hand type, we only care if op2 isn't NULL. Constants won't affect us here
+	generic_type_t* right_hand_type = instruction->op2 != NULL ? instruction->op2->type : left_hand_type;
 
 	//Grab a cursor to the next statement
 	instruction_t* cursor = instruction->next_statement;
@@ -4193,40 +4198,48 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 		cursor = cursor->next_statement;
 	}
 
-	//Select this instruction
-	instruction->instruction_type = select_cmp_instruction(size);
-
-	//Extract these for convenience
-	generic_type_t* left_hand_type = instruction->op1->type;
-	//For the right hand type, we only care if op2 isn't NULL. Constants won't affect us here
-	generic_type_t* right_hand_type = instruction->op2 != NULL ? instruction->op2->type : left_hand_type;
-	
-	//Since we have a comparison instruction, we don't actually have a destination
-	//register as the registers remain unmodified in this event
+	//Handle any/all converting moves that are going to be needed here
 	if(is_converting_move_required(right_hand_type, instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op1, right_hand_type);
-	} else {
-		//Otherwise we assign directly
-		instruction->source_register = instruction->op1;
+		instruction->op1 = create_and_insert_converting_move_instruction(instruction, instruction->op1, right_hand_type);
 	}
 
-	//If we have op2, we'll use source_register2
-	if(instruction->op2 != NULL){
-		if(is_converting_move_required(left_hand_type, instruction->op2->type) == TRUE){
-			//Let the helper deal with it
-			instruction->source_register2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, left_hand_type);
-		} else {
-			//Otherwise we assign directly
+	//Same for op2, except this could be null
+	if(instruction->op2 != NULL && is_converting_move_required(left_hand_type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, left_hand_type);
+	}
+
+	//If this is only used by a branch(which is the most common type to have), we will
+	//handle here
+	if(used_by_branch_only == TRUE){
+		//Select this instruction
+		instruction->instruction_type = select_cmp_instruction(size);
+
+		//Move as needed
+		instruction->source_register = instruction->op1;
+
+		//If we have 
+		if(instruction->op2 != NULL){
 			instruction->source_register2 = instruction->op2;
+		} else {
+			instruction->source_immediate = instruction->op1_const;
 		}
 
-	//Otherwise we have a constant source
+		//And we're done, there's no other work to do for a regular comparison
+		//that will be followed by a branch
+
+
+	//Otherwise, we have something that isn't used by
+	//a branch and will need setting logic
 	} else {
-		//Otherwise we use an immediate value
-		instruction->source_immediate = instruction->op1_const;
+
 	}
 
+	//Default - we don't have any FP values
+	if(is_floating_point == FALSE){
+
+	} else {
+
+	}
 
 	//We expect that this is the likely case. Usually
 	//a programmer is putting in comparisons to determine a branch

@@ -408,6 +408,9 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 		case ORW:
 		case ORL:
 		case ORQ:
+		//Floating point comparisons do have their destination overwritten
+		case CMPSS:
+		case CMPSD:
 			return TRUE;
 		default:
 			return FALSE;
