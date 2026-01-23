@@ -299,6 +299,9 @@ struct instruction_t{
 	u_int8_t is_branch_ending;
 	//Is this a regular or inverse branch
 	u_int8_t inverse_branch;
+	//Does this branch rely on a floating point comparison? This could affect
+	//our selection logic later on
+	u_int8_t relies_on_fp_comparison;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?

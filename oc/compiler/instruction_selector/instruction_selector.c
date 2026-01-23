@@ -4104,6 +4104,13 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	 */
 	u_int8_t used_by_branch_only = TRUE;
 
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(instruction->op1->type);
+
+	//Get the signedness and the floating point status
+	u_int8_t type_signed = is_type_signed(instruction->assignee->type);
+	u_int8_t is_floating_point = (size == SINGLE_PRECISION || size == DOUBLE_PRECISION) ? TRUE : FALSE;
+
 	//Grab a cursor to the next statement
 	instruction_t* cursor = instruction->next_statement;
 
@@ -4116,6 +4123,13 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
 				used_by_branch_only = FALSE;
 				break;
+			}
+
+			//Otherwise logically speaking we do have a branch
+			//statement here. As such, if it's a floating point
+			//branch we'll need to flag that
+			if(is_floating_point == TRUE){
+				cursor->relies_on_fp_comparison = TRUE;
 			}
 
 		//We could also be used by op2. If this is the case, then it's definitely not just
@@ -4135,9 +4149,6 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 		//Advance the cursor up
 		cursor = cursor->next_statement;
 	}
-
-	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->op1->type);
 
 	//Select this instruction
 	instruction->instruction_type = select_cmp_instruction(size);
@@ -4184,10 +4195,6 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	//We've already handled the comparison instruction by this point. Now,
 	//we'll add logic that does the setX instruction and the final assignment
 	} else {
-		//Get the signedness and the floating point status
-		u_int8_t type_signed = is_type_signed(instruction->assignee->type);
-		u_int8_t is_floating_point = (size == SINGLE_PRECISION || size == DOUBLE_PRECISION) ? TRUE : FALSE;
-
 		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
 		//is required to use a byte sized register so we can't just set the assignee and move on
 		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, is_floating_point, type_signed);
