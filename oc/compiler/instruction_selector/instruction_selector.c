@@ -4293,6 +4293,8 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 
 		} else {
 			//TODO WRONG
+			printf("NOT YET SUPPORTED\n");
+			exit(1);
 			return instruction;
 		}
 	}
