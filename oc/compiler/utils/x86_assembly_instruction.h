@@ -191,6 +191,8 @@ typedef enum{
 	MULSD, //Multiply scalar f64
 	MOVSS, //Move f32 -> f32
 	MOVSD, //Move f64 -> f64
+	CMPSS, //Scalar float comparison(no flags set)
+	CMPSD, //Scalar double comparions(no flags set)
 	COMISS, //Ordered compare of f32(throws FP exception)
 	COMISD, //Ordered compare of f64(throw FP exception)
 	UCOMISS, //Unordered compare of f32

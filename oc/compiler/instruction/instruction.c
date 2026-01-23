@@ -3676,6 +3676,16 @@ static inline void print_sse_cmp_instruction(FILE* fl, instruction_t* instructio
 
 
 /**
+ * Print the specialized CMPSS or CMPSD instructions along with their comparison
+ * selectors for SSE. We will handle all of the comparions selector logic here
+ */
+static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//TODO
+
+}
+
+
+/**
  * Print out a setX instruction
  */
 static void print_set_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
@@ -4267,6 +4277,11 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case CMPL:
 		case CMPQ:
 			print_general_purpose_cmp_instruction(fl, instruction, mode);
+			break;
+		
+		case CMPSS:
+		case CMPSD:
+			print_sse_scalar_cmp_instruction(fl, instruction, mode);
 			break;
 
 		case UCOMISD:

@@ -290,7 +290,8 @@ struct instruction_t{
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
 	instruction_type_t instruction_type;
-	//The actual operator, stored as a token for size requirements
+	//The actual operator, stored as a token for size requirements. We will
+	//also use this in determining floating point comparsions
 	ollie_token_t op;
 	//Is this operation critical?
 	u_int8_t mark;
