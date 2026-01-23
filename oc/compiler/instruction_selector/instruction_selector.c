@@ -4226,45 +4226,48 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 
 		//And we're done, there's no other work to do for a regular comparison
 		//that will be followed by a branch
-
-
-	//Otherwise, we have something that isn't used by
-	//a branch and will need setting logic
-	} else {
-
-	}
-
-	//Default - we don't have any FP values
-	if(is_floating_point == FALSE){
-
-	} else {
-
-	}
-
-	//We expect that this is the likely case. Usually
-	//a programmer is putting in comparisons to determine a branch
-	//in some way
-	if(used_by_branch_only == TRUE){
-		//Just give back the instruction we modified
 		return instruction;
 
-	//We've already handled the comparison instruction by this point. Now,
-	//we'll add logic that does the setX instruction and the final assignment
+	/**
+	 * If we make it here, then we will need to leverage different setting logic
+	 * based on the kind of operand. Floats have a completely different path as compared
+	 * to regular instructions
+	 */
 	} else {
-		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
-		//is required to use a byte sized register so we can't just set the assignee and move on
-		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, type_signed);
+		//Not FP, so we can just select normally
+		if(is_floating_point == FALSE){
+			//Select this instruction
+			instruction->instruction_type = select_cmp_instruction(size);
 
-		//The set instruction goes right after the cmp instruction
-		insert_instruction_after_given(set_instruction, instruction);
+			//Move as needed
+			instruction->source_register = instruction->op1;
 
-		//Move from the set instruction's assignee to this instruction's assignee
-		instruction_t* final_move = emit_move_instruction(instruction->assignee, set_instruction->destination_register);
+			//If we have 
+			if(instruction->op2 != NULL){
+				instruction->source_register2 = instruction->op2;
+			} else {
+				instruction->source_immediate = instruction->op1_const;
+			}
 
-		//This final move goes right after the set instruction
-		insert_instruction_after_given(final_move, set_instruction);
+			//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
+			//is required to use a byte sized register so we can't just set the assignee and move on
+			instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, type_signed);
 
-		return final_move;
+			//The set instruction goes right after the cmp instruction
+			insert_instruction_after_given(set_instruction, instruction);
+
+			//Move from the set instruction's assignee to this instruction's assignee
+			instruction_t* final_move = emit_move_instruction(instruction->assignee, set_instruction->destination_register);
+
+			//This final move goes right after the set instruction
+			insert_instruction_after_given(final_move, set_instruction);
+
+			return final_move;
+
+		} else {
+			//TODO WRONG
+			return instruction;
+		}
 	}
 }
 
