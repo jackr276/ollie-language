@@ -3694,23 +3694,30 @@ static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* ins
 			exit(1);
 	}
 
+	//Depending on the operand, we print out the needed comparison code immediate value
 	switch(instruction->op){
 		case L_THAN:
+			fprintf(fl, "$1, "); //CMPLT
 			break;
 
 		case L_THAN_OR_EQ:
+			fprintf(fl, "$2, "); //CMPLE
 			break;
 
 		case G_THAN:
+			fprintf(fl, "$6, "); //CMPNLE
 			break;
 
 		case G_THAN_OR_EQ:
+			fprintf(fl, "$5, "); //CMPNLT
 			break;
 
 		case EQUALS:
+			fprintf(fl, "$0, "); //CMPEQ
 			break;
 		
 		case NOT_EQUALS:
+			fprintf(fl, "$4, "); //CMPNEQ
 			break;
 
 		default:
@@ -3718,6 +3725,12 @@ static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* ins
 			exit(1);
 	}
 
+	//Now print out the source register
+	print_variable(fl, instruction->source_register, mode);
+	fprintf(fl, ", ");
+
+	//Finally the second source which also doubles as the destination
+	print_variable(fl, instruction->destination_register, mode);
 }
 
 
