@@ -85,13 +85,6 @@ typedef struct{
  */
 #define IS_SSA_VARIABLE_TYPE(variable) ((variable->variable_type == VARIABLE_TYPE_NON_TEMP || variable->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS) ? TRUE : FALSE)
 
-/**
- * Determine whether a given block needs to have a jump appended to it
- * If the block is empty *or* it doesn't end in a return, we need a jump
- */
-#define DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(block) (((block->exit_statement == NULL)\
-		|| (block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT)) ? TRUE : FALSE)
-
 //Are we emitting the dominance frontier or not?
 typedef enum{
 	EMIT_DOMINANCE_FRONTIER,
@@ -191,6 +184,29 @@ static inline int32_t increment_and_get(){
 
 
 /**
+ * A helper that determines if a block ends in a statement that would
+ * exclude us from putting another jump right after it. Such
+ * blocks end in: ret, branch, or jmp statements
+ */
+static inline u_int8_t does_block_end_in_terminal_statement(basic_block_t* basic_block){
+	//Just a catch here if it's null
+	if(basic_block->exit_statement == NULL){
+		return FALSE;
+	}
+
+	//Just checking for these 3
+	switch(basic_block->exit_statement->statement_type){
+		case THREE_ADDR_CODE_JUMP_STMT:
+		case THREE_ADDR_CODE_RET_STMT:
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * A helper function that will directly emit either an f32 or f64
  * constant value and place said value into the appropriate location
  * for a function. This will return a variable that corresponds
@@ -203,12 +219,19 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 
 	switch(constant_type){
 		case F32:
-			//Emit the local constant
-			local_constant = f32_local_constant_alloc(f32, constant_value);
-			local_constant->reference_count++;
+			//Let's first see if we're able to extract the local constant
+			local_constant = get_f32_local_constant(function, constant_value);
 
-			//Add it to the function and emit a var for it
-			add_local_constant_to_function(function, local_constant);
+			//We had a miss here, so this is a never before seen value that
+			//we need to create ourselves
+			if(local_constant == NULL){
+				//Allocate and add it in
+				local_constant = f32_local_constant_alloc(f32, constant_value);
+				add_local_constant_to_function(function, local_constant);
+			}
+
+			//Emit the temp var for this local function. Note that this temp
+			//var is also how we deal with reference counting for it
 			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
 
 			//Emit the load and add it into the block
@@ -223,12 +246,17 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 			return load_f32->assignee;
 		
 		case F64:
-			//Emit the local constant
-			local_constant = f64_local_constant_alloc(f64, constant_value);
-			local_constant->reference_count++;
+			//Like above let's first try to extract it
+			local_constant = get_f64_local_constant(function, constant_value);
 
-			//Add it to the function and emit a var for it
-			add_local_constant_to_function(function, local_constant);
+			//If we couldn't find it, then we must add it ourselves
+			if(local_constant == NULL){
+				local_constant = f64_local_constant_alloc(f64, constant_value);
+				add_local_constant_to_function(function, local_constant);
+			}
+
+			//Emit the temp var for it. This temp var will also handle all of our
+			//reference count tracking
 			local_constant_temp_var = emit_local_constant_temp_var(local_constant);
 
 			//Emit the load and add it into the block
@@ -2820,6 +2848,7 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	three_addr_const_t* const_val;
 	three_addr_var_t* local_constant_val;
 	three_addr_var_t* function_pointer_variable;
+	local_constant_t* local_constant;
 	//Holder for the constant assignment
 	instruction_t* const_assignment;
 	instruction_t* address_load;
@@ -2832,8 +2861,16 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	 */
 	switch(constant_node->constant_type){
 		case STR_CONST:
-			//Here's our constant value
-			local_constant_val = emit_string_local_constant(current_function, constant_node);
+			//Let's first see if we already have it
+			local_constant = get_string_local_constant(current_function, constant_node->string_value.string);
+
+			//If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
+			//to get our temp var
+			if(local_constant == NULL){
+				local_constant_val = emit_string_local_constant(current_function, constant_node);
+			} else {
+				local_constant_val = emit_local_constant_temp_var(local_constant);
+			}
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
 			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var);
@@ -2841,8 +2878,15 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 		//For float constants, we need to emit the local constant equivalent via the helper
 		case FLOAT_CONST:
-			//Here's our constant value
-			local_constant_val = emit_f32_local_constant(current_function, constant_node);
+			//Let's first see if we can find it
+			local_constant = get_f32_local_constant(current_function, constant_node->constant_value.float_value);
+
+			//Either create a new local constant or update it accordingly
+			if(local_constant == NULL){
+				local_constant_val = emit_f32_local_constant(current_function, constant_node);
+			} else {
+				local_constant_val = emit_local_constant_temp_var(local_constant);
+			}
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
 			//This only gets the address, we still need to do extra work for our constants
@@ -2857,8 +2901,15 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 		//For double constants, we need to emit the local constant equivalent via the helper
 		case DOUBLE_CONST:
-			//Here's our constant value
-			local_constant_val = emit_f64_local_constant(current_function, constant_node);
+			//Let's first see if we can find it
+			local_constant = get_f64_local_constant(current_function, constant_node->constant_value.double_value);
+
+			//Either create a new local constant or update it accordingly
+			if(local_constant == NULL){
+				local_constant_val = emit_f64_local_constant(current_function, constant_node);
+			} else {
+				local_constant_val = emit_local_constant_temp_var(local_constant);
+			}
 
 			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
 			//This only gets the address, we still need to do extra work for our constants
@@ -5885,7 +5936,7 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
  * 	      /						|			\ 
  * 	 0 or more expressions condition node  0 or more expressions
  * 	 							|
- * 	 						logical or statement
+ * 	 					logical or statement?
  */
 static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//Initialize the return package
@@ -5934,16 +5985,25 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 	//We will now emit a jump from the entry block, to the condition block
 	emit_jump(for_stmt_entry_block, condition_block);
+	
+	//For later branching - null by default
+	three_addr_var_t* conditional_decider = NULL;
+	//What is the conditional operator?
+	ollie_token_t conditional_operator = BLANK;
 
-	//The condition block values package. This is just a regular expression
-	cfg_result_package_t condition_block_vals = emit_expression(condition_block, cursor->first_child, TRUE, TRUE);
+	//*if* we have a condition block we will emit it now - remember that this is not a strict requirement
+	if(cursor->first_child != NULL){
+		//The condition block values package. This is just a regular expression
+		cfg_result_package_t condition_block_vals = emit_expression(condition_block, cursor->first_child, TRUE, TRUE);
 
-	//Store this for later
-	three_addr_var_t* conditional_decider = condition_block_vals.assignee;
+		//Store this for later
+		conditional_decider = condition_block_vals.assignee;
+		conditional_operator = condition_block_vals.operator;	
 
-	//If this is blank, we need to change this
-	if(condition_block_vals.operator == BLANK){
-		conditional_decider = emit_test_code(condition_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
+		//If this is blank, we need to change this
+		if(conditional_operator == BLANK){
+			conditional_decider = emit_test_code(condition_block_vals.final_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
+		}
 	}
 
 	//Now push up to the third condition
@@ -5954,7 +6014,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//In case stuff gets pushed around
 	basic_block_t* for_stmt_update_block_end = for_stmt_update_block;
 
-	//If we see an expression chain, we need 
+	//If we see an expression chain, we need to parse it out there
 	if(cursor->ast_node_type == AST_NODE_TYPE_EXPR_CHAIN){
 		cfg_result_package_t expression_chain_result = emit_expression_chain(for_stmt_update_block, cursor, FALSE, FALSE);
 
@@ -5985,23 +6045,31 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		compound_statement_results.final_block = compound_statement_results.starting_block;
 	}
 
-	//Determine the kind of branch that we'll need here
-	branch_type_t branch_type = select_appropriate_branch_statement(condition_block_vals.operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
+	//If we have a conditional at all, we will emit appropriate branch
+	//logic
+	if(conditional_decider != NULL){
+		//Determine the kind of branch that we'll need here
+		branch_type_t branch_type = select_appropriate_branch_statement(conditional_operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
 
-	/**
-	 * Inverse jumping logic so
-	 *
-	 * if not condition 
-	 * 	goto exit
-	 * else
-	 * 	goto update
-	 */
-	emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
+		/**
+		 * Inverse jumping logic so
+		 *
+		 * if not condition 
+		 * 	goto exit
+		 * else
+		 * 	goto update
+		 */
+		emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
+
+	//Otherwise - we're doing as the user wants here and just emitting a straight jump from this block to the body
+	} else {
+		emit_jump(condition_block, compound_statement_results.starting_block);
+	}
 
 	//However if it isn't NULL, we'll need to find the end of this compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
-	if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(compound_stmt_end) == TRUE){
+	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
 		//We also need an uncoditional jump right to the update block
 		emit_jump(compound_stmt_end, for_stmt_update_block);
 	}
@@ -6193,7 +6261,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
 
 	//If the block is empty *or* it doesn't end in a return, we need a jump
-	if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(compound_stmt_end) == TRUE){
+	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
 		//The compound statement end will jump right back up to the entry block
 		emit_jump(compound_stmt_end, while_statement_entry_block);
 	}
@@ -6265,7 +6333,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	basic_block_t* if_compound_stmt_end = if_compound_statement_results.final_block;
 
 	//If the block is empty *or* it doesn't end in a return, we add a jump
-	if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(if_compound_stmt_end) == TRUE){
+	if(does_block_end_in_terminal_statement(if_compound_stmt_end) == FALSE){
 		//The successor to the if-stmt end path is the if statement end block
 		emit_jump(if_compound_stmt_end, exit_block);
 	}
@@ -6346,7 +6414,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
 
 		//If the block is empty *or* it doesn't end in a return, we need the jump
-		if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(else_if_compound_stmt_exit) == TRUE){
+		if(does_block_end_in_terminal_statement(else_if_compound_stmt_exit) == FALSE){
 			//The successor to the if-stmt end path is the if statement end block
 			emit_jump(else_if_compound_stmt_exit, exit_block);
 		}
@@ -6385,7 +6453,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			basic_block_t* else_compound_statement_exit = else_compound_statement_values.final_block;
 
 			//If the block is empty *or* it doesn't end in a return, we need the jump
-			if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(else_compound_statement_exit) == TRUE){
+			if(does_block_end_in_terminal_statement(else_compound_statement_exit) == FALSE){
 				//The successor to the if-stmt end path is the if statement end block
 				emit_jump(else_compound_statement_exit, exit_block);
 			}
@@ -6989,7 +7057,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 		current_block = case_default_results.final_block;
 
 		//If the block is empty *or* it doesn't end in a return, add the jump
-		if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(current_block) == TRUE){
+		if(does_block_end_in_terminal_statement(current_block) == FALSE){
 			//We will always emit a direct jump from this block to the ending block
 			emit_jump(current_block, ending_block);
 		}
@@ -8103,8 +8171,8 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 		//Grab the predecessor out
 		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
 
-		//If the exit statement is not a return statement, we need to know what's happening here
-		if(DOES_BLOCK_END_IN_NON_RETURN_STATEMENT(block) == TRUE){
+		//If the exit statement is not a return statement or is null, we need to know what's happening here
+		if(block->exit_statement == NULL || block->exit_statement->statement_type != THREE_ADDR_CODE_RET_STMT){
 			//If this isn't void, then we need to throw a warning
 			if((function_defined_in->return_type->type_class != TYPE_CLASS_BASIC
 				|| function_defined_in->return_type->basic_type_token != VOID)

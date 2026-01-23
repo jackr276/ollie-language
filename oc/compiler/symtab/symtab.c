@@ -1639,6 +1639,74 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 
 
 /**
+ * Get a string local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_string_local_constant(symtab_function_record_t* record, char* string_value){
+	//Run through all of the local constants
+	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
+		//Extract the candidate
+		local_constant_t* candidate = dynamic_array_get_at(&(record->local_string_constants), i);
+
+		//If we have a match then we're good here, we'll return the candidate and leave
+		if(strcmp(candidate->local_constant_value.string_value.string, string_value) == 0){
+			return candidate;
+		}
+	}
+
+	//If we get here we didn't find it
+	return NULL;
+}
+
+
+/**
+ * Get an f32 local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float float_value){
+	//Run through all of the local constants
+	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
+		//Extract the candidate
+		local_constant_t* candidate = dynamic_array_get_at(&(record->local_f32_constants), i);
+
+		//We will be comparing the values at a byte level. We do not compare the raw values because
+		//that would use FP comparison
+		if(candidate->local_constant_value.float_bit_equivalent == *((u_int32_t*)&float_value)){
+			return candidate;
+		}
+	}
+
+	//If we get here we didn't find it
+	return NULL;
+}
+
+
+/**
+ * Get an f64 local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_f64_local_constant(symtab_function_record_t* record, double double_value){
+	//Run through all of the local constants
+	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
+		//Extract the candidate
+		local_constant_t* candidate = dynamic_array_get_at(&(record->local_f64_constants), i);
+
+		//We will be comparing the values at a byte level. We do not compare the raw values because
+		//that would use FP comparison
+		if(candidate->local_constant_value.float_bit_equivalent == *((u_int64_t*)&double_value)){
+			return candidate;
+		}
+	}
+
+	//If we get here we didn't find it
+	return NULL;
+}
+
+
+/**
  * Part of optimizer's mark and sweep - remove any local constants
  * with a reference count of 0
  */

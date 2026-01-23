@@ -581,6 +581,27 @@ void print_function_name(symtab_function_record_t* record);
 void print_local_constants(FILE* fl, symtab_function_record_t* record);
 
 /**
+ * Get an f32 local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float constant_value);
+
+/**
+ * Get an f64 local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_f64_local_constant(symtab_function_record_t* record, double constant_value);
+
+/**
+ * Get a string local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_string_local_constant(symtab_function_record_t* record, char* string_value);
+
+/**
  * A helper method for variable name printing
  */
 void print_variable_name(symtab_variable_record_t* record);
