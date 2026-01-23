@@ -4135,10 +4135,24 @@ static inline instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_
  * like:
  * 	movd %xmm0, %eax
  *
- * In practice
+ * In practice, this is only ever going to be used for floating point "set" statements where we are dealing with
+ * something like "let x:i32 = 3.44 < 32.2"(not exactly that but that's the context)
  */
 static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_purpose_destination, three_addr_var_t* sse_source){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Give it the assignee
+	stmt->destination_register = general_purpose_destination;
+
+	//And the operand
+	stmt->source_register = sse_source;
+
+	//Now set the instruction type
+	stmt->instruction_type = MOVD;
+
+	//And finally, we give it back
+	return stmt;
 }
 
 
