@@ -855,11 +855,6 @@ void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* co
 branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_category_t branch_type, u_int8_t is_signed);
 
 /**
- * Select the appropriate set type given the circumstances, including the operand and the signedness
- */
-instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_floating_point, u_int8_t is_signed);
-
-/**
  * Get the estimated cycle count for a given instruction. This count
  * is of course estimated, we cannot know for sure
  */

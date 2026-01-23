@@ -6995,51 +6995,6 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
 
 
 /**
- * Select the appropriate set type given the circumstances, including the operand and the signedness
- *
- *
- * TODO - we need to determine what this is for floats with something like "SETP"
- */
-instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_floating_point, u_int8_t is_signed){
-	if(is_signed == TRUE){
-		switch(op){
-			case G_THAN:
-				return SETG;
-			case L_THAN:
-				return SETL;
-			case G_THAN_OR_EQ:
-				return SETGE;
-			case L_THAN_OR_EQ:
-				return SETLE;
-			case NOT_EQUALS:
-				return SETNE;
-			case EQUALS:
-				return SETE;
-			default:
-				return SETE;
-		}
-	} else {
-		switch(op){
-			case G_THAN:
-				return SETA;
-			case L_THAN:
-				return SETB;
-			case G_THAN_OR_EQ:
-				return SETAE;
-			case L_THAN_OR_EQ:
-				return SETBE;
-			case NOT_EQUALS:
-				return SETNE;
-			case EQUALS:
-				return SETE;
-			default:
-				return SETE;
-		}
-	}
-}
-
-
-/**
  * Get the estimated cycle count for a given instruction. This count
  * is of course estimated, we cannot know for sure
  */

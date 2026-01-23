@@ -4066,9 +4066,52 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 
 
 /**
+ * Select the appropriate set type given the circumstances, including the operand and the signedness
+ */
+static inline instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed){
+	if(is_signed == TRUE){
+		switch(op){
+			case G_THAN:
+				return SETG;
+			case L_THAN:
+				return SETL;
+			case G_THAN_OR_EQ:
+				return SETGE;
+			case L_THAN_OR_EQ:
+				return SETLE;
+			case NOT_EQUALS:
+				return SETNE;
+			case EQUALS:
+				return SETE;
+			default:
+				return SETE;
+		}
+
+	} else {
+		switch(op){
+			case G_THAN:
+				return SETA;
+			case L_THAN:
+				return SETB;
+			case G_THAN_OR_EQ:
+				return SETAE;
+			case L_THAN_OR_EQ:
+				return SETBE;
+			case NOT_EQUALS:
+				return SETNE;
+			case EQUALS:
+				return SETE;
+			default:
+				return SETE;
+		}
+	}
+}
+
+
+/**
  * Emit a setX instruction directly
  */
-static inline instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_floating_point, u_int8_t is_signed){
+static inline instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_signed){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -4079,7 +4122,7 @@ static inline instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_
 	stmt->op1 = relies_on;
 
 	//We'll determine the actual instruction type using the helper
-	stmt->instruction_type = select_appropriate_set_stmt(op, is_floating_point, is_signed);
+	stmt->instruction_type = select_appropriate_set_stmt(op, is_signed);
 
 	//Once that's done, we'll return
 	return stmt;
@@ -4197,7 +4240,7 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	} else {
 		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
 		//is required to use a byte sized register so we can't just set the assignee and move on
-		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, is_floating_point, type_signed);
+		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, type_signed);
 
 		//The set instruction goes right after the cmp instruction
 		insert_instruction_after_given(set_instruction, instruction);
