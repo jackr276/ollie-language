@@ -902,6 +902,26 @@ static void remediate_memory_address_in_non_access_context(instruction_window_t*
 
 
 /**
+ * Emit a setne three address code statement
+ */
+static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Save the assignee
+	stmt->assignee = assignee;
+
+	stmt->op1 = relies_on;
+
+	//We'll determine the actual instruction type using the helper
+	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
+
+	//Once that's done, we'll return
+	return stmt;
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -3732,6 +3752,10 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
 			return CMPL;
 		case QUAD_WORD:
 			return CMPQ;
+		case SINGLE_PRECISION:
+			return UCOMISS;
+		case DOUBLE_PRECISION:
+			return UCOMISD;
 		default:
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in cmp instruction\n");
 			exit(1);
@@ -4042,6 +4066,27 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 
 
 /**
+ * Emit a setX instruction directly
+ */
+static inline instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_floating_point, u_int8_t is_signed){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//We'll need to give it the assignee
+	stmt->destination_register = destination_register;
+
+	//What do we relie on
+	stmt->op1 = relies_on;
+
+	//We'll determine the actual instruction type using the helper
+	stmt->instruction_type = select_appropriate_set_stmt(op, is_floating_point, is_signed);
+
+	//Once that's done, we'll return
+	return stmt;
+}
+
+
+/**
  * Handle a cmp operation. This is used whenever we have
  * relational operation.
  *
@@ -4139,12 +4184,13 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 	//We've already handled the comparison instruction by this point. Now,
 	//we'll add logic that does the setX instruction and the final assignment
 	} else {
-		//Get the signedness based on the assignee of the cmp instruction
+		//Get the signedness and the floating point status
 		u_int8_t type_signed = is_type_signed(instruction->assignee->type);
+		u_int8_t is_floating_point = (size == SINGLE_PRECISION || size == DOUBLE_PRECISION) ? TRUE : FALSE;
 
 		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
 		//is required to use a byte sized register so we can't just set the assignee and move on
-		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, type_signed);
+		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, is_floating_point, type_signed);
 
 		//The set instruction goes right after the cmp instruction
 		insert_instruction_after_given(set_instruction, instruction);
@@ -4788,6 +4834,7 @@ static void handle_inc_instruction(instruction_t* instruction){
 	instruction->destination_register = instruction->assignee;
 }
 
+
 /**
  * Handle a decrement statement
  */
@@ -5046,6 +5093,8 @@ static void handle_lea_statement(instruction_t* instruction){
  * jump-to-if and the unconditional else jump
  *
  * NOTE: we know that the branch instruction here is always instruction 1
+ *
+ * TODO - we need to deal with floating point branching here
  */
 static void handle_branch_instruction(instruction_window_t* window){
 	//Add it in here

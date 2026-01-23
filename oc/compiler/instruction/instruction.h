@@ -755,16 +755,6 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable);
 instruction_t* emit_idle_instruction();
 
 /**
- * Emit a setX instruction
- */
-instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_signed);
-
-/**
- * Emit a setne three address code statement
- */
-instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on);
-
-/**
  * Emit a fully formed global variable OIR address calculation with offset lea
  *
  * This will always produce instructions like: t8 <- global_var(%rip)
@@ -864,7 +854,7 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
 /**
  * Select the appropriate set type given the circumstances, including the operand and the signedness
  */
-instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed);
+instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_floating_point, u_int8_t is_signed);
 
 /**
  * Get the estimated cycle count for a given instruction. This count

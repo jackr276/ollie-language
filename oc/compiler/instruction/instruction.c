@@ -1246,47 +1246,6 @@ instruction_t* emit_idle_instruction(){
 
 
 /**
- * Emit a setX instruction
- */
-instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_signed){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//We'll need to give it the assignee
-	stmt->destination_register = destination_register;
-
-	//What do we relie on
-	stmt->op1 = relies_on;
-
-	//We'll determine the actual instruction type using the helper
-	stmt->instruction_type = select_appropriate_set_stmt(op, is_signed);
-
-	//Once that's done, we'll return
-	return stmt;
-}
-
-
-/**
- * Emit a setne three address code statement
- */
-instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Save the assignee
-	stmt->assignee = assignee;
-
-	stmt->op1 = relies_on;
-
-	//We'll determine the actual instruction type using the helper
-	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
-
-	//Once that's done, we'll return
-	return stmt;
-}
-
-
-/**
  * Print an 8-bit register out. The names used for these are still
  * 64 bits because 8, 16, 32 and 64 bit uses can't occupy the same register at the 
  * same time
@@ -7041,7 +7000,7 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
  *
  * TODO - we need to determine what this is for floats with something like "SETP"
  */
-instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed){
+instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_floating_point, u_int8_t is_signed){
 	if(is_signed == TRUE){
 		switch(op){
 			case G_THAN:
