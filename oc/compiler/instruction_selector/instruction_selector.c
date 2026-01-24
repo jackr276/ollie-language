@@ -3523,7 +3523,7 @@ static instruction_t* emit_setne_instruction(three_addr_var_t* destination, thre
 /**
  * Emit an ANDx instruction
  */
-static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+static inline instruction_t* emit_and_instruction(three_addr_var_t* destination, three_addr_var_t* source){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -3551,6 +3551,43 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 	//Finally we set the destination
 	instruction->destination_register = destination;
 	instruction->source_register = source;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit an ANDx instruction with a constant operand
+ */
+static inline instruction_t* emit_and_with_source_instruction(three_addr_var_t* destination, three_addr_const_t* constant_source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size of the variable
+	variable_size_t size = get_type_size(destination->type);
+
+	switch(size){
+		case QUAD_WORD:	
+			instruction->instruction_type = ANDQ;
+			break;
+		case DOUBLE_WORD:	
+			instruction->instruction_type = ANDL;
+			break;
+		case WORD:	
+			instruction->instruction_type = ANDW;
+			break;
+		case BYTE:	
+			instruction->instruction_type = ANDB;
+			break;
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in and instruction\n");
+			exit(1);
+	}
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_immediate = constant_source;
 
 	//And now we'll give it back
 	return instruction;
@@ -4322,6 +4359,19 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 			instruction->destination_register = copied_op1;
 			//It is not possible for this to be a constant
 			instruction->source_register = instruction->op2;
+
+			//Now that we've done all that, we need to emit a move instruction that takes the copied op1 and puts it into
+			//a general purpose register(32 bit)
+			three_addr_var_t* general_purpose_destination = emit_temp_var(u32);
+
+			//Move the result(in op1) into the GP destination
+			instruction_t* move_mask = emit_movd_instruction(general_purpose_destination, copied_op1);
+
+			//Now that we have this done, we can finally *and* the gp destination and 1 together. We will
+			//get 1 if our result is true and 0 if it is not true
+			instruction_t* and_mask = emit_and_instruction(
+				, three_addr_var_t *source)
+	
 
 
 			//TODO WRONG
