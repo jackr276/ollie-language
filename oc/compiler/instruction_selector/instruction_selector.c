@@ -5316,8 +5316,9 @@ static void handle_lea_statement(instruction_t* instruction){
  * NOTE: we know that the branch instruction here is always instruction 1
  */
 static void handle_branch_instruction(instruction_window_t* window){
-	//Add it in here
 	instruction_t* branch_stmt = window->instruction1;
+	//Grab the block out
+	basic_block_t* block = branch_stmt->block_contained_in;
 
 	//Grab out the if and else blocks
 	basic_block_t* if_block = branch_stmt->if_block;
@@ -5325,6 +5326,10 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 	//Placeholder for the jump to if instruction
 	instruction_t* jump_to_if;
+	//For floats only, this is used to jump when we have a NaN
+	instruction_t* jump_when_nan;
+	//The false jump condition
+	instruction_t* jump_to_else;
 
 	//Most common case, we do not expect that most things will
 	//be relying on FP comparison
@@ -5376,10 +5381,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 		jump_to_if->op1 = branch_stmt->op1;
 
 		//The else jump is always a direct jump no matter what
-		instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-		//Grab the block our
-		basic_block_t* block = branch_stmt->block_contained_in;
+		jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
 		//The if must go after the branch statement before the else
 		add_statement(block, jump_to_if);
@@ -5445,6 +5447,19 @@ static void handle_branch_instruction(instruction_window_t* window){
 			 */
 			case BRANCH_E:
 			case BRANCH_Z:
+				//We need two conditional jumps here
+				jump_when_nan = emit_jump_instruction_directly(else_block, JP);
+				jump_when_nan->op1 = branch_stmt->op1;
+
+				jump_to_if = emit_jump_instruction_directly(if_block, JE);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				//Add all of these statements in. NaN comes first, then the
+				//if, and finally the ending catch-all
+				add_statement(block, jump_when_nan);
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+				
 				break;
 
 			//Should be unreachable
@@ -5452,6 +5467,12 @@ static void handle_branch_instruction(instruction_window_t* window){
 				printf("Fatal internal compiler error: Unreachable branch type hit\n");
 				exit(1);
 		}
+
+		//Branch stmt is now useless so scrap it
+		delete_statement(branch_stmt);
+
+		//In the end, we always rebuild the window around the jump to else
+		reconstruct_window(window, jump_to_else);
 	}
 }
 
