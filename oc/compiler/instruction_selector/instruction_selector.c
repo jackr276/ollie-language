@@ -5314,8 +5314,6 @@ static void handle_lea_statement(instruction_t* instruction){
  * jump-to-if and the unconditional else jump
  *
  * NOTE: we know that the branch instruction here is always instruction 1
- *
- * TODO - we need to deal with floating point branching here
  */
 static void handle_branch_instruction(instruction_window_t* window){
 	//Add it in here
@@ -5370,11 +5368,55 @@ static void handle_branch_instruction(instruction_window_t* window){
 				break;
 			//We in reality should never reach here
 			default:
-				break;
+				printf("Fatal internal compiler error: Unreachable branch type hit\n");
+				exit(1);
 		}
+	
+	/**
+	 * Handle all floating point cases. For these cases, we need to account
+	 * for the fact that we could have an inverse branch. We do this because
+	 * we consider NaNs to be "falseful" values and as such they cause us to jump
+	 * to our else cases
+	 */
 	} else {
-		printf("TODO NOT IMPLEMENTED");
-		exit(1);
+		branch_stmt->inverse_branch == TRUE;
+
+		//Go by the branch type
+		switch(branch_stmt->branch_type){
+			//Any kind of ">" case is the same
+			case BRANCH_A:
+			case BRANCH_G:
+				jump_to_if = emit_jump_instruction_directly(if_block, JA);
+				break;
+
+			//Same with any kind of "<" case
+			case BRANCH_L:
+			case BRANCH_B:
+				jump_to_if = emit_jump_instruction_directly(if_block, JB);
+				break;
+
+			//These are lumped together
+			case BRANCH_AE:
+			case BRANCH_GE:
+				break;
+
+			//These are lumped together
+			case BRANCH_LE:
+			case BRANCH_BE:
+				break;
+
+			case BRANCH_NE:
+			case BRANCH_NZ:
+				break;
+
+			case BRANCH_E:
+			case BRANCH_Z:
+				break;
+
+			default:
+				printf("Fatal internal compiler error: Unreachable branch type hit\n");
+				exit(1);
+		}
 	}
 
 
