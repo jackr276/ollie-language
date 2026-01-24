@@ -5328,47 +5328,55 @@ static void handle_branch_instruction(instruction_window_t* window){
 	//Placeholder for the jump to if instruction
 	instruction_t* jump_to_if;
 
-	switch(branch_stmt->branch_type){
-		case BRANCH_A:
-			jump_to_if = emit_jump_instruction_directly(if_block, JA);
-			break;
-		case BRANCH_AE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JAE);
-			break;
-		case BRANCH_B:
-			jump_to_if = emit_jump_instruction_directly(if_block, JB);
-			break;
-		case BRANCH_BE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JBE);
-			break;
-		case BRANCH_E:
-			jump_to_if = emit_jump_instruction_directly(if_block, JE);
-			break;
-		case BRANCH_NE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JNE);
-			break;
-		case BRANCH_Z:
-			jump_to_if = emit_jump_instruction_directly(if_block, JZ);
-			break;
-		case BRANCH_NZ:
-			jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
-			break;
-		case BRANCH_G:
-			jump_to_if = emit_jump_instruction_directly(if_block, JG);
-			break;
-		case BRANCH_GE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JGE);
-			break;
-		case BRANCH_L:
-			jump_to_if = emit_jump_instruction_directly(if_block, JL);
-			break;
-		case BRANCH_LE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JLE);
-			break;
-		//We in reality should never reach here
-		default:
-			break;
+	//Most common case, we do not expect that most things will
+	//be relying on FP comparison
+	if(branch_stmt->relies_on_fp_comparison == FALSE){
+		switch(branch_stmt->branch_type){
+			case BRANCH_A:
+				jump_to_if = emit_jump_instruction_directly(if_block, JA);
+				break;
+			case BRANCH_AE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+				break;
+			case BRANCH_B:
+				jump_to_if = emit_jump_instruction_directly(if_block, JB);
+				break;
+			case BRANCH_BE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+				break;
+			case BRANCH_E:
+				jump_to_if = emit_jump_instruction_directly(if_block, JE);
+				break;
+			case BRANCH_NE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+				break;
+			case BRANCH_Z:
+				jump_to_if = emit_jump_instruction_directly(if_block, JZ);
+				break;
+			case BRANCH_NZ:
+				jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
+				break;
+			case BRANCH_G:
+				jump_to_if = emit_jump_instruction_directly(if_block, JG);
+				break;
+			case BRANCH_GE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JGE);
+				break;
+			case BRANCH_L:
+				jump_to_if = emit_jump_instruction_directly(if_block, JL);
+				break;
+			case BRANCH_LE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JLE);
+				break;
+			//We in reality should never reach here
+			default:
+				break;
+		}
+	} else {
+		printf("TODO NOT IMPLEMENTED");
+		exit(1);
 	}
+
 
 	//Copy the source register over here as it is a dependence
 	jump_to_if->op1 = branch_stmt->op1;
