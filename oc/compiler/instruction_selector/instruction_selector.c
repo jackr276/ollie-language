@@ -5415,25 +5415,52 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
+				//Add them all in
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
 
 				break;
 
 			//Same with any kind of "<" case
 			case BRANCH_L:
 			case BRANCH_B:
-				jump_to_if = emit_jump_instruction_directly(if_block, JB);
+				jump_to_if = emit_jump_instruction_directly(if_block, JL);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add them all in
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
 				break;
 
 			//These are lumped together
 			case BRANCH_AE:
 			case BRANCH_GE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add them all in
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+				
 				break;
 
 			//These are lumped together
 			case BRANCH_LE:
 			case BRANCH_BE:
-				break;
+				jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+				jump_to_if->op1 = branch_stmt->op1;
 
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add them all in
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+
+				break;
 
 			/**
 			 * For not equals, say we had something like:
