@@ -3719,7 +3719,7 @@ static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* ins
 			fprintf(fl, "$5, "); //CMPNLT
 			break;
 
-		case EQUALS:
+		case DOUBLE_EQUALS:
 			fprintf(fl, "$0, "); //CMPEQ
 			break;
 		
@@ -3738,6 +3738,7 @@ static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* ins
 
 	//Finally the second source which also doubles as the destination
 	print_variable(fl, instruction->destination_register, mode);
+	fprintf(fl, "\n");
 }
 
 
