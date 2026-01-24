@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -3560,7 +3561,7 @@ static inline instruction_t* emit_and_instruction(three_addr_var_t* destination,
 /**
  * Emit an ANDx instruction with a constant operand
  */
-static inline instruction_t* emit_and_with_source_instruction(three_addr_var_t* destination, three_addr_const_t* constant_source){
+static inline instruction_t* emit_and_with_constant_source_instruction(three_addr_var_t* destination, three_addr_const_t* constant_source){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -4329,6 +4330,9 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 			return final_move;
 
 		} else {
+			//Cache the original destination var
+			three_addr_var_t* original_destination = instruction->assignee;
+
 			//Since the CMPSS/CMPSD operations *do* overwrite the destintatoin, we need to emit a copy of op1 first
 			instruction_t* copying_move = emit_move_instruction(emit_temp_var(instruction->op1->type), instruction->op1);
 
@@ -4366,16 +4370,26 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 
 			//Move the result(in op1) into the GP destination
 			instruction_t* move_mask = emit_movd_instruction(general_purpose_destination, copied_op1);
+			
+			//This instruction goes in after the current one
+			insert_instruction_after_given(move_mask, instruction);
 
 			//Now that we have this done, we can finally *and* the gp destination and 1 together. We will
 			//get 1 if our result is true and 0 if it is not true
-			instruction_t* and_mask = emit_and_instruction(
-				, three_addr_var_t *source)
-	
+			instruction_t* and_mask = emit_and_with_constant_source_instruction(general_purpose_destination, emit_direct_integer_or_char_constant(1, u32));
 
+			//This and mask goes in after the move mask
+			insert_instruction_after_given(and_mask, move_mask);
 
-			//TODO WRONG
-			return instruction;
+			//And finally, we're going to emit one last copy of the GP destination into the actual destination as described
+			//by the original instruction
+			instruction_t* final_move = emit_move_instruction(original_destination, general_purpose_destination);
+
+			//Add this in after the and mask
+			insert_instruction_after_given(final_move, and_mask);
+
+			//Give back the instruction that ends the chain
+			return final_move;
 		}
 	}
 }
