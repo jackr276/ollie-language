@@ -4374,16 +4374,32 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 			//This instruction goes in after the current one
 			insert_instruction_after_given(move_mask, instruction);
 
+			/**
+			 * Even though our movd instruction does need to have a double word
+			 * destination, once it's been moved we can treat that GP register however
+			 * we please. This is important because the original destination may not be
+			 * 32 bits wide. To accommodate this, we will adjust the types now
+			 */
+			three_addr_var_t* true_general_purpose_destination = general_purpose_destination;
+			if(original_destination->type->type_size < general_purpose_destination->type->type_size){
+				//Straight duplicate here
+				true_general_purpose_destination = emit_var_copy(general_purpose_destination);
+
+				//Copy the type/variable size on over
+				true_general_purpose_destination->type = original_destination->type;
+				true_general_purpose_destination->variable_size = original_destination->variable_size;
+			}
+
 			//Now that we have this done, we can finally *and* the gp destination and 1 together. We will
 			//get 1 if our result is true and 0 if it is not true
-			instruction_t* and_mask = emit_and_with_constant_source_instruction(general_purpose_destination, emit_direct_integer_or_char_constant(1, u32));
+			instruction_t* and_mask = emit_and_with_constant_source_instruction(true_general_purpose_destination, emit_direct_integer_or_char_constant(1, u32));
 
 			//This and mask goes in after the move mask
 			insert_instruction_after_given(and_mask, move_mask);
 
 			//And finally, we're going to emit one last copy of the GP destination into the actual destination as described
 			//by the original instruction
-			instruction_t* final_move = emit_move_instruction(original_destination, general_purpose_destination);
+			instruction_t* final_move = emit_move_instruction(original_destination, true_general_purpose_destination);
 
 			//Add this in after the and mask
 			insert_instruction_after_given(final_move, and_mask);
