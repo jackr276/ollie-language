@@ -5371,6 +5371,26 @@ static void handle_branch_instruction(instruction_window_t* window){
 				printf("Fatal internal compiler error: Unreachable branch type hit\n");
 				exit(1);
 		}
+
+		//Copy the source register over here as it is a dependence
+		jump_to_if->op1 = branch_stmt->op1;
+
+		//The else jump is always a direct jump no matter what
+		instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+		//Grab the block our
+		basic_block_t* block = branch_stmt->block_contained_in;
+
+		//The if must go after the branch statement before the else
+		add_statement(block, jump_to_if);
+		//And the jump to else always goes after the if jump
+		add_statement(block, jump_to_else);
+
+		//Once this is all done, we can delete the branch
+		delete_statement(branch_stmt);
+
+		//And reset the window based on the last one
+		reconstruct_window(window, jump_to_else);
 	
 	/**
 	 * Handle all floating point cases. For these cases, we need to account
@@ -5379,8 +5399,6 @@ static void handle_branch_instruction(instruction_window_t* window){
 	 * to our else cases
 	 */
 	} else {
-		branch_stmt->inverse_branch == TRUE;
-
 		//Go by the branch type
 		switch(branch_stmt->branch_type){
 			//Any kind of ">" case is the same
@@ -5405,40 +5423,36 @@ static void handle_branch_instruction(instruction_window_t* window){
 			case BRANCH_BE:
 				break;
 
+
+			/**
+			 * For not equals, say we had something like:
+			 *    NaN != x
+			 * This will always be true. As such, we need to jump
+			 * to the true area on the condition that the parity
+			 * flag is set to 1(means we had NaN)
+			 */
 			case BRANCH_NE:
 			case BRANCH_NZ:
 				break;
 
+
+			/**
+			 * For equals, say we had something like:
+			 *    NaN == x
+			 * This will always be false. As such, we need to jump
+			 * to the false area on the condition that the parity
+			 * flag is set to 1(means we had NaN)
+			 */
 			case BRANCH_E:
 			case BRANCH_Z:
 				break;
 
+			//Should be unreachable
 			default:
 				printf("Fatal internal compiler error: Unreachable branch type hit\n");
 				exit(1);
 		}
 	}
-
-
-	//Copy the source register over here as it is a dependence
-	jump_to_if->op1 = branch_stmt->op1;
-
-	//The else jump is always a direct jump no matter what
-	instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-	//Grab the block our
-	basic_block_t* block = branch_stmt->block_contained_in;
-
-	//The if must go after the branch statement before the else
-	add_statement(block, jump_to_if);
-	//And the jump to else always goes after the if jump
-	add_statement(block, jump_to_else);
-
-	//Once this is all done, we can delete the branch
-	delete_statement(branch_stmt);
-
-	//And reset the window based on the last one
-	reconstruct_window(window, jump_to_else);
 }
 
 
