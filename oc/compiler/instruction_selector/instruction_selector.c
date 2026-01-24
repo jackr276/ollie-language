@@ -5399,6 +5399,10 @@ static void handle_branch_instruction(instruction_window_t* window){
 	 * for the fact that we could have an inverse branch. We do this because
 	 * we consider NaNs to be "falseful" values and as such they cause us to jump
 	 * to our else cases
+	 *
+	 * These leads us to have JP's for our equals and not equals. However for any other
+	 * kind of branch, these values are automatically false and as such we don't need any
+	 * kind of JP
 	 */
 	} else {
 		//Go by the branch type
@@ -5407,6 +5411,11 @@ static void handle_branch_instruction(instruction_window_t* window){
 			case BRANCH_A:
 			case BRANCH_G:
 				jump_to_if = emit_jump_instruction_directly(if_block, JA);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+
 				break;
 
 			//Same with any kind of "<" case
@@ -5435,6 +5444,22 @@ static void handle_branch_instruction(instruction_window_t* window){
 			 */
 			case BRANCH_NE:
 			case BRANCH_NZ:
+				//We need two conditional jumps here
+				jump_when_nan = emit_jump_instruction_directly(if_block, JP);
+				jump_when_nan->op1 = branch_stmt->op1;
+
+				jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				//And the standard jump to else here
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add all of these statements in. NaN comes first, then the
+				//if, and finally the ending catch-all
+				add_statement(block, jump_when_nan);
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+
 				break;
 
 
@@ -5453,6 +5478,9 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 				jump_to_if = emit_jump_instruction_directly(if_block, JE);
 				jump_to_if->op1 = branch_stmt->op1;
+
+				//And the standard jump to else here
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 
 				//Add all of these statements in. NaN comes first, then the
 				//if, and finally the ending catch-all
