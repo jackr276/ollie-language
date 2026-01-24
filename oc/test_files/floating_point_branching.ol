@@ -3,38 +3,61 @@
 * Testing for floating point branching
 */
 
-pub fn float_compare(xx:f32, y:f32, z:f32, aa:f32) -> i32 {
-	let x:mut i32 = 0;
-
-	if(xx > y) {
-		x += 3;
+pub fn float_compare_e(x:f32, y:f32) -> i32 {
+	if(x == y){
+		ret 0;
+	} else {
+		ret 1;
 	}
-
-	if (xx < y) {
-		x += 55;
-	}
-
-	if (xx >= y) {
-		x += 252;
-	}
-
-	if ( z <= aa) {
-		x += 98;
-	}
-
-	if(xx == z) {
-		x += 83;
-	}
-
-	if(z != aa){
-		x += 33;
-	}
-
-	//So the optimizer doesn't blow it away
-	ret x;
 }
 
 
+pub fn float_compare_ne(x:f32, y:f32) -> i32 {
+	if(x != y){
+		ret 0;
+	} else {
+		ret 1;
+	}
+}
+
+
+pub fn float_compare_g(x:f32, y:f32) -> i32 {
+	if(x > y){
+		ret 0;
+	} else {
+		ret 1;
+	}
+}
+
+
+pub fn float_compare_ge(x:f32, y:f32) -> i32 {
+	if(x >= y){
+		ret 0;
+	} else {
+		ret 1;
+	}
+}
+
+
+pub fn float_compare_l(x:f32, y:f32) -> i32 {
+	if(x < y){
+		ret 0;
+	} else {
+		ret 1;
+	}
+}
+
+
+pub fn float_compare_le(x:f32, y:f32) -> i32 {
+	if(x < y){
+		ret 0;
+	} else {
+		ret 1;
+	}
+}
+
+
+//Dummy
 pub fn main() -> i32 {
-	ret @float_compare(3.2, 32.3, .3, .4);
+	ret 0;
 }
