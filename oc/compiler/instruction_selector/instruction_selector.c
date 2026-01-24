@@ -4203,8 +4203,12 @@ static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_pur
  * the actual cmpX instruction does not naturally produce and output, it just
  * sets flags. We have custom logic in this block do determine whether or not 
  * that flag setting is needed
+ *
+ * NOTE: we always assume that instruction1 in the window is our target
  */
-static instruction_t* handle_cmp_instruction(instruction_t* instruction){
+static void handle_cmp_instruction(instruction_window_t* window){
+	instruction_t* instruction = window->instruction1;
+
 	/**
 	 * First step - determine if this cmp instruction is *exclusively* used
 	 * by a branch statement or if we are going to need to expand it out
@@ -4291,7 +4295,6 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 
 		//And we're done, there's no other work to do for a regular comparison
 		//that will be followed by a branch
-		return instruction;
 
 	/**
 	 * If we make it here, then we will need to leverage different setting logic
@@ -4327,7 +4330,8 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 			//This final move goes right after the set instruction
 			insert_instruction_after_given(final_move, set_instruction);
 
-			return final_move;
+			//Rebuild the window around the last instruction that we added
+			reconstruct_window(window, final_move);
 
 		} else {
 			//Cache the original destination var
@@ -4404,8 +4408,8 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 			//Add this in after the and mask
 			insert_instruction_after_given(final_move, and_mask);
 
-			//Give back the instruction that ends the chain
-			return final_move;
+			//Rebuild the window around the last instruction that we added
+			reconstruct_window(window, final_move);
 		}
 	}
 }
@@ -4934,8 +4938,13 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 /**
  * We can translate a bin op statement a few different ways based on the operand
+ *
+ * NOTE: We always assume that instruction 1 is the one that we're after
  */
-static void handle_binary_operation_instruction(instruction_t* instruction){
+static inline void handle_binary_operation_instruction(instruction_window_t* window){
+	//We're looking at the first instruciton
+	instruction_t* instruction = window->instruction1;
+
 	//Go based on what we have as the operation
 	switch(instruction->op){
 		/**
@@ -4969,25 +4978,31 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 			//Let the helper do it
 			handle_subtraction_instruction(instruction);
 			break;
+
 		//Hanlde a left shift instruction
 		case L_SHIFT:
 			handle_left_shift_instruction(instruction);
 			break;
+
 		//Handle a right shift operation
 		case R_SHIFT:
 			handle_right_shift_instruction(instruction);
 			break;
+
 		//Handle the (|) operator
 		case SINGLE_OR:
 			handle_bitwise_inclusive_or_instruction(instruction);
 			break;
+
 		//Handle the (&) operator in a binary operation context
 		case SINGLE_AND:
 			handle_bitwise_and_instruction(instruction);
 			break;
+
 		case CARROT:
 			handle_bitwise_exclusive_or_instruction(instruction);
 			break;
+
 		//All of these instructions require us to use the CMP or CMPQ command
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
@@ -4995,9 +5010,10 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 		case G_THAN_OR_EQ:
 		case L_THAN:
 		case L_THAN_OR_EQ:
-			//Let the helper do it
-			handle_cmp_instruction(instruction);
+			//Let the helper do it. This will modify the window
+			handle_cmp_instruction(window);
 			break;
+
 		default:
 			printf("Fatal internal compiler error: unreachable path hit for binary operation selection");
 			exit(1);
@@ -7298,36 +7314,8 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
-			/**
-			 * Some comparison instructions need us to set the
-			 * value of them after the fact, while others don't
-			 * (think ones that are relied on by branches). So, we will
-			 * invoke a special rule for relational and equality operators
-			 * to handle these special cases
-			 */
-			switch(instruction->op){
-				case DOUBLE_EQUALS:
-				case NOT_EQUALS:
-				case G_THAN:
-				case G_THAN_OR_EQ:
-				case L_THAN:
-				case L_THAN_OR_EQ:
-					//This helper does all of the heavy lifting. It will
-					//return the last instruction that it created/touched
-					instruction = handle_cmp_instruction(instruction);
-
-					//Rebuild the window based on this
-					reconstruct_window(window, instruction);
-
-					break;
-
-				//All other cases - just handle the instruction
-				//normally
-				default:
-					handle_binary_operation_instruction(instruction);
-					break;
-			}
-
+			//Let the helper deal with this
+			handle_binary_operation_instruction(window);
 			break;
 		//For a phi function, we perform an exact 1:1 mapping
 		case THREE_ADDR_CODE_PHI_FUNC:
