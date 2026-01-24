@@ -4292,9 +4292,39 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 			return final_move;
 
 		} else {
+			//Since the CMPSS/CMPSD operations *do* overwrite the destintatoin, we need to emit a copy of op1 first
+			instruction_t* copying_move = emit_move_instruction(emit_temp_var(instruction->op1->type), instruction->op1);
+
+			//Grab a reference to the duplicated version
+			three_addr_var_t* copied_op1 = copying_move->destination_register;
+
+			//This copying move needs to go in before the cmp
+			insert_instruction_before_given(copying_move, instruction);
+
+			//Now let's handle selection for our instruction
+			switch(size){
+				case SINGLE_PRECISION:
+					instruction->instruction_type = CMPSS;
+					break;
+					
+				case DOUBLE_PRECISION:
+					instruction->instruction_type = CMPSD;
+					break;
+
+				//We should never hit this. If we do something went very wrong
+				default:
+					printf("Fatal internal compiler error: unreachable path hit in CMP selector\n");
+					exit(1);
+			}
+
+			//Now let's assign the destination/source. Remember that it's essential to use the copied_op1 in the destination
+			//so that we don't run into any issues with registers being overwritten
+			instruction->destination_register = copied_op1;
+			//It is not possible for this to be a constant
+			instruction->source_register = instruction->op2;
+
+
 			//TODO WRONG
-			printf("NOT YET SUPPORTED\n");
-			exit(1);
 			return instruction;
 		}
 	}
