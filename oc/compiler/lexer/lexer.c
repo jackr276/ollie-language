@@ -1279,7 +1279,15 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.lexeme = lexeme;
 							lex_item.tok = LONG_CONST;
 
-							//TODO CONVERT
+							//Convert accordingly
+							if(seen_hex == FALSE){
+								lex_item.constant_values.signed_long_value = atol(numeric_lexeme.string);
+							} else {
+								lex_item.constant_values.signed_long_value = strtol(numeric_lexeme.string, NULL, 0);
+							}
+
+							//Add this into the stream
+							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
@@ -1296,7 +1304,15 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.lexeme = lexeme;
 							lex_item.tok = LONG_CONST;
 
-							//TODO CONVERT
+							//Convert accordingly
+							if(seen_hex == FALSE){
+								lex_item.constant_values.signed_short_value = atol(numeric_lexeme.string);
+							} else {
+								lex_item.constant_values.signed_short_value = strtol(numeric_lexeme.string, NULL, 0);
+							}
+
+							//Add it to the stream
+							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
@@ -1312,9 +1328,16 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = BYTE_CONST;
-							add_lexitem_to_stream(stream, lex_item);
 
-							//TODO CONVERT
+							//Convert accordingly
+							if(seen_hex == FALSE){
+								lex_item.constant_values.signed_byte_value = atol(numeric_lexeme.string);
+							} else {
+								lex_item.constant_values.signed_byte_value = strtol(numeric_lexeme.string, NULL, 0);
+							}
+
+							//Add it to the stream
+							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
@@ -1336,16 +1359,40 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								case 'l':
 								case 'L':
 									lex_item.tok = LONG_CONST_FORCE_U;
+
+									//Convert accordingly
+									if(seen_hex == FALSE){
+										lex_item.constant_values.unsigned_long_value = atol(numeric_lexeme.string);
+									} else {
+										lex_item.constant_values.unsigned_long_value = strtol(numeric_lexeme.string, NULL, 0);
+									}
+
 									break;
 
 								case 's':
 								case 'S':
 									lex_item.tok = SHORT_CONST_FORCE_U;
+
+									//Convert accordingly
+									if(seen_hex == FALSE){
+										lex_item.constant_values.unsigned_short_value = atol(numeric_lexeme.string);
+									} else {
+										lex_item.constant_values.unsigned_short_value = strtol(numeric_lexeme.string, NULL, 0);
+									}
+
 									break;
 
 								case 'b':
 								case 'B':
 									lex_item.tok = BYTE_CONST_FORCE_U;
+
+									//Convert accordingly
+									if(seen_hex == FALSE){
+										lex_item.constant_values.unsigned_byte_value = atol(numeric_lexeme.string);
+									} else {
+										lex_item.constant_values.unsigned_byte_value = strtol(numeric_lexeme.string, NULL, 0);
+									}
+
 									break;
 
 								default:
@@ -1353,13 +1400,17 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 									PUT_BACK_CHAR(fl);
 									lex_item.tok = INT_CONST_FORCE_U;
 
+									//Convert accordingly
+									if(seen_hex == FALSE){
+										lex_item.constant_values.unsigned_int_value = atol(numeric_lexeme.string);
+									} else {
+										lex_item.constant_values.unsigned_int_value = strtol(numeric_lexeme.string, NULL, 0);
+									}
+
 									break;
 							}
 
-							//TODO CONVERT
-
-							//Pack everything up and return
-							lex_item.lexeme = lexeme;
+							//Add the line number and get it into the stream
 							lex_item.line_num = line_number;
 							add_lexitem_to_stream(stream, lex_item);
 
