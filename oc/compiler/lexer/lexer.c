@@ -1046,8 +1046,49 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							//that is a hard failure
 							switch(ch2) {
 								case '0':
+									//This is the actual value 0
+									lex_item.constant_values.char_value = 0;
+									break;
+
+								//Double escape char
+								case '\\':
+									lex_item.constant_values.char_value = 92;
+									break;
+
+								//BEL char
+								case 'a':
+									lex_item.constant_values.char_value = 7;
+									break;
+
+								//Backspace
+								case 'b':
+									lex_item.constant_values.char_value = 8;
+									break;
+								
+								//Horizontal tab
+								case 't':
+									lex_item.constant_values.char_value = 9;
+									break;
+
+								//Newline
+								case 'n':
+									lex_item.constant_values.char_value = 10;
+									break;
+
+								//Vertical tab
+								case 'v':
+									lex_item.constant_values.char_value = 11;
+									break;
+
+								//Form feed
+								case 'f':
+									lex_item.constant_values.char_value = 12;
 									break;
 									
+								//Carriage return
+								case 'r':
+									lex_item.constant_values.char_value = 13;
+									break;
 
 								//Hard fail in this case
 								default:
@@ -1057,33 +1098,13 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 									return FAILURE;
 							}
 
+							//If we get to down here then it all worked out, so we'll
+							//add it into the stream
 							lex_item.tok = CHAR_CONST;
 							lex_item.line_num = line_number;
+							add_lexitem_to_stream(stream, lex_item);
 						}
 
-
-						if(ch2 == '\\'){
-							dynamic_string_add_char_to_back(&lexeme, ch2);
-							ch2 = GET_NEXT_CHAR(fl);
-						}
-
-						//Add our char const ch2 in
-						dynamic_string_add_char_to_back(&lexeme, ch2);
-
-						//Now we must see another single quote
-						ch2 = GET_NEXT_CHAR(fl);
-
-						//This is a failure, we need to leave out
-						if(ch2 != '\''){
-							lex_item.tok = ERROR;
-							lex_item.line_num = line_number;
-							print_lexer_error("Chars can only be one character in length. For a string constant, use double quotes(\")", line_number);
-							return FAILURE;
-						}
-
-						lex_item.lexeme = lexeme;
-						lex_item.line_num = line_number;
-						add_lexitem_to_stream(stream, lex_item);
 						break;
 
 					case '<':
