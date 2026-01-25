@@ -6116,29 +6116,46 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 					return FAILURE;
 			}
 
-
 			//Something to store the current value in
-			u_int64_t current = 0;
+			u_int64_t constant_value;
 
-			printf("TODO NEEDS TO BE FIXED\n");
-			exit(0);
-
-			//Switch based on what we have
-			switch(lookahead.tok){
-				//Just translate here
+			//Let's now extract the value that we're working with
+			switch(constant_expression->constant_type){
 				case INT_CONST_FORCE_U:
+					constant_value = constant_expression->constant_value.unsigned_int_value;
+					break;
+
 				case INT_CONST:
-					current = atoi(lookahead.lexeme.string);
+					constant_value = constant_expression->constant_value.signed_int_value;
 					break;
 
 				case LONG_CONST_FORCE_U:
-				case LONG_CONST:
-					current = atol(lookahead.lexeme.string);
+					constant_value = constant_expression->constant_value.unsigned_long_value;
 					break;
 
+				case LONG_CONST:
+					constant_value = constant_expression->constant_value.signed_long_value;
+					break;
+
+				case SHORT_CONST:
+					constant_value = constant_expression->constant_value.signed_short_value;
+					break;
+
+				case SHORT_CONST_FORCE_U:
+					constant_value = constant_expression->constant_value.unsigned_short_value;
+					break;
+
+				case BYTE_CONST:
+					constant_value = constant_expression->constant_value.signed_byte_value;
+					break;
+
+				case BYTE_CONST_FORCE_U:
+					constant_value = constant_expression->constant_value.unsigned_byte_value;
+					break;
+				
 				//Character constants are allowed
 				case CHAR_CONST:
-					current = *(lookahead.lexeme.string);
+					constant_value = constant_expression->constant_value.char_value;
 					break;
 
 				//If we see anything else, leave
@@ -6149,12 +6166,12 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			}
 
 			//Keep track of what our largest value is
-			if(current > largest_value){
-				largest_value = current;
+			if(constant_value > largest_value){
+				largest_value = constant_value;
 			}
 
 			//Assign the value in
-			member_record->enum_member_value = current;
+			member_record->enum_member_value = constant_value;
 
 			//We need to refresh the lookahead here
 			lookahead = get_next_token(token_stream, &parser_line_num);
