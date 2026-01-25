@@ -460,6 +460,8 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int32_t line_n
 
 	//Assign our line number;
 	lex_item.line_num = line_number;
+	//Wipe this out too
+	lex_item.constant_values.signed_long_value = 0;
 
 	//Let's see if we have a keyword here
 	for(u_int8_t i = 0; i < KEYWORD_COUNT; i++){
@@ -468,15 +470,15 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int32_t line_n
 			switch(tok_array[i]){
 				case TRUE_CONST:
 					lex_item.tok = BYTE_CONST_FORCE_U;
-					lex_item.lexeme = dynamic_string_alloc();
-					dynamic_string_set(&(lex_item.lexeme), "1");
+					//Set the byte value
+					lex_item.constant_values.unsigned_byte_value = 1;
 
 					return lex_item;
 				
 				case FALSE_CONST:
 					lex_item.tok = BYTE_CONST_FORCE_U;
-					lex_item.lexeme = dynamic_string_alloc();
-					dynamic_string_set(&(lex_item.lexeme), "0");
+					//Set the byte value
+					lex_item.constant_values.unsigned_byte_value = 0;
 
 					return lex_item;
 

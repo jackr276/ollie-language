@@ -735,8 +735,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Mark what it is
 			constant_node->constant_type = SHORT_CONST;
 
-			//Store the integer value
-			constant_node->constant_value.signed_short_value = atoi(lookahead.lexeme.string);
+			//Copy over
+			constant_node->constant_value.signed_short_value = lookahead.constant_values.signed_short_value;
 
 			//Use the helper rule to determine what size int we should initially have
 			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_short_value, 16);
@@ -748,8 +748,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Mark what it is
 			constant_node->constant_type = SHORT_CONST_FORCE_U;
 
-			//Store the integer value
-			constant_node->constant_value.signed_short_value = atoi(lookahead.lexeme.string);
+			//Copy over
+			constant_node->constant_value.unsigned_short_value = lookahead.constant_values.unsigned_short_value;
 
 			//Use the helper rule to determine what size int we should initially have
 			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_short_value, 16);
@@ -762,8 +762,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Mark what it is
 			constant_node->constant_type = INT_CONST;
 
-			//Store the integer value
-			constant_node->constant_value.signed_int_value = atoi(lookahead.lexeme.string);
+			//Copy over
+			constant_node->constant_value.signed_int_value = lookahead.constant_values.signed_int_value;
 
 			//Use the helper rule to determine what size int we should initially have
 			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value, 32);
@@ -773,24 +773,14 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 		//Forced unsigned
 		case INT_CONST_FORCE_U:
 			//Mark what it is
-			constant_node->constant_type = INT_CONST;
-			//Store the int value we were given
-			constant_node->constant_value.unsigned_int_value = atoi(lookahead.lexeme.string);
+			constant_node->constant_type = INT_CONST_FORCE_U;
+
+			//Copy over
+			constant_node->constant_value.unsigned_int_value = lookahead.constant_values.unsigned_int_value;
 
 			//Use the helper rule to determine what size int we should initially have
 			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_int_value, 32);
-			break;
-
-		//Hex constants are really just integers
-		case HEX_CONST:
-			//Mark what it is 
-			constant_node->constant_type = INT_CONST;
-			//Store the int value we were given
-			constant_node->constant_value.signed_int_value = strtol(lookahead.lexeme.string, NULL, 0);
-
-			//Use the helper rule to determine what size int we should initially have
-			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_int_value, 32);
-
+			
 			break;
 
 		//Regular signed long constant
@@ -798,8 +788,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Store the type
 			constant_node->constant_type = LONG_CONST;
 
-			//Store the value we've been given
-			constant_node->constant_value.signed_long_value = atol(lookahead.lexeme.string);
+			//Copy over
+			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
 
 			//Get the size up to 64 bits
 			constant_node->inferred_type = determine_required_minimum_signed_integer_type_size(constant_node->constant_value.signed_long_value, 64);
@@ -811,20 +801,19 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Store the type
 			constant_node->constant_type = LONG_CONST;
 
-			//Store the value we've been given
-			constant_node->constant_value.unsigned_long_value = atol(lookahead.lexeme.string);
+			//Copy over
+			constant_node->constant_value.signed_long_value = lookahead.constant_values.signed_long_value;
 
+			//Get the size up to 64 bits
 			constant_node->inferred_type = determine_required_minimum_unsigned_integer_type_size(constant_node->constant_value.unsigned_long_value, 64);
 
 			break;
 
 		case FLOAT_CONST:
 			constant_node->constant_type = FLOAT_CONST;
-			//Grab the float val
-			float float_val = atof(lookahead.lexeme.string);
 
-			//Store the float value we were given
-			constant_node->constant_value.float_value = float_val;
+			//Copy the value
+			constant_node->constant_value.float_value = lookahead.constant_values.float_value;
 
 			//By default, float constants are of type float32
 			constant_node->inferred_type = immut_f32;
@@ -832,11 +821,9 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 
 		case DOUBLE_CONST:
 			constant_node->constant_type = DOUBLE_CONST;
-			//Grab the float val
-			double double_value = atof(lookahead.lexeme.string);
 
-			//Store the float value we were given
-			constant_node->constant_value.double_value = double_value;
+			//Copy the value
+			constant_node->constant_value.double_value = lookahead.constant_values.double_value;
 
 			//Double constants are always an f64
 			constant_node->inferred_type = immut_f64;
@@ -845,11 +832,9 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 
 		case CHAR_CONST:
 			constant_node->constant_type = CHAR_CONST;
-			//Grab the char val
-			char char_val = *(lookahead.lexeme.string);
 
 			//Store the char value that we were given
-			constant_node->constant_value.char_value = char_val;
+			constant_node->constant_value.char_value = lookahead.constant_values.char_value;
 
 			//Char consts are of type char(obviously)
 			constant_node->inferred_type = immut_char;
@@ -885,7 +870,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Signed byte
 			constant_node->constant_type = BYTE_CONST;
 
-			constant_node->constant_value.signed_byte_value = atoi(lookahead.lexeme.string);
+			//Copy over
+			constant_node->constant_value.signed_byte_value = lookahead.constant_values.signed_byte_value;
 
 			//Inferred type is i8
 			constant_node->inferred_type = immut_i8;
@@ -896,7 +882,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			//Unsigned byte
 			constant_node->constant_type = BYTE_CONST_FORCE_U;
 
-			constant_node->constant_value.unsigned_byte_value = atoi(lookahead.lexeme.string);
+			//Copy over
+			constant_node->constant_value.unsigned_byte_value = lookahead.constant_values.unsigned_byte_value;
 
 			//Inferred type is u8
 			constant_node->inferred_type = immut_u8;
@@ -1534,7 +1521,6 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 		case BYTE_CONST:
 		case BYTE_CONST_FORCE_U:
 		case LONG_CONST:
-		case HEX_CONST:
 		case INT_CONST_FORCE_U:
 		case LONG_CONST_FORCE_U:
 			//Again put the token back
@@ -6113,6 +6099,22 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			//Something to store the current value in
 			u_int64_t current = 0;
 
+			//
+			//
+			//
+			//
+			//
+			//
+			//TODO FIX THIS
+			//
+			//
+			//
+			//
+			//
+			//
+			printf("TODO NEEDS TO BE FIXED\n");
+			exit(0);
+
 			//Switch based on what we have
 			switch(lookahead.tok){
 				//Just translate here
@@ -6123,7 +6125,6 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 				case LONG_CONST_FORCE_U:
 				case LONG_CONST:
-				case HEX_CONST:
 					current = atol(lookahead.lexeme.string);
 					break;
 
