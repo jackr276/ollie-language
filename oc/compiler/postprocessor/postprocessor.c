@@ -442,7 +442,9 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			 * floating point comparisons, but it is there so
 			 * we need to account for it
 			 */
-			if(jumping_to_block->predecessors.current_index == 1){
+			if(jumping_to_block->predecessors.current_index == 1
+				//Check to see if it does or does not contain more than one jump
+				&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 				//Delete the jump statement because it's now useless
 				delete_statement(current->exit_statement);
 
