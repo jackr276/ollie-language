@@ -379,6 +379,12 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			/**
 			 * If j only has one predecessor then
 			 * 	merge i and j
+			 *
+			 * We need to check here if the current block
+			 * contains only 1 jump to this jumping to block. This
+			 * only becomes necessary when we're dealing with certain
+			 * floating point comparisons, but it is there so
+			 * we need to account for it
 			 */
 			if(jumping_to_block->predecessors.current_index == 1){
 				//Delete the jump statement because it's now useless
