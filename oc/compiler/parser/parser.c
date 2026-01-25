@@ -6095,25 +6095,31 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 				return FAILURE;
 			}
 
-			//Now that we've caught all potential errors, we need to see a constant here
-			lookahead = get_next_token(token_stream, &parser_line_num);
+			//We can now see a constant expression here. So long as this ends up a constant in the
+			//end after the compiler simplifies, it can be whatever the user pleases
+			generic_ast_node_t* constant_expression = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+
+			//Go based on what node type we have
+			switch (constant_expression->ast_node_type) {
+				//Error so obviously we fail
+				case AST_NODE_TYPE_ERR_NODE:
+					print_parse_message(PARSE_ERROR, "Invalid constant expression given in enum definer", parser_line_num);
+					return FAILURE;
+
+				//A constant is completely fine
+				case AST_NODE_TYPE_CONSTANT:
+					break;
+
+				//Anything else means that we did not expand to a constant in the end. This is invalid
+				default:
+					print_parse_message(PARSE_ERROR, "Expression does not simplify to compile-time constant", parser_line_num);
+					return FAILURE;
+			}
+
 
 			//Something to store the current value in
 			u_int64_t current = 0;
 
-			//
-			//
-			//
-			//
-			//
-			//
-			//TODO FIX THIS
-			//
-			//
-			//
-			//
-			//
-			//
 			printf("TODO NEEDS TO BE FIXED\n");
 			exit(0);
 
