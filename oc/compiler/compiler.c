@@ -205,9 +205,27 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//If it failed, we need to leave immediately
 	if(token_stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(PARSE_ERROR, "Tokenizing failed. Please remedy the tokenizer errors and recompile", 0);
-		//1 - it failed
-		return 1;
+		fprintf(stdout, "\n\n[FILE: %s]: Tokenizing failed. Please remedy the tokenizer error and recompile\n\n", options->file_name);
+		num_errors++;
+
+		//Timer end
+		end = clock();
+
+		//Crude time calculation
+		times.total_time = (double)(end - begin) / CLOCKS_PER_SEC;
+
+		//Print summary with a failure here
+		if(options->show_summary == TRUE){
+			print_summary(options, &times, 0, num_errors, num_warnings, FALSE);
+		}
+
+		//If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
+		//is not, we'll return 1 to show the error
+		if(options->is_test_run == TRUE){
+			return 0;
+		} else {
+			return 1;
+		}
 	}
 
 	//If we are doing module specific timing, store the lexer time
