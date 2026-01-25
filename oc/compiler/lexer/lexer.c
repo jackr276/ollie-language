@@ -603,6 +603,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	lex_item.line_num = 0;
 	INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
+	//We will need this numeric lexeme for any number we encounter.
+	//We will be reusing it, so it's declared up here
+	dynamic_string_t numeric_lexeme = dynamic_string_alloc();
+
 	//For eventual use down the road. We will not allocate here because this
 	//is not always needed
 	dynamic_string_t lexeme;
@@ -1416,6 +1420,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				return FAILURE;
 		}
 	}
+
+	//Once we get down here, it is safe for us to free the numeric lexeme because we do not
+	//need it anymore
+	dynamic_string_dealloc(&numeric_lexeme);
 
 	//Return this token
 	if(ch == EOF){

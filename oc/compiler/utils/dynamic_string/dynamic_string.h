@@ -67,6 +67,12 @@ void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch);
 void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string);
 
 /**
+ * Completely wipe a dynamic string. This allows us to use the same memory that
+ * we've allocated once over and over again. This is particularly useful in the lexer
+ */
+void clear_dynamic_string(dynamic_string_t* dynamic_string);
+
+/**
  * Deallocate a dynamic string from the heap
  */
 void dynamic_string_dealloc(dynamic_string_t* dynamic_string);
