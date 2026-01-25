@@ -749,6 +749,10 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node);
 instruction_t* emit_phi_function(symtab_variable_record_t* variable);
 
 /**
+ * Emit a "test if not 0 three address code statement"
+ */
+
+/**
  * Emit an idle statement
  */
 instruction_t* emit_idle_instruction();

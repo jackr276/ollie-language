@@ -5884,38 +5884,6 @@ static void handle_not_instruction(instruction_t* instruction){
 
 
 /**
- * Handle a test instruction. The test instruction's op1 is acutally duplicated
- * to be both of its inputs in this case
- */
-static void handle_test_instruction(instruction_t* instruction){
-	//Find out what size we have
-	variable_size_t size = get_type_size(instruction->op1->type);
-
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = TESTQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = TESTL;
-			break;
-		case WORD:
-			instruction->instruction_type = TESTW;
-			break;
-		case BYTE:
-			instruction->instruction_type = TESTB;
-			break;
-		default:
-			break;
-	}
-
-	//This actually has no real destination register, the assignee was a dummy
-	//It does have 2 source registers however
-	instruction->source_register = instruction->op1;
-	instruction->source_register2 = instruction->op2;
-}
-
-
-/**
  * Emit a register to register converting move instruction directly
  *
  * This bypasses all register allocation entirely
@@ -7479,10 +7447,6 @@ static void select_instruction_patterns(instruction_window_t* window){
 		//Handle a neg statement
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
 			handle_not_instruction(instruction);
-			break;
-		//Handle the testing statement
-		case THREE_ADDR_CODE_TEST_STMT:
-			handle_test_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
