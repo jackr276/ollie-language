@@ -1038,13 +1038,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								return FAILURE;
 							}
 
-							lex_item.tok = CHAR_CONST;
-							lex_item.line_num = line_number;
+							//Store the char value
 							lex_item.constant_values.char_value = ch2;
-							add_lexitem_to_stream(stream, lex_item);
-
-							ch3 = GET_NEXT_CHAR(fl);
-
 
 						//If this is the escape character, then
 						//we need to consume the next token
@@ -1133,13 +1128,13 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 									lex_item.line_num = line_number;
 									return FAILURE;
 							}
-
-							//If we get to down here then it all worked out, so we'll
-							//add it into the stream
-							lex_item.tok = CHAR_CONST;
-							lex_item.line_num = line_number;
-							add_lexitem_to_stream(stream, lex_item);
 						}
+
+						//If we get to down here then it all worked out, so we'll
+						//add it into the stream
+						lex_item.tok = CHAR_CONST;
+						lex_item.line_num = line_number;
+						add_lexitem_to_stream(stream, lex_item);
 
 						break;
 

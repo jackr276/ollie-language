@@ -1591,7 +1591,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 		//If we get here we fail
 		default:
-			sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lookahead.lexeme.string);
+			sprintf(info, "Expected identifier, constant or (<expression>), but got %s", lexitem_to_string(&lookahead));
 			return print_and_return_error(info, current_line);
 	}
 }
