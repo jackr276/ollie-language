@@ -122,7 +122,7 @@ int main(int argc, char** argv){
 	//If this fails, we need to leave
 	if(stream.status == STREAM_STATUS_FAILURE){
 		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
-		exit(1);
+		exit(0);
 	}
 
 	//Now that we can actually open the file, we'll parse

@@ -13,6 +13,16 @@
 
 typedef struct dynamic_string_t dynamic_string_t;
 
+
+//============================== Public Utility Macros ===============================
+#define INITIALIZE_NULL_DYNAMIC_STRING(dynamic_string)\
+		dynamic_string.string = NULL;\
+		dynamic_string.current_length = 0;\
+		dynamic_string.length = 0;\
+
+//============================== Public Utility Macros ===============================
+
+
 /**
  * A dynamic string itself contains the true length of the string(with \0 included)
  * and the pointer itself
@@ -55,6 +65,12 @@ void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch);
  * Concatenate a string to the end of our dynamic string
  */
 void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string);
+
+/**
+ * Completely wipe a dynamic string. This allows us to use the same memory that
+ * we've allocated once over and over again. This is particularly useful in the lexer
+ */
+void clear_dynamic_string(dynamic_string_t* dynamic_string);
 
 /**
  * Deallocate a dynamic string from the heap

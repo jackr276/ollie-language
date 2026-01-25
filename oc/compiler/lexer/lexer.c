@@ -33,7 +33,7 @@ typedef enum {
 	IN_STRING,
 	IN_MULTI_COMMENT,
 	IN_SINGLE_COMMENT
-} lex_state;
+} lex_state_t;
 
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
@@ -139,20 +139,41 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "DONE";
 		case IDENT:
 		case FUNC_CONST:
-		case HEX_CONST:
-		case INT_CONST:
-		case INT_CONST_FORCE_U:
-		case LONG_CONST_FORCE_U:
-		case SHORT_CONST_FORCE_U:
-		case SHORT_CONST:
-		case BYTE_CONST:
-		case BYTE_CONST_FORCE_U:
-		case LONG_CONST:
-		case DOUBLE_CONST:
-		case FLOAT_CONST:
 		case STR_CONST:
-		case CHAR_CONST:
 			return lexitem->lexeme.string;
+		case INT_CONST:
+			sprintf(info, "%d", lexitem->constant_values.signed_int_value);
+			return info;
+		case INT_CONST_FORCE_U:
+			sprintf(info, "%ud", lexitem->constant_values.unsigned_int_value);
+			return info;
+		case LONG_CONST_FORCE_U:
+			sprintf(info, "%ld", lexitem->constant_values.unsigned_long_value);
+			return info;
+		case SHORT_CONST_FORCE_U:
+			sprintf(info, "%u", lexitem->constant_values.unsigned_short_value);
+			return info;
+		case SHORT_CONST:
+			sprintf(info, "%d", lexitem->constant_values.signed_short_value);
+			return info;
+		case BYTE_CONST:
+			sprintf(info, "%d", lexitem->constant_values.signed_byte_value);
+			return info;
+		case BYTE_CONST_FORCE_U:
+			sprintf(info, "%u", lexitem->constant_values.unsigned_byte_value);
+			return info;
+		case LONG_CONST:
+			sprintf(info, "%ld", lexitem->constant_values.unsigned_long_value);
+			return info;
+		case DOUBLE_CONST:
+			sprintf(info, "%lf", lexitem->constant_values.double_value);
+			return info;
+		case FLOAT_CONST:
+			sprintf(info, "%f", lexitem->constant_values.float_value);
+			return info;
+		case CHAR_CONST:
+			sprintf(info, "%c", lexitem->constant_values.char_value);
+			return info;
 		case IF:
 			return "if";
 		case ELSE:
@@ -439,6 +460,8 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int32_t line_n
 
 	//Assign our line number;
 	lex_item.line_num = line_number;
+	//Wipe this out too
+	lex_item.constant_values.signed_long_value = 0;
 
 	//Let's see if we have a keyword here
 	for(u_int8_t i = 0; i < KEYWORD_COUNT; i++){
@@ -447,15 +470,15 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int32_t line_n
 			switch(tok_array[i]){
 				case TRUE_CONST:
 					lex_item.tok = BYTE_CONST_FORCE_U;
-					lex_item.lexeme = dynamic_string_alloc();
-					dynamic_string_set(&(lex_item.lexeme), "1");
+					//Set the byte value
+					lex_item.constant_values.unsigned_byte_value = 1;
 
 					return lex_item;
 				
 				case FALSE_CONST:
 					lex_item.tok = BYTE_CONST_FORCE_U;
-					lex_item.lexeme = dynamic_string_alloc();
-					dynamic_string_set(&(lex_item.lexeme), "0");
+					//Set the byte value
+					lex_item.constant_values.unsigned_byte_value = 0;
 
 					return lex_item;
 
@@ -570,10 +593,20 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	char ch3;
 
 	//Current state always begins in START
-	lex_state current_state = IN_START;
+	lex_state_t current_state = IN_START;
 
-	//Initialize here. We have the ERROR token as our sane default
-	lexitem_t lex_item = {{NULL, 0, 0}, 0, ERROR};
+	//Initialize the lexitem to be nothing at first
+	lexitem_t lex_item;
+	lex_item.constant_values.signed_long_value = 0;
+	lex_item.tok = ERROR;
+	lex_item.line_num = 0;
+	INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
+
+	//We will need this numeric lexeme for any number we encounter.
+	//We will be reusing it, so it's declared up here. It is important
+	//to note that this dynamic string *will never* leave this function. It
+	//will never be passed along as a pointer to anything else
+	dynamic_string_t numeric_lexeme = dynamic_string_alloc();
 
 	//For eventual use down the road. We will not allocate here because this
 	//is not always needed
@@ -588,6 +621,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 			case IN_START:
 				//Reset the seen_hex flag since we're now in the start state
 				seen_hex = FALSE;
+
+				//Wipe out the stack lexitem again
+				lex_item.constant_values.signed_long_value = 0;
+				lex_item.tok = ERROR;
+				lex_item.line_num = 0;
+				INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
 				//If we see whitespace we just get out
 				if(is_whitespace(ch, &line_number) == TRUE){
@@ -924,12 +963,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							case '7':
 							case '8':
 							case '9':
-								//Allocate the string
-								lexeme = dynamic_string_alloc();
-
-								//Add both of these in
-								dynamic_string_add_char_to_back(&lexeme, ch);
-								dynamic_string_add_char_to_back(&lexeme, ch2);
+								//VERY IMPORTANT - we need to add this to the *numeric lexeme*. That is what will be processed
+								//by the converter
+								dynamic_string_add_char_to_back(&numeric_lexeme, ch);
+								dynamic_string_add_char_to_back(&numeric_lexeme, ch2);
 
 								//We are not in an int
 								current_state = IN_FLOAT;
@@ -989,34 +1026,116 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						//Grab the next char
 						ch2 = GET_NEXT_CHAR(fl);
 
-						//Allocate the lexeme here
-						lexeme = dynamic_string_alloc();
+						//We've seen no escape character, so
+						//we can do normal processing
+						if(ch2 != '\\'){
+							//We need to hit the closing single quote
+							ch3 = GET_NEXT_CHAR(fl);
+
+							//Remember - we need to see the closing quote here
+							if(ch3 != '\''){
+								print_lexer_error("Char must be a single character or escape sequence character, followed by '''", line_number);
+								return FAILURE;
+							}
+
+							//Store the char value
+							lex_item.constant_values.char_value = ch2;
 
 						//If this is the escape character, then
 						//we need to consume the next token
-						if(ch2 == '\\'){
-							dynamic_string_add_char_to_back(&lexeme, ch2);
+						} else {
+							//Get the next token
 							ch2 = GET_NEXT_CHAR(fl);
+
+							//We can't just see the escape backslash
+							if(ch2 == '\''){
+								print_lexer_error("Escape sequence requires a character after \\.", line_number);
+								return FAILURE;
+							}
+
+							//We need to hit the closing single quote
+							ch3 = GET_NEXT_CHAR(fl);
+
+							//Remember - we need to see the closing quote here
+							if(ch3 != '\''){
+								print_lexer_error("Char must be a single character or escape sequence character, followed by '''", line_number);
+								return FAILURE;
+							}
+
+							//There are only a few kinds of escape characters
+							//allowed. If a user attempt an invalid escape character,
+							//that is a hard failure
+							switch(ch2) {
+								case '0':
+									//This is the actual value 0
+									lex_item.constant_values.char_value = 0;
+									break;
+
+								//Double escape char
+								case '\\':
+									lex_item.constant_values.char_value = 92;
+									break;
+
+								//BEL char
+								case 'a':
+									lex_item.constant_values.char_value = 7;
+									break;
+
+								//Backspace
+								case 'b':
+									lex_item.constant_values.char_value = 8;
+									break;
+								
+								//Horizontal tab
+								case 't':
+									lex_item.constant_values.char_value = 9;
+									break;
+
+								//Newline
+								case 'n':
+									lex_item.constant_values.char_value = 10;
+									break;
+
+								//Vertical tab
+								case 'v':
+									lex_item.constant_values.char_value = 11;
+									break;
+
+								//Form feed
+								case 'f':
+									lex_item.constant_values.char_value = 12;
+									break;
+									
+								//Carriage return
+								case 'r':
+									lex_item.constant_values.char_value = 13;
+									break;
+
+								//Trying to escape into a char
+								case '\'':
+									lex_item.constant_values.char_value = '\'';
+									break;
+									
+								//Trying to escape into a quote
+								case '\"':
+									lex_item.constant_values.char_value = '\"';
+									break;
+
+								//Hard fail in this case
+								default:
+									print_lexer_error("Invalid escape sequence character found. Please consult the ASCII manual(man ascii) for the list of escape characters", line_number);
+									lex_item.tok = ERROR;
+									lex_item.line_num = line_number;
+									return FAILURE;
+							}
 						}
 
-						//Add our char const ch2 in
-						dynamic_string_add_char_to_back(&lexeme, ch2);
-
-						//Now we must see another single quote
-						ch2 = GET_NEXT_CHAR(fl);
-
-						//This is a failure, we need to leave out
-						if(ch2 != '\''){
-							lex_item.tok = ERROR;
-							lex_item.line_num = line_number;
-							print_lexer_error("Chars can only be one character in length. For a string constant, use double quotes(\")", line_number);
-							return FAILURE;
-						}
-
+						//If we get to down here then it all worked out, so we'll
+						//add it into the stream
 						lex_item.tok = CHAR_CONST;
-						lex_item.lexeme = lexeme;
 						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
+
 						break;
 
 					case '<':
@@ -1107,14 +1226,17 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 						//If we get here we have the start of either an int or a real
 						} else if(ch >= '0' && ch <= '9'){
-							lexeme = dynamic_string_alloc();
-							dynamic_string_add_char_to_back(&lexeme, ch);
+							//VERY IMPORTANT - we need to add this to the *numeric lexeme*. That is what will be processed
+							//by the converter
+							dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 							current_state = IN_INT;
 
 						} else {
 							print_lexer_error("Invalid character found", line_number);
 							return FAILURE;
 						}
+
+						break;
 				}
 
 				break;
@@ -1137,15 +1259,17 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 				break;
 
+			//For any/all INT constants, we will be using the numeric
+			//lexeme to hold values temporarily until we're done
 			case IN_INT:
 				//Add it in and move along
 				if(ch >= '0' && ch <= '9'){
-					dynamic_string_add_char_to_back(&lexeme, ch);
+					dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 				//If we see hex and we're in hex, it's also fine
 				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == TRUE) 
 						|| ((ch >= 'A' && ch <= 'F') && seen_hex == TRUE)){
-					dynamic_string_add_char_to_back(&lexeme, ch);
+					dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 				} else {
 					switch(ch){
@@ -1158,7 +1282,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							}
 
 							//If we haven't seen the 0 here it's bad
-							if(*(lexeme.string) != '0'){
+							if(*(numeric_lexeme.string) != '0'){
 								print_lexer_error("Hexadecimal 'x' or 'X' must be preceeded by a '0'", line_number);
 								return FAILURE;
 							}
@@ -1167,15 +1291,21 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							seen_hex = TRUE;
 
 							//Add the character dynamically
-							dynamic_string_add_char_to_back(&lexeme, ch);
+							dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 							break;
 
 						case '.':
+							//If we've already seen the hex code this is bad
+							if(seen_hex == TRUE){
+								print_lexer_error("The '.' character is not valid in hexadecimal constants", line_number);
+								return FAILURE;
+							}
+
 							//We're actually in a float const
 							current_state = IN_FLOAT;
 							//Add the character dynamically
-							dynamic_string_add_char_to_back(&lexeme, ch);
+							dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 							break;
 
@@ -1185,10 +1315,22 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = LONG_CONST;
+
+							//Convert accordingly
+							if(seen_hex == FALSE){
+								lex_item.constant_values.signed_long_value = atol(numeric_lexeme.string);
+							} else {
+								lex_item.constant_values.signed_long_value = strtol(numeric_lexeme.string, NULL, 0);
+							}
+
+							//Add this into the stream
 							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 
@@ -1197,24 +1339,48 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						case 'S':
 							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
-							lex_item.tok = LONG_CONST;
+							lex_item.tok = SHORT_CONST;
+
+							//Convert accordingly
+							if(seen_hex == FALSE){
+								lex_item.constant_values.signed_short_value = atol(numeric_lexeme.string);
+							} else {
+								lex_item.constant_values.signed_short_value = strtol(numeric_lexeme.string, NULL, 0);
+							}
+
+							//Add it to the stream
 							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 
 						//Forcing to Byte
-						case 'b':
-						case 'B':
+						case 'y':
+						case 'Y':
 							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = BYTE_CONST;
+
+							//Convert accordingly
+							if(seen_hex == FALSE){
+								lex_item.constant_values.signed_byte_value = atol(numeric_lexeme.string);
+							} else {
+								lex_item.constant_values.signed_byte_value = strtol(numeric_lexeme.string, NULL, 0);
+							}
+
+							//Add it to the stream
 							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 
@@ -1230,16 +1396,40 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								case 'l':
 								case 'L':
 									lex_item.tok = LONG_CONST_FORCE_U;
+
+									//Convert accordingly
+									if(seen_hex == FALSE){
+										lex_item.constant_values.unsigned_long_value = atol(numeric_lexeme.string);
+									} else {
+										lex_item.constant_values.unsigned_long_value = strtol(numeric_lexeme.string, NULL, 0);
+									}
+
 									break;
 
 								case 's':
 								case 'S':
 									lex_item.tok = SHORT_CONST_FORCE_U;
+
+									//Convert accordingly
+									if(seen_hex == FALSE){
+										lex_item.constant_values.unsigned_short_value = atol(numeric_lexeme.string);
+									} else {
+										lex_item.constant_values.unsigned_short_value = strtol(numeric_lexeme.string, NULL, 0);
+									}
+
 									break;
 
-								case 'b':
-								case 'B':
+								case 'y':
+								case 'Y':
 									lex_item.tok = BYTE_CONST_FORCE_U;
+
+									//Convert accordingly
+									if(seen_hex == FALSE){
+										lex_item.constant_values.unsigned_byte_value = atol(numeric_lexeme.string);
+									} else {
+										lex_item.constant_values.unsigned_byte_value = strtol(numeric_lexeme.string, NULL, 0);
+									}
+
 									break;
 
 								default:
@@ -1247,17 +1437,25 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 									PUT_BACK_CHAR(fl);
 									lex_item.tok = INT_CONST_FORCE_U;
 
+									//Convert accordingly
+									if(seen_hex == FALSE){
+										lex_item.constant_values.unsigned_int_value = atol(numeric_lexeme.string);
+									} else {
+										lex_item.constant_values.unsigned_int_value = strtol(numeric_lexeme.string, NULL, 0);
+									}
+
 									break;
 							}
 
-
-							//Pack everything up and return
-							lex_item.lexeme = lexeme;
+							//Add the line number and get it into the stream
 							lex_item.line_num = line_number;
 							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 
@@ -1266,19 +1464,25 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							//"Put back" the char
 							PUT_BACK_CHAR(fl);
 
-							//Populate and return
-							if(seen_hex == TRUE){
-								lex_item.tok = HEX_CONST;
+							//This is an int const
+							lex_item.tok = INT_CONST;
+
+							//Convert accordingly
+							if(seen_hex == FALSE){
+								lex_item.constant_values.signed_int_value = atol(numeric_lexeme.string);
 							} else {
-								lex_item.tok = INT_CONST;
+								lex_item.constant_values.signed_int_value = strtol(numeric_lexeme.string, NULL, 0);
 							}
 
-							lex_item.lexeme = lexeme;
+							//Pack it up and add it in
 							lex_item.line_num = line_number;
 							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 					}
@@ -1290,19 +1494,26 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				//We're just in a regular float here
 				if(ch >= '0' && ch <= '9'){
 					//Add the character in
-					dynamic_string_add_char_to_back(&lexeme, ch);
+					dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 				//We can now see a D or d here that tells
 				//us to force this to double precision
 				} else if(ch == 'd' || ch == 'D'){
 					//Give this back as a double CONST
 					lex_item.tok = DOUBLE_CONST;
-					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_number;
+
+					//Convert here
+					lex_item.constant_values.double_value = atof(numeric_lexeme.string);
+
+					//Get it into the stream
 					add_lexitem_to_stream(stream, lex_item);
 
 					//IMPORTANT - reset the state here
 					current_state = IN_START;
+
+					//We need to also reset the numeric lexeme
+					clear_dynamic_string(&numeric_lexeme);
 
 				} else {
 					//Put back the char
@@ -1310,12 +1521,19 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					
 					//We'll give this back now
 					lex_item.tok = FLOAT_CONST;
-					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_number;
+
+					//Convert here
+					lex_item.constant_values.float_value = atof(numeric_lexeme.string);
+
+					//Get it into the stream
 					add_lexitem_to_stream(stream, lex_item);
 
 					//IMPORTANT - reset the state here
 					current_state = IN_START;
+
+					//We need to also reset the numeric lexeme
+					clear_dynamic_string(&numeric_lexeme);
 				}
 
 				break;
@@ -1382,6 +1600,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				return FAILURE;
 		}
 	}
+
+	//Once we get down here, it is safe for us to free the numeric lexeme because we do not
+	//need it anymore
+	dynamic_string_dealloc(&numeric_lexeme);
 
 	//Return this token
 	if(ch == EOF){
