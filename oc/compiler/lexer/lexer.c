@@ -1027,11 +1027,41 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						//Grab the next char
 						ch2 = GET_NEXT_CHAR(fl);
 
-						//Allocate the lexeme here
-						lexeme = dynamic_string_alloc();
+						//We've seen no escape character, so
+						//we can do normal processing
+						if(ch2 != '\\'){
+							lex_item.tok = CHAR_CONST;
+							lex_item.line_num = line_number;
+							lex_item.constant_values.char_value = ch2;
+							add_lexitem_to_stream(stream, lex_item);
 
 						//If this is the escape character, then
 						//we need to consume the next token
+						} else {
+							//Get the next token
+							ch2 = GET_NEXT_CHAR(fl);
+
+							//There are only a few kinds of escape characters
+							//allowed. If a user attempt an invalid escape character,
+							//that is a hard failure
+							switch(ch2) {
+								case '0':
+									break;
+									
+
+								//Hard fail in this case
+								default:
+									print_lexer_error("Invalid escape sequence character found. Please consult the ASCII manual(man ascii) for the list of escape characters", line_number);
+									lex_item.tok = ERROR;
+									lex_item.line_num = line_number;
+									return FAILURE;
+							}
+
+							lex_item.tok = CHAR_CONST;
+							lex_item.line_num = line_number;
+						}
+
+
 						if(ch2 == '\\'){
 							dynamic_string_add_char_to_back(&lexeme, ch2);
 							ch2 = GET_NEXT_CHAR(fl);
@@ -1051,7 +1081,6 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							return FAILURE;
 						}
 
-						lex_item.tok = CHAR_CONST;
 						lex_item.lexeme = lexeme;
 						lex_item.line_num = line_number;
 						add_lexitem_to_stream(stream, lex_item);
