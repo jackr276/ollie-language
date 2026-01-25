@@ -4806,6 +4806,11 @@ static inline void handle_sse_division_instruction(instruction_t* instruction){
 			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction");
 	}
 
+	//Handle any/all converting moves that are going to be needed here
+	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	}
+
 	//The source register is the op1 and the destination is the assignee. There is never a case where we
 	//will have a constant source, it is not possible for sse operations
 	instruction->destination_register = instruction->assignee;
@@ -4829,6 +4834,11 @@ static inline void handle_sse_multiplication_instruction(instruction_t* instruct
 			break;
 		default:
 			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction");
+	}
+
+	//Handle any/all converting moves that are going to be needed here
+	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
 	}
 
 	//The source register is the op1 and the destination is the assignee. There is never a case where we
