@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -898,6 +899,26 @@ static void remediate_memory_address_in_non_access_context(instruction_window_t*
 				exit(1);
 		}
 	}
+}
+
+
+/**
+ * Emit a setne three address code statement
+ */
+static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Save the assignee
+	stmt->assignee = assignee;
+
+	stmt->op1 = relies_on;
+
+	//We'll determine the actual instruction type using the helper
+	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
+
+	//Once that's done, we'll return
+	return stmt;
 }
 
 
@@ -3362,7 +3383,7 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
  * Create and insert a converting move operation where the destination's type is the desired type. This handles all of the overhead of creating,
  * finding the converting moves, and inserting
  */
-static three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
+static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
 	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
 	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
 	//zero pad when 32 bit moves happen
@@ -3388,6 +3409,19 @@ static three_addr_var_t* create_and_insert_converting_move_instruction(instructi
 
 	//Put it in where we want in the CFG
 	insert_instruction_before_given(move_instruction, after_instruction);
+
+	/**
+	 * For floating point destinations after conversion, we need to completely "0" out the destination
+	 * register before the conversion. We will check this here and insert it only if need be
+	 */
+	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
+		//We need to completely zero out the destination register here, so we will emit a pxor to do
+		//just that
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(destination_variable);
+
+		//Get this in right before the move instruction
+		insert_instruction_before_given(pxor_instruction, move_instruction);
+	}
 
 	//Give back what the final assignee is
 	return destination_variable;
@@ -3490,7 +3524,7 @@ static instruction_t* emit_setne_instruction(three_addr_var_t* destination, thre
 /**
  * Emit an ANDx instruction
  */
-static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+static inline instruction_t* emit_and_instruction(three_addr_var_t* destination, three_addr_var_t* source){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -3518,6 +3552,43 @@ static instruction_t* emit_and_instruction(three_addr_var_t* destination, three_
 	//Finally we set the destination
 	instruction->destination_register = destination;
 	instruction->source_register = source;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit an ANDx instruction with a constant operand
+ */
+static inline instruction_t* emit_and_with_constant_source_instruction(three_addr_var_t* destination, three_addr_const_t* constant_source){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size of the variable
+	variable_size_t size = get_type_size(destination->type);
+
+	switch(size){
+		case QUAD_WORD:	
+			instruction->instruction_type = ANDQ;
+			break;
+		case DOUBLE_WORD:	
+			instruction->instruction_type = ANDL;
+			break;
+		case WORD:	
+			instruction->instruction_type = ANDW;
+			break;
+		case BYTE:	
+			instruction->instruction_type = ANDB;
+			break;
+		default:
+			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in and instruction\n");
+			exit(1);
+	}
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+	instruction->source_immediate = constant_source;
 
 	//And now we'll give it back
 	return instruction;
@@ -3719,6 +3790,10 @@ static instruction_type_t select_cmp_instruction(variable_size_t size){
 			return CMPL;
 		case QUAD_WORD:
 			return CMPQ;
+		case SINGLE_PRECISION:
+			return UCOMISS;
+		case DOUBLE_PRECISION:
+			return UCOMISD;
 		default:
 			printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in cmp instruction\n");
 			exit(1);
@@ -4029,6 +4104,97 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
 
 
 /**
+ * Select the appropriate set type given the circumstances, including the operand and the signedness
+ */
+static inline instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed){
+	if(is_signed == TRUE){
+		switch(op){
+			case G_THAN:
+				return SETG;
+			case L_THAN:
+				return SETL;
+			case G_THAN_OR_EQ:
+				return SETGE;
+			case L_THAN_OR_EQ:
+				return SETLE;
+			case NOT_EQUALS:
+				return SETNE;
+			case EQUALS:
+				return SETE;
+			default:
+				return SETE;
+		}
+
+	} else {
+		switch(op){
+			case G_THAN:
+				return SETA;
+			case L_THAN:
+				return SETB;
+			case G_THAN_OR_EQ:
+				return SETAE;
+			case L_THAN_OR_EQ:
+				return SETBE;
+			case NOT_EQUALS:
+				return SETNE;
+			case EQUALS:
+				return SETE;
+			default:
+				return SETE;
+		}
+	}
+}
+
+
+/**
+ * Emit a setX instruction directly
+ */
+static inline instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_signed){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//We'll need to give it the assignee
+	stmt->destination_register = destination_register;
+
+	//What do we relie on
+	stmt->op1 = relies_on;
+
+	//We'll determine the actual instruction type using the helper
+	stmt->instruction_type = select_appropriate_set_stmt(op, is_signed);
+
+	//Once that's done, we'll return
+	return stmt;
+}
+
+
+/**
+ * Emit a special kind of move instruction that takes a value out of SSE(xmm) registers and puts it into a 32 bit GP register.
+ * In practice this is only used by ollie for moving masks around after FP comparisons. It would look something
+ * like:
+ * 	movd %xmm0, %eax
+ *
+ * In practice, this is only ever going to be used for floating point "set" statements where we are dealing with
+ * something like "let x:i32 = 3.44 < 32.2"(not exactly that but that's the context)
+ */
+static inline instruction_t* emit_movd_instruction(three_addr_var_t* general_purpose_destination, three_addr_var_t* sse_source){
+	//First allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Give it the assignee
+	stmt->destination_register = general_purpose_destination;
+
+	//And the operand
+	stmt->source_register = sse_source;
+
+	//Now set the instruction type
+	stmt->instruction_type = MOVD;
+
+	//And finally, we give it back
+	return stmt;
+}
+
+
+/**
  * Handle a cmp operation. This is used whenever we have
  * relational operation.
  *
@@ -4037,29 +4203,59 @@ static void handle_bitwise_exclusive_or_instruction(instruction_t* instruction){
  * the actual cmpX instruction does not naturally produce and output, it just
  * sets flags. We have custom logic in this block do determine whether or not 
  * that flag setting is needed
+ *
+ * NOTE: we always assume that instruction1 in the window is our target
  */
-static instruction_t* handle_cmp_instruction(instruction_t* instruction){
+static void handle_cmp_instruction(instruction_window_t* window){
+	instruction_t* instruction = window->instruction1;
+
 	/**
 	 * First step - determine if this cmp instruction is *exclusively* used
 	 * by a branch statement or if we are going to need to expand it out
-	 * more. By default, we assume that we're going to have to expand it out
+	 * more. By default, we assume it is just being used by a branch
 	 */
-	u_int8_t used_by_branch = FALSE;
+	u_int8_t used_by_branch_only = TRUE;
+
+	//Determine what our size is off the bat
+	variable_size_t size = get_type_size(instruction->op1->type);
+
+	//Get the signedness and the floating point status
+	u_int8_t type_signed = is_type_signed(instruction->assignee->type);
+	u_int8_t is_floating_point = (size == SINGLE_PRECISION || size == DOUBLE_PRECISION) ? TRUE : FALSE;
+	
+	//Extract these for convenience
+	generic_type_t* left_hand_type = instruction->op1->type;
+	//For the right hand type, we only care if op2 isn't NULL. Constants won't affect us here
+	generic_type_t* right_hand_type = instruction->op2 != NULL ? instruction->op2->type : left_hand_type;
 
 	//Grab a cursor to the next statement
 	instruction_t* cursor = instruction->next_statement;
 
-	//So long as the cursor is not NULL, keep
-	//crawling
+	//So long as the cursor is not NULL, keep crawling
 	while(cursor != NULL){
-		//If we find out that this is a branch statement
-		if(cursor->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
-			//This is the case that we're after. If we find that the branch relies
-			//on this, then we can just get out
-			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
-				used_by_branch = TRUE;
+		//This is the case that we're after. If we find that the branch relies
+		//on this, then we can just get out
+		if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
+			//This means that we are *not* exclusively used by a branch
+			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+				used_by_branch_only = FALSE;
 				break;
 			}
+
+			//Otherwise logically speaking we do have a branch
+			//statement here. As such, if it's a floating point
+			//branch we'll need to flag that
+			if(is_floating_point == TRUE){
+				cursor->relies_on_fp_comparison = TRUE;
+			}
+
+		//We could also be used by op2. If this is the case, then it's definitely not just
+		//being used by a branch
+		} else if (variables_equal(cursor->op2, instruction->assignee, FALSE) == TRUE){
+			//Branches never have dependencies stored in op2. As such if we see this,
+			//it's an automatic false
+			used_by_branch_only = FALSE;
+			break;
 		}
 
 		//If we get to the end and it's not used by a branch, that is fine. The only
@@ -4071,71 +4267,150 @@ static instruction_t* handle_cmp_instruction(instruction_t* instruction){
 		cursor = cursor->next_statement;
 	}
 
-	//Determine what our size is off the bat
-	variable_size_t size = get_type_size(instruction->op1->type);
-
-	//Select this instruction
-	instruction->instruction_type = select_cmp_instruction(size);
-
-	//Extract these for convenience
-	generic_type_t* left_hand_type = instruction->op1->type;
-	//For the right hand type, we only care if op2 isn't NULL. Constants won't affect us here
-	generic_type_t* right_hand_type = instruction->op2 != NULL ? instruction->op2->type : left_hand_type;
-	
-	//Since we have a comparison instruction, we don't actually have a destination
-	//register as the registers remain unmodified in this event
+	//Handle any/all converting moves that are going to be needed here
 	if(is_converting_move_required(right_hand_type, instruction->op1->type) == TRUE){
-		//Let the helper deal with it
-		instruction->source_register = create_and_insert_converting_move_instruction(instruction, instruction->op1, right_hand_type);
-	} else {
-		//Otherwise we assign directly
-		instruction->source_register = instruction->op1;
+		instruction->op1 = create_and_insert_converting_move_instruction(instruction, instruction->op1, right_hand_type);
 	}
 
-	//If we have op2, we'll use source_register2
-	if(instruction->op2 != NULL){
-		if(is_converting_move_required(left_hand_type, instruction->op2->type) == TRUE){
-			//Let the helper deal with it
-			instruction->source_register2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, left_hand_type);
-		} else {
-			//Otherwise we assign directly
+	//Same for op2, except this could be null
+	if(instruction->op2 != NULL && is_converting_move_required(left_hand_type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, left_hand_type);
+	}
+
+	//If this is only used by a branch(which is the most common type to have), we will
+	//handle here
+	if(used_by_branch_only == TRUE){
+		//Select this instruction
+		instruction->instruction_type = select_cmp_instruction(size);
+
+		//Move as needed
+		instruction->source_register = instruction->op1;
+
+		//If we have 
+		if(instruction->op2 != NULL){
 			instruction->source_register2 = instruction->op2;
+		} else {
+			instruction->source_immediate = instruction->op1_const;
 		}
 
-	//Otherwise we have a constant source
+		//And we're done, there's no other work to do for a regular comparison
+		//that will be followed by a branch
+
+	/**
+	 * If we make it here, then we will need to leverage different setting logic
+	 * based on the kind of operand. Floats have a completely different path as compared
+	 * to regular instructions
+	 */
 	} else {
-		//Otherwise we use an immediate value
-		instruction->source_immediate = instruction->op1_const;
-	}
+		//Not FP, so we can just select normally
+		if(is_floating_point == FALSE){
+			//Select this instruction
+			instruction->instruction_type = select_cmp_instruction(size);
 
+			//Move as needed
+			instruction->source_register = instruction->op1;
 
-	//We expect that this is the likely case. Usually
-	//a programmer is putting in comparisons to determine a branch
-	//in some way
-	if(used_by_branch == TRUE){
-		//Just give back the instruction we modified
-		return instruction;
+			//If we have 
+			if(instruction->op2 != NULL){
+				instruction->source_register2 = instruction->op2;
+			} else {
+				instruction->source_immediate = instruction->op1_const;
+			}
 
-	//We've already handled the comparison instruction by this point. Now,
-	//we'll add logic that does the setX instruction and the final assignment
-	} else {
-		//Get the signedness based on the assignee of the cmp instruction
-		u_int8_t type_signed = is_type_signed(instruction->assignee->type);
+			//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
+			//is required to use a byte sized register so we can't just set the assignee and move on
+			instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, type_signed);
 
-		//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
-		//is required to use a byte sized register so we can't just set the assignee and move on
-		instruction_t* set_instruction = emit_setX_instruction(instruction->op, emit_temp_var(u8), instruction->op1, type_signed);
+			//The set instruction goes right after the cmp instruction
+			insert_instruction_after_given(set_instruction, instruction);
 
-		//The set instruction goes right after the cmp instruction
-		insert_instruction_after_given(set_instruction, instruction);
+			//Move from the set instruction's assignee to this instruction's assignee
+			instruction_t* final_move = emit_move_instruction(instruction->assignee, set_instruction->destination_register);
 
-		//Move from the set instruction's assignee to this instruction's assignee
-		instruction_t* final_move = emit_move_instruction(instruction->assignee, set_instruction->destination_register);
+			//This final move goes right after the set instruction
+			insert_instruction_after_given(final_move, set_instruction);
 
-		//This final move goes right after the set instruction
-		insert_instruction_after_given(final_move, set_instruction);
+			//Rebuild the window around the last instruction that we added
+			reconstruct_window(window, final_move);
 
-		return final_move;
+		} else {
+			//Cache the original destination var
+			three_addr_var_t* original_destination = instruction->assignee;
+
+			//Since the CMPSS/CMPSD operations *do* overwrite the destintatoin, we need to emit a copy of op1 first
+			instruction_t* copying_move = emit_move_instruction(emit_temp_var(instruction->op1->type), instruction->op1);
+
+			//Grab a reference to the duplicated version
+			three_addr_var_t* copied_op1 = copying_move->destination_register;
+
+			//This copying move needs to go in before the cmp
+			insert_instruction_before_given(copying_move, instruction);
+
+			//Now let's handle selection for our instruction
+			switch(size){
+				case SINGLE_PRECISION:
+					instruction->instruction_type = CMPSS;
+					break;
+					
+				case DOUBLE_PRECISION:
+					instruction->instruction_type = CMPSD;
+					break;
+
+				//We should never hit this. If we do something went very wrong
+				default:
+					printf("Fatal internal compiler error: unreachable path hit in CMP selector\n");
+					exit(1);
+			}
+
+			//Now let's assign the destination/source. Remember that it's essential to use the copied_op1 in the destination
+			//so that we don't run into any issues with registers being overwritten
+			instruction->destination_register = copied_op1;
+			//It is not possible for this to be a constant
+			instruction->source_register = instruction->op2;
+
+			//Now that we've done all that, we need to emit a move instruction that takes the copied op1 and puts it into
+			//a general purpose register(32 bit)
+			three_addr_var_t* general_purpose_destination = emit_temp_var(u32);
+
+			//Move the result(in op1) into the GP destination
+			instruction_t* move_mask = emit_movd_instruction(general_purpose_destination, copied_op1);
+			
+			//This instruction goes in after the current one
+			insert_instruction_after_given(move_mask, instruction);
+
+			/**
+			 * Even though our movd instruction does need to have a double word
+			 * destination, once it's been moved we can treat that GP register however
+			 * we please. This is important because the original destination may not be
+			 * 32 bits wide. To accommodate this, we will adjust the types now
+			 */
+			three_addr_var_t* true_general_purpose_destination = general_purpose_destination;
+			if(original_destination->type->type_size < general_purpose_destination->type->type_size){
+				//Straight duplicate here
+				true_general_purpose_destination = emit_var_copy(general_purpose_destination);
+
+				//Copy the type/variable size on over
+				true_general_purpose_destination->type = original_destination->type;
+				true_general_purpose_destination->variable_size = original_destination->variable_size;
+			}
+
+			//Now that we have this done, we can finally *and* the gp destination and 1 together. We will
+			//get 1 if our result is true and 0 if it is not true
+			instruction_t* and_mask = emit_and_with_constant_source_instruction(true_general_purpose_destination, emit_direct_integer_or_char_constant(1, u32));
+
+			//This and mask goes in after the move mask
+			insert_instruction_after_given(and_mask, move_mask);
+
+			//And finally, we're going to emit one last copy of the GP destination into the actual destination as described
+			//by the original instruction
+			instruction_t* final_move = emit_move_instruction(original_destination, true_general_purpose_destination);
+
+			//Add this in after the and mask
+			insert_instruction_after_given(final_move, and_mask);
+
+			//Rebuild the window around the last instruction that we added
+			reconstruct_window(window, final_move);
+		}
 	}
 }
 
@@ -4518,8 +4793,28 @@ static void handle_division_instruction(instruction_window_t* window){
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
  */
-static void handle_sse_division_instruction(instruction_window_t* window){
-	//TODO
+static inline void handle_sse_division_instruction(instruction_t* instruction){
+	//Go based on what the assignee's type is
+	switch(instruction->assignee->type->type_size){
+		case SINGLE_PRECISION:
+			instruction->instruction_type = DIVSS;
+			break;
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = DIVSD;
+			break;
+		default:
+			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction");
+	}
+
+	//Handle any/all converting moves that are going to be needed here
+	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	}
+
+	//The source register is the op1 and the destination is the assignee. There is never a case where we
+	//will have a constant source, it is not possible for sse operations
+	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op2;
 }
 
 
@@ -4528,8 +4823,28 @@ static void handle_sse_division_instruction(instruction_window_t* window){
  * know that we're dealing with an SSE operation. This instruction will generate
  * converting moves if such moves are required
  */
-static void handle_sse_multiplication_instruction(instruction_window_t* window){
-	//TODO
+static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
+	//Go based on what the assignee's type is
+	switch(instruction->assignee->type->type_size){
+		case SINGLE_PRECISION:
+			instruction->instruction_type = MULSS;
+			break;
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = MULSD;
+			break;
+		default:
+			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction");
+	}
+
+	//Handle any/all converting moves that are going to be needed here
+	if(is_converting_move_required(instruction->assignee->type, instruction->op2->type) == TRUE){
+		instruction->op2 = create_and_insert_converting_move_instruction(instruction, instruction->op2, instruction->assignee->type);
+	}
+
+	//The source register is the op1 and the destination is the assignee. There is never a case where we
+	//will have a constant source, it is not possible for sse operations
+	instruction->destination_register = instruction->assignee;
+	instruction->source_register = instruction->op2;
 }
 
 
@@ -4633,8 +4948,13 @@ static void handle_modulus_instruction(instruction_window_t* window){
 
 /**
  * We can translate a bin op statement a few different ways based on the operand
+ *
+ * NOTE: We always assume that instruction 1 is the one that we're after
  */
-static void handle_binary_operation_instruction(instruction_t* instruction){
+static inline void handle_binary_operation_instruction(instruction_window_t* window){
+	//We're looking at the first instruciton
+	instruction_t* instruction = window->instruction1;
+
 	//Go based on what we have as the operation
 	switch(instruction->op){
 		/**
@@ -4668,34 +4988,31 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 			//Let the helper do it
 			handle_subtraction_instruction(instruction);
 			break;
-		/**
-		 * NOTE: By the time that we reach here, we know that any unsigned multiplication will
-		 * have already been dealt with. As such, we know for a fact that this will be the signed
-		 * version
-		 */
-		case STAR:
-			//Let the helper do it
-			handle_signed_multiplication_instruction(instruction);
-			break;
+
 		//Hanlde a left shift instruction
 		case L_SHIFT:
 			handle_left_shift_instruction(instruction);
 			break;
+
 		//Handle a right shift operation
 		case R_SHIFT:
 			handle_right_shift_instruction(instruction);
 			break;
+
 		//Handle the (|) operator
 		case SINGLE_OR:
 			handle_bitwise_inclusive_or_instruction(instruction);
 			break;
+
 		//Handle the (&) operator in a binary operation context
 		case SINGLE_AND:
 			handle_bitwise_and_instruction(instruction);
 			break;
+
 		case CARROT:
 			handle_bitwise_exclusive_or_instruction(instruction);
 			break;
+
 		//All of these instructions require us to use the CMP or CMPQ command
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
@@ -4703,11 +5020,13 @@ static void handle_binary_operation_instruction(instruction_t* instruction){
 		case G_THAN_OR_EQ:
 		case L_THAN:
 		case L_THAN_OR_EQ:
-			//Let the helper do it
-			handle_cmp_instruction(instruction);
+			//Let the helper do it. This will modify the window
+			handle_cmp_instruction(window);
 			break;
+
 		default:
-			break;
+			printf("Fatal internal compiler error: unreachable path hit for binary operation selection");
+			exit(1);
 	}
 }
 
@@ -4745,6 +5064,7 @@ static void handle_inc_instruction(instruction_t* instruction){
 	//Set the destination as the assignee
 	instruction->destination_register = instruction->assignee;
 }
+
 
 /**
  * Handle a decrement statement
@@ -5006,8 +5326,9 @@ static void handle_lea_statement(instruction_t* instruction){
  * NOTE: we know that the branch instruction here is always instruction 1
  */
 static void handle_branch_instruction(instruction_window_t* window){
-	//Add it in here
 	instruction_t* branch_stmt = window->instruction1;
+	//Grab the block out
+	basic_block_t* block = branch_stmt->block_contained_in;
 
 	//Grab out the if and else blocks
 	basic_block_t* if_block = branch_stmt->if_block;
@@ -5015,68 +5336,209 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 	//Placeholder for the jump to if instruction
 	instruction_t* jump_to_if;
+	//For floats only, this is used to jump when we have a NaN
+	instruction_t* jump_when_nan;
+	//The false jump condition
+	instruction_t* jump_to_else;
 
-	switch(branch_stmt->branch_type){
-		case BRANCH_A:
-			jump_to_if = emit_jump_instruction_directly(if_block, JA);
-			break;
-		case BRANCH_AE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JAE);
-			break;
-		case BRANCH_B:
-			jump_to_if = emit_jump_instruction_directly(if_block, JB);
-			break;
-		case BRANCH_BE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JBE);
-			break;
-		case BRANCH_E:
-			jump_to_if = emit_jump_instruction_directly(if_block, JE);
-			break;
-		case BRANCH_NE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JNE);
-			break;
-		case BRANCH_Z:
-			jump_to_if = emit_jump_instruction_directly(if_block, JZ);
-			break;
-		case BRANCH_NZ:
-			jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
-			break;
-		case BRANCH_G:
-			jump_to_if = emit_jump_instruction_directly(if_block, JG);
-			break;
-		case BRANCH_GE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JGE);
-			break;
-		case BRANCH_L:
-			jump_to_if = emit_jump_instruction_directly(if_block, JL);
-			break;
-		case BRANCH_LE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JLE);
-			break;
-		//We in reality should never reach here
-		default:
-			break;
+	//Most common case, we do not expect that most things will
+	//be relying on FP comparison
+	if(branch_stmt->relies_on_fp_comparison == FALSE){
+		switch(branch_stmt->branch_type){
+			case BRANCH_A:
+				jump_to_if = emit_jump_instruction_directly(if_block, JA);
+				break;
+			case BRANCH_AE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+				break;
+			case BRANCH_B:
+				jump_to_if = emit_jump_instruction_directly(if_block, JB);
+				break;
+			case BRANCH_BE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+				break;
+			case BRANCH_E:
+				jump_to_if = emit_jump_instruction_directly(if_block, JE);
+				break;
+			case BRANCH_NE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+				break;
+			case BRANCH_Z:
+				jump_to_if = emit_jump_instruction_directly(if_block, JZ);
+				break;
+			case BRANCH_NZ:
+				jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
+				break;
+			case BRANCH_G:
+				jump_to_if = emit_jump_instruction_directly(if_block, JG);
+				break;
+			case BRANCH_GE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JGE);
+				break;
+			case BRANCH_L:
+				jump_to_if = emit_jump_instruction_directly(if_block, JL);
+				break;
+			case BRANCH_LE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JLE);
+				break;
+			//We in reality should never reach here
+			default:
+				printf("Fatal internal compiler error: Unreachable branch type hit\n");
+				exit(1);
+		}
+
+		//Copy the source register over here as it is a dependence
+		jump_to_if->op1 = branch_stmt->op1;
+
+		//The else jump is always a direct jump no matter what
+		jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+		//The if must go after the branch statement before the else
+		add_statement(block, jump_to_if);
+		//And the jump to else always goes after the if jump
+		add_statement(block, jump_to_else);
+
+		//Once this is all done, we can delete the branch
+		delete_statement(branch_stmt);
+
+		//And reset the window based on the last one
+		reconstruct_window(window, jump_to_else);
+	
+	/**
+	 * Handle all floating point cases. For these cases, we need to account
+	 * for the fact that we could have an inverse branch. We do this because
+	 * we consider NaNs to be "falseful" values and as such they cause us to jump
+	 * to our else cases
+	 *
+	 * These leads us to have JP's for our equals and not equals. However for any other
+	 * kind of branch, these values are automatically false and as such we don't need any
+	 * kind of JP
+	 */
+	} else {
+		//Go by the branch type
+		switch(branch_stmt->branch_type){
+			//Any kind of ">" case is the same
+			case BRANCH_A:
+			case BRANCH_G:
+				jump_to_if = emit_jump_instruction_directly(if_block, JA);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add them all in
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+
+				break;
+
+			//Same with any kind of "<" case
+			case BRANCH_L:
+			case BRANCH_B:
+				jump_to_if = emit_jump_instruction_directly(if_block, JL);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add them all in
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+				break;
+
+			//These are lumped together
+			case BRANCH_AE:
+			case BRANCH_GE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add them all in
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+				
+				break;
+
+			//These are lumped together
+			case BRANCH_LE:
+			case BRANCH_BE:
+				jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add them all in
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+
+				break;
+
+			/**
+			 * For not equals, say we had something like:
+			 *    NaN != x
+			 * This will always be true. As such, we need to jump
+			 * to the true area on the condition that the parity
+			 * flag is set to 1(means we had NaN)
+			 */
+			case BRANCH_NE:
+			case BRANCH_NZ:
+				//We need two conditional jumps here
+				jump_when_nan = emit_jump_instruction_directly(if_block, JP);
+				jump_when_nan->op1 = branch_stmt->op1;
+
+				jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				//And the standard jump to else here
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add all of these statements in. NaN comes first, then the
+				//if, and finally the ending catch-all
+				add_statement(block, jump_when_nan);
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+
+				break;
+
+
+			/**
+			 * For equals, say we had something like:
+			 *    NaN == x
+			 * This will always be false. As such, we need to jump
+			 * to the false area on the condition that the parity
+			 * flag is set to 1(means we had NaN)
+			 */
+			case BRANCH_E:
+			case BRANCH_Z:
+				//We need two conditional jumps here
+				jump_when_nan = emit_jump_instruction_directly(else_block, JP);
+				jump_when_nan->op1 = branch_stmt->op1;
+
+				jump_to_if = emit_jump_instruction_directly(if_block, JE);
+				jump_to_if->op1 = branch_stmt->op1;
+
+				//And the standard jump to else here
+				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+				//Add all of these statements in. NaN comes first, then the
+				//if, and finally the ending catch-all
+				add_statement(block, jump_when_nan);
+				add_statement(block, jump_to_if);
+				add_statement(block, jump_to_else);
+				
+				break;
+
+			//Should be unreachable
+			default:
+				printf("Fatal internal compiler error: Unreachable branch type hit\n");
+				exit(1);
+		}
+
+		//Branch stmt is now useless so scrap it
+		delete_statement(branch_stmt);
+
+		//In the end, we always rebuild the window around the jump to else
+		reconstruct_window(window, jump_to_else);
 	}
-
-	//Copy the source register over here as it is a dependence
-	jump_to_if->op1 = branch_stmt->op1;
-
-	//The else jump is always a direct jump no matter what
-	instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-	//Grab the block our
-	basic_block_t* block = branch_stmt->block_contained_in;
-
-	//The if must go after the branch statement before the else
-	add_statement(block, jump_to_if);
-	//And the jump to else always goes after the if jump
-	add_statement(block, jump_to_else);
-
-	//Once this is all done, we can delete the branch
-	delete_statement(branch_stmt);
-
-	//And reset the window based on the last one
-	reconstruct_window(window, jump_to_else);
 }
 
 
@@ -6892,14 +7354,15 @@ static void select_instruction_patterns(instruction_window_t* window){
 
 			//Handle division
 			case F_SLASH:
-				//Likely the most common case - it's not a float
-				if(IS_FLOATING_POINT(window->instruction1->assignee->type) == FALSE){
-					handle_division_instruction(window);
+				switch(window->instruction1->assignee->type->basic_type_token){
+					case F32:
+					case F64:
+						handle_sse_division_instruction(window->instruction1);
+						break;
 
-				//Otherwise we have a floating point division here so we need
-				//to handle it appropriately
-				} else {
-					handle_sse_division_instruction(window);
+					default:
+						handle_division_instruction(window);
+						break;
 				}
 
 				return;
@@ -6912,22 +7375,28 @@ static void select_instruction_patterns(instruction_window_t* window){
 
 			//If we have a multiplication *and* it's unsigned, we go here
 			case STAR:
-				//Likely the most common case - it's not a float
-				if(IS_FLOATING_POINT(window->instruction1->assignee->type) == FALSE){
-					//Only do this if we're unsigned
-					if(is_type_signed(window->instruction1->assignee->type) == FALSE){
-						//Let the helper deal with it
-						handle_unsigned_multiplication_instruction(window);
-						return;
-					}
+				switch(window->instruction1->assignee->type->basic_type_token){
+					//Floating point instruction, let the helper deal with it
+					case F32:
+					case F64:
+						handle_sse_multiplication_instruction(window->instruction1);
+						break;
 
-				//Otherwise we have a floating point multiplication here so we need
-				//to handle it appropriately
-				} else {
-					handle_sse_multiplication_instruction(window);
+					//Signed mult, so we let the signed rule handle it
+					case I8:
+					case I16:
+					case I32:
+					case I64:
+						handle_signed_multiplication_instruction(window->instruction1);
+						break;
+
+					//Everything else counts as unsigned
+					default:
+						handle_unsigned_multiplication_instruction(window);
+						break;
 				}
 
-				break;
+				return;
 
 			default:
 				break;
@@ -6995,36 +7464,8 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
-			/**
-			 * Some comparison instructions need us to set the
-			 * value of them after the fact, while others don't
-			 * (think ones that are relied on by branches). So, we will
-			 * invoke a special rule for relational and equality operators
-			 * to handle these special cases
-			 */
-			switch(instruction->op){
-				case DOUBLE_EQUALS:
-				case NOT_EQUALS:
-				case G_THAN:
-				case G_THAN_OR_EQ:
-				case L_THAN:
-				case L_THAN_OR_EQ:
-					//This helper does all of the heavy lifting. It will
-					//return the last instruction that it created/touched
-					instruction = handle_cmp_instruction(instruction);
-
-					//Rebuild the window based on this
-					reconstruct_window(window, instruction);
-
-					break;
-
-				//All other cases - just handle the instruction
-				//normally
-				default:
-					handle_binary_operation_instruction(instruction);
-					break;
-			}
-
+			//Let the helper deal with this
+			handle_binary_operation_instruction(window);
 			break;
 		//For a phi function, we perform an exact 1:1 mapping
 		case THREE_ADDR_CODE_PHI_FUNC:

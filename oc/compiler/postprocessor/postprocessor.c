@@ -253,7 +253,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
  * here that we have previously considered meaningful which are
  * at this stage meaningless
  */
-static u_int8_t is_block_jump_instruction_only(basic_block_t* block){
+static inline u_int8_t is_block_jump_instruction_only(basic_block_t* block){
 	//If it's null then leave
 	if(block->exit_statement == NULL){
 		return FALSE;
@@ -299,7 +299,7 @@ static u_int8_t is_block_jump_instruction_only(basic_block_t* block){
  * Does the block in question end in a jmp instruction? If so,
  * give back what it's jumping ot
  */
-static basic_block_t* get_jumping_to_block_if_exists(basic_block_t* block){
+static inline basic_block_t* get_jumping_to_block_if_exists(basic_block_t* block){
 	//If it's null then leave
 	if(block->exit_statement == NULL){
 		return NULL;
@@ -315,6 +315,62 @@ static basic_block_t* get_jumping_to_block_if_exists(basic_block_t* block){
 		default:
 			return NULL;
 	}
+}
+
+
+/**
+ * Determine whether the given source block contains only one or more than one jump to the given target. This function
+ * should only be called in the first place if we know that there's at least one, we're just trying to catch situations
+ * like the following:
+ *
+ * ucomiss %xmm0. %xmm1
+ * jp  .L6
+ * jne .L8
+ * jmp .L6
+ *
+ * If we just went by predecessor count alone, we would be ignoring how this block jumps twice and as such cannot be folded
+ */
+static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_block_t* source_block, basic_block_t* target){
+	//Track the number of jumps
+	u_int32_t number_of_jumps = 0;
+
+	//Grab a cursor
+	instruction_t* instruction_cursor = source_block->exit_statement;
+
+	//Run through the instructions
+	while(instruction_cursor != NULL){
+		switch(instruction_cursor->instruction_type){
+			case JMP:
+			case JE:
+			case JNE:
+			case JZ:
+			case JNZ:
+			case JA:
+			case JAE:
+			case JB:
+			case JBE:
+			case JL:
+			case JLE:
+			case JG:
+			case JGE:
+			case JP:
+				//Bump the number of jumps to target it we
+				//hit this
+				if(instruction_cursor->if_block == target){
+					number_of_jumps++;
+				}
+
+				break;
+			
+			default:
+				break;
+		}
+
+		//Back it up by 1
+		instruction_cursor = instruction_cursor->previous_statement;
+	}
+
+	return (number_of_jumps > 1) ? TRUE : FALSE;
 }
 
 
@@ -379,8 +435,16 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			/**
 			 * If j only has one predecessor then
 			 * 	merge i and j
+			 *
+			 * We need to check here if the current block
+			 * contains only 1 jump to this jumping to block. This
+			 * only becomes necessary when we're dealing with certain
+			 * floating point comparisons, but it is there so
+			 * we need to account for it
 			 */
-			if(jumping_to_block->predecessors.current_index == 1){
+			if(jumping_to_block->predecessors.current_index == 1
+				//Check to see if it does or does not contain more than one jump
+				&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 				//Delete the jump statement because it's now useless
 				delete_statement(current->exit_statement);
 

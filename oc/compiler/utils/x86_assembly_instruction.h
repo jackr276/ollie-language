@@ -52,6 +52,7 @@ typedef enum{
 	MOVW, //Regular register-to-register or immediate to register
 	MOVL,
 	MOVQ,
+	MOVD, //Move doubleword, really only used for transferring XMM to eXX registers
 	MOVSBW, //Move signed byte to word
 	MOVSBL, //Move signed byte to long 
 	MOVSBQ, //Move signed byte to quad 
@@ -82,6 +83,7 @@ typedef enum{
 	JLE, //Jump LE(SIGNED)
 	JL, //JUMP LT(SIGNED)
 	JA, //JUMP GT(UNSIGNED)
+	JP, //Jump is Parity
 	JAE, //JUMP GE(UNSIGNED)
 	JB, //JUMP LT(UNSIGNED)
 	JBE, //JUMP LE(UNSIGNED)
@@ -178,6 +180,7 @@ typedef enum{
 	SETA, //Set > unsigned
 	SETBE, //Set <= unsigned
 	SETB, //Set < unsigned
+	SETP, //Set if parity
 	// ============= Begin specialized floating point instructions ==============
 	ADDSD, //Add scalar f64
 	SUBSD, //Subtract scalar f64
@@ -189,6 +192,12 @@ typedef enum{
 	MULSD, //Multiply scalar f64
 	MOVSS, //Move f32 -> f32
 	MOVSD, //Move f64 -> f64
+	CMPSS, //Scalar float comparison(no flags set)
+	CMPSD, //Scalar double comparions(no flags set)
+	COMISS, //Ordered compare of f32(throws FP exception)
+	COMISD, //Ordered compare of f64(throw FP exception)
+	UCOMISS, //Unordered compare of f32
+	UCOMISD, //Unordered compare of f64
 	MOVAPS, //Move aligned packed f32 -> used if we need to clear out the whole thing
 	MOVAPD, //Move aligned packed f64 -> used if we need to clear out the whole thing
 	CVTSS2SD, //Convert scalar f32 to scalar f64

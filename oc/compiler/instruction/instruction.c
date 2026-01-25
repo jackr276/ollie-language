@@ -408,6 +408,9 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 		case ORW:
 		case ORL:
 		case ORQ:
+		//Floating point comparisons do have their destination overwritten
+		case CMPSS:
+		case CMPSD:
 			return TRUE;
 		default:
 			return FALSE;
@@ -424,6 +427,7 @@ u_int8_t is_move_instruction_destination_assigned(instruction_t* instruction){
 		case MOVL:
 		case MOVW:
 		case MOVB:
+		case MOVD:
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:
@@ -1241,47 +1245,6 @@ instruction_t* emit_idle_instruction(){
 	stmt->statement_type = THREE_ADDR_CODE_IDLE_STMT;
 
 	//And we're done
-	return stmt;
-}
-
-
-/**
- * Emit a setX instruction
- */
-instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_signed){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//We'll need to give it the assignee
-	stmt->destination_register = destination_register;
-
-	//What do we relie on
-	stmt->op1 = relies_on;
-
-	//We'll determine the actual instruction type using the helper
-	stmt->instruction_type = select_appropriate_set_stmt(op, is_signed);
-
-	//Once that's done, we'll return
-	return stmt;
-}
-
-
-/**
- * Emit a setne three address code statement
- */
-instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on){
-	//First allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//Save the assignee
-	stmt->assignee = assignee;
-
-	stmt->op1 = relies_on;
-
-	//We'll determine the actual instruction type using the helper
-	stmt->statement_type = THREE_ADDR_CODE_SETNE_STMT;
-
-	//Once that's done, we'll return
 	return stmt;
 }
 
@@ -2847,6 +2810,9 @@ static void print_general_purpose_register_to_register_move(FILE* fl, instructio
 		case MOVW:
 			fprintf(fl, "movw ");
 			break;
+		case MOVD:
+			fprintf(fl, "movd ");
+			break;
 		case MOVB:
 			fprintf(fl, "movb ");
 			break;
@@ -3643,10 +3609,10 @@ static void print_not_instruction(FILE* fl, instruction_t* instruction, variable
 
 
 /**
- * Print a cmp instruction. These instructions can have two registers or
+ * Print a gp cmp instruction. These instructions can have two registers or
  * one register and one immediate value
  */
-static void print_cmp_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static inline void print_general_purpose_cmp_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	switch(instruction->instruction_type){
 		case CMPQ:
 			fprintf(fl, "cmpq ");
@@ -3682,6 +3648,101 @@ static void print_cmp_instruction(FILE* fl, instruction_t* instruction, variable
 
 
 /**
+ * Print an sse cmp instruction. These instructions can have two registers or
+ * one register and one immediate value
+ */
+static inline void print_sse_cmp_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	switch(instruction->instruction_type){
+		case COMISS:
+			fprintf(fl, "comiss ");
+			break;
+		case UCOMISS:
+			fprintf(fl, "ucomiss ");
+			break;
+		case COMISD:
+			fprintf(fl, "comisd ");
+			break;
+		case UCOMISD:
+			fprintf(fl, "ucomisd ");
+			break;
+		default:
+			break;
+	}
+
+	//No immediate values here, only ever a register
+	print_variable(fl, instruction->source_register2, mode);
+
+	fprintf(fl, ",");
+
+	//Now we'll need the source register. This may never be null
+	print_variable(fl, instruction->source_register, mode);
+
+	//And give it a newline and we're done
+	fprintf(fl, "\n");
+}
+
+
+/**
+ * Print the specialized CMPSS or CMPSD instructions along with their comparison
+ * selectors for SSE. We will handle all of the comparions selector logic here
+ *
+ * These instructions go like cmpss <option_code>, source register, destination
+ */
+static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	switch (instruction->instruction_type){
+		case CMPSS:
+			fprintf(fl, "cmpss ");
+			break;
+		case CMPSD:
+			fprintf(fl, "cmpsd ");
+			break;
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
+	}
+
+	//Depending on the operand, we print out the needed comparison code immediate value
+	switch(instruction->op){
+		case L_THAN:
+			fprintf(fl, "$1, "); //CMPLT
+			break;
+
+		case L_THAN_OR_EQ:
+			fprintf(fl, "$2, "); //CMPLE
+			break;
+
+		case G_THAN:
+			fprintf(fl, "$6, "); //CMPNLE
+			break;
+
+		case G_THAN_OR_EQ:
+			fprintf(fl, "$5, "); //CMPNLT
+			break;
+
+		case DOUBLE_EQUALS:
+			fprintf(fl, "$0, "); //CMPEQ
+			break;
+		
+		case NOT_EQUALS:
+			fprintf(fl, "$4, "); //CMPNEQ
+			break;
+
+		default:
+			printf("Fatal internal compiler error: unreachable path hit\n");
+			exit(1);
+	}
+
+	//Now print out the source register
+	print_variable(fl, instruction->source_register, mode);
+	fprintf(fl, ", ");
+
+	//Finally the second source which also doubles as the destination
+	print_variable(fl, instruction->destination_register, mode);
+	fprintf(fl, "\n");
+}
+
+
+/**
  * Print out a setX instruction
  */
 static void print_set_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
@@ -3709,6 +3770,9 @@ static void print_set_instruction(FILE* fl, instruction_t* instruction, variable
 			break;
 		case SETA:
 			fprintf(fl, "seta ");
+			break;
+		case SETP:
+			fprintf(fl, "setp ");
 			break;
 		case SETBE:
 			fprintf(fl, "setbe ");
@@ -4072,6 +4136,9 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case JBE:
 			fprintf(fl, "jbe .L%d\n", jumping_to_block->block_id);
 			break;
+		case JP:
+			fprintf(fl, "jp .L%d\n", jumping_to_block->block_id);
+			break;
 		case ASM_INLINE:
 			fprintf(fl, "%s\n", instruction->inlined_assembly.string);
 			break;
@@ -4206,6 +4273,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVW:
 		case MOVL:
 		case MOVQ:
+		case MOVD:
 		case MOVSBW:
 		case MOVSBL:
 		case MOVSBQ:
@@ -4266,7 +4334,19 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case CMPW:
 		case CMPL:
 		case CMPQ:
-			print_cmp_instruction(fl, instruction, mode);
+			print_general_purpose_cmp_instruction(fl, instruction, mode);
+			break;
+		
+		case CMPSS:
+		case CMPSD:
+			print_sse_scalar_cmp_instruction(fl, instruction, mode);
+			break;
+
+		case UCOMISD:
+		case UCOMISS:
+		case COMISS:
+		case COMISD:
+			print_sse_cmp_instruction(fl, instruction, mode);
 			break;
 
 		//Handle a simple sete instruction
@@ -6983,48 +7063,6 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
 			} else {
 				return BRANCH_NZ;
 			}
-	}
-}
-
-
-/**
- * Select the appropriate set type given the circumstances, including the operand and the signedness
- */
-instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed){
-	if(is_signed == TRUE){
-		switch(op){
-			case G_THAN:
-				return SETG;
-			case L_THAN:
-				return SETL;
-			case G_THAN_OR_EQ:
-				return SETGE;
-			case L_THAN_OR_EQ:
-				return SETLE;
-			case NOT_EQUALS:
-				return SETNE;
-			case EQUALS:
-				return SETE;
-			default:
-				return SETE;
-		}
-	} else {
-		switch(op){
-			case G_THAN:
-				return SETA;
-			case L_THAN:
-				return SETB;
-			case G_THAN_OR_EQ:
-				return SETAE;
-			case L_THAN_OR_EQ:
-				return SETBE;
-			case NOT_EQUALS:
-				return SETNE;
-			case EQUALS:
-				return SETE;
-			default:
-				return SETE;
-		}
 	}
 }
 

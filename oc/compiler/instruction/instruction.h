@@ -290,7 +290,8 @@ struct instruction_t{
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
 	instruction_type_t instruction_type;
-	//The actual operator, stored as a token for size requirements
+	//The actual operator, stored as a token for size requirements. We will
+	//also use this in determining floating point comparsions
 	ollie_token_t op;
 	//Is this operation critical?
 	u_int8_t mark;
@@ -299,6 +300,9 @@ struct instruction_t{
 	u_int8_t is_branch_ending;
 	//Is this a regular or inverse branch
 	u_int8_t inverse_branch;
+	//Does this branch rely on a floating point comparison? This could affect
+	//our selection logic later on
+	u_int8_t relies_on_fp_comparison;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?
@@ -755,16 +759,6 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable);
 instruction_t* emit_idle_instruction();
 
 /**
- * Emit a setX instruction
- */
-instruction_t* emit_setX_instruction(ollie_token_t op, three_addr_var_t* destination_register, three_addr_var_t* relies_on, u_int8_t is_signed);
-
-/**
- * Emit a setne three address code statement
- */
-instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on);
-
-/**
  * Emit a fully formed global variable OIR address calculation with offset lea
  *
  * This will always produce instructions like: t8 <- global_var(%rip)
@@ -860,11 +854,6 @@ void logical_and_constants(three_addr_const_t* constant1, three_addr_const_t* co
  * select the appropriate branch statement given the circumstances, including operand and signedness
  */
 branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_category_t branch_type, u_int8_t is_signed);
-
-/**
- * Select the appropriate set type given the circumstances, including the operand and the signedness
- */
-instruction_type_t select_appropriate_set_stmt(ollie_token_t op, u_int8_t is_signed);
 
 /**
  * Get the estimated cycle count for a given instruction. This count
