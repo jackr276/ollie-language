@@ -141,9 +141,6 @@ char* lexitem_to_string(lexitem_t* lexitem){
 		case FUNC_CONST:
 		case STR_CONST:
 			return lexitem->lexeme.string;
-		case HEX_CONST:
-			sprintf(info, "%d", lexitem->constant_values.signed_int_value);
-			return info;
 		case INT_CONST:
 			sprintf(info, "%d", lexitem->constant_values.signed_int_value);
 			return info;
@@ -1225,15 +1222,17 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 				break;
 
+			//For any/all INT constants, we will be using the numeric
+			//lexeme to hold values temporarily until we're done
 			case IN_INT:
 				//Add it in and move along
 				if(ch >= '0' && ch <= '9'){
-					dynamic_string_add_char_to_back(&lexeme, ch);
+					dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 				//If we see hex and we're in hex, it's also fine
 				} else if(((ch >= 'a' && ch <= 'f') && seen_hex == TRUE) 
 						|| ((ch >= 'A' && ch <= 'F') && seen_hex == TRUE)){
-					dynamic_string_add_char_to_back(&lexeme, ch);
+					dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 				} else {
 					switch(ch){
@@ -1255,15 +1254,21 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							seen_hex = TRUE;
 
 							//Add the character dynamically
-							dynamic_string_add_char_to_back(&lexeme, ch);
+							dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 							break;
 
 						case '.':
+							//If we've already seen the hex code this is bad
+							if(seen_hex == TRUE){
+								print_lexer_error("The '.' character is not valid in hexadecimal constants", line_number);
+								return FAILURE;
+							}
+
 							//We're actually in a float const
 							current_state = IN_FLOAT;
 							//Add the character dynamically
-							dynamic_string_add_char_to_back(&lexeme, ch);
+							dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 							break;
 
@@ -1273,10 +1278,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = LONG_CONST;
-							add_lexitem_to_stream(stream, lex_item);
+
+							//TODO CONVERT
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 
@@ -1286,10 +1295,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = LONG_CONST;
-							add_lexitem_to_stream(stream, lex_item);
+
+							//TODO CONVERT
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 
@@ -1301,8 +1314,13 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							lex_item.tok = BYTE_CONST;
 							add_lexitem_to_stream(stream, lex_item);
 
+							//TODO CONVERT
+
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 
@@ -1338,6 +1356,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 									break;
 							}
 
+							//TODO CONVERT
 
 							//Pack everything up and return
 							lex_item.lexeme = lexeme;
@@ -1346,6 +1365,9 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 
