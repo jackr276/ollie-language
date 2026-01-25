@@ -253,7 +253,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
  * here that we have previously considered meaningful which are
  * at this stage meaningless
  */
-static u_int8_t is_block_jump_instruction_only(basic_block_t* block){
+static inline u_int8_t is_block_jump_instruction_only(basic_block_t* block){
 	//If it's null then leave
 	if(block->exit_statement == NULL){
 		return FALSE;
@@ -299,7 +299,7 @@ static u_int8_t is_block_jump_instruction_only(basic_block_t* block){
  * Does the block in question end in a jmp instruction? If so,
  * give back what it's jumping ot
  */
-static basic_block_t* get_jumping_to_block_if_exists(basic_block_t* block){
+static inline basic_block_t* get_jumping_to_block_if_exists(basic_block_t* block){
 	//If it's null then leave
 	if(block->exit_statement == NULL){
 		return NULL;
@@ -315,6 +315,26 @@ static basic_block_t* get_jumping_to_block_if_exists(basic_block_t* block){
 		default:
 			return NULL;
 	}
+}
+
+
+/**
+ * Determine whether the given source block contains only one or more than one jump to the given target. This function
+ * should only be called in the first place if we know that there's at least one, we're just trying to catch situations
+ * like the following:
+ *
+ * ucomiss %xmm0. %xmm1
+ * jp  .L6
+ * jne .L8
+ * jmp .L6
+ *
+ * If we just went by predecessor count alone, we would be ignoring how this block jumps twice and as such cannot be folded
+ */
+static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_block_t* source_block, basic_block_t* target){
+	//Track the number of jumps
+	u_int32_t number_of_jumps = 0;
+
+	return (number_of_jumps > 1) ? TRUE : FALSE;
 }
 
 
