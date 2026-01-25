@@ -601,7 +601,9 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
 	//We will need this numeric lexeme for any number we encounter.
-	//We will be reusing it, so it's declared up here
+	//We will be reusing it, so it's declared up here. It is important
+	//to note that this dynamic string *will never* leave this function. It
+	//will never be passed along as a pointer to anything else
 	dynamic_string_t numeric_lexeme = dynamic_string_alloc();
 
 	//For eventual use down the road. We will not allocate here because this
@@ -1302,7 +1304,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						case 'S':
 							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
-							lex_item.tok = LONG_CONST;
+							lex_item.tok = SHORT_CONST;
 
 							//Convert accordingly
 							if(seen_hex == FALSE){
@@ -1427,19 +1429,25 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							//"Put back" the char
 							PUT_BACK_CHAR(fl);
 
-							//Populate and return
-							if(seen_hex == TRUE){
-								lex_item.tok = HEX_CONST;
+							//This is an int const
+							lex_item.tok = INT_CONST;
+
+							//Convert accordingly
+							if(seen_hex == FALSE){
+								lex_item.constant_values.signed_int_value = atol(numeric_lexeme.string);
 							} else {
-								lex_item.tok = INT_CONST;
+								lex_item.constant_values.signed_int_value = strtol(numeric_lexeme.string, NULL, 0);
 							}
 
-							lex_item.lexeme = lexeme;
+							//Pack it up and add it in
 							lex_item.line_num = line_number;
 							add_lexitem_to_stream(stream, lex_item);
 
 							//IMPORTANT - reset the state here
 							current_state = IN_START;
+
+							//We need to also reset the numeric lexeme
+							clear_dynamic_string(&numeric_lexeme);
 
 							break;
 					}
@@ -1458,12 +1466,19 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				} else if(ch == 'd' || ch == 'D'){
 					//Give this back as a double CONST
 					lex_item.tok = DOUBLE_CONST;
-					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_number;
+
+					//Convert here
+					lex_item.constant_values.double_value = atof(numeric_lexeme.string);
+
+					//Get it into the stream
 					add_lexitem_to_stream(stream, lex_item);
 
 					//IMPORTANT - reset the state here
 					current_state = IN_START;
+
+					//We need to also reset the numeric lexeme
+					clear_dynamic_string(&numeric_lexeme);
 
 				} else {
 					//Put back the char
@@ -1471,12 +1486,19 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 					
 					//We'll give this back now
 					lex_item.tok = FLOAT_CONST;
-					lex_item.lexeme = lexeme;
 					lex_item.line_num = line_number;
+
+					//Convert here
+					lex_item.constant_values.float_value = atof(numeric_lexeme.string);
+
+					//Get it into the stream
 					add_lexitem_to_stream(stream, lex_item);
 
 					//IMPORTANT - reset the state here
 					current_state = IN_START;
+
+					//We need to also reset the numeric lexeme
+					clear_dynamic_string(&numeric_lexeme);
 				}
 
 				break;
