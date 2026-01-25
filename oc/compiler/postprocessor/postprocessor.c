@@ -334,6 +334,42 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
 	//Track the number of jumps
 	u_int32_t number_of_jumps = 0;
 
+	//Grab a cursor
+	instruction_t* instruction_cursor = source_block->exit_statement;
+
+	//Run through the instructions
+	while(instruction_cursor != NULL){
+		switch(instruction_cursor->instruction_type){
+			case JMP:
+			case JE:
+			case JNE:
+			case JZ:
+			case JNZ:
+			case JA:
+			case JAE:
+			case JB:
+			case JBE:
+			case JL:
+			case JLE:
+			case JG:
+			case JGE:
+			case JP:
+				//Bump the number of jumps to target it we
+				//hit this
+				if(instruction_cursor->if_block == target){
+					number_of_jumps++;
+				}
+
+				break;
+			
+			default:
+				break;
+		}
+
+		//Back it up by 1
+		instruction_cursor = instruction_cursor->previous_statement;
+	}
+
 	return (number_of_jumps > 1) ? TRUE : FALSE;
 }
 
