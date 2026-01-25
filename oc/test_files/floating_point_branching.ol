@@ -49,7 +49,7 @@ pub fn float_compare_l(x:f32, y:f32) -> i32 {
 
 
 pub fn float_compare_le(x:f32, y:f32) -> i32 {
-	if(x < y){
+	if(x <= y){
 		ret 0;
 	} else {
 		ret 1;
