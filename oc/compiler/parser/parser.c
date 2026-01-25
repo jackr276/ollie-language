@@ -11054,6 +11054,7 @@ static u_int8_t replace_statement(ollie_token_stream_t* token_stream){
 	//If we don't see this, we're done
 	if(lookahead.tok != SEMICOLON){
 		print_parse_message(PARSE_ERROR, "Semicolon required after replace statement", parser_line_num);
+		printf("%s\n\n\n", lexitem_to_string(&lookahead));
 		num_errors++;
 		return FAILURE;
 	}

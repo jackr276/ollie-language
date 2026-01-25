@@ -963,12 +963,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							case '7':
 							case '8':
 							case '9':
-								//Allocate the string
-								lexeme = dynamic_string_alloc();
-
-								//Add both of these in
-								dynamic_string_add_char_to_back(&lexeme, ch);
-								dynamic_string_add_char_to_back(&lexeme, ch2);
+								//VERY IMPORTANT - we need to add this to the *numeric lexeme*. That is what will be processed
+								//by the converter
+								dynamic_string_add_char_to_back(&numeric_lexeme, ch);
+								dynamic_string_add_char_to_back(&numeric_lexeme, ch2);
 
 								//We are not in an int
 								current_state = IN_FLOAT;
@@ -1031,16 +1029,43 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						//We've seen no escape character, so
 						//we can do normal processing
 						if(ch2 != '\\'){
+							//We need to hit the closing single quote
+							ch3 = GET_NEXT_CHAR(fl);
+
+							//Remember - we need to see the closing quote here
+							if(ch3 != '\''){
+								print_lexer_error("Char must be a single character or escape sequence character, followed by '''", line_number);
+								return FAILURE;
+							}
+
 							lex_item.tok = CHAR_CONST;
 							lex_item.line_num = line_number;
 							lex_item.constant_values.char_value = ch2;
 							add_lexitem_to_stream(stream, lex_item);
+
+							ch3 = GET_NEXT_CHAR(fl);
+
 
 						//If this is the escape character, then
 						//we need to consume the next token
 						} else {
 							//Get the next token
 							ch2 = GET_NEXT_CHAR(fl);
+
+							//We can't just see the escape backslash
+							if(ch2 == '\''){
+								print_lexer_error("Escape sequence requires a character after \\.", line_number);
+								return FAILURE;
+							}
+
+							//We need to hit the closing single quote
+							ch3 = GET_NEXT_CHAR(fl);
+
+							//Remember - we need to see the closing quote here
+							if(ch3 != '\''){
+								print_lexer_error("Char must be a single character or escape sequence character, followed by '''", line_number);
+								return FAILURE;
+							}
 
 							//There are only a few kinds of escape characters
 							//allowed. If a user attempt an invalid escape character,
@@ -1089,6 +1114,16 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 								//Carriage return
 								case 'r':
 									lex_item.constant_values.char_value = 13;
+									break;
+
+								//Trying to escape into a char
+								case '\'':
+									lex_item.constant_values.char_value = '\'';
+									break;
+									
+								//Trying to escape into a quote
+								case '\"':
+									lex_item.constant_values.char_value = '\"';
 									break;
 
 								//Hard fail in this case
@@ -1196,8 +1231,9 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 						//If we get here we have the start of either an int or a real
 						} else if(ch >= '0' && ch <= '9'){
-							lexeme = dynamic_string_alloc();
-							dynamic_string_add_char_to_back(&lexeme, ch);
+							//VERY IMPORTANT - we need to add this to the *numeric lexeme*. That is what will be processed
+							//by the converter
+							dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 							current_state = IN_INT;
 
 						} else {
@@ -1249,7 +1285,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							}
 
 							//If we haven't seen the 0 here it's bad
-							if(*(lexeme.string) != '0'){
+							if(*(numeric_lexeme.string) != '0'){
 								print_lexer_error("Hexadecimal 'x' or 'X' must be preceeded by a '0'", line_number);
 								return FAILURE;
 							}
