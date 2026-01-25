@@ -139,20 +139,44 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "DONE";
 		case IDENT:
 		case FUNC_CONST:
-		case HEX_CONST:
-		case INT_CONST:
-		case INT_CONST_FORCE_U:
-		case LONG_CONST_FORCE_U:
-		case SHORT_CONST_FORCE_U:
-		case SHORT_CONST:
-		case BYTE_CONST:
-		case BYTE_CONST_FORCE_U:
-		case LONG_CONST:
-		case DOUBLE_CONST:
-		case FLOAT_CONST:
 		case STR_CONST:
-		case CHAR_CONST:
 			return lexitem->lexeme.string;
+		case HEX_CONST:
+			sprintf(info, "%d", lexitem->constant_values.signed_int_value);
+			return info;
+		case INT_CONST:
+			sprintf(info, "%d", lexitem->constant_values.signed_int_value);
+			return info;
+		case INT_CONST_FORCE_U:
+			sprintf(info, "%ud", lexitem->constant_values.unsigned_int_value);
+			return info;
+		case LONG_CONST_FORCE_U:
+			sprintf(info, "%ld", lexitem->constant_values.unsigned_long_value);
+			return info;
+		case SHORT_CONST_FORCE_U:
+			sprintf(info, "%ud", lexitem->constant_values.unsigned_short_value);
+			return info;
+		case SHORT_CONST:
+			sprintf(info, "%d", lexitem->constant_values.signed_short_value);
+			return info;
+		case BYTE_CONST:
+			sprintf(info, "%d", lexitem->constant_values.signed_byte_value);
+			return info;
+		case BYTE_CONST_FORCE_U:
+			sprintf(info, "%ud", lexitem->constant_values.unsigned_byte_value);
+			return info;
+		case LONG_CONST:
+			sprintf(info, "%ld", lexitem->constant_values.unsigned_long_value);
+			return info;
+		case DOUBLE_CONST:
+			sprintf(info, "%lf", lexitem->constant_values.double_value);
+			return info;
+		case FLOAT_CONST:
+			sprintf(info, "%f", lexitem->constant_values.float_value);
+			return info;
+		case CHAR_CONST:
+			sprintf(info, "%c", lexitem->constant_values.char_value);
+			return info;
 		case IF:
 			return "if";
 		case ELSE:
@@ -592,6 +616,12 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 			case IN_START:
 				//Reset the seen_hex flag since we're now in the start state
 				seen_hex = FALSE;
+
+				//Wipe out the stack lexitem again
+				lex_item.constant_values.signed_long_value = 0;
+				lex_item.tok = ERROR;
+				lex_item.line_num = 0;
+				INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
 				//If we see whitespace we just get out
 				if(is_whitespace(ch, &line_number) == TRUE){
