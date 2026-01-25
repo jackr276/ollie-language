@@ -4660,31 +4660,6 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 
 
 /**
- * Emit a test instruction
- *
- * Test instructions inherently have no assignee as they don't modify registers
- */
-instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
-	//First we'll allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//We'll now set the type
-	stmt->statement_type = THREE_ADDR_CODE_TEST_STMT;
-
-	//Assign the assignee and op1
-	stmt->assignee = assignee;
-	stmt->op1 = op1;
-	stmt->op2 = op2;
-
-	op1->use_count++;
-	op2->use_count++;
-
-	//And now we'll give it back
-	return stmt;
-}
-
-
-/**
  * Emit a test instruction directly - bypassing the instruction selection step
  *
  * Test instructions inherently have no assignee as they don't modify registers

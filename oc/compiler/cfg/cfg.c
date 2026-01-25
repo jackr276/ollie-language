@@ -3198,9 +3198,9 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
 
 
 /**
- * Emit a test instruction
+ * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
  */
-static inline three_addr_var_t* emit_test_code(basic_block_t* basic_block, three_addr_var_t* op1, three_addr_var_t* op2, u_int8_t is_branch_ending){
+static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, u_int8_t is_branch_ending){
 	//Emit the test statement based on the type
 	instruction_t* test_statement = emit_test_statement(emit_temp_var(op1->type), op1, op2);
 
@@ -4612,7 +4612,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 	//If this is blank, we need a test instruction
 	if(expression_package.operator == BLANK){
-		conditional_decider = emit_test_code(current_block, expression_package.assignee, expression_package.assignee, TRUE);
+		conditional_decider = emit_test_not_zero(current_block, expression_package.assignee, TRUE);
 	}
 
 	//Select the jump type for our conditional. This is a normal branch, we aren't doing any inverting
@@ -6002,7 +6002,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 
 		//If this is blank, we need to change this
 		if(conditional_operator == BLANK){
-			conditional_decider = emit_test_code(condition_block_vals.final_block, condition_block_vals.assignee, condition_block_vals.assignee, TRUE);
+			conditional_decider = emit_test_not_zero(condition_block_vals.final_block, condition_block_vals.assignee, TRUE);
 		}
 	}
 
@@ -6155,7 +6155,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 
 	//If this is blank, we'll need to emit the test code here
 	if(package.operator == BLANK){
-		conditional_decider = emit_test_code(compound_stmt_end, package.assignee, package.assignee, TRUE);
+		conditional_decider = emit_test_not_zero(compound_stmt_end, package.assignee, TRUE);
 	}
 
 	//Select the appropriate branch type
@@ -6243,7 +6243,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//If the operator is blank, we need to emit a test instruction
 	if(package.operator == BLANK){
 		//Emit the testing instruction
-	 	conditional_decider = emit_test_code(while_statement_entry_block, package.assignee, package.assignee, TRUE);
+	 	conditional_decider = emit_test_not_zero(while_statement_entry_block, package.assignee, TRUE);
 	}
 
 	//The branch type here will be an inverse branch
@@ -6308,7 +6308,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//If the operator is blank, we need to emit a test instruction
 	if(package.operator == BLANK){
 		//Emit the testing instruction
-		conditional_decider = emit_test_code(entry_block, package.assignee, package.assignee, TRUE);
+		conditional_decider = emit_test_not_zero(entry_block, package.assignee, TRUE);
 	}
 
 	//No we'll move one step beyond, the next node must be a compound statement
@@ -6400,7 +6400,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//If the operator is blank, we need to emit a test instruction
 		if(package.operator == BLANK){
 			//Emit the testing instruction
-			conditional_decider = emit_test_code(new_entry_block, package.assignee, package.assignee, TRUE);
+			conditional_decider = emit_test_not_zero(new_entry_block, package.assignee, TRUE);
 		}
 
 		//Select the branch here as well
@@ -7353,7 +7353,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 					//If this is blank, we'll need a test instruction
 					if(package.operator == BLANK){
-						conditional_decider = emit_test_code(current_block, package.assignee, package.assignee, TRUE);
+						conditional_decider = emit_test_not_zero(current_block, package.assignee, TRUE);
 					}
 
 					//We'll need a new block here - this will count as a branch
@@ -7418,7 +7418,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 					//If this is blank, we'll need a test instruction
 					if(ret_package.operator == BLANK){
-						conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+						conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, TRUE);
 					}
 
 					//First we'll select the appropriate branch type. We are using a regular branch type here
@@ -7523,7 +7523,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//If the return package's operator is blank,
 				//then we'll need to emit a test instruction here
 				if(ret_package.operator == BLANK){
-					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, TRUE);
 				}
 
 				//Select the needed branch statement
@@ -7838,7 +7838,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 					//If this is blank, we'll need a test instruction
 					if(package.operator == BLANK){
-						conditional_decider = emit_test_code(current_block, package.assignee, package.assignee, TRUE);
+						conditional_decider = emit_test_not_zero(current_block, package.assignee, TRUE);
 					}
 
 					//We'll need a new block here - this will count as a branch
@@ -7902,7 +7902,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 					//If this is blank, we'll need a test instruction
 					if(ret_package.operator == BLANK){
-						conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+						conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, TRUE);
 					}
 
 					//First we'll select the appropriate branch type. We are using a regular branch type here
@@ -8011,7 +8011,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//If the return package's operator is blank,
 				//then we'll need to emit a test instruction here
 				if(ret_package.operator == BLANK){
-					conditional_decider = emit_test_code(current_block, ret_package.assignee, ret_package.assignee, TRUE);
+					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, TRUE);
 				}
 
 				//Select the needed branch statement
