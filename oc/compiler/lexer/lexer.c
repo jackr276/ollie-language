@@ -1235,6 +1235,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							print_lexer_error("Invalid character found", line_number);
 							return FAILURE;
 						}
+
+						break;
 				}
 
 				break;
@@ -1492,7 +1494,7 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 				//We're just in a regular float here
 				if(ch >= '0' && ch <= '9'){
 					//Add the character in
-					dynamic_string_add_char_to_back(&lexeme, ch);
+					dynamic_string_add_char_to_back(&numeric_lexeme, ch);
 
 				//We can now see a D or d here that tells
 				//us to force this to double precision
