@@ -13,6 +13,16 @@
 
 typedef struct dynamic_string_t dynamic_string_t;
 
+
+//============================== Public Utility Macros ===============================
+#define INITIALIZE_NULL_DYNAMIC_STRING(dynamic_string)\
+		dynamic_string.string = NULL;\
+		dynamic_string.current_length = 0;\
+		dynamic_string.length = 0;\
+
+//============================== Public Utility Macros ===============================
+
+
 /**
  * A dynamic string itself contains the true length of the string(with \0 included)
  * and the pointer itself

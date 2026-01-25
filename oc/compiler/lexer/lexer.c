@@ -33,7 +33,7 @@ typedef enum {
 	IN_STRING,
 	IN_MULTI_COMMENT,
 	IN_SINGLE_COMMENT
-} lex_state;
+} lex_state_t;
 
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
@@ -570,10 +570,14 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	char ch3;
 
 	//Current state always begins in START
-	lex_state current_state = IN_START;
+	lex_state_t current_state = IN_START;
 
-	//Initialize here. We have the ERROR token as our sane default
-	lexitem_t lex_item = {{NULL, 0, 0}, 0, ERROR};
+	//Initialize the lexitem to be nothing at first
+	lexitem_t lex_item;
+	lex_item.constant_values.signed_long_value = 0;
+	lex_item.tok = ERROR;
+	lex_item.line_num = 0;
+	INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
 	//For eventual use down the road. We will not allocate here because this
 	//is not always needed
