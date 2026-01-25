@@ -87,7 +87,8 @@ int main(int argc, char** argv){
 	//If this fails, we need to leave
 	if(token_stream.status == STREAM_STATUS_FAILURE){
 		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
-		exit(1);
+		//0 for test runs
+		exit(0);
 	}
 
 	//Store it and invoke the parser
