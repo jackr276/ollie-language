@@ -5550,6 +5550,25 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 
 /**
+ * Emit a "test if not 0 three address code statement"
+ */
+instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//The assignee/op1 is passed through
+	stmt->assignee = destination_variable;
+	stmt->op1 = being_tested;
+
+	//Note what kind of node this is
+	stmt->statement_type = THREE_ADDR_CODE_PHI_FUNC;
+
+	//And give the statement back
+	return stmt;
+}
+
+
+/**
  * Emit a fully formed global variable OIR address calculation lea
  *
  * This will always produce instructions like: t8 <- global_var(%rip)

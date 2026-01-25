@@ -3201,23 +3201,18 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
  * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
  */
 static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, u_int8_t is_branch_ending){
-	//Emit the test statement based on the type
-	instruction_t* test_statement = emit_test_statement(emit_temp_var(op1->type), op1, op2);
+	//Emit the instruction
+	instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable);
+	test_if_not_zero->is_branch_ending = is_branch_ending;
 
 	//This counts as a use for op1
-	add_used_variable(basic_block, op1);
-
-	//This counts as a use for op2
-	add_used_variable(basic_block, op2);
-
-	//Mark if it is branch ending
-	test_statement->is_branch_ending = is_branch_ending;
+	add_used_variable(basic_block, tested_variable);
 
 	//Now we'll add it into the block
-	add_statement(basic_block, test_statement);
+	add_statement(basic_block, test_if_not_zero);
 
 	//Give back the final assignee
-	return test_statement->assignee;
+	return test_if_not_zero->assignee;
 }
 
 
