@@ -4,11 +4,11 @@
 */
 
 pub fn byte_hex() -> i8 {
-	ret 0x33b;
+	ret 0x33y;
 }
 
 pub fn ubyte_hex() -> u8 {
-	ret 0x33ub;
+	ret 0x33UY;
 }
 
 pub fn short_hex() -> i16 {

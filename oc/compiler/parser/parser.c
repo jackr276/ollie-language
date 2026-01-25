@@ -1520,6 +1520,8 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 		case CHAR_CONST:
 		case BYTE_CONST:
 		case BYTE_CONST_FORCE_U:
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
 		case LONG_CONST:
 		case INT_CONST_FORCE_U:
 		case LONG_CONST_FORCE_U:

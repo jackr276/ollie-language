@@ -151,7 +151,7 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			sprintf(info, "%ld", lexitem->constant_values.unsigned_long_value);
 			return info;
 		case SHORT_CONST_FORCE_U:
-			sprintf(info, "%ud", lexitem->constant_values.unsigned_short_value);
+			sprintf(info, "%u", lexitem->constant_values.unsigned_short_value);
 			return info;
 		case SHORT_CONST:
 			sprintf(info, "%d", lexitem->constant_values.signed_short_value);
@@ -160,7 +160,7 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			sprintf(info, "%d", lexitem->constant_values.signed_byte_value);
 			return info;
 		case BYTE_CONST_FORCE_U:
-			sprintf(info, "%ud", lexitem->constant_values.unsigned_byte_value);
+			sprintf(info, "%u", lexitem->constant_values.unsigned_byte_value);
 			return info;
 		case LONG_CONST:
 			sprintf(info, "%ld", lexitem->constant_values.unsigned_long_value);
@@ -1360,8 +1360,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 							break;
 
 						//Forcing to Byte
-						case 'b':
-						case 'B':
+						case 'y':
+						case 'Y':
 							lex_item.line_num = line_number;
 							lex_item.lexeme = lexeme;
 							lex_item.tok = BYTE_CONST;
@@ -1419,8 +1419,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 									break;
 
-								case 'b':
-								case 'B':
+								case 'y':
+								case 'Y':
 									lex_item.tok = BYTE_CONST_FORCE_U;
 
 									//Convert accordingly
