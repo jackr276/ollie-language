@@ -7085,6 +7085,38 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		//Add this in before our statement
 		insert_instruction_before_given(pxor_instruction, instruction);
 
+		//Grab an instruction cursor
+		instruction_t* cursor = instruction;
+
+		/**
+		 * We also need to flag any branches that come up in front of us
+		 * to tell them that they rely on an FP comparison. We do this
+		 * by a simple crawl
+		 */
+
+		//So long as the cursor is not NULL, keep crawling
+		while(cursor != NULL){
+			//If it's not a branch then we don't care
+			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+				cursor = cursor->next_statement;
+				continue;
+			}
+
+			//This is the case that we're after. If we find that the branch relies
+			//on this, then we can just get out
+			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
+				cursor->relies_on_fp_comparison = TRUE;
+			}
+
+			//If we get to the end and it's not used by a branch, that is fine. The only
+			//thing that we care about in this crawl is whether or not the above statement
+			//was used by a branch instruction. If it was, then all of the extra setX
+			//is unnecessary. If it wasn't then we need to be adding those extra steps
+
+			//Advance the cursor up
+			cursor = cursor->next_statement;
+		}
+
 		//Now that we have this, we can emit the comparison command. We will
 		//just repurpose the above instruction to do this
 		switch(zeroed_out->variable_size){
