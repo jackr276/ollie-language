@@ -4605,13 +4605,16 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Store for later
 	three_addr_var_t* conditional_decider = expression_package.assignee;
 
+	//Extract the operator
+	ollie_token_t operator = expression_package.operator;
+
 	//If this is blank, we need a test instruction
-	if(expression_package.operator == BLANK){
+	if(operator == BLANK){
 		conditional_decider = emit_test_not_zero(current_block, expression_package.assignee, TRUE);
 	}
 
 	//Select the jump type for our conditional. This is a normal branch, we aren't doing any inverting
-	branch_type_t branch_type = select_appropriate_branch_statement(expression_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 	//emit the branch statement
 	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
@@ -6148,13 +6151,16 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	//Store for later
 	three_addr_var_t* conditional_decider = package.assignee;
 
+	//Extract the operator
+	ollie_token_t operator = package.operator;
+
 	//If this is blank, we'll need to emit the test code here
-	if(package.operator == BLANK){
+	if(operator == BLANK){
 		conditional_decider = emit_test_not_zero(compound_stmt_end, package.assignee, TRUE);
 	}
 
 	//Select the appropriate branch type
-	branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 		
 	/**
 	 * Branch works in a regular way
@@ -6235,14 +6241,17 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//What does the conditional jump rely on?
 	three_addr_var_t* conditional_decider = package.assignee;
 
+	//Extract the operator
+	ollie_token_t operator = package.operator;
+
 	//If the operator is blank, we need to emit a test instruction
-	if(package.operator == BLANK){
+	if(operator == BLANK){
 		//Emit the testing instruction
 	 	conditional_decider = emit_test_not_zero(while_statement_entry_block, package.assignee, TRUE);
 	}
 
 	//The branch type here will be an inverse branch
-	branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
+	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_INVERSE, is_type_signed(conditional_decider->type));
 
 	/**
 	 * Inverse jump out of the while loop to the end if bad
@@ -6300,8 +6309,11 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	//Variable for down the road
 	three_addr_var_t* conditional_decider = package.assignee;
 
+	//Extract the operator
+	ollie_token_t operator = package.operator;
+
 	//If the operator is blank, we need to emit a test instruction
-	if(package.operator == BLANK){
+	if(operator == BLANK){
 		//Emit the testing instruction
 		conditional_decider = emit_test_not_zero(entry_block, package.assignee, TRUE);
 	}
@@ -6334,7 +6346,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 	}
 
 	//Select an appropriate branch for the entry block
-	branch_type_t entry_block_branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+	branch_type_t entry_block_branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 	//Emit the branch from the entry block out to the starting block. We will *intentionally* leave the else case NULL
 	//because we may have else-if cases that we need to add down the road
@@ -6392,14 +6404,17 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//This is the package's assignee
 		conditional_decider = package.assignee;
 
+		//Extract the operator
+		ollie_token_t operator = package.operator;
+
 		//If the operator is blank, we need to emit a test instruction
-		if(package.operator == BLANK){
+		if(operator == BLANK){
 			//Emit the testing instruction
 			conditional_decider = emit_test_not_zero(new_entry_block, package.assignee, TRUE);
 		}
 
 		//Select the branch here as well
-		branch_type_t else_if_branch = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+		branch_type_t else_if_branch = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 		//Now we'll emit the branch statement into the current entry block. Again we intentionally
 		//leave the else area null for later use
@@ -7346,8 +7361,11 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Store for later
 					three_addr_var_t* conditional_decider = package.assignee;
 
+					//Extract the operator
+					ollie_token_t operator = package.operator;
+
 					//If this is blank, we'll need a test instruction
-					if(package.operator == BLANK){
+					if(operator == BLANK){
 						conditional_decider = emit_test_not_zero(current_block, package.assignee, TRUE);
 					}
 
@@ -7359,7 +7377,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 					//Select the appropriate branch type using
 					//a normal jump
-					branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					/**
 					 * Now we will emit the branch like so
@@ -7411,13 +7429,16 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					//Store this for later
 					three_addr_var_t* conditional_decider = ret_package.assignee;
 
+					//Extract the operator
+					ollie_token_t operator = ret_package.operator;
+
 					//If this is blank, we'll need a test instruction
-					if(ret_package.operator == BLANK){
+					if(operator == BLANK){
 						conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, TRUE);
 					}
 
 					//First we'll select the appropriate branch type. We are using a regular branch type here
-					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
@@ -7515,14 +7536,17 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
 
+				//Grab out the operator
+				ollie_token_t operator = ret_package.operator;
+
 				//If the return package's operator is blank,
 				//then we'll need to emit a test instruction here
-				if(ret_package.operator == BLANK){
+				if(operator == BLANK){
 					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, TRUE);
 				}
 
 				//Select the needed branch statement
-				branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+				branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
 				//method for each function that handles filling the rest in
@@ -7831,8 +7855,11 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					//Store for later
 					three_addr_var_t* conditional_decider = package.assignee;
 
+					//Grab the operator out
+					ollie_token_t operator = package.operator;
+					
 					//If this is blank, we'll need a test instruction
-					if(package.operator == BLANK){
+					if(operator == BLANK){
 						conditional_decider = emit_test_not_zero(current_block, package.assignee, TRUE);
 					}
 
@@ -7843,7 +7870,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					basic_block_t* continuing_to = peek(&continue_stack);
 
 					//Select the appropriate branch type, we will not use an inverse jump here
-					branch_type_t branch_type = select_appropriate_branch_statement(package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					/**
 					 * Now we will emit the branch like so
@@ -7894,14 +7921,17 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 					//Store this for later
 					three_addr_var_t* conditional_decider = ret_package.assignee;
+					
+					//Grab the operator out
+					ollie_token_t operator = ret_package.operator;
 
 					//If this is blank, we'll need a test instruction
-					if(ret_package.operator == BLANK){
+					if(operator == BLANK){
 						conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, TRUE);
 					}
 
 					//First we'll select the appropriate branch type. We are using a regular branch type here
-					branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+					branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 					//Peak off of the break stack to get what we're breaking to
 					basic_block_t* breaking_to = peek(&break_stack);
@@ -8003,14 +8033,17 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				//Save this here for later
 				three_addr_var_t* conditional_decider = ret_package.assignee;
 
+				//Grab the operator out
+				ollie_token_t operator = ret_package.operator;
+
 				//If the return package's operator is blank,
 				//then we'll need to emit a test instruction here
-				if(ret_package.operator == BLANK){
+				if(operator == BLANK){
 					conditional_decider = emit_test_not_zero(current_block, ret_package.assignee, TRUE);
 				}
 
 				//Select the needed branch statement
-				branch_type_t branch_type = select_appropriate_branch_statement(ret_package.operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
+				branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 				//Now we can emit the branch itself. The branch itself is incomplete right now, there is a special postprocessor
 				//method for each function that handles filling the rest in
