@@ -5561,7 +5561,7 @@ instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_var
 	stmt->op1 = being_tested;
 
 	//Note what kind of node this is
-	stmt->statement_type = THREE_ADDR_CODE_PHI_FUNC;
+	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
 
 	//And give the statement back
 	return stmt;
