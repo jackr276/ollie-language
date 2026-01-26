@@ -5556,7 +5556,7 @@ static void handle_function_call(instruction_t* instruction){
 /**
  * Handle a function call instruction
  */
-static void handle_indirect_function_call(instruction_t* instruction){
+static inline void handle_indirect_function_call(instruction_t* instruction){
 	//This will be an indirect call instruction
 	instruction->instruction_type = INDIRECT_CALL;
 
@@ -5571,7 +5571,8 @@ static void handle_indirect_function_call(instruction_t* instruction){
 /**
  *	//=========================== Logical Notting =============================
  * Although it may not seem like it, logical not is actually a multiple instruction
- * pattern
+ * pattern. Note that logical not can take different forms for GP and SSE registers.
+ * This function takes that into account and handles both cases
  *
  * This:
  * t9 <- logical not t9
@@ -5580,6 +5581,7 @@ static void handle_indirect_function_call(instruction_t* instruction){
  * test t9, t9
  * sete %al
  * movzx %al, t9
+ *
  *
  * NOTE: We know that instruction1 is the one that is a logical not instruction if we
  * get here
