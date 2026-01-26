@@ -623,7 +623,7 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
  * involves converting between types, or it involves memory indirection, then
  * we cannot simply remove it
  */
-static u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_instruction){
+static inline u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_instruction){
 	//If this is a constant assignment, then yes we can
 	if(assignment_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		return TRUE;
@@ -644,7 +644,7 @@ static u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_
  * Can we do an inplace constant operation? Currently we only
  * do these for *, + and -
  */
-static u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t op){
+static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t op){
 	switch(op){
 		case PLUS:
 		case MINUS:
@@ -2474,7 +2474,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Otherwise, the value is not 0
 		} else {
 			//First we add a test instruction
-			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+			instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->op1);
 						
 			//The result of this will be used for our set instruction
 			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->assignee);
@@ -2515,7 +2515,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//First option - the value is 0. If it is, then anything else is irrelevant
 		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
 			//First we add a test instruction
-			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+			instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->op1);
 						
 			//The result of this will be used for our set instruction
 			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->assignee);
