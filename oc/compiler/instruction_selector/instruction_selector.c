@@ -11,7 +11,6 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -7068,9 +7067,46 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		instruction->source_register = instruction->op1;
 		instruction->source_register2 = instruction->op1;
 		
+		//Rebuild the window around this instruction
+		reconstruct_window(window, instruction);
+		
+	//For floating point operations, we need to effectively emit a "test if 0" command here, except we won't
+	//be using a constant. Instead, we can zero out a given XMM register and use that instead
 	} else {
-		printf("TODO\n");
-		exit(0);
+		//Grab this for use
+		generic_type_t* fp_type = instruction->op1->type;
+
+		//Let's first zero out a given XMM register
+		three_addr_var_t* zeroed_out = emit_temp_var(fp_type);
+
+		//Emit the PXOR instruction to wipe it out
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(zeroed_out);
+
+		//Add this in before our statement
+		insert_instruction_before_given(pxor_instruction, instruction);
+
+		//Now that we have this, we can emit the comparison command. We will
+		//just repurpose the above instruction to do this
+		switch(zeroed_out->variable_size){
+			case SINGLE_PRECISION:
+				instruction->instruction_type = UCOMISS;
+				break;
+			
+			case DOUBLE_PRECISION:
+				instruction->instruction_type = UCOMISD;
+				break;
+
+			//This really should be impossible
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in FP test if not zero selector\n");
+				exit(1);
+		}
+
+		//Transfer over the old op1
+		instruction->source_register = instruction->op1;
+
+		//And the second source is the register we just zeroed out
+		instruction->source_register2 = zeroed_out;
 	}
 }
 
