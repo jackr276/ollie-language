@@ -7023,6 +7023,36 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 
 
 /**
+ * Select the appropriate test statement based on the size
+ * of a given GP register
+ */
+static inline instruction_type_t select_appropriate_test_statement(variable_size_t size){
+
+}
+
+
+/**
+ * Handle the "test if not zero" logical instruction. Note that
+ * this logic is different for floating point/non-floating
+ * point values and that all depends on the op1. We will be looking
+ * at the op1 value to determine this
+ *
+ * NOTE: We assume that the window's instruction1 is the one that we're after
+ */
+static void handle_test_if_not_zero_instruction(instruction_window_t* window){
+	//Grab out what we're really after
+	instruction_t* instruction = window->instruction1;
+
+	//We expect the most common case to be non-floating point
+	if(IS_FLOATING_POINT(instruction->op1->type) == FALSE){
+		
+	} else {
+
+	}
+}
+
+
+/**
  * Combine and select all cases where we have a variable offset store that can be combined
  * with a lea to form a singular instruction. This handles all cases, and performs the deletion
  * of the given lea statement at the end
@@ -7466,6 +7496,9 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 			handle_store_with_variable_offset_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+			handle_test_if_not_zero_instruction(window);
 			break;
 		default:
 			break;
