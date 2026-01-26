@@ -1163,7 +1163,7 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(first_branch_conditional_decider, first_half_cursor->assignee, first_half_cursor->assignee);
+		instruction_t* test = emit_test_if_not_zero_statement(first_branch_conditional_decider, first_half_cursor->assignee);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1201,7 +1201,7 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(second_branch_conditional_decider, second_half_cursor->assignee, second_half_cursor->assignee);
+		instruction_t* test = emit_test_if_not_zero_statement(second_branch_conditional_decider, second_half_cursor->assignee);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
@@ -1342,7 +1342,7 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(first_branch_conditional_decider, first_half_cursor->assignee, first_half_cursor->assignee);
+		instruction_t* test = emit_test_if_not_zero_statement(first_branch_conditional_decider, first_half_cursor->assignee);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1381,7 +1381,7 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(second_branch_conditional_decider, second_half_cursor->assignee, second_half_cursor->assignee);
+		instruction_t* test = emit_test_if_not_zero_statement(second_branch_conditional_decider, second_half_cursor->assignee);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
@@ -1517,7 +1517,7 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(first_branch_conditional_decider, first_half_cursor->assignee, first_half_cursor->assignee);
+		instruction_t* test = emit_test_if_not_zero_statement(first_branch_conditional_decider, first_half_cursor->assignee);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1558,7 +1558,7 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(second_branch_conditional_decider, second_half_cursor->assignee, second_half_cursor->assignee);
+		instruction_t* test = emit_test_if_not_zero_statement(second_branch_conditional_decider, second_half_cursor->assignee);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
@@ -1695,7 +1695,7 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(first_branch_conditional_decider, first_half_cursor->assignee, first_half_cursor->assignee);
+		instruction_t* test = emit_test_if_not_zero_statement(first_branch_conditional_decider, first_half_cursor->assignee);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1734,7 +1734,7 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(second_branch_conditional_decider, second_half_cursor->assignee, second_half_cursor->assignee);
+		instruction_t* test = emit_test_if_not_zero_statement(second_branch_conditional_decider, second_half_cursor->assignee);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
