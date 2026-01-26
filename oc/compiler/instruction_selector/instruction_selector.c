@@ -7027,7 +7027,20 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
  * of a given GP register
  */
 static inline instruction_type_t select_appropriate_test_statement(variable_size_t size){
-
+	switch(size){
+		case QUAD_WORD:
+			return TESTQ;
+		case DOUBLE_WORD:
+			return TESTL;
+		case WORD:
+			return TESTW;
+		case BYTE:
+			return TESTB;
+		//This should never be reached
+		default:
+			printf("Fatal internal compiler error: unreachable path hit for test statement selector");
+			exit(1);
+	}
 }
 
 
@@ -7045,9 +7058,19 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 
 	//We expect the most common case to be non-floating point
 	if(IS_FLOATING_POINT(instruction->op1->type) == FALSE){
+		//Get the appopriate set statement here
+		instruction->instruction_type = select_appropriate_test_statement(instruction->op1->variable_size);
+
+		//Store the symbolic destination register
+		instruction->destination_register = instruction->assignee;
+
+		//Op1 is both sourced because we are testing against ourselves
+		instruction->source_register = instruction->op1;
+		instruction->source_register2 = instruction->op1;
 		
 	} else {
-
+		printf("TODO\n");
+		exit(0);
 	}
 }
 
