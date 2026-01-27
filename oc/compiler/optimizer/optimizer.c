@@ -1712,12 +1712,12 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(first_half_cursor->op == BLANK){
+	if(first_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_if_not_zero_statement(first_branch_conditional_decider, first_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1751,12 +1751,12 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(second_half_cursor->op == BLANK){
+	if(second_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_if_not_zero_statement(second_branch_conditional_decider, second_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
