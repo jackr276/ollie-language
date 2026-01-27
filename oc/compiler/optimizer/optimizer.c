@@ -1172,7 +1172,7 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	//And if the type is signed
 	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
 	//Does the first half using float logic?
-	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->op1->type);
+	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
@@ -1213,6 +1213,8 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	ollie_token_t second_condition_op = second_half_cursor->op;
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
+	//Does the first half using float logic?
+	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
@@ -1240,7 +1242,7 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE, second_half_float);
 }
 
 
@@ -1353,6 +1355,8 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 	ollie_token_t first_condition_op = first_half_cursor->op;
 	//And if the type is signed
 	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
+	//Store if it is a float
+	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
@@ -1381,7 +1385,7 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 	//	goto if
 	//else
 	//	goto second_half_block
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -1392,6 +1396,8 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 	ollie_token_t second_condition_op = second_half_cursor->op;
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
+	//Store whether the second half is a float
+	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
@@ -1420,7 +1426,7 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, second_half_float);
 }
 
 
@@ -1532,6 +1538,8 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	ollie_token_t first_condition_op = first_half_cursor->op;
 	//And if the type is signed
 	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
+	//Store whether this is a float or not
+	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
@@ -1559,7 +1567,7 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	//	goto if 
 	//else
 	//	goto second_half_block 
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -1570,6 +1578,8 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	ollie_token_t second_condition_op = second_half_cursor->op;
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
+	//Store whether the second half is a float
+	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
@@ -1597,7 +1607,7 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, second_half_float);
 }
 
 
@@ -1710,6 +1720,8 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	ollie_token_t first_condition_op = first_half_cursor->op;
 	//And if the type is signed
 	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
+	//Store whether the first half is a float
+	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
@@ -1738,7 +1750,7 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	//	goto else
 	//else
 	//	goto second_half_block 
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -1749,6 +1761,8 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	ollie_token_t second_condition_op = second_half_cursor->op;
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
+	//Store whether the second half is a float
+	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
@@ -1777,7 +1791,7 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL, second_half_float);
 }
 
 
