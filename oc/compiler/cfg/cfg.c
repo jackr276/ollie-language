@@ -3281,53 +3281,6 @@ static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basi
 
 
 /**
- * Emit a negation statement
- */
-static three_addr_var_t* emit_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, u_int8_t is_branch_ending){
-	//We make our temp selection based on this
-	three_addr_var_t* var = emit_temp_var(negated->type);
-
-	//This counts as used
-	add_used_variable(basic_block, negated);
-
-	//Now let's create it
-	instruction_t* stmt = emit_neg_instruction(var, negated);
-
-	//Mark with it's branch ending status
-	stmt->is_branch_ending = is_branch_ending;
-	
-	//Add it into the block
-	add_statement(basic_block, stmt);
-
-	//We always return the assignee
-	return var;
-}
-
-
-/**
- * Emit a logical negation statement
- *
- * It is important to note that logical note statements always return a type of u8 in the end
- */
-static three_addr_var_t* emit_logical_neg_stmt_code(basic_block_t* basic_block, three_addr_var_t* negated, u_int8_t is_branch_ending){
-	//This will always overwrite the other value
-	instruction_t* stmt = emit_logical_not_instruction(emit_temp_var(u8), negated);
-
-	//This counts as a use
-	add_used_variable(basic_block, negated);
-
-	//Mark this with its branch ending status
-	stmt->is_branch_ending = is_branch_ending;
-
-	//From here, we'll add the statement in
-	add_statement(basic_block, stmt);
-
-	//We'll give back the assignee temp variable
-	return stmt->assignee;
-}
-
-
-/**
  * Emit the abstract machine code for a primary expression. Remember that a primary
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
@@ -4337,8 +4290,18 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				current_block = unary_package.final_block;
 			}
 
-			//The new assignee will come from this helper
-			unary_package.assignee = emit_logical_neg_stmt_code(current_block, assignee, is_branch_ending);
+			//This will always overwrite the other value
+			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee);
+			logical_not_statement->is_branch_ending = is_branch_ending;
+
+			//Get it into the block right after the unary expression
+			add_statement(current_block, logical_not_statement);
+
+			//This counts as a use
+			add_used_variable(current_block, assignee);
+
+			//The package's assignee is now the result of this logical not instruction
+			unary_package.assignee = logical_not_statement->assignee;
 
 			//Give the package back
 			return unary_package;
@@ -4373,9 +4336,19 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Add this into the block
 			add_statement(current_block, assignment);
 
-			//We will emit the negation code here
-			unary_package.assignee =  emit_neg_stmt_code(basic_block, assignment->assignee, is_branch_ending);
+			//Now emit the instruction itself
+			instruction_t* negation_instruction = emit_neg_instruction(emit_temp_var(assignee->type), assignment->assignee);
+			negation_instruction->is_branch_ending = is_branch_ending;
 
+			//This counts as a use
+			add_used_variable(current_block, assignment->assignee);
+
+			//Now get the whole statement into the block
+			add_statement(current_block, negation_instruction);
+
+			//Rewrite the assignee to be this now
+			unary_package.assignee = negation_instruction->assignee;
+			
 			//And give back the final value
 			return unary_package;
 
