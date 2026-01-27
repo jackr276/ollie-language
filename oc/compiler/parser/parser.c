@@ -2435,7 +2435,7 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 	if(parent_node->variable != NULL){
 		//This is a mutation - so we need to check it
 		if(parent_node->variable->type_defined_as->mutability  == NOT_MUTABLE){
-			sprintf(info, "Attempt to mutate immutable variable %s", parent_node->variable->var_name.string);
+			sprintf(info, "Attempt to mutate immutable variable \"%s\"", parent_node->variable->var_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2908,7 +2908,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			if(cast_expr->variable != NULL){
 				//If this is not mutable, then we cannot change it in this way
 				if(cast_expr->variable->type_defined_as->mutability == NOT_MUTABLE){
-					sprintf(info, "Attempt to mutate immutable variable %s", cast_expr->variable->var_name.string);
+					sprintf(info, "Attempt to mutate immutable variable \"%s\"", cast_expr->variable->var_name.string);
 					return print_and_return_error(info, parser_line_num);
 				}
 

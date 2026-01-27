@@ -677,11 +677,6 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
 instruction_t* emit_dec_instruction(three_addr_var_t* decrementee);
 
 /**
- * Emit a test statement 
- */
-instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2);
-
-/**
  * Directly emit a test instruction - bypassing three_addr_code entirely - going right to a selected instruction
  */
 instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2);
@@ -752,6 +747,11 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node);
  * Emit a phi function statement. Once emitted, these statements are for the exclusive use of the compiler
  */
 instruction_t* emit_phi_function(symtab_variable_record_t* variable);
+
+/**
+ * Emit a "test if not 0 three address code statement"
+ */
+instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested);
 
 /**
  * Emit an idle statement

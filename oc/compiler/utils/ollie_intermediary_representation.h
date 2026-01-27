@@ -130,10 +130,10 @@ typedef enum {
 	THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET,
 	//SPECIAL CASE - assembly inline statement
 	THREE_ADDR_CODE_ASM_INLINE_STMT,
+	//Test if not 0 statement
+	THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT,
 	//A "Load effective address(lea)" instruction
 	THREE_ADDR_CODE_LEA_STMT,
-	//A test instruction
-	THREE_ADDR_CODE_TEST_STMT,
 	//An indirect jump address calculation instruction, very similar to lea
 	THREE_ADDR_CODE_INDIR_JUMP_ADDR_CALC_STMT,
 	//A phi function - for SSA analysis only

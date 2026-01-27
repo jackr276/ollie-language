@@ -227,7 +227,7 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* dest_block);
 /**
  * Emit a branch statement directly into a block
  */
-void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category);
+void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category, u_int8_t relies_on_fp_comparison);
 
 /**
  * For DEBUGGING purposes - we will print all of the blocks in the control

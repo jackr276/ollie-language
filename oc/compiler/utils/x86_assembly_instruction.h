@@ -181,6 +181,7 @@ typedef enum{
 	SETBE, //Set <= unsigned
 	SETB, //Set < unsigned
 	SETP, //Set if parity
+	SETNP, //Set if not parity
 	// ============= Begin specialized floating point instructions ==============
 	ADDSD, //Add scalar f64
 	SUBSD, //Subtract scalar f64
@@ -210,6 +211,22 @@ typedef enum{
 	CVTSI2SSQ, //Convert scalar i64 to f32
 	CVTSI2SDL, //Convert scalar i32 to f64	
 	CVTSI2SDQ, //Convert scalar i64 to f64
+	//Conditional moves
+	CMOVE,
+	CMOVNE,
+	CMOVG,
+	CMOVL,
+	CMOVGE,
+	CMOVLE,
+	CMOVZ,
+	CMOVNZ,
+	CMOVA,
+	CMOVAE,
+	CMOVB,
+	CMOVBE,
+	CMOVNP,
+	CMOVP,
+	//End conditional moves
 	PXOR, //Packed logical exclusive or
 	PAND, //Packed logical and
 	PANDN, //Packed logical and not
