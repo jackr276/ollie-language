@@ -5582,13 +5582,61 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
  * sete %al
  * movzx %al, t9
  *
+ * In the event that we are being used by a branch, it will just have the test instruction
+ * as the set is not needed
+ *
  *
  * NOTE: We know that instruction1 is the one that is a logical not instruction if we
  * get here
  */
 static void handle_logical_not_instruction(instruction_window_t* window){
+	//Is this value *exclusively* used by a branch?
+	u_int8_t used_by_branch_only = TRUE;
+
 	//Let's grab the value out for convenience
 	instruction_t* logical_not = window->instruction1;
+
+	//Let's also determine if this is a floating point logical not or not
+	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_not->op1->type);
+
+	//Grab an instruction cursor for the crawl
+	instruction_t* cursor = logical_not->next_statement;
+
+	//So long as the cursor is not NULL, keep crawling
+	while(cursor != NULL){
+		//This is the case that we're after. If we find that the branch relies
+		//on this, then we can just get out
+		if(variables_equal(cursor->op1, logical_not->assignee, FALSE) == TRUE){
+			//This means that we are *not* exclusively used by a branch
+			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+				used_by_branch_only = FALSE;
+				break;
+			}
+
+			//Otherwise logically speaking we do have a branch
+			//statement here. As such, if it's a floating point
+			//branch we'll need to flag that
+			if(is_floating_point == TRUE){
+				cursor->relies_on_fp_comparison = TRUE;
+			}
+
+		//We could also be used by op2. If this is the case, then it's definitely not just
+		//being used by a branch
+		} else if (variables_equal(cursor->op2, logical_not->assignee, FALSE) == TRUE){
+			//Branches never have dependencies stored in op2. As such if we see this,
+			//it's an automatic false
+			used_by_branch_only = FALSE;
+			break;
+		}
+
+		//If we get to the end and it's not used by a branch, that is fine. The only
+		//thing that we care about in this crawl is whether or not the above statement
+		//was used by a branch instruction. If it was, then all of the extra setX
+		//is unnecessary. If it wasn't then we need to be adding those extra steps
+
+		//Advance the cursor up
+		cursor = cursor->next_statement;
+	}
 
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
