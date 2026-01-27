@@ -4284,6 +4284,20 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVZBQ:
 		case MOVZWL:
 		case MOVZWQ:
+		case CMOVE:
+		case CMOVNE:
+		case CMOVG:
+		case CMOVL:
+		case CMOVGE:
+		case CMOVLE:
+		case CMOVZ:
+		case CMOVNZ:
+		case CMOVA:
+		case CMOVAE:
+		case CMOVB:
+		case CMOVBE:
+		case CMOVNP:
+		case CMOVP:
 			/**
 			 * Now we go based on what kind of memory
 			 * access we're doing here. This will determine
