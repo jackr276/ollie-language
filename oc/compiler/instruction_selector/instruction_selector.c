@@ -3479,7 +3479,7 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
  *
  * The sete instruction is used on a byte
  */
-static instruction_t* emit_sete_instruction(three_addr_var_t* destination){
+static inline instruction_t* emit_sete_instruction(three_addr_var_t* destination){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -3501,7 +3501,7 @@ static instruction_t* emit_sete_instruction(three_addr_var_t* destination){
  * scheduler what this setne relies on in the future, but this op1 is never actually displayed/printed,
  * it is just for tracking
  */
-static instruction_t* emit_setne_instruction(three_addr_var_t* destination, three_addr_var_t* relies_on){
+static inline instruction_t* emit_setne_instruction(three_addr_var_t* destination, three_addr_var_t* relies_on){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -5544,7 +5544,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 /**
  * Handle a function call instruction
  */
-static void handle_function_call(instruction_t* instruction){
+static inline void handle_function_call(instruction_t* instruction){
 	//This will be a call instruction
 	instruction->instruction_type = CALL;
 
@@ -5565,6 +5565,26 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 
 	//The destination register is itself the assignee
 	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
+ * Emit a conditional move if not equals instruction. Note that these instructions do not support 
+ * immediate values, so we only ever have a source variable here
+ */
+static inline instruction_t* emit_cmovne_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source){
+	//First we allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//This is a CMOVNE instruction
+	instruction->instruction_type = CMOVNE;
+
+	//Assign these two over
+	instruction->source_register = source;
+	instruction->destination_register = destination_variable;
+
+	//And give it back
+	return instruction;
 }
 
 

@@ -3724,6 +3724,9 @@ static void print_set_instruction(FILE* fl, instruction_t* instruction, variable
 		case SETP:
 			fprintf(fl, "setp ");
 			break;
+		case SETNP:
+			fprintf(fl, "setnp ");
+			break;
 		case SETBE:
 			fprintf(fl, "setbe ");
 			break;

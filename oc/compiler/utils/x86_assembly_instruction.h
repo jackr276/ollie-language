@@ -181,6 +181,7 @@ typedef enum{
 	SETBE, //Set <= unsigned
 	SETB, //Set < unsigned
 	SETP, //Set if parity
+	SETNP, //Set if not parity
 	// ============= Begin specialized floating point instructions ==============
 	ADDSD, //Add scalar f64
 	SUBSD, //Subtract scalar f64
