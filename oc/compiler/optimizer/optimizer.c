@@ -1534,12 +1534,12 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(first_half_cursor->op == BLANK){
+	if(first_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_if_not_zero_statement(first_branch_conditional_decider, first_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1568,19 +1568,16 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
 
-	//Determine the appropriate branch using an inverse jump
-	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
-
 	//The conditional decider is by default the assignee
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(second_half_cursor->op == BLANK){
+	if(second_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_if_not_zero_statement(second_branch_conditional_decider, second_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
@@ -1588,6 +1585,9 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 		//This now counts as a use
 		add_used_variable(original_block, second_half_cursor->assignee);
 	}
+
+	//Determine the appropriate branch using an inverse jump
+	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
 
 	//Now we'll emit our final branch at the end of the first block. Remember it's:
 	//if condition fails:
