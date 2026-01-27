@@ -5589,6 +5589,58 @@ static inline instruction_t* emit_cmovne_instruction(three_addr_var_t* destinati
 
 
 /**
+ * Emit a direct floating point comparison instruction(ucomiss, ucomisd, comiss, or comisd) 
+ *
+ * The caller has the option to use ordered/unordered instructions
+ */
+static inline instruction_t* emit_float_comparison_instruction(three_addr_var_t* source_register, three_addr_var_t* source_register2, u_int8_t use_unordered){
+	//Allocate the instruction
+	instruction_t* comparison_instruction = calloc(1, sizeof(instruction_t));
+
+	//Run through the values here
+	if(use_unordered == FALSE){
+		switch(source_register->variable_size){
+			case SINGLE_PRECISION:
+				comparison_instruction->instruction_type = COMISS;
+				break;
+
+			case DOUBLE_PRECISION:
+				comparison_instruction->instruction_type = COMISD;
+				break;
+
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
+				exit(1);
+		}
+
+	} else {
+		switch(source_register->variable_size){
+			case SINGLE_PRECISION:
+				comparison_instruction->instruction_type = UCOMISS;
+				break;
+
+			case DOUBLE_PRECISION:
+				comparison_instruction->instruction_type = UCOMISD;
+				break;
+
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
+				exit(1);
+		}
+	}
+
+	//Add in both registers
+	comparison_instruction->source_register = source_register;
+	comparison_instruction->source_register2 = source_register2;
+
+	//Give the instruction back
+	return comparison_instruction;
+}
+
+
+/**
  *	//=========================== Logical Notting =============================
  * Although it may not seem like it, logical not is actually a multiple instruction
  * pattern. Note that logical not can take different forms for GP and SSE registers.
@@ -5697,23 +5749,24 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	/**
 	 * We are inside of a FP logical not:
 	 *
+	 * TODO - review & thoroughly understand
+	 *
 	 * No branch:
 	 * pxor	%xmm0, %xmm0      <--- wipe out a register(set to 0)
 	 * ucomiss	%xmm0, %xmm1  <--- compare our guy with 0
 	 * setnp	%al			  <--- set if parity flag is 0 
 	 * movzbl	%al, %eax 	  <--- Move the value(either one or 0) into the result
 	 * movl	$0, %edx		  <--- Grab a 0 param
-	 * cmovne	%edx, %eax    <--- Move 0 into the result if the above was not equal: note no prior instructions set CC's
+	 * cmovne	%edx, %eax    <--- Move 0 into the result if the above was not equal: note no prior instructions set CC's(!(non_zero) = 0)
 	 *
 	 * With branch:
 	 *
 	 * pxor	%xmm1, %xmm1 	 <--- wipe out a register
 	 * ucomiss	%xmm1, %xmm0 <--- compare our guy with zero
-	 * jp	.L23 			 <--- Jump on NaN, because Nan would not be a truthful value
-	 * je	.L25			 <--- If we do have an equality, we jump to the if
+	 * jp	.L23 			 <--- Jump on NaN, because Nan would not be a truthful value(!NaN == 0, NaN is not 0)
+	 * je	.L25			 <--- If we do have an equality, we jump to the if(The number is 0, so !0 = 1)
 	 */
 	} else {
-
 		//This is the variable that we will be comparing against
 		three_addr_var_t* comparing_against = emit_temp_var(logical_not->op1->type);
 
