@@ -5618,6 +5618,10 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//branch we'll need to flag that
 			if(is_floating_point == TRUE){
 				cursor->relies_on_fp_comparison = TRUE;
+
+				//
+				//TODO - may need to do opcode modification but unsure
+				//
 			}
 
 		//We could also be used by op2. If this is the case, then it's definitely not just
@@ -5641,45 +5645,47 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	//This is the most common case - it is *not* being used by a floating
 	//point value
 	if(is_floating_point == FALSE){
+		//Emit the test instruction
+		instruction_t* test_instruction = emit_direct_test_instruction(logical_not->op1, logical_not->op1); 
+
+		//Insert this right before the instruction we have
+		insert_instruction_before_given(test_instruction, logical_not);
+
+		//If we are just being used by a branch, then the test instruction should
+		//be all that we need. If we are *not* just being used by a branch, then 
+		//we will need more than just the test instruction
+		if(used_by_branch_only == FALSE){
+			//Set to 1 if we're zero
+			instruction_t* set_if_equal = emit_sete_instruction(logical_not->assignee);
+
+			//Insert this after the test
+			insert_instruction_after_given(set_if_equal, test_instruction);
+
+			//This is now useless so get rid of it
+			delete_statement(logical_not);
+
+			//Rebuild the window around the last instruction
+			reconstruct_window(window, set_if_equal);
+
+		} else {
+			//This is now useless so get rid of it
+			delete_statement(logical_not);
+
+			//Rebuild the window around the last instruction
+			reconstruct_window(window, test_instruction);
+		}
 
 	} else {
-
+		printf("TODO NOT YET SUPPORTED\n");
+		exit(0);
 	}
-
-	//Now we'll need to generate three new instructions
-	//First comes the test command. We're testing this against itself
-	instruction_t* test_inst = emit_direct_test_instruction(logical_not->op1, logical_not->op1); 
-	//Ensure that we set all these flags too
-	test_inst->block_contained_in = logical_not->block_contained_in;
-	test_inst->is_branch_ending = logical_not->is_branch_ending;
-
-	//Now we'll set the AL register to 1 if we're equal here
-	instruction_t* sete_inst = emit_sete_instruction(logical_not->assignee);
-	//Ensure that we set all these flags too
-	sete_inst->block_contained_in = logical_not->block_contained_in;
-	sete_inst->is_branch_ending = logical_not->is_branch_ending;
-
-	//Preserve this before we lose it
-	instruction_t* after_logical_not = logical_not->next_statement;
-
-	//Delete the logical not statement, we no longer need it
-	delete_statement(logical_not);
-
-	//First insert the test instruction
-	insert_instruction_before_given(test_inst, after_logical_not);
-
-	//Then insert the sete instruction
-	insert_instruction_before_given(sete_inst, after_logical_not);
-
-	//This is the new window
-	reconstruct_window(window, sete_inst);
 }
 
 
 /**
  * A setne is a very simple one-to-one mapping
  */
-static void handle_setne_instruction(instruction_t* instruction){
+static inline void handle_setne_instruction(instruction_t* instruction){
 	//Just set the type and register
 	instruction->instruction_type = SETNE;
 	instruction->destination_register = instruction->assignee;
