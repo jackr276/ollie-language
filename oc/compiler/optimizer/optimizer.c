@@ -1171,6 +1171,8 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	ollie_token_t first_condition_op = first_half_cursor->op;
 	//And if the type is signed
 	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
+	//Does the first half using float logic?
+	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->op1->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
@@ -1199,7 +1201,8 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	//	goto else
 	//else
 	//	goto second_half_block
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
+
 
 	/**
 	 * HANDLING THE SECOND BLOCK

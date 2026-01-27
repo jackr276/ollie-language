@@ -5638,6 +5638,14 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 		cursor = cursor->next_statement;
 	}
 
+	//This is the most common case - it is *not* being used by a floating
+	//point value
+	if(is_floating_point == FALSE){
+
+	} else {
+
+	}
+
 	//Now we'll need to generate three new instructions
 	//First comes the test command. We're testing this against itself
 	instruction_t* test_inst = emit_direct_test_instruction(logical_not->op1, logical_not->op1); 

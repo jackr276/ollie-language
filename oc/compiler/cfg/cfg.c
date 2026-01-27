@@ -2762,7 +2762,7 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
  *
  * This rule also handles all successor management required for the rule
  */
-void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category){
+void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, branch_category_t branch_category, u_int8_t relies_on_fp_comparison){
 	//Emit the actual instruction here
 	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type);
 
@@ -2771,6 +2771,10 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
 
 	//Mark this as the op1 so that we can track in the optimizer
 	branch_instruction->op1 = conditional_result;
+
+	//Store whether or not this relies on a floating point comparison. This will be important
+	//down the road in the instruction selecotr
+	branch_instruction->relies_on_fp_comparison = relies_on_fp_comparison;
 
 	//This counts as a use for the result variable
 	add_used_variable(basic_block, conditional_result);
@@ -4600,7 +4604,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	branch_type_t branch_type = select_appropriate_branch_statement(operator, BRANCH_CATEGORY_NORMAL, is_type_signed(conditional_decider->type));
 
 	//emit the branch statement
-	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(current_block, if_block, else_block,  branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 	
 	//Now we'll go through and process the two children
 	cursor = cursor->next_sibling;
@@ -6040,7 +6044,7 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 		 * else
 		 * 	goto update
 		 */
-		emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
+		emit_branch(condition_block, for_stmt_exit_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE, FALSE);
 
 	//Otherwise - we're doing as the user wants here and just emitting a straight jump from this block to the body
 	} else {
@@ -6153,7 +6157,7 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 * else
 	 * 	exit
 	 */
-	emit_branch(compound_stmt_end, do_while_stmt_entry_block, do_while_stmt_exit_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(compound_stmt_end, do_while_stmt_entry_block, do_while_stmt_exit_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 	//Now that we're done here, pop the break/continue stacks to remove these blocks
 	pop(&continue_stack);
@@ -6242,7 +6246,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 * If destination -> end of loop
 	 * Else destination -> loop body
 	 */
-	emit_branch(while_statement_entry_block, while_statement_end_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE);
+	emit_branch(while_statement_entry_block, while_statement_end_block, compound_statement_results.starting_block, branch_type, conditional_decider, BRANCH_CATEGORY_INVERSE, FALSE);
 
 	//Let's now find the end of the compound statement
 	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
@@ -6333,7 +6337,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 	//Emit the branch from the entry block out to the starting block. We will *intentionally* leave the else case NULL
 	//because we may have else-if cases that we need to add down the road
-	emit_branch(entry_block, if_compound_statement_results.starting_block, NULL, entry_block_branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(entry_block, if_compound_statement_results.starting_block, NULL, entry_block_branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 	//From our perspective, the previous entry block
 	//is now the one we've just made
@@ -6401,7 +6405,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 		//Now we'll emit the branch statement into the current entry block. Again we intentionally
 		//leave the else area null for later use
-		emit_branch(new_entry_block, else_if_compound_statement_results.starting_block, NULL, else_if_branch, conditional_decider, BRANCH_CATEGORY_NORMAL);
+		emit_branch(new_entry_block, else_if_compound_statement_results.starting_block, NULL, else_if_branch, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 		//Now we'll find the end of this statement
 		basic_block_t* else_if_compound_stmt_exit = else_if_compound_statement_results.final_block;
@@ -6904,7 +6908,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * else:
 	 * 	goto upper_bound_check
 	 */
-	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 	//This will be used for tracking
 	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
@@ -6923,7 +6927,7 @@ static cfg_result_package_t visit_c_style_switch_statement(generic_ast_node_t* r
 	 * else:
 	 *  goto jump block calculation
 	 */
-	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
@@ -7127,7 +7131,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * else:
 	 * 	goto upper_bound_check
 	 */
-	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(root_level_block, default_block, upper_bound_check_block, branch_lower_than, lower_than_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 	//This will be used for tracking
 	three_addr_var_t* higher_than_decider = emit_temp_var(input_result_type);
@@ -7146,7 +7150,7 @@ static cfg_result_package_t visit_switch_statement(generic_ast_node_t* root_node
 	 * else:
 	 *  goto jump block calculation
 	 */
-	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(upper_bound_check_block, default_block, jump_calculation_block, branch_greater_than, higher_than_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 	//To avoid violating SSA rules, we'll emit a temporary assignment here
 	instruction_t* temporary_variable_assignent = emit_assignment_instruction(emit_temp_var(input_result_type), input_results.assignee);
@@ -7370,7 +7374,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					 * else:
 					 * 	goto new block
 					 */
-					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
@@ -7434,7 +7438,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					 * else 
 					 * 	goto new block
 					 */
-					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
@@ -7863,7 +7867,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					 * else:
 					 * 	goto new block
 					 */
-					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+					emit_branch(current_block, continuing_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 					//And as we go forward, this new block will be the current block
 					current_block = new_block;
@@ -7927,7 +7931,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					 * else 
 					 * 	goto new block
 					 */
-					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL);
+					emit_branch(current_block, breaking_to, new_block, branch_type, conditional_decider, BRANCH_CATEGORY_NORMAL, FALSE);
 
 					//Once we're out here, the current block is now the new one
 					current_block = new_block;
