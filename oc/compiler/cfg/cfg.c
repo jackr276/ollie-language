@@ -4307,6 +4307,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//The package's assignee is now the result of this logical not instruction
 			unary_package.assignee = logical_not_statement->assignee;
 
+			//The operator here is logical not
+			unary_package.operator = L_NOT;
+
 			//Give the package back
 			return unary_package;
 

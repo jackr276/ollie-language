@@ -5668,6 +5668,9 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			reconstruct_window(window, set_if_equal);
 
 		} else {
+			//This is just around for bookkeeping, will not be displayed
+			test_instruction->assignee = logical_not->assignee;
+
 			//This is now useless so get rid of it
 			delete_statement(logical_not);
 

@@ -7047,6 +7047,16 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
 			} else {
 				return BRANCH_NE;
 			}
+
+		//Logical not is *TRUE* when the value is zero, and not
+		//true when the value isn't zero
+		case L_NOT:
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				return BRANCH_NZ;
+			} else {
+				return BRANCH_Z;
+			}
+
 		//If we get here, it was some kind of
 		//non relational operator. In this case,
 		//we default to 0 = false non zero = true
