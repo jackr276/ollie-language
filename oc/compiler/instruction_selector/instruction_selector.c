@@ -5678,7 +5678,25 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			reconstruct_window(window, test_instruction);
 		}
 
+	//We are inside of an FP instruction here
 	} else {
+
+		//This is the variable that we will be comparing against
+		three_addr_var_t* comparing_against = emit_temp_var(logical_not->op1->type);
+
+		//First emit a PXOR instruction to zero out a variable. This is the variable that we will compare against
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(comparing_against);
+
+		//Insert this before the given instruciton
+		insert_instruction_before_given(pxor_instruction, logical_not);
+
+		//Different dependencies based on whether or not we are being used in a branch
+		if(used_by_branch_only == FALSE){
+
+		} else {
+
+		}
+
 		printf("TODO NOT YET SUPPORTED\n");
 		exit(0);
 	}
