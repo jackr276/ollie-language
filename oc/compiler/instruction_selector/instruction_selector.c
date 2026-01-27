@@ -5638,10 +5638,6 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//branch we'll need to flag that
 			if(is_floating_point == TRUE){
 				cursor->relies_on_fp_comparison = TRUE;
-
-				//
-				//TODO - may need to do opcode modification but unsure
-				//
 			}
 
 		//We could also be used by op2. If this is the case, then it's definitely not just
@@ -5698,7 +5694,24 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			reconstruct_window(window, test_instruction);
 		}
 
-	//We are inside of an FP instruction here
+	/**
+	 * We are inside of a FP logical not:
+	 *
+	 * No branch:
+	 * pxor	%xmm0, %xmm0      <--- wipe out a register(set to 0)
+	 * ucomiss	%xmm0, %xmm1  <--- compare our guy with 0
+	 * setnp	%al			  <--- set if parity flag is 0 
+	 * movzbl	%al, %eax 	  <--- Move the value(either one or 0) into the result
+	 * movl	$0, %edx		  <--- Grab a 0 param
+	 * cmovne	%edx, %eax    <--- Move 0 into the result if the above was not equal: note no prior instructions set CC's
+	 *
+	 * With branch:
+	 *
+	 * pxor	%xmm1, %xmm1 	 <--- wipe out a register
+	 * ucomiss	%xmm1, %xmm0 <--- compare our guy with zero
+	 * jp	.L23 			 <--- Jump on NaN, because Nan would not be a truthful value
+	 * je	.L25			 <--- If we do have an equality, we jump to the if
+	 */
 	} else {
 
 		//This is the variable that we will be comparing against
