@@ -2795,11 +2795,11 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 
 /**
- * Handle a simple register to register or immediate to register move
+ * Print the move instruction corresponding to the code given to the file pointer given
  */
-static void print_general_purpose_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static inline void print_move_instruction(FILE* fl, instruction_type_t instruction_type){
 	//What we need to print out here
-	switch(instruction->instruction_type){
+	switch(instruction_type){
 		case MOVQ:
 			fprintf(fl, "movq ");
 			break;
@@ -2848,11 +2848,62 @@ static void print_general_purpose_register_to_register_move(FILE* fl, instructio
 		case MOVZWQ:
 			fprintf(fl, "movzwq ");
 			break;
+		case CMOVE:
+			fprintf(fl, "cmove ");
+			break;
+		case CMOVNE:
+			fprintf(fl, "cmovne ");
+			break;
+		case CMOVG:
+			fprintf(fl, "cmovg ");
+			break;
+		case CMOVL:
+			fprintf(fl, "cmovl ");
+			break;
+		case CMOVGE:
+			fprintf(fl, "cmovge ");
+			break;
+		case CMOVLE:
+			fprintf(fl, "cmovle ");
+			break;
+		case CMOVZ:
+			fprintf(fl, "cmovz ");
+			break;
+		case CMOVNZ:
+			fprintf(fl, "cmovnz ");
+			break;
+		case CMOVA:
+			fprintf(fl, "cmova ");
+			break;
+		case CMOVAE:
+			fprintf(fl, "cmovae ");
+			break;
+		case CMOVB:
+			fprintf(fl, "cmovb ");
+			break;
+		case CMOVBE:
+			fprintf(fl, "cmovbe ");
+			break;
+		case CMOVNP:
+			fprintf(fl, "cmovnp ");
+			break;
+		case CMOVP:
+			fprintf(fl, "cmovp ");
+			break;
 		//We should never hit this
 		default:
 			printf("Fatal internal compiler error: unreachable path hit\n");
 			exit(1);
 	}
+}
+
+
+/**
+ * Handle a simple register to register or immediate to register move
+ */
+static void print_general_purpose_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First thing - print the move instruciton
+	print_move_instruction(fl, instruction->instruction_type);
 
 	//Print the appropriate variable here
 	if(instruction->source_register != NULL){
@@ -2877,58 +2928,8 @@ static void print_general_purpose_register_to_register_move(FILE* fl, instructio
  * address offset calculation
  */
 static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//What we need to print out here
-	switch(instruction->instruction_type){
-		case MOVQ:
-			fprintf(fl, "movq ");
-			break;
-		case MOVL:
-			fprintf(fl, "movl ");
-			break;
-		case MOVW:
-			fprintf(fl, "movw ");
-			break;
-		case MOVB:
-			fprintf(fl, "movb ");
-			break;
-		case MOVSBW:
-			fprintf(fl, "movsbw ");
-			break;
-		case MOVSBL:
-			fprintf(fl, "movsbl ");
-			break;
-		case MOVSBQ:
-			fprintf(fl, "movsbq ");
-			break;
-		case MOVSWL:
-			fprintf(fl, "movswl ");
-			break;
-		case MOVSWQ:
-			fprintf(fl, "movswq ");
-			break;
-		case MOVSLQ:
-			fprintf(fl, "movslq ");
-			break;
-		case MOVZBW:
-			fprintf(fl, "movzbw ");
-			break;
-		case MOVZBL:
-			fprintf(fl, "movzbl ");
-			break;
-		case MOVZBQ:
-			fprintf(fl, "movzbq ");
-			break;
-		case MOVZWL:
-			fprintf(fl, "movzwl ");
-			break;
-		case MOVZWQ:
-			fprintf(fl, "movzwq ");
-			break;
-		//We should never hit this
-		default:
-			printf("Fatal internal compiler error: unreachable path hit\n");
-			exit(1);
-	}
+	//First thing - print the move instruciton
+	print_move_instruction(fl, instruction->instruction_type);
 
 	//First we'll print out the source
 	if(instruction->source_register != NULL){
@@ -2949,58 +2950,8 @@ static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_
  * Handle a complex memory to register move with a complex address offset calculation
  */
 static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//What we need to print out here
-	switch(instruction->instruction_type){
-		case MOVQ:
-			fprintf(fl, "movq ");
-			break;
-		case MOVL:
-			fprintf(fl, "movl ");
-			break;
-		case MOVW:
-			fprintf(fl, "movw ");
-			break;
-		case MOVB:
-			fprintf(fl, "movb ");
-			break;
-		case MOVSBW:
-			fprintf(fl, "movsbw ");
-			break;
-		case MOVSBL:
-			fprintf(fl, "movsbl ");
-			break;
-		case MOVSBQ:
-			fprintf(fl, "movsbq ");
-			break;
-		case MOVSWL:
-			fprintf(fl, "movswl ");
-			break;
-		case MOVSWQ:
-			fprintf(fl, "movswq ");
-			break;
-		case MOVSLQ:
-			fprintf(fl, "movslq ");
-			break;
-		case MOVZBW:
-			fprintf(fl, "movzbw ");
-			break;
-		case MOVZBL:
-			fprintf(fl, "movzbl ");
-			break;
-		case MOVZBQ:
-			fprintf(fl, "movzbq ");
-			break;
-		case MOVZWL:
-			fprintf(fl, "movzwl ");
-			break;
-		case MOVZWQ:
-			fprintf(fl, "movzwq ");
-			break;
-		//We should never hit this
-		default:
-			printf("Fatal internal compiler error: unreachable path hit\n");
-			exit(1);
-	}
+	//First thing - print the move instruciton
+	print_move_instruction(fl, instruction->instruction_type);
 	
 	//The address mode expression comes firsj
 	print_addressing_mode_expression(fl, instruction, mode);
