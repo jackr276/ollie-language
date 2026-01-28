@@ -1467,6 +1467,21 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->op == STAR
 		&& is_constant_lea_compatible_power_of_2(window->instruction1->op1_const) == TRUE //Must be: 1, 2, 4, 8 for lea
 		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == FALSE){
+		
+		//Extract the instruction for convenience
+		instruction_t* instruction = window->instruction1;
+
+		//Go based on the lea multiplier here
+		switch(instruction->op1_const->constant_value.signed_long_constant){
+			//Special case, we can knock out the whole expression
+			case 0:
+				break;
+
+			//Similar special case here
+			case 1:
+				printf("HERE\n");
+				break;
+		}
 
 		//This is now a lea statement
 		window->instruction1->statement_type = THREE_ADDR_CODE_LEA_STMT;
