@@ -1467,46 +1467,113 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->op == STAR
 		&& is_constant_lea_compatible_power_of_2(window->instruction1->op1_const) == TRUE //Must be: 1, 2, 4, 8 for lea
 		&& variables_equal(window->instruction1->assignee, window->instruction1->op1, FALSE) == FALSE){
-
-		//This is now a lea statement
-		window->instruction1->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-		//The lea type will be scale and index
-		window->instruction1->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
 		
-		//Knock out the op
-		window->instruction1->op = BLANK;
+		//Extract the instruction for convenience
+		instruction_t* instruction = window->instruction1;
 
-		//Copy over from the constant to the lea multiplier
-		window->instruction1->lea_multiplier = window->instruction1->op1_const->constant_value.signed_long_constant;
+		//Go based on the lea multiplier here
+		switch(instruction->op1_const->constant_value.signed_long_constant){
+			//Special case, we can knock out the whole expression. This will just become
+			//an assign const with 0
+			case 0:
+				//This is now an assign const(<value> * 0 = 0)
+				instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-		//We can now null out the constant
-		window->instruction1->op1_const = NULL;
+				//Wipe out anything that isn't the 0
+				instruction->op1 = NULL;
+				instruction->op = BLANK;
+
+				break;
+
+			//Similar special case here, but now we have something that's an assignment statement itself
+			case 1:
+				//This is now a regular assignment (<value> * 1 = <value>)
+				instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+				//Wipe out the op and constant
+				instruction->op1_const = NULL;
+				instruction->op = BLANK;
+
+				break;
+
+			//Otherwise for any other cases, we're just turning this into a lea statement
+			default:
+				//This is now a lea statement
+				instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+				//The lea type will be scale and index
+				instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+				
+				//Knock out the op
+				instruction->op = BLANK;
+
+				//Copy over from the constant to the lea multiplier
+				instruction->lea_multiplier = instruction->op1_const->constant_value.signed_long_constant;
+
+				//We can now null out the constant
+				instruction->op1_const = NULL;
+				
+				break;
+		}
 
 		//This counts as a change
 		changed = TRUE;
 	}
 
+	//This is the same exact procedure with the same exact rules as above
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT
 		&& window->instruction2->op == STAR
 		&& is_constant_lea_compatible_power_of_2(window->instruction2->op1_const) == TRUE //Must be: 1, 2, 4, 8 for lea
 		&& variables_equal_no_ssa(window->instruction2->assignee, window->instruction2->op1, FALSE) == FALSE){
 
-		//This is now a lea statement
-		window->instruction2->statement_type = THREE_ADDR_CODE_LEA_STMT;
+		//Extract the instruction for convenience
+		instruction_t* instruction = window->instruction2;
 
-		//The lea type will be scale and index
-		window->instruction2->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
-		
-		//Knock out the op
-		window->instruction2->op = BLANK;
+		//Go based on the lea multiplier here
+		switch(instruction->op1_const->constant_value.signed_long_constant){
+			//Special case, we can knock out the whole expression. This will just become
+			//an assign const with 0
+			case 0:
+				//This is now an assign const(<value> * 0 = 0)
+				instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-		//Copy over from the constant to the lea multiplier
-		window->instruction2->lea_multiplier = window->instruction2->op1_const->constant_value.signed_long_constant;
+				//Wipe out anything that isn't the 0
+				instruction->op1 = NULL;
+				instruction->op = BLANK;
 
-		//We can now null out the constant
-		window->instruction2->op1_const = NULL;
+				break;
+
+			//Similar special case here, but now we have something that's an assignment statement itself
+			case 1:
+				//This is now a regular assignment (<value> * 1 = <value>)
+				instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+				//Wipe out the op and constant
+				instruction->op1_const = NULL;
+				instruction->op = BLANK;
+
+				break;
+
+			//Otherwise for any other cases, we're just turning this into a lea statement
+			default:
+				//This is now a lea statement
+				instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+
+				//The lea type will be scale and index
+				instruction->lea_statement_type = OIR_LEA_TYPE_INDEX_AND_SCALE;
+				
+				//Knock out the op
+				instruction->op = BLANK;
+
+				//Copy over from the constant to the lea multiplier
+				instruction->lea_multiplier = instruction->op1_const->constant_value.signed_long_constant;
+
+				//We can now null out the constant
+				instruction->op1_const = NULL;
+				
+				break;
+		}
 
 		//This counts as a change
 		changed = TRUE;
@@ -2169,6 +2236,82 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+	/**
+	 * ====================== Combining stores and operations =============
+	 *
+	 * If we have:
+	 *
+	 * t8 <- t7 + 4
+	 * store t8 <- t5
+	 *
+	 * We can instead combine this to be
+	 * store t7[4] <- t5
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
+		//Go based on the first statement
+		switch (window->instruction1->statement_type) {
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+				//If the first one is used less than once and they match
+				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
+					&& window->instruction1->op == PLUS //We can only handle addition
+					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
+
+					//This is now a load with variable offset
+					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
+
+					//Copy these both over
+					window->instruction2->assignee = window->instruction1->assignee;
+					window->instruction2->op1 = window->instruction1->op1;
+
+					//Now scrap instruction 1
+					delete_statement(window->instruction1);
+
+					//Rebuild around instruction 2
+					reconstruct_window(window, window->instruction2);
+
+					//Is a change
+					changed = TRUE;
+				}
+
+				break;
+
+			//Same treatment for if we have a binary operation with const here
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				//If the first one is used less than once and they match
+				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& (window->instruction1->op == PLUS || window->instruction1->op == MINUS) //We can only handle addition/subtraction
+					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
+
+					//This is now a load with contant offset
+					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+
+					//Copy these both over
+					window->instruction2->assignee = window->instruction1->assignee;
+					window->instruction2->offset = window->instruction1->op1_const;
+
+					//If we have a minus, we'll just convert to a negative
+					if(window->instruction1->op == MINUS){
+						window->instruction2->offset->constant_value.signed_long_constant *= -1;
+					}
+
+					//Now scrap instruction 1
+					delete_statement(window->instruction1);
+
+					//Rebuild around instruction 2
+					reconstruct_window(window, window->instruction2);
+
+					//Is a change
+					changed = TRUE;
+				}
+
+				break;
+				
+			//By default do nothing
+			default:
+				break;
+		}
+	}
 
 	/**
 	 * ====================== Combining loads and preceeding binary operations =============
@@ -2247,83 +2390,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
-	/**
-	 * ====================== Combining stores and preceeding binary operations =============
-	 *
-	 * If we have:
-	 *
-	 * t8 <- t7 + 4
-	 * load t8 <- t5
-	 *
-	 * We can instead combine this to be
-	 * store t7[4] <- t5
-	 */
-	if(window->instruction2 != NULL
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
-		//Go based on the first statement
-		switch (window->instruction1->statement_type) {
-			case THREE_ADDR_CODE_BIN_OP_STMT:
-				//If the first one is used less than once and they match
-				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
-					&& window->instruction1->op == PLUS //We can only handle addition
-					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
-
-					//This is now a load with variable offset
-					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
-
-					//Copy these both over
-					window->instruction2->assignee = window->instruction1->assignee;
-					window->instruction2->op1 = window->instruction1->op1;
-
-					//Now scrap instruction 1
-					delete_statement(window->instruction1);
-
-					//Rebuild around instruction 2
-					reconstruct_window(window, window->instruction2);
-
-					//Is a change
-					changed = TRUE;
-				}
-
-				break;
-
-			//Same treatment for if we have a binary operation with const here
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-				//If the first one is used less than once and they match
-				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& (window->instruction1->op == PLUS || window->instruction1->op == MINUS) //We can only handle addition/subtraction
-					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
-
-					//This is now a load with contant offset
-					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
-
-					//Copy these both over
-					window->instruction2->assignee = window->instruction1->assignee;
-					window->instruction2->offset = window->instruction1->op1_const;
-
-					//If we have a minus, we'll just convert to a negative
-					if(window->instruction1->op == MINUS){
-						window->instruction2->offset->constant_value.signed_long_constant *= -1;
-					}
-
-					//Now scrap instruction 1
-					delete_statement(window->instruction1);
-
-					//Rebuild around instruction 2
-					reconstruct_window(window, window->instruction2);
-
-					//Is a change
-					changed = TRUE;
-				}
-
-				break;
-				
-			//By default do nothing
-			default:
-				break;
-		}
-	}
 
 
 	/**
@@ -2874,7 +2940,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 
 	/**
-	 * Optimize loads with variable offsets into one's that have constant offsets
+	 * Optimize loads with variable offsets into one's that have constant offsets. Also
+	 * reduce redundant copy operations if need be
 	 *
 	 * We'll take something like:
 	 * t3 <- 4
@@ -2884,68 +2951,148 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * load t5 <- t4[4]
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
+	if(window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
+		//Extract these for our convenience
+		instruction_t* load_instruction = window->instruction2;
+		instruction_t* preceeding_instruction = window->instruction1;
 
-		//This is now a load with constant offset
-		window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+		//Go based on what the statement type here is
+		switch(preceeding_instruction->statement_type){
+			//If we have the assign const look at it here
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				//These conditions must be met for it to be ok for us to do this
+				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
 
-		//We don't want to have this in here anymore
-		window->instruction2->op2 = NULL;
+					//This is now a load with constant offset
+					load_instruction->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
 
-		//Copy their constants over
-		window->instruction2->offset = window->instruction1->op1_const;
+					//We don't want to have this in here anymore
+					load_instruction->op2 = NULL;
 
-		//We can delete the entire assignment statement
-		delete_statement(window->instruction1);
+					//Copy their constants over
+					load_instruction->offset = preceeding_instruction->op1_const;
 
-		//Reconstruct the window now based on instruction2
-		reconstruct_window(window, window->instruction2);
+					//We can delete the entire assignment statement
+					delete_statement(preceeding_instruction);
 
-		//This counts as change
-		changed = TRUE;
+					//Reconstruct the window now based on instruction2
+					reconstruct_window(window, load_instruction);
+
+					//This counts as change
+					changed = TRUE;
+				}
+
+				break;
+
+			//Handle an assign statement. Unlike before we aren't fundamentally
+			//changing the instruction, just replacing a variable
+			case THREE_ADDR_CODE_ASSN_STMT:
+				//Same conditions must be met for this to work
+				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
+
+					//Copy over the result pre-assignment. The load instruction's 
+					//op2 will be whatever we were assigning over here
+					load_instruction->op2 = preceeding_instruction->op1;
+
+					//The assignment instruction itself is now useless
+					delete_statement(preceeding_instruction);
+
+					//Rebuild the window around the one that we have now
+					reconstruct_window(window, load_instruction);
+
+					//Counts as a change
+					changed = TRUE;
+				}
+
+				break;
+
+			//By default just ignore and do nothing
+			default:
+				break;
+		}
 	}
 
-
 	/**
-	 * Optimize loads with variable offsets into one's that have constant offsets
+	 * Optimize loads with variable offsets into one's that have constant offsets. Also
+	 * reduce redundant copy operations if need be
 	 *
 	 * We'll take something like:
 	 * t3 <- 4
-	 * store t5[t3] <- t4
+	 * store t4[t3] <- t5
 	 *
 	 * And make it:
 	 *
-	 * store t5[4] <- t4
+	 * store t4[4] <- t5
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
+	if(window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET){
+		//Extract these for our convenience
+		instruction_t* store_instruction = window->instruction2;
+		instruction_t* preceeding_instruction = window->instruction1;
 
-		//This is now a store with constant offset
-		window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+		//Only 2 types that we are going to consider - assigning constants and regular
+		//assignments that could potentially benefit from a copy fold
+		switch(preceeding_instruction->statement_type){
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				//These specific conditions must be met for this to be true
+				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->assignee, store_instruction->op1, FALSE) == TRUE){
+				}
 
-		//We don't want to have this in here anymore
-		window->instruction2->op1 = NULL;
+				//This now has a constant offset
+				store_instruction->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
 
-		//Copy their constants over
-		window->instruction2->offset = window->instruction1->op1_const;
+				//The op1 is now irrelevant
+				store_instruction->op1 = NULL;
 
-		//We can delete the entire assignment statement
-		delete_statement(window->instruction1);
+				//The offset just comes from the above constant
+				store_instruction->offset = preceeding_instruction->op1_const;
 
-		//Reconstruct the window now based on instruction2
-		reconstruct_window(window, window->instruction2);
+				//And now that we've extracted all that we can, we delete the preceeding instruction
+				delete_statement(preceeding_instruction);
 
-		//This counts as change
-		changed = TRUE;
+				//Rebuild around the new instruction
+				reconstruct_window(window, store_instruction);
+
+				//This is a change
+				changed = TRUE;
+
+				break;
+
+			//Opportunity to copy fold here
+			case THREE_ADDR_CODE_ASSN_STMT:
+				//These specific conditions must be met for this to be true
+				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->assignee, store_instruction->op1, FALSE) == TRUE){
+				}
+
+				//Unlike above, we do not need to change the statement type. We just need to shuffle around the values
+				//that we already have
+
+				//This becomes our op1
+				store_instruction->op1 = preceeding_instruction->op1;
+
+				//THe preceeding instruction is now irrelevant, so delete it
+				delete_statement(preceeding_instruction);
+
+				//Rebuild the entire window around the only instruction left
+				reconstruct_window(window, preceeding_instruction);
+
+				//This is a change
+				changed = TRUE;
+
+				break;
+
+			//By default don't do anything
+			default:
+				break;
+		}
 	}
-
 
 	/**
 	 * Optimize constant offset loads with a 0 offset into regular loads
