@@ -3063,12 +3063,28 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				break;
 
+			//Opportunity to copy fold here
 			case THREE_ADDR_CODE_ASSN_STMT:
 				//These specific conditions must be met for this to be true
 				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
 					&& preceeding_instruction->assignee->use_count == 1
 					&& variables_equal(preceeding_instruction->assignee, store_instruction->op1, FALSE) == TRUE){
 				}
+
+				//Unlike above, we do not need to change the statement type. We just need to shuffle around the values
+				//that we already have
+
+				//This becomes our op1
+				store_instruction->op1 = preceeding_instruction->op1;
+
+				//THe preceeding instruction is now irrelevant, so delete it
+				delete_statement(preceeding_instruction);
+
+				//Rebuild the entire window around the only instruction left
+				reconstruct_window(window, preceeding_instruction);
+
+				//This is a change
+				changed = TRUE;
 
 				break;
 
