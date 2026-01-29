@@ -3668,6 +3668,32 @@ static inline instruction_t* emit_setne_instruction(three_addr_var_t* destinatio
 
 
 /**
+ * Emit a setnp instruction
+ *
+ * The setne instruction is used on a byte. We have a "relies_on" field to tell the instruction
+ * scheduler what this setne relies on in the future, but this op1 is never actually displayed/printed,
+ * it is just for tracking
+ */
+static inline instruction_t* emit_setnp_instruction(three_addr_var_t* destination, three_addr_var_t* relies_on){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//And we'll set the class
+	instruction->instruction_type = SETNP;
+
+	//We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
+	//but it is completely ignored at the selector level
+	instruction->op1 = relies_on;
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
  * Emit an ANDx instruction
  */
 static inline instruction_t* emit_and_instruction(three_addr_var_t* destination, three_addr_var_t* source){
