@@ -2316,7 +2316,84 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 
 	/**
-	 * ====================== Combining stores and preceeding binary operations =============
+	 * ====================== Combining stores and operations =============
+	 *
+	 * If we have:
+	 *
+	 * t8 <- t7 + 4
+	 * store t8 <- t5
+	 *
+	 * We can instead combine this to be
+	 * store t7[4] <- t5
+	 */
+	if(window->instruction2 != NULL
+		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
+		//Go based on the first statement
+		switch (window->instruction1->statement_type) {
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+				//If the first one is used less than once and they match
+				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP 
+					&& window->instruction1->op == PLUS //We can only handle addition
+					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
+
+					//This is now a load with variable offset
+					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET;
+
+					//Copy these both over
+					window->instruction2->assignee = window->instruction1->assignee;
+					window->instruction2->op1 = window->instruction1->op1;
+
+					//Now scrap instruction 1
+					delete_statement(window->instruction1);
+
+					//Rebuild around instruction 2
+					reconstruct_window(window, window->instruction2);
+
+					//Is a change
+					changed = TRUE;
+				}
+
+				break;
+
+			//Same treatment for if we have a binary operation with const here
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				//If the first one is used less than once and they match
+				if(window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& (window->instruction1->op == PLUS || window->instruction1->op == MINUS) //We can only handle addition/subtraction
+					&& variables_equal(window->instruction1->assignee, window->instruction2->assignee, FALSE) == TRUE){
+
+					//This is now a load with contant offset
+					window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+
+					//Copy these both over
+					window->instruction2->assignee = window->instruction1->assignee;
+					window->instruction2->offset = window->instruction1->op1_const;
+
+					//If we have a minus, we'll just convert to a negative
+					if(window->instruction1->op == MINUS){
+						window->instruction2->offset->constant_value.signed_long_constant *= -1;
+					}
+
+					//Now scrap instruction 1
+					delete_statement(window->instruction1);
+
+					//Rebuild around instruction 2
+					reconstruct_window(window, window->instruction2);
+
+					//Is a change
+					changed = TRUE;
+				}
+
+				break;
+				
+			//By default do nothing
+			default:
+				break;
+		}
+	}
+
+	/**
+	 * ====================== Combining loads and operations =============
 	 *
 	 * If we have:
 	 *
@@ -2324,7 +2401,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * load t8 <- t5
 	 *
 	 * We can instead combine this to be
-	 * store t7[4] <- t5
+	 * load t7[4] <- t5
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_STATEMENT){
