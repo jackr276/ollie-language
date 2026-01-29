@@ -2959,10 +2959,28 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		switch(preceeding_instruction->statement_type){
 			//If we have the assign const look at it here
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				//These conditions must be met for it to be ok for us to do this
 				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
 					&& preceeding_instruction->assignee->use_count == 1
 					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
 
+					//This is now a load with constant offset
+					window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+
+					//We don't want to have this in here anymore
+					window->instruction2->op2 = NULL;
+
+					//Copy their constants over
+					window->instruction2->offset = window->instruction1->op1_const;
+
+					//We can delete the entire assignment statement
+					delete_statement(window->instruction1);
+
+					//Reconstruct the window now based on instruction2
+					reconstruct_window(window, window->instruction2);
+
+					//This counts as change
+					changed = TRUE;
 				}
 
 				break;
@@ -2981,32 +2999,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 	}
-
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op2, FALSE) == TRUE){
-
-		//This is now a load with constant offset
-		window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
-
-		//We don't want to have this in here anymore
-		window->instruction2->op2 = NULL;
-
-		//Copy their constants over
-		window->instruction2->offset = window->instruction1->op1_const;
-
-		//We can delete the entire assignment statement
-		delete_statement(window->instruction1);
-
-		//Reconstruct the window now based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//This counts as change
-		changed = TRUE;
-	}
-
 
 	/**
 	 * Optimize loads with variable offsets into one's that have constant offsets
