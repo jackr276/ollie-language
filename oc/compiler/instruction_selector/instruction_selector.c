@@ -3016,7 +3016,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
 	/**
 	 * Optimize loads with variable offsets into one's that have constant offsets. Also
 	 * reduce redundant copy operations if need be
@@ -3038,9 +3037,39 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//assignments that could potentially benefit from a copy fold
 		switch(preceeding_instruction->statement_type){
 			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				//These specific conditions must be met for this to be true
+				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->assignee, store_instruction->op1, FALSE) == TRUE){
+				}
+
+				//This now has a constant offset
+				store_instruction->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
+
+				//The op1 is now irrelevant
+				store_instruction->op1 = NULL;
+
+				//The offset just comes from the above constant
+				store_instruction->offset = preceeding_instruction->op1_const;
+
+				//And now that we've extracted all that we can, we delete the preceeding instruction
+				delete_statement(preceeding_instruction);
+
+				//Rebuild around the new instruction
+				reconstruct_window(window, store_instruction);
+
+				//This is a change
+				changed = TRUE;
+
 				break;
 
 			case THREE_ADDR_CODE_ASSN_STMT:
+				//These specific conditions must be met for this to be true
+				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->assignee, store_instruction->op1, FALSE) == TRUE){
+				}
+
 				break;
 
 			//By default don't do anything
@@ -3048,45 +3077,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 	}
-
-	/**
-	 * Optimize loads with variable offsets into one's that have constant offsets
-	 *
-	 * We'll take something like:
-	 * t3 <- 4
-	 * store t5[t3] <- t4
-	 *
-	 * And make it:
-	 *
-	 * store t5[4] <- t4
-	 *
-	 * TODO REMOVEME
-	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
-		&& window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET 
-		&& variables_equal(window->instruction1->assignee, window->instruction2->op1, FALSE) == TRUE){
-
-		//This is now a store with constant offset
-		window->instruction2->statement_type = THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET;
-
-		//We don't want to have this in here anymore
-		window->instruction2->op1 = NULL;
-
-		//Copy their constants over
-		window->instruction2->offset = window->instruction1->op1_const;
-
-		//We can delete the entire assignment statement
-		delete_statement(window->instruction1);
-
-		//Reconstruct the window now based on instruction2
-		reconstruct_window(window, window->instruction2);
-
-		//This counts as change
-		changed = TRUE;
-	}
-
 
 	/**
 	 * Optimize constant offset loads with a 0 offset into regular loads
