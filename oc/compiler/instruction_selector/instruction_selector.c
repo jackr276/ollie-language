@@ -2993,8 +2993,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					&& preceeding_instruction->assignee->use_count == 1
 					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
 
-					//Copy over the result pre-assignment
-					preceeding_instruction->op2 = load_instruction->op1;
+					//Copy over the result pre-assignment. The load instruction's 
+					//op2 will be whatever we were assigning over here
+					load_instruction->op2 = preceeding_instruction->op1;
 
 					//The assignment instruction itself is now useless
 					delete_statement(preceeding_instruction);
