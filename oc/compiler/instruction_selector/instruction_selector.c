@@ -2940,7 +2940,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 
 	/**
-	 * Optimize loads with variable offsets into one's that have constant offsets
+	 * Optimize loads with variable offsets into one's that have constant offsets. Also
+	 * reduce redundant copy operations if need be
 	 *
 	 * We'll take something like:
 	 * t3 <- 4
@@ -3015,6 +3016,39 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+
+	/**
+	 * Optimize loads with variable offsets into one's that have constant offsets. Also
+	 * reduce redundant copy operations if need be
+	 *
+	 * We'll take something like:
+	 * t3 <- 4
+	 * store t4[t3] <- t5
+	 *
+	 * And make it:
+	 *
+	 * store t4[4] <- t5
+	 */
+	if(window->instruction2->statement_type == THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET){
+		//Extract these for our convenience
+		instruction_t* store_instruction = window->instruction2;
+		instruction_t* preceeding_instruction = window->instruction1;
+
+		//Only 2 types that we are going to consider - assigning constants and regular
+		//assignments that could potentially benefit from a copy fold
+		switch(preceeding_instruction->statement_type){
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				break;
+
+			case THREE_ADDR_CODE_ASSN_STMT:
+				break;
+
+			//By default don't do anything
+			default:
+				break;
+		}
+	}
+
 	/**
 	 * Optimize loads with variable offsets into one's that have constant offsets
 	 *
@@ -3025,6 +3059,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * And make it:
 	 *
 	 * store t5[4] <- t4
+	 *
+	 * TODO REMOVEME
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
