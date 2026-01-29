@@ -2950,6 +2950,38 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * load t5 <- t4[4]
 	 */
+	if(window->instruction2->statement_type == THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET){
+		//Extract these for our convenience
+		instruction_t* load_instruction = window->instruction2;
+		instruction_t* preceeding_instruction = window->instruction1;
+
+		//Go based on what the statement type here is
+		switch(preceeding_instruction->statement_type){
+			//If we have the assign const look at it here
+			case THREE_ADDR_CODE_ASSN_CONST_STMT:
+				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
+
+				}
+
+				break;
+
+			case THREE_ADDR_CODE_ASSN_STMT:
+				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& preceeding_instruction->assignee->use_count == 1
+					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
+
+				}
+
+				break;
+
+			//By default just ignore and do nothing
+			default:
+				break;
+		}
+	}
+
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& window->instruction1->assignee->use_count == 1 //Use count is just for here
