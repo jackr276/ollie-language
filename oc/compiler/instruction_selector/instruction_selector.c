@@ -5923,7 +5923,9 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	 * We are inside of a FP logical not:
 	 *
 	 * Ollie behavior: !(NaN) == 0, NaN is not 0. Because of this, we need to account for the PF
-	 * inside of the float logical not in both cases
+	 * inside of the float logical not in both cases.
+	 *
+	 * Remember: parity flag(P) is only set if at least one operand is NaN, infinity, -infinity
 	 *
 	 * No branch:
 	 * pxor	%xmm0, %xmm0      <--- wipe out a register(set to 0)
@@ -5932,6 +5934,16 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	 * movzbl	%al, %eax 	  <--- Move the value(either one or 0) into the result
 	 * movl	$0, %edx		  <--- Grab a 0 param
 	 * cmovne	%edx, %eax    <--- Move 0 into the result if the above was not equal: note no prior instructions set CC's(!(non_zero) = 0)
+	 *
+	 * Detailed explanation: 
+	 * First remember:
+	 * 	!0 = 1
+	 * 	!(non-zero) = 0
+	 *
+	 * We first grab a register and zero it out. Following that, we compare our desired value with said value. If the parity
+	 * flag is not set(remember, parity flag *is* set when we have at least one NaN), then we will move 1 into the result variable. This is because us not seeing
+	 * the parity flag set is the first step towards a confirmed 0 value so we will precondition the result register using a 1. Following that, we will move 0 into
+	 * the result register *if* we have a not-equal result(ZF = 0). Us having a NE means that our value is *not* zero, so we want a result of 0 in the final output
 	 *
 	 * With branch:
 	 *
