@@ -372,11 +372,6 @@ u_int8_t is_load_operation(instruction_t* statement);
 u_int8_t is_load_instruction(instruction_t* instruction);
 
 /**
- * Helper function to determine if an operator is can be constant folded
- */
-u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op);
-
-/**
  * Helper function to determine if an instruction is a binary operation
  */
 u_int8_t is_instruction_binary_operation(instruction_t* instruction);

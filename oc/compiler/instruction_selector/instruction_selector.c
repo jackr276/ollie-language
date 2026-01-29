@@ -117,7 +117,7 @@ static void print_instruction_window(instruction_window_t* window){
  * the very next block. If so, we'll return what block the jump goes to.
  * If not, we'll return null.
  */
-static basic_block_t* does_block_end_in_jump(basic_block_t* block){
+static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 	//If it's null then leave
 	if(block->exit_statement == NULL){
 		return NULL;
@@ -137,6 +137,28 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 		//By default no
 		default:
 			return NULL;
+	}
+}
+
+
+/**
+ * Helper function to determine if an operator is can be constant folded
+ */
+static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op){
+	switch(op){
+		case G_THAN:
+		case L_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+		//Note that this is valid only for logical and. Logical or
+		//requires the use of the "orX" instruction, which does modify
+		//its assignee unlike logical and
+		case DOUBLE_AND:
+			return TRUE;
+		default:
+			return FALSE;
 	}
 }
 
@@ -5742,15 +5764,46 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 
 
 /**
- * Emit a conditional move if not equals instruction. Note that these instructions do not support 
- * immediate values, so we only ever have a source variable here
+ * Emit a conditional move instruction based on the op we're given. This is done in order to increase versatility of this
+ * helper function and reduce the need for extra code
+ *
+ * The op's are one-to-one mappings for relational ops only. We're kind of hijacking the token system here but it will work
  */
-static inline instruction_t* emit_cmovne_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source){
+static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op){
 	//First we allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
-	//This is a CMOVNE instruction
-	instruction->instruction_type = CMOVNE;
+	//Go based on what op we've got. This is not going to support everything and it
+	//really doesn't need to
+	switch(op){
+		case NOT_EQUALS:
+			instruction->instruction_type = CMOVNE;
+			break;
+
+		case EQUALS:
+			instruction->instruction_type = CMOVE;
+			break;
+			
+		case G_THAN:
+			instruction->instruction_type = CMOVG;
+			break;
+
+		case G_THAN_OR_EQ:
+			instruction->instruction_type = CMOVGE;
+			break;
+
+		case L_THAN:
+			instruction->instruction_type = CMOVL;
+			break;
+
+		case L_THAN_OR_EQ:
+			instruction->instruction_type = CMOVLE;
+			break;
+
+		default:
+			printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
+			exit(1);
+	}
 
 	//Assign these two over
 	instruction->source_register = source;

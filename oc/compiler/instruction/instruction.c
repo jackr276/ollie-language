@@ -292,28 +292,6 @@ u_int8_t is_load_instruction(instruction_t* instruction){
 
 
 /**
- * Helper function to determine if an operator is can be constant folded
- */
-u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op){
-	switch(op){
-		case G_THAN:
-		case L_THAN:
-		case G_THAN_OR_EQ:
-		case L_THAN_OR_EQ:
-		case DOUBLE_EQUALS:
-		case NOT_EQUALS:
-		//Note that this is valid only for logical and. Logical or
-		//requires the use of the "orX" instruction, which does modify
-		//its assignee unlike logical and
-		case DOUBLE_AND:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Helper function to determine if an instruction is a binary operation
  */
 u_int8_t is_instruction_binary_operation(instruction_t* instruction){
