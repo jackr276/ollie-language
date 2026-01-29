@@ -5896,12 +5896,13 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	/**
 	 * We are inside of a FP logical not:
 	 *
-	 * TODO - review & thoroughly understand
+	 * Ollie behavior: !(NaN) == 0, NaN is not 0. Because of this, we need to account for the PF
+	 * inside of the float logical not in both cases
 	 *
 	 * No branch:
 	 * pxor	%xmm0, %xmm0      <--- wipe out a register(set to 0)
 	 * ucomiss	%xmm0, %xmm1  <--- compare our guy with 0
-	 * setnp	%al			  <--- set if parity flag is 0 
+	 * setnp	%al			  <--- set if parity flag is 0(We will get 1 if PF is 0)
 	 * movzbl	%al, %eax 	  <--- Move the value(either one or 0) into the result
 	 * movl	$0, %edx		  <--- Grab a 0 param
 	 * cmovne	%edx, %eax    <--- Move 0 into the result if the above was not equal: note no prior instructions set CC's(!(non_zero) = 0)
@@ -5923,15 +5924,28 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 		//Insert this before the given instruciton
 		insert_instruction_before_given(pxor_instruction, logical_not);
 
+		//Now no matter what we also are going to need an unordered comparison instruction
+		instruction_t* unordered_comparison = emit_float_comparison_instruction(comparing_against, logical_not->op1, TRUE);
+
+		//Insert this in right before the logical not
+		insert_instruction_before_given(unordered_comparison, logical_not);
+
+		//We can now delete the logical not entirely
+		delete_statement(logical_not);
+
 		//Different dependencies based on whether or not we are being used in a branch
 		if(used_by_branch_only == FALSE){
+			printf("TODO NOT YET SUPPORTED\n");
+			exit(0);
 
+		//No new instructions if it actually is a branch, but we still need some bookkeeping
 		} else {
+			//Set this just for bookkeeping
+			unordered_comparison->assignee = logical_not->assignee;
 
+			//Rebuild around the unordered comparison in this case
+			reconstruct_window(window, unordered_comparison);
 		}
-
-		printf("TODO NOT YET SUPPORTED\n");
-		exit(0);
 	}
 }
 
