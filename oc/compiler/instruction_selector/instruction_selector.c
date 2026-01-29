@@ -2965,19 +2965,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
 
 					//This is now a load with constant offset
-					window->instruction2->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
+					load_instruction->statement_type = THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET;
 
 					//We don't want to have this in here anymore
-					window->instruction2->op2 = NULL;
+					load_instruction->op2 = NULL;
 
 					//Copy their constants over
-					window->instruction2->offset = window->instruction1->op1_const;
+					load_instruction->offset = preceeding_instruction->op1_const;
 
 					//We can delete the entire assignment statement
-					delete_statement(window->instruction1);
+					delete_statement(preceeding_instruction);
 
 					//Reconstruct the window now based on instruction2
-					reconstruct_window(window, window->instruction2);
+					reconstruct_window(window, load_instruction);
 
 					//This counts as change
 					changed = TRUE;
@@ -2985,11 +2985,25 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				break;
 
+			//Handle an assign statement. Unlike before we aren't fundamentally
+			//changing the instruction, just replacing a variable
 			case THREE_ADDR_CODE_ASSN_STMT:
+				//Same conditions must be met for this to work
 				if(preceeding_instruction->assignee->variable_type == VARIABLE_TYPE_TEMP
 					&& preceeding_instruction->assignee->use_count == 1
 					&& variables_equal(preceeding_instruction->assignee, load_instruction->op2, FALSE) == TRUE){
 
+					//Copy over the result pre-assignment
+					preceeding_instruction->op2 = load_instruction->op1;
+
+					//The assignment instruction itself is now useless
+					delete_statement(preceeding_instruction);
+
+					//Rebuild the window around the one that we have now
+					reconstruct_window(window, load_instruction);
+
+					//Counts as a change
+					changed = TRUE;
 				}
 
 				break;
