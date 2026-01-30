@@ -21,6 +21,7 @@ static generic_type_t* u64;
 static generic_type_t* i64;
 static generic_type_t* u32;
 static generic_type_t* i32;
+static generic_type_t* u16;
 static generic_type_t* u8;
 
 //A holder for the stack pointer
@@ -6067,6 +6068,9 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 
 		//Different dependencies based on whether or not we are being used in a branch
 		if(used_by_branch_only == FALSE){
+			//We need to know this type size for later
+			generic_type_t* destination_type = logical_not->assignee->type;
+
 			//This is purely for bookkeeping
 			unordered_comparison->assignee = emit_temp_var(u8);
 
@@ -6078,6 +6082,8 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 
 			//Insert this right after the unordered comparison
 			insert_instruction_after_given(setnp_instruction, unordered_comparison);
+
+			//TODO SIZE DIFFERENCE
 
 			//Now let's have a 0 on hand. We need a 0 because unfortunately the conditional move operations
 			//do not support immediate values on x86
@@ -6099,8 +6105,21 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//Now add this in after the setnp instruction
 			insert_instruction_after_given(first_move_to_dest, zero_assignment);
 
+			//The original CMOVNE destination 
+			three_addr_var_t* cmovne_destination = logical_not->assignee;
+
+			//Do we need to emit a special kind of assignee here that is 16 bits?
+			//If so, we will need to do that now by determining if th
+			if(destination_type->type_size <= 8){
+				//Emit a carbon copy
+				cmovne_destination = emit_var_copy(cmovne_destination);
+
+				//Make the size a u16
+				cmovne_destination->type = u16;
+			}
+
 			//Now we need the final conditional move
-			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(logical_not->assignee, zero_assignment->destination_register, NOT_EQUALS);
+			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->destination_register, NOT_EQUALS);
 
 			//And finally add this in after the zero assignment
 			insert_instruction_after_given(conditional_move_to_dest, first_move_to_dest);
@@ -8142,6 +8161,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	i64 = lookup_type_name_only(cfg->type_symtab, "i64", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(cfg->type_symtab, "u32", NOT_MUTABLE)->type;
+	u8 = lookup_type_name_only(cfg->type_symtab, "u16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
 	//Stash the stack pointer & instruction pointer
