@@ -5454,6 +5454,9 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 	//Leave it in here
 	stmt->op1 = op1;
 
+	//Flag that this does have an operator, even though we aren't strictly using it
+	stmt->op = L_NOT;
+
 	//Give the stmt back
 	return stmt;
 }
