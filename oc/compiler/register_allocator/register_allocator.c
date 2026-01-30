@@ -232,7 +232,7 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
  *
  * NOTE that this function does *not* add anything to the live range
  */
-static live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
+static inline live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//Lookup the live range that is associated with this
 	live_range_t* live_range = find_live_range_with_variable(live_ranges, variable);
 

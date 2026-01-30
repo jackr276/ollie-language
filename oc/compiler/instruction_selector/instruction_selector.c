@@ -7562,9 +7562,6 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		//Get the appopriate set statement here
 		instruction->instruction_type = select_appropriate_test_statement(instruction->op1->variable_size);
 
-		//Store the symbolic destination register
-		instruction->destination_register = instruction->assignee;
-
 		//Op1 is both sourced because we are testing against ourselves
 		instruction->source_register = instruction->op1;
 		instruction->source_register2 = instruction->op1;
