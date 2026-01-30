@@ -6038,6 +6038,19 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//Insert this right after the unordered comparison
 			insert_instruction_after_given(setnp_instruction, unordered_comparison);
 
+			//Once we've done the setnp, we need to move the result into our destination variable
+			instruction_t* first_move_to_dest = emit_move_instruction(logical_not->assignee, setnp_instruction->assignee);
+
+			//Now add this in after the setnp instruction
+			insert_instruction_after_given(first_move_to_dest, setnp_instruction);
+
+			//Now let's have a 0 on hand. We need a 0 because unfortunately the conditional move operations
+			//do not support immediate values on x86
+			instruction_t* zero_assignment = emit_constant_move_instruction(emit_temp_var(logical_not->assignee->type), emit_direct_integer_or_char_constant(0, logical_not->assignee->type));
+
+			//Throw this in right after the first move
+			insert_instruction_after_given(zero_assignment, first_move_to_dest);
+
 
 			printf("TODO NOT YET SUPPORTED\n");
 			exit(0);
