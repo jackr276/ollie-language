@@ -4305,6 +4305,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case SETA:
 		case SETBE:
 		case SETB:
+		case SETNP:
+		case SETP:
 			print_set_instruction(fl, instruction, mode);
 			break;
 		

@@ -6039,7 +6039,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			insert_instruction_after_given(setnp_instruction, unordered_comparison);
 
 			//Once we've done the setnp, we need to move the result into our destination variable
-			instruction_t* first_move_to_dest = emit_move_instruction(logical_not->assignee, setnp_instruction->assignee);
+			instruction_t* first_move_to_dest = emit_move_instruction(logical_not->assignee, set_variable);
 
 			//Now add this in after the setnp instruction
 			insert_instruction_after_given(first_move_to_dest, setnp_instruction);
@@ -6052,7 +6052,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			insert_instruction_after_given(zero_assignment, first_move_to_dest);
 
 			//Now we need the final conditional move
-			instruction_t* conditional_move = emit_cmovX_instruction(logical_not->assignee, zero_assignment->assignee, NOT_EQUALS);
+			instruction_t* conditional_move = emit_cmovX_instruction(logical_not->assignee, zero_assignment->destination_register, NOT_EQUALS);
 
 			//And finally add this in after the zero assignment
 			insert_instruction_after_given(conditional_move, zero_assignment);
