@@ -6026,6 +6026,19 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 
 		//Different dependencies based on whether or not we are being used in a branch
 		if(used_by_branch_only == FALSE){
+			//This is purely for bookkeeping
+			unordered_comparison->assignee = emit_temp_var(u8);
+
+			//Emit a temp var that is a u8. We need this to "set" in here
+			three_addr_var_t* set_variable = emit_temp_var(u8);
+
+			//Now let's add in the setnp instruction
+			instruction_t* setnp_instruction = emit_setnp_instruction(set_variable, unordered_comparison->assignee);
+
+			//Insert this right after the unordered comparison
+			insert_instruction_after_given(setnp_instruction, unordered_comparison);
+
+
 			printf("TODO NOT YET SUPPORTED\n");
 			exit(0);
 
