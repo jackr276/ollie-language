@@ -303,6 +303,9 @@ struct instruction_t{
 	//Does this branch rely on a floating point comparison? This could affect
 	//our selection logic later on
 	u_int8_t relies_on_fp_comparison;
+	//Do we need to stop this value from being coalesced. This is only used
+	//very specifically in the logical not handler currently
+	u_int8_t cannot_be_combined;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?

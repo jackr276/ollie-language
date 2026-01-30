@@ -6048,6 +6048,13 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//Now that we've got 0 primed, we can do our set variable move to the destination
 			instruction_t* first_move_to_dest = emit_move_instruction(logical_not->assignee, set_variable);
 
+			/**
+			 * VERY IMPORTANT - odds are the coalescer would want to remove this first move to dest because
+			 * the source and destination do not techincally interfere with one another. We need to stop
+			 * this be flagging specifically that it cannot be coalesced at all
+			 */
+			first_move_to_dest->cannot_be_combined = TRUE;
+
 			//Now add this in after the setnp instruction
 			insert_instruction_after_given(first_move_to_dest, zero_assignment);
 
