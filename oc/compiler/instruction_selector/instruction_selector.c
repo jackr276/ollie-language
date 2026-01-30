@@ -6051,9 +6051,14 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//Throw this in right after the first move
 			insert_instruction_after_given(zero_assignment, first_move_to_dest);
 
+			//Now we need the final conditional move
+			instruction_t* conditional_move = emit_cmovX_instruction(logical_not->assignee, zero_assignment->assignee, NOT_EQUALS);
 
-			printf("TODO NOT YET SUPPORTED\n");
-			exit(0);
+			//And finally add this in after the zero assignment
+			insert_instruction_after_given(conditional_move, zero_assignment);
+
+			//Rebuild the entire window around the conditional move
+			reconstruct_window(window, conditional_move);
 
 		//No new instructions if it actually is a branch, but we still need some bookkeeping
 		} else {
