@@ -5984,8 +5984,8 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	 * pxor	%xmm0, %xmm0      <--- wipe out a register(set to 0)
 	 * ucomiss	%xmm0, %xmm1  <--- compare our guy with 0
 	 * setnp	%al			  <--- set if parity flag is 0(We will get 1 if PF is 0)
-	 * movzbl	%al, %eax 	  <--- Move the value(either one or 0) into the result
 	 * movl	$0, %edx		  <--- Grab a 0 param
+	 * movzbl	%al, %eax 	  <--- Move the set value(either one or 0) into the result
 	 * cmovne	%edx, %eax    <--- Move 0 into the result if the above was not equal: note no prior instructions set CC's(!(non_zero) = 0)
 	 *
 	 * Detailed explanation: 
@@ -6038,27 +6038,27 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//Insert this right after the unordered comparison
 			insert_instruction_after_given(setnp_instruction, unordered_comparison);
 
-			//Once we've done the setnp, we need to move the result into our destination variable
-			instruction_t* first_move_to_dest = emit_move_instruction(logical_not->assignee, set_variable);
-
-			//Now add this in after the setnp instruction
-			insert_instruction_after_given(first_move_to_dest, setnp_instruction);
-
 			//Now let's have a 0 on hand. We need a 0 because unfortunately the conditional move operations
 			//do not support immediate values on x86
 			instruction_t* zero_assignment = emit_constant_move_instruction(emit_temp_var(logical_not->assignee->type), emit_direct_integer_or_char_constant(0, logical_not->assignee->type));
 
-			//Throw this in right after the first move
-			insert_instruction_after_given(zero_assignment, first_move_to_dest);
+			//Throw this in right after the set
+			insert_instruction_after_given(zero_assignment, setnp_instruction);
+
+			//Now that we've got 0 primed, we can do our set variable move to the destination
+			instruction_t* first_move_to_dest = emit_move_instruction(logical_not->assignee, set_variable);
+
+			//Now add this in after the setnp instruction
+			insert_instruction_after_given(first_move_to_dest, zero_assignment);
 
 			//Now we need the final conditional move
-			instruction_t* conditional_move = emit_cmovX_instruction(logical_not->assignee, zero_assignment->destination_register, NOT_EQUALS);
+			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(logical_not->assignee, zero_assignment->destination_register, NOT_EQUALS);
 
 			//And finally add this in after the zero assignment
-			insert_instruction_after_given(conditional_move, zero_assignment);
+			insert_instruction_after_given(conditional_move_to_dest, first_move_to_dest);
 
 			//Rebuild the entire window around the conditional move
-			reconstruct_window(window, conditional_move);
+			reconstruct_window(window, conditional_move_to_dest);
 
 		//No new instructions if it actually is a branch, but we still need some bookkeeping
 		} else {
