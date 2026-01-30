@@ -675,11 +675,6 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee);
 instruction_t* emit_dec_instruction(three_addr_var_t* decrementee);
 
 /**
- * Directly emit a test instruction - bypassing three_addr_code entirely - going right to a selected instruction
- */
-instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2);
-
-/**
  * Emit a negation(negX) statement
  */
 instruction_t* emit_neg_instruction(three_addr_var_t* assignee, three_addr_var_t* negatee);
