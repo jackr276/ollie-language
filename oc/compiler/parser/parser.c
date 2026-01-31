@@ -5099,9 +5099,9 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Once we've gotten past this point, we're safe to allocate this type. Function
-	//pointers are always private
-	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, parser_line_num, MUTABLE);
-	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, parser_line_num, NOT_MUTABLE);
+	//pointers are always private and never inlined
+	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, MUTABLE);
+	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, NOT_MUTABLE);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -10916,12 +10916,21 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 		//Let's now check - if the is_public's don't match here, we can fail already
 		if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == FALSE){
-			sprintf(info, "Function %s was predeclared as public, but defined as private", function_record->func_name.string);
+			sprintf(info, "Function \"%s\" was predeclared as public, but defined as private", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 
 		//Other case, still a failure
 		} else if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == TRUE){
-			sprintf(info, "Function %s was predeclared as private, but defined as public", function_record->func_name.string);
+			sprintf(info, "Function \"%s\" was predeclared as private, but defined as public", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		if(function_record->inlined == TRUE && is_inlined == FALSE){
+			sprintf(info, "Function \"%s\" was predeclared as inline. Please add the inline keyword to the declaration", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+
+		} else if(function_record->inlined == FALSE && is_inlined == TRUE){
+			sprintf(info, "Function \"%s\" was not predeclared as inline. Please add the inline keyword to the forward declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 	}

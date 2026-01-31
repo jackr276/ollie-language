@@ -170,6 +170,8 @@ struct function_type_t{
 	u_int8_t returns_void;
 	//Is this function public? By default it is not
 	u_int8_t is_public;
+	//Is this function inlined:
+	u_int8_t is_inlined;
 };
 
 
@@ -348,7 +350,7 @@ generic_type_t* create_aliased_type(char* type_name, generic_type_t* aliased_typ
 /**
  * Dynamically allocate and create a function pointer type
  */
-generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int32_t line_number, mutability_type_t mutability);
+generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number, mutability_type_t mutability);
 
 /**
  * Add a function's parameter in
