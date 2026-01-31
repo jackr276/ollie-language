@@ -18,6 +18,7 @@ PREPROC_PATH = ./oc/compiler/preprocessor
 POSTPROCESSOR_PATH = ./oc/compiler/postprocessor
 DEPENDENCY_TREE_PATH = ./oc/compiler/dependency_tree
 DYNAMIC_ARRAY_PATH = ./oc/compiler/utils/dynamic_array
+DYNAMIC_SET_PATH = ./oc/compiler/utils/dynamic_set
 DYNAMIC_STRING_PATH = ./oc/compiler/utils/dynamic_string
 INSTRUCTION_PATH = ./oc/compiler/instruction
 INSTRUCTION_SELECTOR_PATH = ./oc/compiler/instruction_selector
@@ -93,6 +94,12 @@ dynamic_array.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
 
 dynamic_arrayd.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
 	$(CC) $(CFLAGS) -g $(DYNAMIC_ARRAY_PATH)/dynamic_array.c -o $(OUT_LOCAL)/dynamic_arrayd.o
+
+dynamic_set.o: $(DYNAMIC_SET_PATH)/dynamic_set.c
+	$(CC) $(CFLAGS) $(DYNAMIC_SET_PATH)/dynamic_set.c -o $(OUT_LOCAL)/dynamic_set.o
+
+dynamic_setd.o: $(DYNAMIC_SET_PATH)/dynamic_set.c
+	$(CC) $(CFLAGS) -g $(DYNAMIC_SET_PATH)/dynamic_set.c -o $(OUT_LOCAL)/dynamic_setd.o
 
 lexstack.o: $(STACK_PATH)/lexstack.c
 	$(CC) $(CFLAGS) $(STACK_PATH)/lexstack.c -o $(OUT_LOCAL)/lexstack.o
@@ -232,6 +239,12 @@ dynamic_array_test.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 dynamic_array_testd.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATh)/dynamic_array_test.c -o $(OUT_LOCAL)/dynamic_array_testd.o
 
+dynamic_set_test.o: $(TEST_SUITE_PATH)/dynamic_set_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_set_test.c -o $(OUT_LOCAL)/dynamic_set_test.o
+
+dynamic_set_testd.o: $(TEST_SUITE_PATH)/dynamic_set_test.c
+	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATh)/dynamic_set_test.c -o $(OUT_LOCAL)/dynamic_set_testd.o
+
 priority_queue_test.o: $(TEST_SUITE_PATH)/priority_queue_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/priority_queue_test.c -o $(OUT_LOCAL)/priority_queue_test.o
 
@@ -255,6 +268,12 @@ dynamic_array_test: dynamic_array_test.o dynamic_array.o
 
 dynamic_array_testd: dynamic_array_testd.o dynamic_arrayd.o
 	$(CC) -o $(OUT_LOCAL)/dynamic_array_testd $(OUT_LOCAL)/dynamic_array_testd.o $(OUT_LOCAL)/dynamic_arrayd.o
+
+dynamic_set_test: dynamic_set_test.o dynamic_set.o
+	$(CC) -o $(OUT_LOCAL)/dynamic_set_test $(OUT_LOCAL)/dynamic_set_test.o $(OUT_LOCAL)/dynamic_set.o
+
+dynamic_set_testd: dynamic_set_testd.o dynamic_setd.o
+	$(CC) -o $(OUT_LOCAL)/dynamic_set_testd $(OUT_LOCAL)/dynamic_set_testd.o $(OUT_LOCAL)/dynamic_setd.o
 
 parser_test.o: $(TEST_SUITE_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/parser_test.c -o $(OUT_LOCAL)/parser_test.o
@@ -442,6 +461,9 @@ memory_check: oc_debug memory_checker
 
 array_test: dynamic_array_test
 	$(OUT_LOCAL)/dynamic_array_test
+
+set_test: dynamic_set_test
+	$(OUT_LOCAL)/dynamic_set_test
 
 interference_graph_test: interference_graph_tester
 	$(OUT_LOCAL)/interference_graph_test
