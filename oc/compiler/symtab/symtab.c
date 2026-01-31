@@ -2249,8 +2249,20 @@ static inline void compute_call_graph_transitive_closure(function_symtab_t* symt
 	memcpy(symtab->call_graph_transitive_closure, symtab->call_graph_matrix, number_of_functions * number_of_functions * sizeof(u_int8_t));
 
 	//Now that we've made the copy, we can start on the actual transitive closure
-
-
+	
+	//For each node i(intermediate node)
+	for(u_int32_t i = 0; i < number_of_functions; i++){
+		for(u_int32_t j = 0; j < number_of_functions; j++){
+			for(u_int32_t k = 0; k < number_of_functions; k++){
+				//If there's a path from j to i, and a path from i to k
+				if(symtab->call_graph_transitive_closure[j * number_of_functions + i] == TRUE
+					&& symtab->call_graph_transitive_closure[i * number_of_functions + k] == TRUE){
+					//Flag that there is a path from j to k
+					symtab->call_graph_transitive_closure[j * number_of_functions + k] = TRUE;
+				}
+			}
+		}
+	}
 }
 
 
