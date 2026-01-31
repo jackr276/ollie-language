@@ -83,9 +83,6 @@ static generic_ast_node_t* deferred_stmts_node = NULL;
 //Are we enabling debug printing? By default no
 static u_int8_t enable_debug_printing = FALSE;
 
-//Did we find a main function? By default no
-static u_int8_t found_main_function = FALSE;
-
 //The current file name
 static char* current_file_name = NULL;
 
@@ -976,7 +973,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//Store our function signature
 		function_signature = function_record->signature->internal_types.function_type;
 
-		//TODO FUNCTION CALL
+		//Note that the current function calls out to the given one
+		add_function_call(current_function, function_record);
 
 		//We'll now note that this was indeed called
 		function_record->called = TRUE;
@@ -10960,8 +10958,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	if(is_main_function == TRUE){
 		//Mark that it's been called
 		function_record->called = TRUE;
-
-		//TODO FUNCTION CALL
 	}
 	
 	//We're done with this, so destroy it
