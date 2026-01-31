@@ -84,22 +84,22 @@ dynamic_set_t clone_dynamic_set(dynamic_set_t* set){
 
 
 /**
- * Does the dynamic array contain this pointer?
+ * Does the dynamic set contain this pointer?
  *
  * NOTE: This will currently do a linear scan. O(n) time, should be fast
  * enough for our purposes here. If it's really slowing things down, consider
  * sorting the array and binary searching
 */
-int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
+int16_t dynamic_set_contains(dynamic_set_t* set, void* ptr){
 	//If it's null just return false
-	if(array == NULL || array->internal_array == NULL){
+	if(set == NULL || set->internal_array == NULL){
 		return NOT_FOUND;
 	}
 
 	//We'll run through the entire array, comparing pointer by pointer
-	for(u_int16_t i = 0; i < array->current_index; i++){
+	for(u_int16_t i = 0; i < set->current_index; i++){
 		//If we find an exact memory address match return true
-		if(array->internal_array[i] == ptr){
+		if(set->internal_array[i] == ptr){
 			return i;
 		}
 	}
@@ -155,37 +155,36 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr){
 
 
 /**
- * Clear a dynamic array entirely - keeps the size unchanged, but
+ * Clear a dynamic set entirely - keeps the size unchanged, but
  * sets the entire internal array to 0
  */
-void clear_dynamic_array(dynamic_array_t* array){
+void clear_dynamic_set(dynamic_set_t* set){
 	//Just to be safe
-	if(array == NULL){
-		printf("ERROR: Attempting to clear a NULL dynamic array\n");
+	if(set == NULL || set->internal_array == NULL){
+		printf("ERROR: Attempting to clear a NULL dynamic set\n");
 		exit(1);
 	}
 
 	//Wipe the entire thing out
-	memset(array->internal_array, 0, sizeof(void*) * array->current_max_size);
+	memset(set->internal_array, 0, sizeof(void*) * set->current_max_size);
 
 	//Our current index is now 0
-	array->current_index = 0;
+	set->current_index = 0;
 }
 
 
 /**
  * Get an element at a specified index. Do not remove the element
  */
-void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
-	//Return NULL here. It is the caller's responsibility
-	//to check this
-	if(array->current_max_size <= index){
-		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_index);
+void* dynamic_set_get_at(dynamic_set_t* set, u_int16_t index){
+	//This should never be happening
+	if(set->current_max_size <= index){
+		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, set->current_index);
 		exit(1);
 	}
 
 	//Otherwise we should be good to grab. Again we do not delete here
-	return array->internal_array[index];
+	return set->internal_array[index];
 }
 
 
@@ -194,27 +193,27 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
  * is returned, allowing this to be used as a search & delete function
  * all in one
  */
-void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
+void* dynamic_set_delete_at(dynamic_set_t* set, u_int16_t index){
 	//Again if we can't do this, we won't disrupt the program. Just return NULL
-	if(array->current_index <= index){
+	if(set->current_index <= index){
 		return NULL;
 	}
 
 	//We'll grab the element at this index first
-	void* deleted = array->internal_array[index];
+	void* deleted = set->internal_array[index];
 
 	//Now we'll run through everything from that index up until the end, 
 	//shifting left every time
-	for(u_int16_t i = index; i < array->current_index - 1; i++){
+	for(u_int16_t i = index; i < set->current_index - 1; i++){
 		//Shift left here
-		array->internal_array[i] = array->internal_array[i + 1];
+		set->internal_array[i] = set->internal_array[i + 1];
 	}
 
 	//Null this out
-	array->internal_array[array->current_index - 1] = NULL;
+	set->internal_array[set->current_index - 1] = NULL;
 
 	//We've seen one less of these now
-	(array->current_index)--;
+	(set->current_index)--;
 
 	//And once we've done that shifting, we're done so
 	return deleted;
@@ -244,26 +243,6 @@ void dynamic_array_delete(dynamic_array_t* array, void* ptr){
 	dynamic_array_delete_at(array, index);
 
 	//And we're done
-}
-
-
-/**
- * Remove an element from the back of the dynamic array - O(1) removal
- */
-void* dynamic_array_delete_from_back(dynamic_array_t* array){
-	//Already empty
-	if(array->current_index == 0){
-		return NULL;
-	}
-
-	//Grab off of the very end
-	void* deleted = array->internal_array[array->current_index - 1];
-
-	//Decrement the index
-	(array->current_index)--;
-
-	//Give back the pointer
-	return deleted;
 }
 
 
@@ -327,36 +306,19 @@ u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
 
 
 /**
- * Reset a dynamic array by wiping the contents of its memory
- */
-void reset_dynamic_array(dynamic_array_t* array){
-	//If this is the case then just bail
-	if(array == NULL || array->internal_array == NULL){
-		return;
-	}
-
-	//Otherwise we'll memset by wiping everything
-	memset(array->internal_array, 0, array->current_max_size * sizeof(void**));
-
-	//The current index is now 0
-	array->current_index = 0;
-}
-
-
-/**
  * Deallocate an entire dynamic array
 */
-void dynamic_array_dealloc(dynamic_array_t* array){
+void dynamic_set_dealloc(dynamic_set_t* set){
 	//Let's just make sure here...
-	if(array->internal_array == NULL){
+	if(set->internal_array == NULL){
 		return;
 	}
 
 	//First we'll free the internal array
-	free(array->internal_array);
+	free(set->internal_array);
 
 	//Set this to NULL as a warning
-	array->internal_array = NULL;
-	array->current_index = 0;
-	array->current_max_size = 0;
+	set->internal_array = NULL;
+	set->current_index = 0;
+	set->current_max_size = 0;
 }

@@ -99,6 +99,6 @@ u_int8_t dynamic_sets_equal(dynamic_set_t* a, dynamic_set_t* b);
  * NOTE: This will not touch/free any pointers in the set itself,
  * just the overall structure
 */
-void dynamic_set_dealloc(dynamic_set_t* array);
+void dynamic_set_dealloc(dynamic_set_t* set);
 
 #endif /* DYNAMIC_SET_H */
