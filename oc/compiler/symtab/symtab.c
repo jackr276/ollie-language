@@ -673,7 +673,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	record->line_number = line_number;
 
 	//Allocate the list of all functions that this calls
-	record->callees = dynamic_set_alloc();
+	record->called_functions = dynamic_set_alloc();
 
 	//We know that we need to create this immediately
 	record->signature = create_function_pointer_type(is_public, line_number, NOT_MUTABLE);
@@ -1657,6 +1657,22 @@ local_constant_t* get_string_local_constant(symtab_function_record_t* record, ch
 
 
 /**
+ * Record that a given source function calls the target
+ *
+ * This always goes as: source calls target
+ */
+void add_function_call(symtab_function_record_t* source, symtab_function_record_t* target){
+	//Add it into the list of functions called by the source. Since we use a set here, we are
+	//guaranteed to never add the function in more than once even if the source function calls
+	//it multiple times in the body
+	dynamic_set_add(&(source->called_functions), target);
+
+	//This function has been called
+	target->called = TRUE;
+}
+
+
+/**
  * Get an f32 local constant whose value matches the given constant
  *
  * Returns NULL if no matching constant can be found
@@ -2130,11 +2146,6 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			temp = record;
 			record = record->next;
 
-			//If the call graph node has been defined, we will free that too
-			if(temp->call_graph_node != NULL){
-				free(temp->call_graph_node);
-			}
-
 			//Deallocation for local constants
 			if(temp->local_string_constants.internal_array != NULL){
 				//Deallocate each local constant
@@ -2169,7 +2180,7 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			}
 
 			//Destroy the call graph infrastructure
-			dynamic_set_dealloc(&(temp->callees));
+			dynamic_set_dealloc(&(temp->called_functions));
 
 			//Dealloate the function type
 			type_dealloc(temp->signature);

@@ -154,14 +154,12 @@ struct symtab_function_record_t{
 	stack_data_area_t data_area;
 	//The hash that we have
 	u_int64_t hash;
-	//The associated call graph node with this function
-	void* call_graph_node;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
 	//The type of the function
 	generic_type_t* signature;
 	//The list of all functions that this function calls out to
-	dynamic_set_t callees;
+	dynamic_set_t called_functions;
 	//What's the return type?
 	generic_type_t* return_type;
 	//The line number
@@ -344,10 +342,8 @@ struct function_symtab_t{
 	//How many records(names) we can have
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
 
-
 	// TODO MAYBE
-	symtab_function_record_t*** call_graph_matrix;
-
+	symtab_function_record_t** call_graph_matrix;
 
 	//The level of this particular symtab
 	u_int8_t current_lexical_scope;
@@ -619,6 +615,13 @@ local_constant_t* get_f64_local_constant(symtab_function_record_t* record, doubl
  * Returns NULL if no matching constant can be found
  */
 local_constant_t* get_string_local_constant(symtab_function_record_t* record, char* string_value);
+
+/**
+ * Record that a given source function calls the target
+ *
+ * This always goes as: source calls target
+ */
+void add_function_call(symtab_function_record_t* source, symtab_function_record_t* target);
 
 /**
  * A helper method for variable name printing

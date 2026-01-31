@@ -78,13 +78,13 @@ static u_int32_t num_warnings;
 static u_int32_t parser_line_num = 1;
 
 //The overall node that holds all deferred statements for a function
-generic_ast_node_t* deferred_stmts_node = NULL;
+static generic_ast_node_t* deferred_stmts_node = NULL;
 
 //Are we enabling debug printing? By default no
-u_int8_t enable_debug_printing = FALSE;
+static u_int8_t enable_debug_printing = FALSE;
 
 //Did we find a main function? By default no
-u_int8_t found_main_function = FALSE;
+static u_int8_t found_main_function = FALSE;
 
 //The current file name
 static char* current_file_name = NULL;
