@@ -9165,10 +9165,11 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 	//Go based on what we see here
 	switch(lookahead.tok){
-		//If we see either of these tokens, it means that the user is predeclaring a function.
+		//If we see any of these tokens, it means that the user is predeclaring a function.
 		//In this case, we push the token back and let the function predeclaration rule
 		//handle it
 		case PUB:
+		case INLINE:
 		case FN:
 			//If this is now global, then we cannot do this
 			if(is_global == FALSE){
@@ -11415,6 +11416,9 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
  * check every function to make sure it adheres to this rule
  */
 static inline u_int8_t validate_inlined_functions_are_non_revursive(function_symtab_t* symtab) {
+	//Use the error count so that we can do all functions at once
+	u_int32_t error_count = 0;
+
 	//Run through every cell in the symtab
 	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 		if(symtab->records[i] == NULL){
@@ -11436,7 +11440,7 @@ static inline u_int8_t validate_inlined_functions_are_non_revursive(function_sym
 					sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
 					print_parse_message(PARSE_ERROR, info, cursor->line_number);
 					num_errors++;
-					return FAILURE;
+					error_count++;
 				}
 			}
 
@@ -11445,8 +11449,8 @@ static inline u_int8_t validate_inlined_functions_are_non_revursive(function_sym
 		}
 	}
 
-	//If we survive to down here then we are fine 
-	return SUCCESS;
+	//Based on the error count give back what we got here
+	return error_count == 0 ? SUCCESS : FAILURE;
 }
 
 
