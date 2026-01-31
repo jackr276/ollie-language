@@ -726,17 +726,17 @@ symtab_constant_record_t* create_constant_record(dynamic_string_t name){
  * RETURNS 0 if no collision, 1 if collision
  */
 u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record){
+	//Assign this a unique identifier. Once we've assigned the unique ID, bump the
+	//overall function ID for the next go around
+	record->function_id = symtab->current_function_id;
+	(symtab->current_function_id)++;
+
 	//If there's no collision
 	if(symtab->records[record->hash] == NULL){
 		//Store it and get out
 		symtab->records[record->hash] = record;
 		return 0;
 	}
-
-	//Assign this a unique identifier. Once we've assigned the unique ID, bump the
-	//overall function ID for the next go around
-	record->function_id = symtab->current_function_id;
-	symtab->current_function_id++;
 	
 	//Otherwise if we get here there was a collision
 	//Grab the head record
@@ -1980,6 +1980,63 @@ void print_type_name(symtab_type_record_t* record){
 
 	//Then print out the name
 	printf("%s\n\n", record->type->type_name.string);
+}
+
+
+/**
+ * Print the call graph's adjacency matrix out for debugging
+ */
+void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_symtab){
+	fprintf(fl, "=============== Function Call Graph ========================\n");
+	
+	//We need a min priority queue for this
+	min_priority_queue_t min_priority_queue = min_priority_queue_alloc();
+
+	//Run through and print all of these out first
+	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		//Skip ahead
+		if(function_symtab->records[i] == NULL){
+			continue;
+		}
+
+		//Otherwise grab it out
+		symtab_function_record_t* cursor = function_symtab->records[i];
+
+		//Crawl the whole thing
+		while(cursor != NULL){
+			//Use the min priority queue to insert based on the function ID
+			min_priority_queue_enqueue(&min_priority_queue, cursor, cursor->function_id);
+
+			//Bump it up
+			cursor = cursor->next;
+		}
+	}
+
+	//Now we're done so deallocate it
+	min_priority_queue_dealloc(&min_priority_queue);
+
+	//Run through the entire symtab first and print out all of the functions with their
+	//IDs for the user
+
+	//Get the overall count
+	u_int32_t function_count = function_symtab->current_function_id;
+
+	//Run through each row
+	for(u_int32_t i = 0; i < function_count; i++){
+		//Print out the row number
+		fprintf(fl, "[%2d]: ", i);
+
+		//Now print out the columns
+		for(u_int32_t j = 0; j < function_count; j++){
+			//Will be 1(connected) or 0
+			fprintf(fl, "%d ", function_symtab->call_graph_matrix[i * function_count + j]);
+		}
+
+		//Final newline
+		fprintf(fl, "\n");
+	}
+
+	fprintf(fl, "=============== Function Call Graph ========================\n");
 }
 
 

@@ -640,6 +640,11 @@ void print_constant_name(symtab_constant_record_t* record);
 void print_type_name(symtab_type_record_t* record);
 
 /**
+ * Print the call graph's adjacency matrix out for debugging
+ */
+void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_symtab);
+
+/**
  * This function is intended to be called after parsing is complete.
  * Within it, we will finalize the function symtab including constructing
  * the adjacency matrix for the call graph
