@@ -57,10 +57,10 @@ int main(){
 		dynamic_set_add(&set, int_ptr);
 	}
 
-	//If for some reason the size is more than 29999, this is a failure because we violated the uniqueness
+	//If for some reason the size is more than 30000, this is a failure because we violated the uniqueness
 	//constraint
-	if(set.current_index != 29999){
-		fprintf(stderr, "Exepcted a maximum size of 29999 but got %d\n", set.current_max_size);
+	if(set.current_index != 30000){
+		fprintf(stderr, "Exepcted a maximum size of 30000 but got %d\n", set.current_index);
 		exit(1);
 	}
 

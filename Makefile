@@ -243,7 +243,7 @@ dynamic_set_test.o: $(TEST_SUITE_PATH)/dynamic_set_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_set_test.c -o $(OUT_LOCAL)/dynamic_set_test.o
 
 dynamic_set_testd.o: $(TEST_SUITE_PATH)/dynamic_set_test.c
-	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATh)/dynamic_set_test.c -o $(OUT_LOCAL)/dynamic_set_testd.o
+	$(CC) $(CFLAGS) -g $(TEST_SUITE_PATH)/dynamic_set_test.c -o $(OUT_LOCAL)/dynamic_set_testd.o
 
 priority_queue_test.o: $(TEST_SUITE_PATH)/priority_queue_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/priority_queue_test.c -o $(OUT_LOCAL)/priority_queue_test.o
@@ -497,6 +497,9 @@ max_priority_queue-CI.o: $(QUEUE_PATH)/max_priority_queue.c
 dynamic_array-CI.o: $(DYNAMIC_ARRAY_PATH)/dynamic_array.c
 	$(CC) $(CFLAGS) $(DYNAMIC_ARRAY_PATH)/dynamic_array.c -o $(OUT_CI)/dynamic_array.o
 
+dynamic_set-CI.o: $(DYNAMIC_SET_PATH)/dynamic_set.c
+	$(CC) $(CFLAGS) $(DYNAMIC_SET_PATH)/dynamic_set.c -o $(OUT_CI)/dynamic_set.o
+
 dynamic_string-CI.o: $(DYNAMIC_STRING_PATH)/dynamic_string.c
 	$(CC) $(CFLAGS) $(DYNAMIC_STRING_PATH)/dynamic_string.c -o $(OUT_CI)/dynamic_string.o
 
@@ -569,6 +572,9 @@ symtab_test-CI.o: $(TEST_SUITE_PATH)/symtab_test.c
 dynamic_array_test-CI.o: $(TEST_SUITE_PATH)/dynamic_array_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_array_test.c -o $(OUT_CI)/dynamic_array_test.o
 
+dynamic_set_test-CI.o: $(TEST_SUITE_PATH)/dynamic_set_test.c
+	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/dynamic_set_test.c -o $(OUT_CI)/dynamic_set_test.o
+
 priority_queue_test-CI.o: $(TEST_SUITE_PATH)/priority_queue_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/priority_queue_test.c -o $(OUT_CI)/priority_queue_test.o
 
@@ -580,6 +586,9 @@ dynamic_string_test-CI: dynamic_string_test-CI.o dynamic_string-CI.o
 
 dynamic_array_test-CI: dynamic_array_test-CI.o dynamic_array-CI.o
 	$(CC) -o $(OUT_CI)/dynamic_array_test $(OUT_CI)/dynamic_array_test.o $(OUT_CI)/dynamic_array.o
+
+dynamic_set_test-CI: dynamic_set_test-CI.o dynamic_set-CI.o
+	$(CC) -o $(OUT_CI)/dynamic_set_test $(OUT_CI)/dynamic_set_test.o $(OUT_CI)/dynamic_set.o
 
 parser_test-CI.o: $(TEST_SUITE_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/parser_test.c -o $(OUT_CI)/parser_test.o
@@ -658,6 +667,9 @@ compiler_test-non-timed-CI: oc-CI
 
 array_test-CI: dynamic_array_test-CI
 	$(OUT_CI)/dynamic_array_test
+
+set_test-CI: dynamic_set_test-CI
+	$(OUT_CI)/dynamic_set_test
 
 string_test-CI: dynamic_string_test-CI
 	$(OUT_CI)/dynamic_string_test
