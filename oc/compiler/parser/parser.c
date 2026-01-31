@@ -11265,8 +11265,9 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 
 	//Switch based on the token
 	switch(lookahead.tok){
-		//We can either see the "pub"(public) keyword or we can see a straight fn keyword
+		//We can either see the "pub"(public) keyword, "inline keyword" or we can see a straight fn keyword
 		case PUB:
+		case INLINE:
 		case FN:
 			//Put the token back, we'll let the rule handle it
 			push_back_token(token_stream, &parser_line_num);
