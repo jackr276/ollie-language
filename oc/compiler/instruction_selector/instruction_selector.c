@@ -11,7 +11,6 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -22,6 +21,7 @@ static generic_type_t* u64;
 static generic_type_t* i64;
 static generic_type_t* u32;
 static generic_type_t* i32;
+static generic_type_t* u16;
 static generic_type_t* u8;
 
 //A holder for the stack pointer
@@ -118,7 +118,7 @@ static void print_instruction_window(instruction_window_t* window){
  * the very next block. If so, we'll return what block the jump goes to.
  * If not, we'll return null.
  */
-static basic_block_t* does_block_end_in_jump(basic_block_t* block){
+static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 	//If it's null then leave
 	if(block->exit_statement == NULL){
 		return NULL;
@@ -138,6 +138,28 @@ static basic_block_t* does_block_end_in_jump(basic_block_t* block){
 		//By default no
 		default:
 			return NULL;
+	}
+}
+
+
+/**
+ * Helper function to determine if an operator is can be constant folded
+ */
+static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op){
+	switch(op){
+		case G_THAN:
+		case L_THAN:
+		case G_THAN_OR_EQ:
+		case L_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+		//Note that this is valid only for logical and. Logical or
+		//requires the use of the "orX" instruction, which does modify
+		//its assignee unlike logical and
+		case DOUBLE_AND:
+			return TRUE;
+		default:
+			return FALSE;
 	}
 }
 
@@ -623,7 +645,7 @@ static u_int8_t is_operation_valid_for_constant_folding(instruction_t* instructi
  * involves converting between types, or it involves memory indirection, then
  * we cannot simply remove it
  */
-static u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_instruction){
+static inline u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_instruction){
 	//If this is a constant assignment, then yes we can
 	if(assignment_instruction->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
 		return TRUE;
@@ -644,7 +666,7 @@ static u_int8_t can_assignment_instruction_be_removed(instruction_t* assignment_
  * Can we do an inplace constant operation? Currently we only
  * do these for *, + and -
  */
-static u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t op){
+static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_token_t op){
 	switch(op){
 		case PLUS:
 		case MINUS:
@@ -2540,7 +2562,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Otherwise, the value is not 0
 		} else {
 			//First we add a test instruction
-			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+			instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->op1);
 						
 			//The result of this will be used for our set instruction
 			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->assignee);
@@ -2581,7 +2603,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//First option - the value is 0. If it is, then anything else is irrelevant
 		if(is_constant_value_zero(current_instruction->op1_const) == TRUE){
 			//First we add a test instruction
-			instruction_t* test_instruction = test_instruction = emit_test_statement(emit_temp_var(u8), current_instruction->op1, current_instruction->op1);
+			instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->op1);
 						
 			//The result of this will be used for our set instruction
 			instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->assignee);
@@ -3627,7 +3649,7 @@ static instruction_t* emit_conversion_instruction(three_addr_var_t* converted){
  *
  * The sete instruction is used on a byte
  */
-static instruction_t* emit_sete_instruction(three_addr_var_t* destination){
+static inline instruction_t* emit_sete_instruction(three_addr_var_t* destination){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -3649,12 +3671,38 @@ static instruction_t* emit_sete_instruction(three_addr_var_t* destination){
  * scheduler what this setne relies on in the future, but this op1 is never actually displayed/printed,
  * it is just for tracking
  */
-static instruction_t* emit_setne_instruction(three_addr_var_t* destination, three_addr_var_t* relies_on){
+static inline instruction_t* emit_setne_instruction(three_addr_var_t* destination, three_addr_var_t* relies_on){
 	//First we'll allocate it
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//And we'll set the class
 	instruction->instruction_type = SETNE;
+
+	//We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
+	//but it is completely ignored at the selector level
+	instruction->op1 = relies_on;
+
+	//Finally we set the destination
+	instruction->destination_register = destination;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a setnp instruction
+ *
+ * The setne instruction is used on a byte. We have a "relies_on" field to tell the instruction
+ * scheduler what this setne relies on in the future, but this op1 is never actually displayed/printed,
+ * it is just for tracking
+ */
+static inline instruction_t* emit_setnp_instruction(three_addr_var_t* destination, three_addr_var_t* relies_on){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//And we'll set the class
+	instruction->instruction_type = SETNP;
 
 	//We store what this instruction relies on in it's op1 value. This is necessary for scheduling reasons,
 	//but it is completely ignored at the selector level
@@ -5692,7 +5740,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 /**
  * Handle a function call instruction
  */
-static void handle_function_call(instruction_t* instruction){
+static inline void handle_function_call(instruction_t* instruction){
 	//This will be a call instruction
 	instruction->instruction_type = CALL;
 
@@ -5704,7 +5752,7 @@ static void handle_function_call(instruction_t* instruction){
 /**
  * Handle a function call instruction
  */
-static void handle_indirect_function_call(instruction_t* instruction){
+static inline void handle_indirect_function_call(instruction_t* instruction){
 	//This will be an indirect call instruction
 	instruction->instruction_type = INDIRECT_CALL;
 
@@ -5717,9 +5765,154 @@ static void handle_indirect_function_call(instruction_t* instruction){
 
 
 /**
+ * Emit a conditional move instruction based on the op we're given. This is done in order to increase versatility of this
+ * helper function and reduce the need for extra code
+ *
+ * The op's are one-to-one mappings for relational ops only. We're kind of hijacking the token system here but it will work
+ */
+static inline instruction_t* emit_cmovX_instruction(three_addr_var_t* destination_variable, three_addr_var_t* source, ollie_token_t op){
+	//First we allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Go based on what op we've got. This is not going to support everything and it
+	//really doesn't need to
+	switch(op){
+		case NOT_EQUALS:
+			instruction->instruction_type = CMOVNE;
+			break;
+
+		case EQUALS:
+			instruction->instruction_type = CMOVE;
+			break;
+			
+		case G_THAN:
+			instruction->instruction_type = CMOVG;
+			break;
+
+		case G_THAN_OR_EQ:
+			instruction->instruction_type = CMOVGE;
+			break;
+
+		case L_THAN:
+			instruction->instruction_type = CMOVL;
+			break;
+
+		case L_THAN_OR_EQ:
+			instruction->instruction_type = CMOVLE;
+			break;
+
+		default:
+			printf("Fatal internal compiler error: Unknown op passed in for CMOVX selector. Review source code to see tokens supported\n");
+			exit(1);
+	}
+
+	//Assign these two over
+	instruction->source_register = source;
+	instruction->destination_register = destination_variable;
+
+	//And give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a direct floating point comparison instruction(ucomiss, ucomisd, comiss, or comisd) 
+ *
+ * The caller has the option to use ordered/unordered instructions
+ */
+static inline instruction_t* emit_float_comparison_instruction(three_addr_var_t* source_register, three_addr_var_t* source_register2, u_int8_t use_unordered){
+	//Allocate the instruction
+	instruction_t* comparison_instruction = calloc(1, sizeof(instruction_t));
+
+	//Run through the values here
+	if(use_unordered == FALSE){
+		switch(source_register->variable_size){
+			case SINGLE_PRECISION:
+				comparison_instruction->instruction_type = COMISS;
+				break;
+
+			case DOUBLE_PRECISION:
+				comparison_instruction->instruction_type = COMISD;
+				break;
+
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
+				exit(1);
+		}
+
+	} else {
+		switch(source_register->variable_size){
+			case SINGLE_PRECISION:
+				comparison_instruction->instruction_type = UCOMISS;
+				break;
+
+			case DOUBLE_PRECISION:
+				comparison_instruction->instruction_type = UCOMISD;
+				break;
+
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: attempt to use a non-float variable for float instruction\n");
+				exit(1);
+		}
+	}
+
+	//Add in both registers
+	comparison_instruction->source_register = source_register;
+	comparison_instruction->source_register2 = source_register2;
+
+	//Give the instruction back
+	return comparison_instruction;
+}
+
+
+/**
+ * Emit a test instruction directly - bypassing the instruction selection step
+ *
+ * Test instructions inherently have no assignee as they don't modify registers
+ *
+ * NOTE: This may only be used DURING the process of register selection
+ */
+static inline instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
+	//First we'll allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll need the size to select the appropriate instruction
+	variable_size_t size = get_type_size(op1->type);
+
+	//Select the size appropriately
+	switch(size){
+		case QUAD_WORD:
+			instruction->instruction_type = TESTQ;
+			break;
+		case DOUBLE_WORD:
+			instruction->instruction_type = TESTL;
+			break;
+		case WORD:
+			instruction->instruction_type = TESTW;
+			break;
+		case BYTE:
+			instruction->instruction_type = TESTB;
+			break;
+		default:
+			break;
+	}
+
+	//Then we'll set op1 and op2 to be the source registers
+	instruction->source_register = op1;
+	instruction->source_register2 = op2;
+
+	//And now we'll give it back
+	return instruction;
+}
+
+
+/**
  *	//=========================== Logical Notting =============================
  * Although it may not seem like it, logical not is actually a multiple instruction
- * pattern
+ * pattern. Note that logical not can take different forms for GP and SSE registers.
+ * This function takes that into account and handles both cases
  *
  * This:
  * t9 <- logical not t9
@@ -5729,47 +5922,237 @@ static void handle_indirect_function_call(instruction_t* instruction){
  * sete %al
  * movzx %al, t9
  *
+ * In the event that we are being used by a branch, it will just have the test instruction
+ * as the set is not needed
+ *
+ *
  * NOTE: We know that instruction1 is the one that is a logical not instruction if we
  * get here
  */
 static void handle_logical_not_instruction(instruction_window_t* window){
+	//Is this value *exclusively* used by a branch?
+	u_int8_t used_by_branch_only = TRUE;
+
 	//Let's grab the value out for convenience
 	instruction_t* logical_not = window->instruction1;
 
-	//Now we'll need to generate three new instructions
-	//First comes the test command. We're testing this against itself
-	instruction_t* test_inst = emit_direct_test_instruction(logical_not->op1, logical_not->op1); 
-	//Ensure that we set all these flags too
-	test_inst->block_contained_in = logical_not->block_contained_in;
-	test_inst->is_branch_ending = logical_not->is_branch_ending;
+	//Let's also determine if this is a floating point logical not or not
+	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_not->op1->type);
 
-	//Now we'll set the AL register to 1 if we're equal here
-	instruction_t* sete_inst = emit_sete_instruction(logical_not->assignee);
-	//Ensure that we set all these flags too
-	sete_inst->block_contained_in = logical_not->block_contained_in;
-	sete_inst->is_branch_ending = logical_not->is_branch_ending;
+	//Grab an instruction cursor for the crawl
+	instruction_t* cursor = logical_not->next_statement;
 
-	//Preserve this before we lose it
-	instruction_t* after_logical_not = logical_not->next_statement;
+	//So long as the cursor is not NULL, keep crawling
+	while(cursor != NULL){
+		//This is the case that we're after. If we find that the branch relies
+		//on this, then we can just get out
+		if(variables_equal(cursor->op1, logical_not->assignee, FALSE) == TRUE){
+			//This means that we are *not* exclusively used by a branch
+			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+				used_by_branch_only = FALSE;
+				break;
+			}
 
-	//Delete the logical not statement, we no longer need it
-	delete_statement(logical_not);
+			//Otherwise logically speaking we do have a branch
+			//statement here. As such, if it's a floating point
+			//branch we'll need to flag that
+			if(is_floating_point == TRUE){
+				cursor->relies_on_fp_comparison = TRUE;
+			}
 
-	//First insert the test instruction
-	insert_instruction_before_given(test_inst, after_logical_not);
+		//We could also be used by op2. If this is the case, then it's definitely not just
+		//being used by a branch
+		} else if (variables_equal(cursor->op2, logical_not->assignee, FALSE) == TRUE){
+			//Branches never have dependencies stored in op2. As such if we see this,
+			//it's an automatic false
+			used_by_branch_only = FALSE;
+			break;
+		}
 
-	//Then insert the sete instruction
-	insert_instruction_before_given(sete_inst, after_logical_not);
+		//If we get to the end and it's not used by a branch, that is fine. The only
+		//thing that we care about in this crawl is whether or not the above statement
+		//was used by a branch instruction. If it was, then all of the extra setX
+		//is unnecessary. If it wasn't then we need to be adding those extra steps
 
-	//This is the new window
-	reconstruct_window(window, sete_inst);
+		//Advance the cursor up
+		cursor = cursor->next_statement;
+	}
+
+	//This is the most common case - it is *not* being used by a floating
+	//point value
+	if(is_floating_point == FALSE){
+		//Emit the test instruction
+		instruction_t* test_instruction = emit_direct_test_instruction(logical_not->op1, logical_not->op1); 
+
+		//Insert this right before the instruction we have
+		insert_instruction_before_given(test_instruction, logical_not);
+
+		//If we are just being used by a branch, then the test instruction should
+		//be all that we need. If we are *not* just being used by a branch, then 
+		//we will need more than just the test instruction
+		if(used_by_branch_only == FALSE){
+			//Set to 1 if we're zero
+			instruction_t* set_if_equal = emit_sete_instruction(logical_not->assignee);
+
+			//Insert this after the test
+			insert_instruction_after_given(set_if_equal, test_instruction);
+
+			//This is now useless so get rid of it
+			delete_statement(logical_not);
+
+			//Rebuild the window around the last instruction
+			reconstruct_window(window, set_if_equal);
+
+		} else {
+			//This is just around for bookkeeping, will not be displayed
+			test_instruction->assignee = logical_not->assignee;
+
+			//This is now useless so get rid of it
+			delete_statement(logical_not);
+
+			//Rebuild the window around the last instruction
+			reconstruct_window(window, test_instruction);
+		}
+
+	/**
+	 * We are inside of a FP logical not:
+	 *
+	 * Ollie behavior: !(NaN) == 0, NaN is not 0. Because of this, we need to account for the PF
+	 * inside of the float logical not in both cases.
+	 *
+	 * Remember: parity flag(P) is only set if at least one operand is NaN, infinity, -infinity
+	 *
+	 * No branch:
+	 * pxor	%xmm0, %xmm0      <--- wipe out a register(set to 0)
+	 * ucomiss	%xmm0, %xmm1  <--- compare our guy with 0
+	 * setnp	%al			  <--- set if parity flag is 0(We will get 1 if PF is 0)
+	 * movl	$0, %edx		  <--- Grab a 0 param
+	 * movzbl	%al, %eax 	  <--- Move the set value(either one or 0) into the result
+	 * cmovne	%edx, %eax    <--- Move 0 into the result if the above was not equal: note no prior instructions set CC's(!(non_zero) = 0)
+	 *
+	 * Detailed explanation: 
+	 * First remember:
+	 * 	!0 = 1
+	 * 	!(non-zero) = 0
+	 *
+	 * We first grab a register and zero it out. Following that, we compare our desired value with said value. If the parity
+	 * flag is not set(remember, parity flag *is* set when we have at least one NaN), then we will move 1 into the result variable. This is because us not seeing
+	 * the parity flag set is the first step towards a confirmed 0 value so we will precondition the result register using a 1. Following that, we will move 0 into
+	 * the result register *if* we have a not-equal result(ZF = 0). Us having a NE means that our value is *not* zero, so we want a result of 0 in the final output
+	 *
+	 * With branch:
+	 *
+	 * pxor	%xmm1, %xmm1 	 <--- wipe out a register
+	 * ucomiss	%xmm1, %xmm0 <--- compare our guy with zero
+	 * jp	.L23 			 <--- Jump on NaN, because Nan would not be a truthful value(!NaN == 0, NaN is not 0)
+	 * je	.L25			 <--- If we do have an equality, we jump to the if(The number is 0, so !0 = 1)
+	 */
+	} else {
+		//This is the variable that we will be comparing against
+		three_addr_var_t* comparing_against = emit_temp_var(logical_not->op1->type);
+
+		//First emit a PXOR instruction to zero out a variable. This is the variable that we will compare against
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(comparing_against);
+
+		//Insert this before the given instruciton
+		insert_instruction_before_given(pxor_instruction, logical_not);
+
+		//Now no matter what we also are going to need an unordered comparison instruction
+		instruction_t* unordered_comparison = emit_float_comparison_instruction(comparing_against, logical_not->op1, TRUE);
+
+		//Insert this in right before the logical not
+		insert_instruction_before_given(unordered_comparison, logical_not);
+
+		//We can now delete the logical not entirely
+		delete_statement(logical_not);
+
+		//Different dependencies based on whether or not we are being used in a branch
+		if(used_by_branch_only == FALSE){
+			//We need to know this type size for later
+			generic_type_t* destination_type = logical_not->assignee->type;
+
+			//This is purely for bookkeeping
+			unordered_comparison->assignee = emit_temp_var(u8);
+
+			//Emit a temp var that is a u8. We need this to "set" in here
+			three_addr_var_t* set_variable = emit_temp_var(u8);
+
+			//Now let's add in the setnp instruction
+			instruction_t* setnp_instruction = emit_setnp_instruction(set_variable, unordered_comparison->assignee);
+
+			//Insert this right after the unordered comparison
+			insert_instruction_after_given(setnp_instruction, unordered_comparison);
+
+			//The original CMOVNE destination/zero assignment destinations. These type sizes may
+			//need to be changed for compliance reasons
+			three_addr_var_t* cmovne_destination = logical_not->assignee;
+			three_addr_var_t* zero_assignment_dest = emit_temp_var(destination_type);
+
+			//Do we need to emit a special kind of assignee here that is 16 bits?
+			//If so, we will need to do that now by determining if th
+			if(destination_type->type_size <= 8){
+				//Emit a carbon copy
+				cmovne_destination = emit_var_copy(cmovne_destination);
+
+				//Make the size a u16
+				cmovne_destination->type = u16;
+
+				//This is a "WORD" sized variable for compliance reasons with the conditional move's limitations
+				cmovne_destination->variable_size = WORD;
+
+				//Let's also change the zero assignment destination type
+				zero_assignment_dest->type = u16;
+
+				//This will also be forced to be a word
+				zero_assignment_dest->variable_size = WORD;
+			}
+
+			//Now let's have a 0 on hand. We need a 0 because unfortunately the conditional move operations
+			//do not support immediate values on x86
+			instruction_t* zero_assignment = emit_constant_move_instruction(zero_assignment_dest, emit_direct_integer_or_char_constant(0, logical_not->assignee->type));
+
+			//Throw this in right after the set
+			insert_instruction_after_given(zero_assignment, setnp_instruction);
+
+			//Now that we've got 0 primed, we can do our set variable move to the destination
+			instruction_t* first_move_to_dest = emit_move_instruction(logical_not->assignee, set_variable);
+
+			/**
+			 * VERY IMPORTANT - odds are the coalescer would want to remove this first move to dest because
+			 * the source and destination do not techincally interfere with one another. We need to stop
+			 * this be flagging specifically that it cannot be coalesced at all
+			 */
+			first_move_to_dest->cannot_be_combined = TRUE;
+
+			//Now add this in after the setnp instruction
+			insert_instruction_after_given(first_move_to_dest, zero_assignment);
+
+
+			//Now we need the final conditional move
+			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->destination_register, NOT_EQUALS);
+
+			//And finally add this in after the zero assignment
+			insert_instruction_after_given(conditional_move_to_dest, first_move_to_dest);
+
+			//Rebuild the entire window around the conditional move
+			reconstruct_window(window, conditional_move_to_dest);
+
+		//No new instructions if it actually is a branch, but we still need some bookkeeping
+		} else {
+			//Set this just for bookkeeping
+			unordered_comparison->assignee = logical_not->assignee;
+
+			//Rebuild around the unordered comparison in this case
+			reconstruct_window(window, unordered_comparison);
+		}
+	}
 }
 
 
 /**
  * A setne is a very simple one-to-one mapping
  */
-static void handle_setne_instruction(instruction_t* instruction){
+static inline void handle_setne_instruction(instruction_t* instruction){
 	//Just set the type and register
 	instruction->instruction_type = SETNE;
 	instruction->destination_register = instruction->assignee;
@@ -6027,38 +6410,6 @@ static void handle_not_instruction(instruction_t* instruction){
 
 	//Now we'll just translate the assignee to be the destination(and source in this case) register
 	instruction->destination_register = instruction->assignee;
-}
-
-
-/**
- * Handle a test instruction. The test instruction's op1 is acutally duplicated
- * to be both of its inputs in this case
- */
-static void handle_test_instruction(instruction_t* instruction){
-	//Find out what size we have
-	variable_size_t size = get_type_size(instruction->op1->type);
-
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = TESTQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = TESTL;
-			break;
-		case WORD:
-			instruction->instruction_type = TESTW;
-			break;
-		case BYTE:
-			instruction->instruction_type = TESTB;
-			break;
-		default:
-			break;
-	}
-
-	//This actually has no real destination register, the assignee was a dummy
-	//It does have 2 source registers however
-	instruction->source_register = instruction->op1;
-	instruction->source_register2 = instruction->op2;
 }
 
 
@@ -7202,6 +7553,125 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 
 
 /**
+ * Select the appropriate test statement based on the size
+ * of a given GP register
+ */
+static inline instruction_type_t select_appropriate_test_statement(variable_size_t size){
+	switch(size){
+		case QUAD_WORD:
+			return TESTQ;
+		case DOUBLE_WORD:
+			return TESTL;
+		case WORD:
+			return TESTW;
+		case BYTE:
+			return TESTB;
+		//This should never be reached
+		default:
+			printf("Fatal internal compiler error: unreachable path hit for test statement selector");
+			exit(1);
+	}
+}
+
+
+/**
+ * Handle the "test if not zero" logical instruction. Note that
+ * this logic is different for floating point/non-floating
+ * point values and that all depends on the op1. We will be looking
+ * at the op1 value to determine this
+ *
+ * NOTE: We assume that the window's instruction1 is the one that we're after
+ */
+static void handle_test_if_not_zero_instruction(instruction_window_t* window){
+	//Grab out what we're really after
+	instruction_t* instruction = window->instruction1;
+
+	//We expect the most common case to be non-floating point
+	if(IS_FLOATING_POINT(instruction->op1->type) == FALSE){
+		//Get the appopriate set statement here
+		instruction->instruction_type = select_appropriate_test_statement(instruction->op1->variable_size);
+
+		//Op1 is both sourced because we are testing against ourselves
+		instruction->source_register = instruction->op1;
+		instruction->source_register2 = instruction->op1;
+		
+		//Rebuild the window around this instruction
+		reconstruct_window(window, instruction);
+		
+	//For floating point operations, we need to effectively emit a "test if 0" command here, except we won't
+	//be using a constant. Instead, we can zero out a given XMM register and use that instead
+	} else {
+		//Grab this for use
+		generic_type_t* fp_type = instruction->op1->type;
+
+		//Let's first zero out a given XMM register
+		three_addr_var_t* zeroed_out = emit_temp_var(fp_type);
+
+		//Emit the PXOR instruction to wipe it out
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(zeroed_out);
+
+		//Add this in before our statement
+		insert_instruction_before_given(pxor_instruction, instruction);
+
+		//Grab an instruction cursor
+		instruction_t* cursor = instruction;
+
+		/**
+		 * We also need to flag any branches that come up in front of us
+		 * to tell them that they rely on an FP comparison. We do this
+		 * by a simple crawl
+		 */
+
+		//So long as the cursor is not NULL, keep crawling
+		while(cursor != NULL){
+			//If it's not a branch then we don't care
+			if(cursor->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+				cursor = cursor->next_statement;
+				continue;
+			}
+
+			//This is the case that we're after. If we find that the branch relies
+			//on this, then we can just get out
+			if(variables_equal(cursor->op1, instruction->assignee, FALSE) == TRUE){
+				cursor->relies_on_fp_comparison = TRUE;
+			}
+
+			//If we get to the end and it's not used by a branch, that is fine. The only
+			//thing that we care about in this crawl is whether or not the above statement
+			//was used by a branch instruction. If it was, then all of the extra setX
+			//is unnecessary. If it wasn't then we need to be adding those extra steps
+
+			//Advance the cursor up
+			cursor = cursor->next_statement;
+		}
+
+		//Now that we have this, we can emit the comparison command. We will
+		//just repurpose the above instruction to do this
+		switch(zeroed_out->variable_size){
+			case SINGLE_PRECISION:
+				instruction->instruction_type = UCOMISS;
+				break;
+			
+			case DOUBLE_PRECISION:
+				instruction->instruction_type = UCOMISD;
+				break;
+
+			//This really should be impossible
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in FP test if not zero selector\n");
+				exit(1);
+		}
+
+		//Transfer over the old op1
+		instruction->source_register = instruction->op1;
+
+		//And the second source is the register we just zeroed out
+		instruction->source_register2 = zeroed_out;
+	}
+}
+
+
+/**
  * Combine and select all cases where we have a variable offset store that can be combined
  * with a lea to form a singular instruction. This handles all cases, and performs the deletion
  * of the given lea statement at the end
@@ -7627,10 +8097,6 @@ static void select_instruction_patterns(instruction_window_t* window){
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
 			handle_not_instruction(instruction);
 			break;
-		//Handle the testing statement
-		case THREE_ADDR_CODE_TEST_STMT:
-			handle_test_instruction(instruction);
-			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
 			handle_load_instruction(instruction);
@@ -7649,6 +8115,9 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 			handle_store_with_variable_offset_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+			handle_test_if_not_zero_instruction(window);
 			break;
 		default:
 			break;
@@ -7702,6 +8171,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	i64 = lookup_type_name_only(cfg->type_symtab, "i64", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(cfg->type_symtab, "u32", NOT_MUTABLE)->type;
+	u16 = lookup_type_name_only(cfg->type_symtab, "u16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
 	//Stash the stack pointer & instruction pointer

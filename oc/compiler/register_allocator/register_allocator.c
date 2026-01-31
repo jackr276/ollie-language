@@ -232,7 +232,7 @@ static live_range_t* live_range_alloc(symtab_function_record_t* function_defined
  *
  * NOTE that this function does *not* add anything to the live range
  */
-static live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
+static inline live_range_t* find_or_create_live_range(dynamic_array_t* live_ranges, basic_block_t* block, three_addr_var_t* variable){
 	//Lookup the live range that is associated with this
 	live_range_t* live_range = find_live_range_with_variable(live_ranges, variable);
 
@@ -2506,7 +2506,8 @@ static void perform_block_level_coalescence(basic_block_t* block, interference_g
 	//Now run through all of these
 	while(instruction != NULL){
 		//If it's not a pure copy *or* it's marked as non-combinable, just move along
-		if(is_instruction_pure_copy(instruction) == FALSE){
+		if(is_instruction_pure_copy(instruction) == FALSE
+			|| instruction->cannot_be_combined == TRUE){
 			instruction = instruction->next_statement;
 			continue;
 		}

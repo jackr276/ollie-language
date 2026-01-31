@@ -1042,6 +1042,28 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 
 /**
+ * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
+ *
+ * Note that for the operator input, we will use this to modify the given operator *if* we have a floating point operation.
+ * This is because the eventual selected code for floating point will turn if(x) into if(x != 0) essentially, so we need to
+ * have that logic already in for when the branch statements are selected
+ */
+static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* destination_variable, three_addr_var_t* tested_variable, ollie_token_t* operator){
+	//Emit the instruction
+	instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(destination_variable, tested_variable);
+
+	//If this is a floating point variable, update the pass-by-reference
+	//operator
+	if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
+		*operator = NOT_EQUALS;
+	}
+
+	//Give back the final assignee
+	return test_if_not_zero;
+}
+
+
+/**
  * Handle a logical or inverse branch statement optimization
  *
  * These statement will take what was once one block, and split it into 
@@ -1149,21 +1171,19 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	ollie_token_t first_condition_op = first_half_cursor->op;
 	//And if the type is signed
 	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
-
-	//Determine an appropriate branch. Remember, if this *fails* the if condition
-	//succeeds, so this is an *inverse* jump
-	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_NORMAL, first_half_signed);
+	//Does the first half using float logic?
+	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(first_half_cursor->op == BLANK){
+	if(first_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(first_branch_conditional_decider, first_half_cursor->assignee, first_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1172,12 +1192,17 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
+	//Determine an appropriate branch. Remember, if this *fails* the if condition
+	//succeeds, so this is an *inverse* jump
+	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_NORMAL, first_half_signed);
+
 	//Now we'll emit our branch at the very end of the first block. Remember it's:
 	//if condition works:
 	//	goto else
 	//else
 	//	goto second_half_block
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
+
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -1188,20 +1213,19 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	ollie_token_t second_condition_op = second_half_cursor->op;
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
-
-	//Determine the appropriate inverse jump here
-	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
+	//Does the first half using float logic?
+	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(second_half_cursor->op == BLANK){
+	if(second_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(second_branch_conditional_decider, second_half_cursor->assignee, second_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
@@ -1210,12 +1234,15 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
+	//Determine the appropriate inverse jump here
+	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
+
 	//Now we'll emit our final branch at the end of the first block. Remember it's:
 	//if condition fails:
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_INVERSE, second_half_float);
 }
 
 
@@ -1328,21 +1355,19 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 	ollie_token_t first_condition_op = first_half_cursor->op;
 	//And if the type is signed
 	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
-
-	//Determine an appropriate branch. Remember, if this *fails* the if condition
-	//succeeds, so this is an *inverse* jump
-	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_NORMAL, first_half_signed);
+	//Store if it is a float
+	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(first_half_cursor->op == BLANK){
+	if(first_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(first_branch_conditional_decider, first_half_cursor->assignee, first_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1351,12 +1376,16 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 		add_used_variable(original_block, first_half_cursor->assignee);
 	}
 
+	//Determine an appropriate branch. Remember, if this *fails* the if condition
+	//succeeds, so this is an *inverse* jump
+	branch_type_t first_half_branch = select_appropriate_branch_statement(first_condition_op, BRANCH_CATEGORY_NORMAL, first_half_signed);
+
 	//Now we'll emit our branch at the very end of the first block. Remember it's:
 	//if condition works:
 	//	goto if
 	//else
 	//	goto second_half_block
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -1367,21 +1396,19 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 	ollie_token_t second_condition_op = second_half_cursor->op;
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
-
-	//Determine an appropriate branch. Remember, if this *succeeds* the if condition
-	//succeeds, so this is a *regular* jump
-	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_NORMAL, second_half_signed);
+	//Store whether the second half is a float
+	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(second_half_cursor->op == BLANK){
+	if(second_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(second_branch_conditional_decider, second_half_cursor->assignee, second_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
@@ -1390,12 +1417,16 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
 		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
+	//Determine an appropriate branch. Remember, if this *succeeds* the if condition
+	//succeeds, so this is a *regular* jump
+	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_NORMAL, second_half_signed);
+
 	//Now we'll emit our final branch at the end of the first block. Remember it's:
 	//if condition succeeds:
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, second_half_float);
 }
 
 
@@ -1507,17 +1538,19 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	ollie_token_t first_condition_op = first_half_cursor->op;
 	//And if the type is signed
 	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
+	//Store whether this is a float or not
+	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(first_half_cursor->op == BLANK){
+	if(first_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(first_branch_conditional_decider, first_half_cursor->assignee, first_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1534,7 +1567,7 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	//	goto if 
 	//else
 	//	goto second_half_block 
-	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(original_block, if_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -1545,20 +1578,19 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 	ollie_token_t second_condition_op = second_half_cursor->op;
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
-
-	//Determine the appropriate branch using an inverse jump
-	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
+	//Store whether the second half is a float
+	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(second_half_cursor->op == BLANK){
+	if(second_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(second_branch_conditional_decider, second_half_cursor->assignee, second_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
@@ -1567,12 +1599,15 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
 		add_used_variable(original_block, second_half_cursor->assignee);
 	}
 
+	//Determine the appropriate branch using an inverse jump
+	branch_type_t second_half_branch = select_appropriate_branch_statement(second_condition_op, BRANCH_CATEGORY_INVERSE, second_half_signed);
+
 	//Now we'll emit our final branch at the end of the first block. Remember it's:
 	//if condition fails:
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, second_half_float);
 }
 
 
@@ -1685,17 +1720,19 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	ollie_token_t first_condition_op = first_half_cursor->op;
 	//And if the type is signed
 	u_int8_t first_half_signed = is_type_signed(first_half_cursor->assignee->type);
+	//Store whether the first half is a float
+	u_int8_t first_half_float = IS_FLOATING_POINT(first_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* first_branch_conditional_decider = first_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(first_half_cursor->op == BLANK){
+	if(first_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		first_branch_conditional_decider = emit_temp_var(first_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(first_branch_conditional_decider, first_half_cursor->assignee, first_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(first_branch_conditional_decider, first_half_cursor->assignee, &first_condition_op);
 
 		//Throw it into the block
 		add_statement(original_block, test);
@@ -1713,7 +1750,7 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	//	goto else
 	//else
 	//	goto second_half_block 
-	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL);
+	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
 
 	/**
 	 * HANDLING THE SECOND BLOCK
@@ -1724,17 +1761,19 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	ollie_token_t second_condition_op = second_half_cursor->op;
 	//And if the type is signed
 	u_int8_t second_half_signed = is_type_signed(second_half_cursor->assignee->type);
+	//Store whether the second half is a float
+	u_int8_t second_half_float = IS_FLOATING_POINT(second_half_cursor->assignee->type);
 
 	//The conditional decider is by default the assignee
 	three_addr_var_t* second_branch_conditional_decider = second_half_cursor->assignee;
 
 	//This is possible - if it happens we need to emit test code
-	if(second_half_cursor->op == BLANK){
+	if(second_condition_op == BLANK){
 		//This is now the first half's conditional decider
 		second_branch_conditional_decider = emit_temp_var(second_half_cursor->assignee->type);
 
 		//Test instruction, we're just testing against ourselves here
-		instruction_t* test = emit_test_statement(second_branch_conditional_decider, second_half_cursor->assignee, second_half_cursor->assignee);
+		instruction_t* test = emit_test_not_zero_instruction(second_branch_conditional_decider, second_half_cursor->assignee, &second_condition_op);
 
 		//Throw it into the block
 		add_statement(second_half_block, test);
@@ -1752,7 +1791,7 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
 	// goto if_block
 	//else 
 	// goto else_block
-	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL);
+	emit_branch(second_half_block, if_target, else_target, second_half_branch, second_half_cursor->assignee, BRANCH_CATEGORY_NORMAL, second_half_float);
 }
 
 

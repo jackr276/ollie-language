@@ -292,28 +292,6 @@ u_int8_t is_load_instruction(instruction_t* instruction){
 
 
 /**
- * Helper function to determine if an operator is can be constant folded
- */
-u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token_t op){
-	switch(op){
-		case G_THAN:
-		case L_THAN:
-		case G_THAN_OR_EQ:
-		case L_THAN_OR_EQ:
-		case DOUBLE_EQUALS:
-		case NOT_EQUALS:
-		//Note that this is valid only for logical and. Logical or
-		//requires the use of the "orX" instruction, which does modify
-		//its assignee unlike logical and
-		case DOUBLE_AND:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Helper function to determine if an instruction is a binary operation
  */
 u_int8_t is_instruction_binary_operation(instruction_t* instruction){
@@ -2092,14 +2070,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
-		case THREE_ADDR_CODE_TEST_STMT:
-			//First print the assignee
+		//Special kind of statement for things like "if(x)"
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, " <- test ");
+			fprintf(fl, " <- Test if not zero ");
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
-			fprintf(fl, ", ");
-			print_variable(fl, stmt->op2, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
+
 			break;
 
 		case THREE_ADDR_CODE_ASSN_CONST_STMT:
@@ -2796,11 +2773,11 @@ static void print_addressing_mode_expression(FILE* fl, instruction_t* instructio
 
 
 /**
- * Handle a simple register to register or immediate to register move
+ * Print the move instruction corresponding to the code given to the file pointer given
  */
-static void print_general_purpose_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static inline void print_move_instruction(FILE* fl, instruction_type_t instruction_type){
 	//What we need to print out here
-	switch(instruction->instruction_type){
+	switch(instruction_type){
 		case MOVQ:
 			fprintf(fl, "movq ");
 			break;
@@ -2849,11 +2826,62 @@ static void print_general_purpose_register_to_register_move(FILE* fl, instructio
 		case MOVZWQ:
 			fprintf(fl, "movzwq ");
 			break;
+		case CMOVE:
+			fprintf(fl, "cmove ");
+			break;
+		case CMOVNE:
+			fprintf(fl, "cmovne ");
+			break;
+		case CMOVG:
+			fprintf(fl, "cmovg ");
+			break;
+		case CMOVL:
+			fprintf(fl, "cmovl ");
+			break;
+		case CMOVGE:
+			fprintf(fl, "cmovge ");
+			break;
+		case CMOVLE:
+			fprintf(fl, "cmovle ");
+			break;
+		case CMOVZ:
+			fprintf(fl, "cmovz ");
+			break;
+		case CMOVNZ:
+			fprintf(fl, "cmovnz ");
+			break;
+		case CMOVA:
+			fprintf(fl, "cmova ");
+			break;
+		case CMOVAE:
+			fprintf(fl, "cmovae ");
+			break;
+		case CMOVB:
+			fprintf(fl, "cmovb ");
+			break;
+		case CMOVBE:
+			fprintf(fl, "cmovbe ");
+			break;
+		case CMOVNP:
+			fprintf(fl, "cmovnp ");
+			break;
+		case CMOVP:
+			fprintf(fl, "cmovp ");
+			break;
 		//We should never hit this
 		default:
 			printf("Fatal internal compiler error: unreachable path hit\n");
 			exit(1);
 	}
+}
+
+
+/**
+ * Handle a simple register to register or immediate to register move
+ */
+static void print_general_purpose_register_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+	//First thing - print the move instruciton
+	print_move_instruction(fl, instruction->instruction_type);
 
 	//Print the appropriate variable here
 	if(instruction->source_register != NULL){
@@ -2878,58 +2906,8 @@ static void print_general_purpose_register_to_register_move(FILE* fl, instructio
  * address offset calculation
  */
 static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//What we need to print out here
-	switch(instruction->instruction_type){
-		case MOVQ:
-			fprintf(fl, "movq ");
-			break;
-		case MOVL:
-			fprintf(fl, "movl ");
-			break;
-		case MOVW:
-			fprintf(fl, "movw ");
-			break;
-		case MOVB:
-			fprintf(fl, "movb ");
-			break;
-		case MOVSBW:
-			fprintf(fl, "movsbw ");
-			break;
-		case MOVSBL:
-			fprintf(fl, "movsbl ");
-			break;
-		case MOVSBQ:
-			fprintf(fl, "movsbq ");
-			break;
-		case MOVSWL:
-			fprintf(fl, "movswl ");
-			break;
-		case MOVSWQ:
-			fprintf(fl, "movswq ");
-			break;
-		case MOVSLQ:
-			fprintf(fl, "movslq ");
-			break;
-		case MOVZBW:
-			fprintf(fl, "movzbw ");
-			break;
-		case MOVZBL:
-			fprintf(fl, "movzbl ");
-			break;
-		case MOVZBQ:
-			fprintf(fl, "movzbq ");
-			break;
-		case MOVZWL:
-			fprintf(fl, "movzwl ");
-			break;
-		case MOVZWQ:
-			fprintf(fl, "movzwq ");
-			break;
-		//We should never hit this
-		default:
-			printf("Fatal internal compiler error: unreachable path hit\n");
-			exit(1);
-	}
+	//First thing - print the move instruciton
+	print_move_instruction(fl, instruction->instruction_type);
 
 	//First we'll print out the source
 	if(instruction->source_register != NULL){
@@ -2950,58 +2928,8 @@ static void print_general_purpose_register_to_memory_move(FILE* fl, instruction_
  * Handle a complex memory to register move with a complex address offset calculation
  */
 static void print_general_purpose_memory_to_register_move(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	//What we need to print out here
-	switch(instruction->instruction_type){
-		case MOVQ:
-			fprintf(fl, "movq ");
-			break;
-		case MOVL:
-			fprintf(fl, "movl ");
-			break;
-		case MOVW:
-			fprintf(fl, "movw ");
-			break;
-		case MOVB:
-			fprintf(fl, "movb ");
-			break;
-		case MOVSBW:
-			fprintf(fl, "movsbw ");
-			break;
-		case MOVSBL:
-			fprintf(fl, "movsbl ");
-			break;
-		case MOVSBQ:
-			fprintf(fl, "movsbq ");
-			break;
-		case MOVSWL:
-			fprintf(fl, "movswl ");
-			break;
-		case MOVSWQ:
-			fprintf(fl, "movswq ");
-			break;
-		case MOVSLQ:
-			fprintf(fl, "movslq ");
-			break;
-		case MOVZBW:
-			fprintf(fl, "movzbw ");
-			break;
-		case MOVZBL:
-			fprintf(fl, "movzbl ");
-			break;
-		case MOVZBQ:
-			fprintf(fl, "movzbq ");
-			break;
-		case MOVZWL:
-			fprintf(fl, "movzwl ");
-			break;
-		case MOVZWQ:
-			fprintf(fl, "movzwq ");
-			break;
-		//We should never hit this
-		default:
-			printf("Fatal internal compiler error: unreachable path hit\n");
-			exit(1);
-	}
+	//First thing - print the move instruciton
+	print_move_instruction(fl, instruction->instruction_type);
 	
 	//The address mode expression comes firsj
 	print_addressing_mode_expression(fl, instruction, mode);
@@ -3774,6 +3702,9 @@ static void print_set_instruction(FILE* fl, instruction_t* instruction, variable
 		case SETP:
 			fprintf(fl, "setp ");
 			break;
+		case SETNP:
+			fprintf(fl, "setnp ");
+			break;
 		case SETBE:
 			fprintf(fl, "setbe ");
 			break;
@@ -4285,6 +4216,20 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MOVZBQ:
 		case MOVZWL:
 		case MOVZWQ:
+		case CMOVE:
+		case CMOVNE:
+		case CMOVG:
+		case CMOVL:
+		case CMOVGE:
+		case CMOVLE:
+		case CMOVZ:
+		case CMOVNZ:
+		case CMOVA:
+		case CMOVAE:
+		case CMOVB:
+		case CMOVBE:
+		case CMOVNP:
+		case CMOVP:
 			/**
 			 * Now we go based on what kind of memory
 			 * access we're doing here. This will determine
@@ -4360,6 +4305,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case SETA:
 		case SETBE:
 		case SETB:
+		case SETNP:
+		case SETP:
 			print_set_instruction(fl, instruction, mode);
 			break;
 		
@@ -4656,72 +4603,6 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee){
 
 	//And give it back
 	return dec_stmt;
-}
-
-
-/**
- * Emit a test instruction
- *
- * Test instructions inherently have no assignee as they don't modify registers
- */
-instruction_t* emit_test_statement(three_addr_var_t* assignee, three_addr_var_t* op1, three_addr_var_t* op2){
-	//First we'll allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//We'll now set the type
-	stmt->statement_type = THREE_ADDR_CODE_TEST_STMT;
-
-	//Assign the assignee and op1
-	stmt->assignee = assignee;
-	stmt->op1 = op1;
-	stmt->op2 = op2;
-
-	op1->use_count++;
-	op2->use_count++;
-
-	//And now we'll give it back
-	return stmt;
-}
-
-
-/**
- * Emit a test instruction directly - bypassing the instruction selection step
- *
- * Test instructions inherently have no assignee as they don't modify registers
- *
- * NOTE: This may only be used DURING the process of register selection
- */
-instruction_t* emit_direct_test_instruction(three_addr_var_t* op1, three_addr_var_t* op2){
-	//First we'll allocate it
-	instruction_t* instruction = calloc(1, sizeof(instruction_t));
-
-	//We'll need the size to select the appropriate instruction
-	variable_size_t size = get_type_size(op1->type);
-
-	//Select the size appropriately
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = TESTQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = TESTL;
-			break;
-		case WORD:
-			instruction->instruction_type = TESTW;
-			break;
-		case BYTE:
-			instruction->instruction_type = TESTB;
-			break;
-		default:
-			break;
-	}
-
-	//Then we'll set op1 and op2 to be the source registers
-	instruction->source_register = op1;
-	instruction->source_register2 = op2;
-
-	//And now we'll give it back
-	return instruction;
 }
 
 
@@ -5532,6 +5413,9 @@ instruction_t* emit_logical_not_instruction(three_addr_var_t* assignee, three_ad
 	//Leave it in here
 	stmt->op1 = op1;
 
+	//Flag that this does have an operator, even though we aren't strictly using it
+	stmt->op = L_NOT;
+
 	//Give the stmt back
 	return stmt;
 }
@@ -5569,6 +5453,25 @@ instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_PHI_FUNC;
+
+	//And give the statement back
+	return stmt;
+}
+
+
+/**
+ * Emit a "test if not 0 three address code statement"
+ */
+instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//The assignee/op1 is passed through
+	stmt->assignee = destination_variable;
+	stmt->op1 = being_tested;
+
+	//Note what kind of node this is
+	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
 
 	//And give the statement back
 	return stmt;
@@ -7054,6 +6957,16 @@ branch_type_t select_appropriate_branch_statement(ollie_token_t op, branch_categ
 			} else {
 				return BRANCH_NE;
 			}
+
+		//Logical not is *TRUE* when the value is zero, and not
+		//true when the value isn't zero
+		case L_NOT:
+			if(branch_type == BRANCH_CATEGORY_INVERSE){
+				return BRANCH_NZ;
+			} else {
+				return BRANCH_Z;
+			}
+
 		//If we get here, it was some kind of
 		//non relational operator. In this case,
 		//we default to 0 = false non zero = true
