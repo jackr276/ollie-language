@@ -11,7 +11,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../ast/ast.h"
-#include "../call_graph/call_graph.h"
 //For error printing
 #include "../utils/queue/min_priority_queue.h"
 #include "../utils/constants.h"
@@ -673,8 +672,8 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	//Store the line number
 	record->line_number = line_number;
 
-	//Create its call graph node
-	record->call_graph_node = create_call_graph_node(record);
+	//Allocate the list of all functions that this calls
+	record->callees = dynamic_array_alloc();
 
 	//We know that we need to create this immediately
 	record->signature = create_function_pointer_type(is_public, line_number, NOT_MUTABLE);
@@ -2171,6 +2170,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				//Then destroy the whole array
 				dynamic_array_dealloc(&(temp->local_f64_constants));
 			}
+
+			//Destroy the call graph infrastructure
+			dynamic_array_dealloc(&(temp->callees));
 
 			//Dealloate the function type
 			type_dealloc(temp->signature);

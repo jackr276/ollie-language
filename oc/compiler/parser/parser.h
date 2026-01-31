@@ -12,7 +12,6 @@
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
 #include "../ast/ast.h"
-#include "../call_graph/call_graph.h"
 #include "../utils/utility_structs.h"
 #include <sys/types.h>
 
@@ -56,8 +55,6 @@ struct front_end_results_package_t{
 	constants_symtab_t* constant_symtab;
 	//Grouping stack
 	lex_stack_t grouping_stack;
-	//Global call graph entry point
-	call_graph_node_t* os;
 	//Number of errors
 	u_int16_t num_errors;
 	//Number of warnings

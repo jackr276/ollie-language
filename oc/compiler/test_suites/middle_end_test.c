@@ -164,8 +164,6 @@ int main(int argc, char** argv){
 
 	//Deallocate everything at the end
 	ast_dealloc();
-	//Free the call graph holder
-	free(parse_results->os);
 	function_symtab_dealloc(parse_results->function_symtab);
 	type_symtab_dealloc(parse_results->type_symtab);
 	variable_symtab_dealloc(parse_results->variable_symtab);

@@ -400,7 +400,6 @@ static u_int8_t compile(compiler_options_t* options){
 	 */
 	//Deallocate the ast
 	ast_dealloc();
-	free(results->os);
 	function_symtab_dealloc(results->function_symtab);
 	type_symtab_dealloc(results->type_symtab);
 	variable_symtab_dealloc(results->variable_symtab);

@@ -38,8 +38,6 @@ static variable_symtab_t* variable_symtab = NULL;
 static type_symtab_t* type_symtab = NULL;
 static constants_symtab_t* constant_symtab = NULL;
 
-//The "operating system" function that is symbolically referenced here
-static call_graph_node_t* os = NULL;
 //The entire AST is rooted here
 static generic_ast_node_t* prog = NULL;
 
@@ -978,8 +976,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//Store our function signature
 		function_signature = function_record->signature->internal_types.function_type;
 
-		//We'll also add in that the current function has called this one
-		call_function(current_function->call_graph_node, function_record->call_graph_node);
+		//TODO FUNCTION CALL
+
 		//We'll now note that this was indeed called
 		function_record->called = TRUE;
 
@@ -10962,8 +10960,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	if(is_main_function == TRUE){
 		//Mark that it's been called
 		function_record->called = TRUE;
-		//Call it
-		call_function(os, function_record->call_graph_node);
+
+		//TODO FUNCTION CALL
 	}
 	
 	//We're done with this, so destroy it
@@ -11358,9 +11356,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	type_symtab = type_symtab_alloc();
 	constant_symtab = constants_symtab_alloc(); 
 
-	//Initialize the OS call graph. This is because the OS always calls the main function
-	os = calloc(1, sizeof(call_graph_node_t));
-	
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
 	
@@ -11416,8 +11411,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	results->grouping_stack = grouping_stack;
 	//AST root
 	results->root = prog;
-	//Call graph OS root
-	results->os = os;
 	//Record how many errors that we had
 	results->num_errors = num_errors;
 	results->num_warnings = num_warnings;
