@@ -2140,12 +2140,45 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
  * the adjacency matrix for the call graph
  */
 void finalize_function_symtab(function_symtab_t* symtab){
+	//Extract the number of functions
+	u_int32_t number_of_functions = symtab->current_function_id;
+
 	//Now that we have all of the possible functions added in, we need to create the
 	//overall adjacency matrix for all of these functions
 	symtab->call_graph_matrix = calloc(symtab->current_function_id, sizeof(symtab_function_record_t*));
 
-	//We will now go through and populate the adjacency matrix
+	//We will now go through and populate the adjacency matrix. We need to run through the entire
+	//hashmap to do this
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		//Totally possible for this to happen
+		if(symtab->records[i] == NULL){
+			continue;
+		}
 
+		//Otherwise, we actually have a space that is populated so we need to
+		//populate here. Remember, every record is a linked list so we need
+		//to explore all of the nodes
+		symtab_function_record_t* cursor = symtab->records[i];
+
+		//So long as the cursor is not NULL
+		while(cursor != NULL){
+			//Grab the cursor's unique function ID
+			u_int32_t cursor_id = cursor->function_id;
+
+			//Run through all of the functions that this function
+			//itself calls
+			for(u_int16_t j = 0; j < cursor->called_functions.current_index; j++){
+				//Extract it
+				symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), i);
+
+			}
+
+
+
+			//Bump it up to the next one
+			cursor = cursor->next;
+		}
+	}
 }
 
 

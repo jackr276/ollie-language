@@ -28,7 +28,7 @@
 #define CONSTANT_KEYSPACE 256 
 
 //There's only one function keyspace per program, so it can be a bit larger
-#define FUNCTION_KEYSPACE 512
+#define FUNCTION_KEYSPACE 1024 
 
 //The maximum number of function paramaters
 #define MAX_FUNCTION_PARAMS 6
