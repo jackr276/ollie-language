@@ -123,32 +123,43 @@ u_int8_t dynamic_set_is_empty(dynamic_set_t* set){
 
 
 /**
- * Add an element into the dynamic array
- *
- *
- * TODO UNIQUENESS
+ * Add an element into the dynamic set. This function enforces
+ * uniqueness in the addition
  */
-void dynamic_array_add(dynamic_array_t* array, void* ptr){
+void dynamic_set_add(dynamic_set_t* set, void* ptr){
 	//Let's just double check here. Hard fail if this happens
 	if(ptr == NULL){
-		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
+		printf("ERROR: Attempting to insert a NULL pointer into a dynamic set\n");
 		exit(1);
 	}
+
+	//Let's now check and see if the dynamic set already contains this memory
+	//address inside of it. If it does, then we'll just leave without adding
+	//anything
+	for(u_int16_t i = 0; i < set->current_index; i++){
+		//Compare our pointer with the stored pointer. If we have a match,
+		//then we need to exit out
+		if(set->internal_array[i] == ptr){
+			return;
+		}
+	}
+
+	//If we make it here, then we know that we are good to add
 	
 	//Now we'll see if we need to reallocate this
-	if(array->current_index == array->current_max_size){
+	if(set->current_index == set->current_max_size){
 		//We'll double the current max size
-		array->current_max_size *= 2;
+		set->current_max_size *= 2;
 
 		//And we'll reallocate the array
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
+		set->internal_array = realloc(set->internal_array, sizeof(void*) * set->current_max_size);
 	}
 
 	//Now that we're all set, we can add our element in. Elements are always added in at the very end
-	array->internal_array[array->current_index] = ptr;
+	set->internal_array[set->current_index] = ptr;
 
 	//Bump this up by 1
-	array->current_index++;
+	set->current_index++;
 
 	//And we're all set
 }
@@ -156,7 +167,7 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr){
 
 /**
  * Clear a dynamic set entirely - keeps the size unchanged, but
- * sets the entire internal array to 0
+array * sets the entire internal array to 0
  */
 void clear_dynamic_set(dynamic_set_t* set){
 	//Just to be safe
@@ -221,18 +232,18 @@ void* dynamic_set_delete_at(dynamic_set_t* set, u_int16_t index){
 
 
 /**
- * Delete the pointer itself from the dynamic array
+ * Delete the pointer itself from the dynamic set
  *
  * Will not complain if it cannot be found - it simply won't be deleted
  */
-void dynamic_array_delete(dynamic_array_t* array, void* ptr){
+void dynamic_set_delete(dynamic_set_t* set, void* ptr){
 	//If this is NULL or empty we'll just return
-	if(ptr == NULL || array == NULL || array->current_index == 0){
+	if(ptr == NULL || set == NULL || set->current_index == 0){
 		return;
 	}
 
 	//Otherwise we'll need to grab this index
-	int16_t index = dynamic_array_contains(array, ptr);
+	int16_t index = dynamic_set_contains(set, ptr);
 
 	//If we couldn't find it - no harm, we just won't do anything
 	if(index == NOT_FOUND){
@@ -240,18 +251,16 @@ void dynamic_array_delete(dynamic_array_t* array, void* ptr){
 	}
 
 	//Now we'll use the index to delete
-	dynamic_array_delete_at(array, index);
-
-	//And we're done
+	dynamic_set_delete_at(set, index);
 }
 
 
 /**
- * Are two dynamic arrays completely equal? A "deep equals" 
+ * Are two dynamic sets completely equal? A "deep equals" 
  * will ensure that every single element in one array is also inside of the
  * other, and that no elements in one array are different
  */
-u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
+u_int8_t dynamic_sets_equal(dynamic_set_t* a, dynamic_set_t* b){
 	//Safety check here 
 	if(a == NULL || b == NULL){
 		return FALSE;
