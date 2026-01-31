@@ -200,6 +200,26 @@ void* dynamic_set_get_at(dynamic_set_t* set, u_int16_t index){
 
 
 /**
+ * Remove an element from the back of the dynamic array - O(1) removal
+ */
+void* dynamic_set_delete_from_back(dynamic_set_t* set){
+	//Already empty
+	if(set->current_index == 0){
+		return NULL;
+	}
+
+	//Grab off of the very end
+	void* deleted = set->internal_array[set->current_index - 1];
+
+	//Decrement the index
+	(set->current_index)--;
+
+	//Give back the pointer
+	return deleted;
+}
+
+
+/**
  * Delete an element from a specified index. The element itself
  * is returned, allowing this to be used as a search & delete function
  * all in one

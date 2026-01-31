@@ -12,6 +12,7 @@
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
 #include "../utils/stack/lightstack.h"
+#include "../utils/dynamic_set/dynamic_set.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/constants.h"
 //Every function record has one of these
@@ -145,10 +146,10 @@ struct symtab_function_record_t{
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
 	//The name of the function
 	dynamic_string_t func_name;
-	//Functions have dynamic arrays for string/nonstring constants
-	dynamic_array_t local_string_constants;
-	dynamic_array_t local_f32_constants;
-	dynamic_array_t local_f64_constants;
+	//Functions have dynamic sets for string/nonstring constants
+	dynamic_set_t local_string_constants;
+	dynamic_set_t local_f32_constants;
+	dynamic_set_t local_f64_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The hash that we have
@@ -160,7 +161,7 @@ struct symtab_function_record_t{
 	//The type of the function
 	generic_type_t* signature;
 	//The list of all functions that this function calls out to
-	dynamic_array_t callees;
+	dynamic_set_t callees;
 	//What's the return type?
 	generic_type_t* return_type;
 	//The line number

@@ -673,7 +673,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	record->line_number = line_number;
 
 	//Allocate the list of all functions that this calls
-	record->callees = dynamic_array_alloc();
+	record->callees = dynamic_set_alloc();
 
 	//We know that we need to create this immediately
 	record->signature = create_function_pointer_type(is_public, line_number, NOT_MUTABLE);
@@ -1327,11 +1327,10 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 			//If we have no local constants, then we'll need to allocate
 			//the array
 			if(function->local_string_constants.internal_array == NULL){
-				function->local_string_constants = dynamic_array_alloc();
+				function->local_string_constants = dynamic_set_alloc();
 			}
 
-			//And add the function in
-			dynamic_array_add(&(function->local_string_constants), constant);
+			dynamic_set_add(&(function->local_string_constants), constant);
 
 			break;
 
@@ -1339,11 +1338,10 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 			//If we have no local constants, then we'll need to allocate
 			//the array
 			if(function->local_f32_constants.internal_array == NULL){
-				function->local_f32_constants = dynamic_array_alloc();
+				function->local_f32_constants = dynamic_set_alloc();
 			}
 
-			//And add the function in
-			dynamic_array_add(&(function->local_f32_constants), constant);
+			dynamic_set_add(&(function->local_f32_constants), constant);
 
 			break;
 
@@ -1351,11 +1349,10 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 			//If we have no local constants, then we'll need to allocate
 			//the array
 			if(function->local_f64_constants.internal_array == NULL){
-				function->local_f64_constants = dynamic_array_alloc();
+				function->local_f64_constants = dynamic_set_alloc();
 			}
 
-			//And add the function in
-			dynamic_array_add(&(function->local_f64_constants), constant);
+			dynamic_set_add(&(function->local_f64_constants), constant);
 
 			break;
 	}
@@ -1591,7 +1588,7 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 		//Run through every string constant
 		for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
 			//Grab the constant out
-			local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
+			local_constant_t* constant = dynamic_set_get_at(&(record->local_string_constants), i);
 
 			//Now print out every local string constant
 			fprintf(fl, ".LC%d:\n\t.string \"%s\"\n", constant->local_constant_id, constant->local_constant_value.string_value.string);
@@ -1606,7 +1603,7 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 		//Run through all constants
 		for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
 			//Grab the constant out
-			local_constant_t* constant = dynamic_array_get_at(&(record->local_f32_constants), i);
+			local_constant_t* constant = dynamic_set_get_at(&(record->local_f32_constants), i);
 
 			//Extract the floating point equivalent using the mask
 			int32_t float_equivalent = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
@@ -1624,7 +1621,7 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 		//Run through all constants
 		for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
 			//Grab the constant out
-			local_constant_t* constant = dynamic_array_get_at(&(record->local_f64_constants), i);
+			local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
 
 			//These are in little-endian order. Lower 32 bits comes first, then the upper 32 bits
 			int32_t lower32 = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
@@ -1646,7 +1643,7 @@ local_constant_t* get_string_local_constant(symtab_function_record_t* record, ch
 	//Run through all of the local constants
 	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_array_get_at(&(record->local_string_constants), i);
+		local_constant_t* candidate = dynamic_set_get_at(&(record->local_string_constants), i);
 
 		//If we have a match then we're good here, we'll return the candidate and leave
 		if(strcmp(candidate->local_constant_value.string_value.string, string_value) == 0){
@@ -1668,7 +1665,7 @@ local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float
 	//Run through all of the local constants
 	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_array_get_at(&(record->local_f32_constants), i);
+		local_constant_t* candidate = dynamic_set_get_at(&(record->local_f32_constants), i);
 
 		//We will be comparing the values at a byte level. We do not compare the raw values because
 		//that would use FP comparison
@@ -1691,7 +1688,7 @@ local_constant_t* get_f64_local_constant(symtab_function_record_t* record, doubl
 	//Run through all of the local constants
 	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_array_get_at(&(record->local_f64_constants), i);
+		local_constant_t* candidate = dynamic_set_get_at(&(record->local_f64_constants), i);
 
 		//We will be comparing the values at a byte level. We do not compare the raw values because
 		//that would use FP comparison
@@ -1716,7 +1713,7 @@ void sweep_local_constants(symtab_function_record_t* record){
 	//Run through every string constant
 	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_string_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -1730,13 +1727,13 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_array_delete(&(record->local_string_constants), to_be_deleted);
+		dynamic_set_delete(&(record->local_string_constants), to_be_deleted);
 	}
 
 	//Now do the exact same thing for f32's. We can reuse the same array
 	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(&(record->local_f32_constants), i);
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_f32_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -1750,13 +1747,13 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_array_delete(&(record->local_f32_constants), to_be_deleted);
+		dynamic_set_delete(&(record->local_f32_constants), to_be_deleted);
 	}
 
 	//Now do the exact same thing for f64's. We can reuse the same array
 	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(&(record->local_f64_constants), i);
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -1770,7 +1767,7 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_array_delete(&(record->local_f64_constants), to_be_deleted);
+		dynamic_set_delete(&(record->local_f64_constants), to_be_deleted);
 	}
 
 	//Scrap this now that we're done with it
@@ -2142,37 +2139,37 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			if(temp->local_string_constants.internal_array != NULL){
 				//Deallocate each local constant
 				for(u_int16_t i = 0; i < temp->local_string_constants.current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(&(temp->local_string_constants), i));
+					local_constant_dealloc(dynamic_set_get_at(&(temp->local_string_constants), i));
 				}
 
-				//Then destroy the whole array
-				dynamic_array_dealloc(&(temp->local_string_constants));
+				//Then destroy the whole set 
+				dynamic_set_dealloc(&(temp->local_string_constants));
 			}
 
 			//Deallocation for local float constants
 			if(temp->local_f32_constants.internal_array != NULL){
 				//Deallocate each local constant
 				for(u_int16_t i = 0; i < temp->local_f32_constants.current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(&(temp->local_f32_constants), i));
+					local_constant_dealloc(dynamic_set_get_at(&(temp->local_f32_constants), i));
 				}
 
-				//Then destroy the whole array
-				dynamic_array_dealloc(&(temp->local_f32_constants));
+				//Then destroy the whole set 
+				dynamic_set_dealloc(&(temp->local_f32_constants));
 			}
 
 			//Deallocation for local float constants
 			if(temp->local_f64_constants.internal_array != NULL){
 				//Deallocate each local constant
 				for(u_int16_t i = 0; i < temp->local_f64_constants.current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(&(temp->local_f64_constants), i));
+					local_constant_dealloc(dynamic_set_get_at(&(temp->local_f64_constants), i));
 				}
 
 				//Then destroy the whole array
-				dynamic_array_dealloc(&(temp->local_f64_constants));
+				dynamic_set_dealloc(&(temp->local_f64_constants));
 			}
 
 			//Destroy the call graph infrastructure
-			dynamic_array_dealloc(&(temp->callees));
+			dynamic_set_dealloc(&(temp->callees));
 
 			//Dealloate the function type
 			type_dealloc(temp->signature);

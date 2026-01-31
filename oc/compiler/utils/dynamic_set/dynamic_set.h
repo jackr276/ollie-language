@@ -74,6 +74,11 @@ void clear_dynamic_set(dynamic_set_t* set);
 void* dynamic_set_get_at(dynamic_set_t* set, u_int16_t index);
 
 /**
+ * Remove an element from the back of the dynamic set - O(1) removal
+ */
+void* dynamic_set_delete_from_back(dynamic_set_t* set);
+
+/**
  * Delete an element from the dynamic set at a given index. Returns
  * the element at said index
  */
