@@ -20,7 +20,7 @@ int main(){
 	//We should ensure that this is empty
 	if(dynamic_set_is_empty(&set) == FALSE){
 		fprintf(stderr, "Is empty check fails\n");
-		exit(-1);
+		exit(1);
 	}
 	
 	//Fill it up with some junk - just a bunch of int pointers
@@ -46,8 +46,26 @@ int main(){
 		}
 	}
 
+	//Now, let's test the dynamic set capabilities. If we try to readd the same pointers
+	//over and over again, we should never do so
+	for(int i = 0; i < 30000; i++){
+		//Get the int pointer out
+		int* int_ptr = dynamic_set_get_at(&set, i);
+
+		//Try to add it back in. Note that this should not result in any
+		//real additions
+		dynamic_set_add(&set, int_ptr);
+	}
+
+	//If for some reason the size is more than 29999, this is a failure because we violated the uniqueness
+	//constraint
+	if(set.current_index != 29999){
+		fprintf(stderr, "Exepcted a maximum size of 29999 but got %d\n", set.current_max_size);
+		exit(1);
+	}
+
 	//Delete at the very end
-	int* deleted = (int*)(dynamic_array_delete_at(&array, 29999));
+	int* deleted = (int*)(dynamic_set_delete_at(&set, 29999));
 
 	//Make sure it matches
 	//If this is all correct here, it should match
@@ -61,7 +79,7 @@ int main(){
 	//Now we'll do the exact same thing but with a deletion
 	for(u_int16_t i = 0; i < 29999; i++){
 		//Grab it out here -- remember, a dynamic array returns a void*
- 		int* grabbed = (int*)(dynamic_array_delete_at(&array, 0));
+ 		int* grabbed = (int*)(dynamic_set_delete_at(&set, 0));
 
 		//If this is all correct here, it should match
 		if(*grabbed != i){
@@ -74,51 +92,14 @@ int main(){
 
 	//So we now know that we can add
 	//We should ensure that this is not empty
-	if(dynamic_array_is_empty(&array) == FALSE){
+	if(dynamic_set_is_empty(&set) == FALSE){
 		fprintf(stderr, "Is empty check fails\n");
 		exit(-1);
 	}
 	
 	//Destroy it
-	dynamic_array_dealloc(&array);
-
-	printf("\n================= TESTING SETTING =================\n");
-
-	//Allocate this one with an initial size
-	array = dynamic_array_alloc_initial_size(35);
-
-	for(int16_t i = 34; i >= 0; i--){
-		int* c = malloc(1 * sizeof(int));
-
-		if(i % 2 == 1){
-			*c = 1;
-		} else {
-			*c = 0;
-		}
-
-		dynamic_array_set_at(&array, c, i);
-	}
-
-	printf("[");
-
-	for(u_int16_t i = 0; i < 35; i++){
-		int* value = dynamic_array_get_at(&array, i);
-
-		if(value == NULL){
-			printf("(NULL)");
-		} else {
-			printf("%d", *value);
-		}
-
-		if(i != 34){
-			printf(", ");
-		}
-
-		//Deallocate this when done
-		free(value);
-	}
-
-	printf("]\n");
-
 	dynamic_set_dealloc(&set);
+
+	//All worked here
+	return 0;
 }
