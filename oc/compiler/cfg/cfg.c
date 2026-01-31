@@ -151,14 +151,14 @@ void reset_block_variable_tracking(basic_block_t* block){
 	if(block->assigned_variables.internal_array == NULL){
 		block->assigned_variables = dynamic_array_alloc();
 	} else {
-		reset_dynamic_array(&(block->assigned_variables));
+		clear_dynamic_array(&(block->assigned_variables));
 	}
 
 	//Do the same with the used variables
 	if(block->used_variables.internal_array == NULL){
 		block->used_variables = dynamic_array_alloc();
 	} else {
-		reset_dynamic_array(&(block->used_variables));
+		clear_dynamic_array(&(block->used_variables));
 	}
 
 	//Reset live in completely

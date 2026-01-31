@@ -444,7 +444,7 @@ static void compute_transitive_closure_of_graph(data_dependency_graph_t* graph){
  */
 static u_int32_t get_nodes_independent_of_given(data_dependency_graph_t* graph, data_dependency_graph_node_t* node, dynamic_array_t* independent){
 	//Wipe the dynamic array - we are avoiding reallocation for efficiency
-	reset_dynamic_array(independent);
+	clear_dynamic_array(independent);
 
 	//Assume that we have found no load instructions
 	u_int32_t independent_load_count = 0;
@@ -546,7 +546,7 @@ static dynamic_array_t* get_all_connected_components(dynamic_array_t* subgraph, 
 	}
 
 	//Wipe out the connected components graph from the prior run
-	reset_dynamic_array(connected_components);
+	clear_dynamic_array(connected_components);
 
 	for(u_int16_t i = 0; i < subgraph->current_index; i++){
 		//Extract it

@@ -1194,8 +1194,8 @@ static inline void reset_function_blocks_for_liveness(basic_block_t* function_en
 		current->visited = FALSE;
 
 		//Also reset the liveness sets
-		reset_dynamic_array(&(current->live_in));
-		reset_dynamic_array(&(current->live_out));
+		clear_dynamic_array(&(current->live_in));
+		clear_dynamic_array(&(current->live_out));
 
 		//Push it up
 		current = current->direct_successor;
@@ -1339,7 +1339,7 @@ static void reset_all_live_ranges(dynamic_array_t* live_ranges){
 		current->spill_cost = 0;
 
 		//And we'll also reset all of the neighbors
-		reset_dynamic_array(&(current->neighbors));
+		clear_dynamic_array(&(current->neighbors));
 	}
 }
 
@@ -2222,8 +2222,8 @@ static void precolor_function(basic_block_t* function_entry, dynamic_array_t* ge
  */
 static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 	//Wipe these two values out
-	reset_dynamic_array(&(block->used_variables));
-	reset_dynamic_array(&(block->assigned_variables));
+	clear_dynamic_array(&(block->used_variables));
+	clear_dynamic_array(&(block->assigned_variables));
 
 	//Instruction cursor
 	instruction_t* cursor = block->leader_statement;

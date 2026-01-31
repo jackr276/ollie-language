@@ -14,11 +14,9 @@ typedef struct dynamic_set_t dynamic_set_t;
 
 /**
  * Allows for an automatically resizing, error-free
- * and thoughtless dynamic array. This is primarily
- * designed for the Worklists in SSA conversion, but
- * can be used anywhere
+ * and thoughtless dynamic set
 */
-struct dynamic_array_t{
+struct dynamic_set_t{
 	//The overall array - void* so it's generic
 	void** internal_array;
 	//The current maximum size
@@ -28,50 +26,41 @@ struct dynamic_array_t{
 	u_int16_t current_index;
 };
 
-/**
- * Initialize a dynamic array on the heap 
- * specifically
- */
-dynamic_array_t* dynamic_array_heap_alloc();
 
 /**
- * Initialize a dynamic array. The resulting
+ * Initialize a dynamic set. The resulting
  * control structure will be stack allocated
  */
-dynamic_array_t dynamic_array_alloc();
-
+dynamic_set_t dynamic_set_alloc();
 
 /**
- * Initialize a dynamic array with an initial
+ * Initialize a dynamic set with an initial
  * size. This is useful if we already know
  * the size we need
  */
-dynamic_array_t dynamic_array_alloc_initial_size(u_int16_t initial_size);
-
+dynamic_set_t dynamic_set_alloc_initial_size(u_int16_t initial_size);
 
 /**
- * Create an exact clone of the dynamic array that we're given
+ * Create an exact clone of the dynamic set that we're given
  */
-dynamic_array_t clone_dynamic_array(dynamic_array_t* array);
+dynamic_set_t clone_dynamic_array(dynamic_set_t* set);
 
 /**
- * Does the dynamic array contain this pointer?
+ * Does the dynamic set contain this pointer?
  * 
  * RETURNS: the index if true, -1 if not
 */
-int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr);
-
+int16_t dynamic_set_contains(dynamic_set_t* set, void* ptr);
 
 /**
  * Is the dynamic array is empty?
 */
-u_int8_t dynamic_array_is_empty(dynamic_array_t* array);
-
+u_int8_t dynamic_set_is_empty(dynamic_set_t* set);
 
 /**
- * Add an item into the dynamic array
+ * Add an item into the dynamic set 
  */
-void dynamic_array_add(dynamic_array_t* array, void* ptr);
+void dynamic_set_add(dynamic_set_t* set, void* ptr);
 
 /**
  * Clear a dynamic array entirely - keeps the size unchanged, but
@@ -105,11 +94,6 @@ void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index);
  * Will not complain if it cannot be found - it simply won't be deleted
  */
 void dynamic_array_delete(dynamic_array_t* array, void* ptr);
-
-/**
- * Remove an element from the back of the dynamic array - O(1) removal
- */
-void* dynamic_array_delete_from_back(dynamic_array_t* array);
 
 /**
  * Are two dynamic arrays completely equal? A "deep equals" 
