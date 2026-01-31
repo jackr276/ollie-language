@@ -11410,6 +11410,18 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
 
 
 /**
+ * In Ollie, we do not allow the user to inline functions that are *directly or indirectly* recursive.
+ * We only look for this after the entire file has been parsed, so now that it has, we will
+ * check every function to make sure it adheres to this rule
+ */
+static inline u_int8_t validate_inlined_functions_are_non_revursive(function_symtab_t* symtab) {
+
+	//If we survive to down here then we are fine 
+	return SUCCESS;
+}
+
+
+/**
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
  * static methods
 */
@@ -11480,6 +11492,13 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	if(prog->ast_node_type != AST_NODE_TYPE_ERR_NODE){
 		//Finalize the function symtab
 		finalize_function_symtab(function_symtab);
+
+		//Validate that we have no recursive & inlined functions. If this fails, 
+		//we force to an error
+		if(validate_inlined_functions_are_non_revursive(function_symtab) == FAILURE){
+			prog->ast_node_type = AST_NODE_TYPE_ERR_NODE;
+		}
+
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);
 		//Check for any bad variable declarations

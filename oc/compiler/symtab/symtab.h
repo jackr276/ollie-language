@@ -472,6 +472,18 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
 u_int8_t insert_constant(constants_symtab_t* symtab, symtab_constant_record_t* record);
 
 /**
+ * Determine whether or not a function is directly recursive using the function
+ * symtab's adjacency matrix
+ */
+u_int8_t is_function_directly_recursive(function_symtab_t* symtab, symtab_function_record_t* record);
+
+/**
+ * Determine whether or not a function is recursive(direct or indirect) using the function
+ * symtab's transitive closure 
+ */
+u_int8_t is_function_recursive(function_symtab_t* symtab, symtab_function_record_t* record);
+
+/**
  * A helper function that adds all basic types to the type symtab
  */
 u_int16_t add_all_basic_types(type_symtab_t* symtab);

@@ -2080,6 +2080,35 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 
 
 /**
+ * Determine whether or not a function is directly recursive using the function
+ * symtab's adjacency matrix
+ */
+u_int8_t is_function_directly_recursive(function_symtab_t* symtab, symtab_function_record_t* record){
+	//Extract for our uses
+	u_int32_t function_id = record->function_id;
+	u_int32_t num_functions = symtab->current_function_id;
+
+	//Extract the value contained at adjacency_matrix[func_id][func_id]
+	return symtab->call_graph_matrix[function_id * num_functions + function_id];
+
+}
+
+
+/**
+ * Determine whether or not a function is recursive(direct or indirect) using the function
+ * symtab's transitive closure 
+ */
+u_int8_t is_function_recursive(function_symtab_t* symtab, symtab_function_record_t* record){
+	//Extract for our uses
+	u_int32_t function_id = record->function_id;
+	u_int32_t num_functions = symtab->current_function_id;
+
+	//Extract the value contained at transitive_closure[func_id][func_id]
+	return symtab->call_graph_transitive_closure[function_id * num_functions + function_id];
+}
+
+
+/**
  * Crawl the symtab and check for any unused functions. We generate some hopefully helpful
  * warnings here for the user
  */
