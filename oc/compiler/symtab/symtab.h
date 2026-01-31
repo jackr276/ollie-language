@@ -174,6 +174,8 @@ struct symtab_function_record_t{
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;
+	//Has this function been inlined?
+	u_int8_t inlined;
 	//Is this function public or private
 	function_visibility_t function_visibility;
 };
@@ -432,7 +434,7 @@ u_int8_t add_function_parameter(symtab_function_record_t* function_record, symta
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int32_t line_number);
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number);
 
 /**
  * Create a type record for the symbol table

@@ -654,7 +654,7 @@ u_int8_t add_function_parameter(symtab_function_record_t* function_record, symta
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 

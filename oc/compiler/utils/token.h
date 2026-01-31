@@ -131,5 +131,6 @@ typedef enum {
 	PUB,
 	TRUE_CONST,
 	FALSE_CONST,
+	INLINE,
 } ollie_token_t;
 

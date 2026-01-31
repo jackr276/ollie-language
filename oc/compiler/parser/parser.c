@@ -10520,22 +10520,72 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
-	//Lookahead token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	//Is this a public function?
 	u_int8_t is_public = FALSE;
+	//Is this an inline function? Also assume no by default
+	u_int8_t is_inlined = FALSE;
 
-	//If we see the PUB keyword, that means we have a public function
-	if(lookahead.tok == PUB){
-		//Set the flag
-		is_public = TRUE;
-		//Refresh the lookahead
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
+	//Lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Now we need to see the "fn" keyword. If we don't, we leave
-	if(lookahead.tok != FN){
-		return print_and_return_error("fn keyword required in function predeclaration", parser_line_num);
+	//We could see pub fn or fn here, so we need to process both cases
+	switch(lookahead.tok){
+		//Explicit declaration that this function is visible to other partial programs
+		case PUB:
+			//Flag that it is public
+			is_public = TRUE;
+
+			//Refresh the lookahead token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case INLINE:
+					return print_and_return_error("Public functions may not be inlined", parser_line_num);
+
+				default:
+					return print_and_return_error("Expected \"fn\" keyword after \"pub\" in function declaration", parser_line_num);
+			}
+
+			//Otherwise we're all good if we get here, so break out
+			break;
+
+		//Explicit inline request. Note that inlining functions and functions being public are mutually exclusive. You cannot have
+		//one or the other
+		case INLINE:
+			//This is being inlined
+			is_inlined = TRUE;
+
+			//Refresh the lookahead token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case PUB:
+					return print_and_return_error("Inlined functions may not be made public", parser_line_num);
+
+				default:
+					return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
+			}
+
+			break;
+
+		//Nothing more to do here, just leave
+		case FN:
+			break;
+		
+		//It would be bizarre if we got here, but just in case
+		default:
+			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
 	}
 
 	//Following this, we need to see an identifier
@@ -10584,7 +10634,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(function_name, is_public, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(function_name, is_public, is_inlined, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10694,7 +10744,7 @@ after_rparen:
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= {pub}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= {pub | inline}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
  */
 static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
 	//Freeze the line number
@@ -10707,6 +10757,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	u_int8_t is_main_function = FALSE;
 	//Is this function public or private? Unless explicitly stated, all functions are private
 	u_int8_t is_public = FALSE;
+	//Is this function inlined? By default no
+	u_int8_t is_inlined = FALSE;
 
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10721,12 +10773,44 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			//Refresh the lookahead token
 			lookahead = get_next_token(token_stream, &parser_line_num);
 
-			//Now we need to ensure that this is the FN keyword, if it isn't, we fail out
-			if(lookahead.tok != FN){
-				return print_and_return_error("\"fn\" keyword is required after \"pub\" keyword", parser_line_num);
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case INLINE:
+					return print_and_return_error("Public functions may not be inlined", parser_line_num);
+
+				default:
+					return print_and_return_error("Expected \"fn\" keyword after \"pub\" in function declaration", parser_line_num);
 			}
 
 			//Otherwise we're all good if we get here, so break out
+			break;
+
+		//Explicit inline request. Note that inlining functions and functions being public are mutually exclusive. You cannot have
+		//one or the other
+		case INLINE:
+			//This is being inlined
+			is_inlined = TRUE;
+
+			//Refresh the lookahead token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case PUB:
+					return print_and_return_error("Inlined functions may not be made public", parser_line_num);
+
+				default:
+					return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
+			}
+
 			break;
 
 		//Nothing more to do here, just leave
@@ -10735,7 +10819,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		
 		//It would be bizarre if we got here, but just in case
 		default:
-			sprintf(info, "Expected \"pub\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
+			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
 			return print_and_return_error(info, parser_line_num);
 	}
 
@@ -10804,7 +10888,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, is_public, parser_line_num);
+		function_record = create_function_record(function_name, is_public, is_inlined, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
