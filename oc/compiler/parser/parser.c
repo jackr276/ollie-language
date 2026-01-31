@@ -11415,6 +11415,35 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
  * check every function to make sure it adheres to this rule
  */
 static inline u_int8_t validate_inlined_functions_are_non_revursive(function_symtab_t* symtab) {
+	//Run through every cell in the symtab
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		if(symtab->records[i] == NULL){
+			continue;
+		}
+
+		//Otherwise grab out a cursor
+		symtab_function_record_t* cursor = symtab->records[i];
+
+		//Run through any collisions in the hashmap
+		while(cursor != NULL){
+			//We only care if this is inlined(for now)
+			if(cursor->inlined == TRUE){
+				//Is it recursive? use the helper
+				u_int8_t is_recursive = is_function_recursive(symtab, cursor);
+
+				//This is our fail case - we may not have this
+				if(is_recursive == TRUE){
+					sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
+					print_parse_message(PARSE_ERROR, info, cursor->line_number);
+					num_errors++;
+					return FAILURE;
+				}
+			}
+
+			//Bump it up
+			cursor = cursor->next;
+		}
+	}
 
 	//If we survive to down here then we are fine 
 	return SUCCESS;
