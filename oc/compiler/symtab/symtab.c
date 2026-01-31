@@ -2145,7 +2145,7 @@ void finalize_function_symtab(function_symtab_t* symtab){
 
 	//Now that we have all of the possible functions added in, we need to create the
 	//overall adjacency matrix for all of these functions
-	symtab->call_graph_matrix = calloc(symtab->current_function_id, sizeof(symtab_function_record_t*));
+	symtab->call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
 
 	//We will now go through and populate the adjacency matrix. We need to run through the entire
 	//hashmap to do this
@@ -2169,11 +2169,14 @@ void finalize_function_symtab(function_symtab_t* symtab){
 			//itself calls
 			for(u_int16_t j = 0; j < cursor->called_functions.current_index; j++){
 				//Extract it
-				symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), i);
+				symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), j);
 
+				//Now let's get his ID
+				u_int32_t called_function_id = called_function->function_id;
+
+				//Insert this call into the adjacency matrix
+				symtab->call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
 			}
-
-
 
 			//Bump it up to the next one
 			cursor = cursor->next;

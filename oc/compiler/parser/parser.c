@@ -11393,6 +11393,8 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//We'll only perform these tests if we want debug printing enabled
 	if(prog->ast_node_type != AST_NODE_TYPE_ERR_NODE){
+		//Finalize the function symtab
+		finalize_function_symtab(function_symtab);
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);
 		//Check for any bad variable declarations

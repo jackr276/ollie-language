@@ -341,7 +341,7 @@ struct function_symtab_t{
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
 
 	//The adjacency matrix for the call graph
-	symtab_function_record_t** call_graph_matrix;
+	u_int8_t* call_graph_matrix;
 
 	//The current function id
 	u_int32_t current_function_id;
