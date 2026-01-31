@@ -3,6 +3,9 @@
  *
  * The call graph itself is entirely integrated into the symbol table. As such there is no need
  * for any kind of "deallocation" function in the call graph
+ *
+ *
+ * TODO DEPRECATE
 */
 
 #include "call_graph.h"

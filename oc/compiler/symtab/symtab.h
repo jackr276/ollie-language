@@ -131,6 +131,14 @@ struct local_constant_t{
 /**
  * The symtab function record. This stores data about the function's name, parameter
  * numbers, parameter types, return types, etc.
+ *
+ * To enable call-graph functionality, the symtab function record itself also stores
+ * an adjacency list of all the functions that it calls. This allows us to have just one
+ * single source of truth for everything relating to a given function
+ *
+ *
+ * TODO transitive closure over an adjacency matrix of these functions? It may be worth it
+ * in helping identify indirect recursive chains - worth thinking about
  */
 struct symtab_function_record_t{
 	//The parameters for the function
@@ -151,6 +159,8 @@ struct symtab_function_record_t{
 	symtab_function_record_t* next;
 	//The type of the function
 	generic_type_t* signature;
+	//The list of all functions that this function calls out to
+	dynamic_array_t callees;
 	//What's the return type?
 	generic_type_t* return_type;
 	//The line number
@@ -159,6 +169,8 @@ struct symtab_function_record_t{
 	u_int32_t assigned_general_purpose_registers;
 	//A bitmap for all assigned SSE registers
 	u_int32_t assigned_sse_registers;
+	//How many functions call this function?
+	u_int32_t called_by_count;
 	//Number of parameters
 	u_int8_t number_of_params;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
@@ -330,6 +342,12 @@ struct constants_symtab_t{
 struct function_symtab_t{
 	//How many records(names) we can have
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
+
+
+	// TODO MAYBE
+	symtab_function_record_t*** call_graph_matrix;
+
+
 	//The level of this particular symtab
 	u_int8_t current_lexical_scope;
 };

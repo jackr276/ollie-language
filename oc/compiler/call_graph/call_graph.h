@@ -2,6 +2,9 @@
  * This module represents the call-graph IR for the ollie language
  *
  * The call graph has a node for each procedure and an edge for each call site
+ *
+ *
+ * TODO DEPRECATE
 */
 
 #ifndef CALL_GRAPH_H
