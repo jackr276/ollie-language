@@ -43,7 +43,7 @@ dynamic_set_t dynamic_set_alloc_initial_size(u_int16_t initial_size);
 /**
  * Create an exact clone of the dynamic set that we're given
  */
-dynamic_set_t clone_dynamic_array(dynamic_set_t* set);
+dynamic_set_t clone_dynamic_set(dynamic_set_t* set);
 
 /**
  * Does the dynamic set contain this pointer?

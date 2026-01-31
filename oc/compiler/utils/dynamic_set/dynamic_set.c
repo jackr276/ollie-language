@@ -1,12 +1,10 @@
 /**
  * Author: Jack Robbins
- * Implementation file for the generic dynamic array
+ * Implementation file for the generic dynamic set
 */
 
 //Link to header
-#include "dynamic_array.h"
-#include <stddef.h>
-#include <stdint.h>
+#include "dynamic_set.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,93 +15,70 @@
  * Allocate an entire dynamic array. The resulting control
  * structure will be stack allocated
 */
-dynamic_array_t dynamic_array_alloc(){
+dynamic_set_t dynamic_set_alloc(){
 	//First we'll create the overall structure
- 	dynamic_array_t array;
+ 	dynamic_set_t set;
 
 	//Set the max size using the sane default 
-	array.current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
+	set.current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
 
 	//Starts off at 0
-	array.current_index = 0;
+	set.current_index = 0;
 
 	//Now we'll allocate the overall internal array
-	array.internal_array = calloc(array.current_max_size, sizeof(void*));
+	set.internal_array = calloc(set.current_max_size, sizeof(void*));
 
 	//Now we're all set
-	return array;
+	return set;
 } 
 
 
 /**
- * Initialize a dynamic array on the heap 
- * specifically. This should only be used
- * when you absolutely need it
- */
-dynamic_array_t* dynamic_array_heap_alloc(){
-	//First we'll create the overall structure
- 	dynamic_array_t* array = calloc(1, sizeof(dynamic_array_t));
-
-	//Set the max size using the sane default 
-	array->current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
-
-	//Starts off at 0
-	array->current_index = 0;
-
-	//Now we'll allocate the overall internal array
-	array->internal_array = calloc(array->current_max_size, sizeof(void*));
-
-	//Now we're all set
-	return array;
-}
-
-
-/**
- * Initialize a dynamic array with an initial
+ * Initialize a dynamic set with an initial
  * size. This is useful if we already know
  * the size we need
  */
-dynamic_array_t dynamic_array_alloc_initial_size(u_int16_t initial_size){
+dynamic_set_t dynamic_set_alloc_initial_size(u_int16_t initial_size){
 //First we'll create the overall structure
- 	dynamic_array_t array;
+ 	dynamic_set_t set;
 
 	//Set the max size using the sane default 
-	array.current_max_size = initial_size;
+	set.current_max_size = initial_size;
 
 	//Set the current index flag
-	array.current_index = 0;
+	set.current_index = 0;
 
 	//Now we'll allocate the overall internal array
-	array.internal_array = calloc(array.current_max_size, sizeof(void*));
+	set.internal_array = calloc(set.current_max_size, sizeof(void*));
 
 	//Now we're all set
-	return array;
+	return set;
 }
 
 
 /**
  * Create an exact clone of the dynamic array that we're given
  */
-dynamic_array_t clone_dynamic_array(dynamic_array_t* array){
+dynamic_set_t clone_dynamic_set(dynamic_set_t* set){
 	//If it's null then we'll just allocate for the user
-	if(array == NULL || array->current_index == 0){
-		return dynamic_array_alloc();
+	if(set == NULL || set->current_index == 0){
+		return dynamic_set_alloc();
 	}
 
 	//First we create the overall structure
-	dynamic_array_t cloned;
+	dynamic_set_t cloned;
 
 	//Now we'll create the array for it - of the exact same size as the original
-	cloned.internal_array = calloc(array->current_max_size, sizeof(void*));
+	cloned.internal_array = calloc(set->current_max_size, sizeof(void*));
 
 	//Now we'll perform a memory copy
-	memcpy(cloned.internal_array, array->internal_array, array->current_max_size * sizeof(void*));
+	memcpy(cloned.internal_array, set->internal_array, set->current_max_size * sizeof(void*));
 	
 	//Finally copy over the rest of the information
-	cloned.current_index = array->current_index;
-	cloned.current_max_size = array->current_max_size;
+	cloned.current_index = set->current_index;
+	cloned.current_max_size = set->current_max_size;
 
-	//And return this pointer
+	//And give back what was cloned
 	return cloned;
 }
 
@@ -135,11 +110,11 @@ int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
 
 
 /**
- * Is the dynamic array is empty?
+ * Is the dynamic set empty?
 */
-u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
+u_int8_t dynamic_set_is_empty(dynamic_set_t* set){
 	//We'll just return what the next index is
-	if(array->current_index == 0){
+	if(set->current_index == 0){
 		return TRUE;
 	} else {
 		return FALSE;
@@ -149,6 +124,9 @@ u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
 
 /**
  * Add an element into the dynamic array
+ *
+ *
+ * TODO UNIQUENESS
  */
 void dynamic_array_add(dynamic_array_t* array, void* ptr){
 	//Let's just double check here. Hard fail if this happens
@@ -208,36 +186,6 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
 
 	//Otherwise we should be good to grab. Again we do not delete here
 	return array->internal_array[index];
-}
-
-
-/**
- * Set an element at a specified index. No check will be performed
- * to see if the element is already there. Dynamic resize
- * will be in effect here
- */
-void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index){
-	//Let's just double check here
-	if(ptr == NULL){
-		printf("ERROR: Attempting to set index %d to a NULL pointer ino a dynamic array\n", index);
-		exit(1);
-	}
-
-	//There is always a chance that we'll need to resize here. If so, we'll resize
-	//enough to comfortably fix the new index
-	if(array->current_max_size <= index){
-		//The current max size is now double the index
-		array->current_max_size = index * 2;
-
-		//We'll now want to realloc
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
-	}
-
-	//Now that we've taken care of all that, we'll perform the setting
-	array->internal_array[index] = ptr;
-
-	//NOTE: we will NOT modify the so-called "current-index" that is used for setting. If the user
-	//mixes these two together, they are responsible for the consequences
 }
 
 
@@ -411,24 +359,4 @@ void dynamic_array_dealloc(dynamic_array_t* array){
 	array->internal_array = NULL;
 	array->current_index = 0;
 	array->current_max_size = 0;
-}
-
-
-/**
- * Deallocate a dynamic array that was on the heap
- */
-void dynamic_array_heap_dealloc(dynamic_array_t** array){
-	//Let's just make sure here...
-	if((*array)->internal_array == NULL){
-		return;
-	}
-
-	//First we'll free the internal array
-	free((*array)->internal_array);
-
-	//Free the overall structure too
-	free(*array);
-
-	//Set this as a warning
-	*array = NULL;
 }
