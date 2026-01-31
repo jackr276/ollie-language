@@ -286,6 +286,8 @@ static u_int8_t compile(compiler_options_t* options){
 	//If we're doing debug printing, then we'll print this
 	if(options->print_irs == TRUE){
 		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
+		//Print the adjacency matrix out
+		print_call_graph_adjacency_matrix(stdout, results->function_symtab);
 		print_all_cfg_blocks(cfg);
 		printf("============================================= BEFORE OPTIMIZATION =======================================\n");
 	}

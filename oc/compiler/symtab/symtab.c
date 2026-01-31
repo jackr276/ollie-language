@@ -1993,7 +1993,7 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 	min_priority_queue_t min_priority_queue = min_priority_queue_alloc();
 
 	//Run through and print all of these out first
-	for(u_int16_t i = 0; i < FUNCTION_KEYSPACE; i++){
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
 		//Skip ahead
 		if(function_symtab->records[i] == NULL){
 			continue;
@@ -2011,6 +2011,18 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 			cursor = cursor->next;
 		}
 	}
+
+	//Now run through the priority queue and print the functions out
+	while(min_priority_queue_is_empty(&min_priority_queue) == FALSE){
+		//Get the function off
+		symtab_function_record_t* function = min_priority_queue_dequeue(&min_priority_queue);
+
+		//Now print it's name and ID out
+		fprintf(fl, "[%d]: %s\n", function->function_id, function->func_name.string);
+	}
+
+	//Dividing newline
+	fprintf(fl, "\n");
 
 	//Now we're done so deallocate it
 	min_priority_queue_dealloc(&min_priority_queue);
