@@ -5207,6 +5207,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Emit the final call here
 	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
 
+	//This is a use of the function pointer variable itself - very important to track for SSA reasons
+	add_used_variable(basic_block, function_pointer_var);
+
 	//Mark this with whatever we have
 	func_call_stmt->is_branch_ending = is_branch_ending;
 

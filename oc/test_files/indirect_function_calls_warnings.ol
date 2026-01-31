@@ -25,16 +25,7 @@ fn dynamic_dispatch(x:u8, y:i32) -> i32{
 	//Let this be a dynamic function
 	define fn(i32, i32) -> i32 as dynamic_function;
 
-	declare dyn_fun:dynamic_function;
-
-	//TODO all wrong
-	if(x == 0) {
-		dyn_fun = add;
-
-	} else if( x == 1) {
-		dyn_fun = add;
-	}
-
+	declare dyn_fun:mut dynamic_function;
 
 	switch(x) {
 		case 0 -> {
