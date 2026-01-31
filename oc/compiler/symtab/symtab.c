@@ -732,6 +732,11 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 		symtab->records[record->hash] = record;
 		return 0;
 	}
+
+	//Assign this a unique identifier. Once we've assigned the unique ID, bump the
+	//overall function ID for the next go around
+	record->function_id = symtab->current_function_id;
+	symtab->current_function_id++;
 	
 	//Otherwise if we get here there was a collision
 	//Grab the head record
@@ -2130,6 +2135,21 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 
 
 /**
+ * This function is intended to be called after parsing is complete.
+ * Within it, we will finalize the function symtab including constructing
+ * the adjacency matrix for the call graph
+ */
+void finalize_function_symtab(function_symtab_t* symtab){
+	//Now that we have all of the possible functions added in, we need to create the
+	//overall adjacency matrix for all of these functions
+	symtab->call_graph_matrix = calloc(symtab->current_function_id, sizeof(symtab_function_record_t*));
+
+	//We will now go through and populate the adjacency matrix
+
+}
+
+
+/**
  * Provide a function that will destroy the function symtab completely
  */
 void function_symtab_dealloc(function_symtab_t* symtab){
@@ -2191,6 +2211,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			free(temp);
 		}
 	}
+
+	//Free the adjacency matrix
+	free(symtab->call_graph_matrix);
 
 	//Free the entire symtab at the very end
 	free(symtab);

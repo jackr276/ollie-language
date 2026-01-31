@@ -136,10 +136,6 @@ struct local_constant_t{
  * To enable call-graph functionality, the symtab function record itself also stores
  * an adjacency list of all the functions that it calls. This allows us to have just one
  * single source of truth for everything relating to a given function
- *
- *
- * TODO transitive closure over an adjacency matrix of these functions? It may be worth it
- * in helping identify indirect recursive chains - worth thinking about
  */
 struct symtab_function_record_t{
 	//The parameters for the function
@@ -170,6 +166,8 @@ struct symtab_function_record_t{
 	u_int32_t assigned_sse_registers;
 	//How many functions call this function?
 	u_int32_t called_by_count;
+	//Unique identifier that is not a name
+	u_int32_t function_id;
 	//Number of parameters
 	u_int8_t number_of_params;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
@@ -342,8 +340,11 @@ struct function_symtab_t{
 	//How many records(names) we can have
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
 
-	// TODO MAYBE
+	//The adjacency matrix for the call graph
 	symtab_function_record_t** call_graph_matrix;
+
+	//The current function id
+	u_int32_t current_function_id;
 
 	//The level of this particular symtab
 	u_int8_t current_lexical_scope;
@@ -637,6 +638,13 @@ void print_constant_name(symtab_constant_record_t* record);
  * A helper method for type name printing
  */
 void print_type_name(symtab_type_record_t* record);
+
+/**
+ * This function is intended to be called after parsing is complete.
+ * Within it, we will finalize the function symtab including constructing
+ * the adjacency matrix for the call graph
+ */
+void finalize_function_symtab(function_symtab_t* symtab);
 
 /**
  * Destroy a function symtab
