@@ -6083,11 +6083,33 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//Insert this right after the unordered comparison
 			insert_instruction_after_given(setnp_instruction, unordered_comparison);
 
-			//TODO SIZE DIFFERENCE
+			//The original CMOVNE destination/zero assignment destinations. These type sizes may
+			//need to be changed for compliance reasons
+			three_addr_var_t* cmovne_destination = logical_not->assignee;
+			three_addr_var_t* zero_assignment_dest = emit_temp_var(destination_type);
+
+			//Do we need to emit a special kind of assignee here that is 16 bits?
+			//If so, we will need to do that now by determining if th
+			if(destination_type->type_size <= 8){
+				//Emit a carbon copy
+				cmovne_destination = emit_var_copy(cmovne_destination);
+
+				//Make the size a u16
+				cmovne_destination->type = u16;
+
+				//This is a "WORD" sized variable for compliance reasons with the conditional move's limitations
+				cmovne_destination->variable_size = WORD;
+
+				//Let's also change the zero assignment destination type
+				zero_assignment_dest->type = u16;
+
+				//This will also be forced to be a word
+				zero_assignment_dest->variable_size = WORD;
+			}
 
 			//Now let's have a 0 on hand. We need a 0 because unfortunately the conditional move operations
 			//do not support immediate values on x86
-			instruction_t* zero_assignment = emit_constant_move_instruction(emit_temp_var(logical_not->assignee->type), emit_direct_integer_or_char_constant(0, logical_not->assignee->type));
+			instruction_t* zero_assignment = emit_constant_move_instruction(zero_assignment_dest, emit_direct_integer_or_char_constant(0, logical_not->assignee->type));
 
 			//Throw this in right after the set
 			insert_instruction_after_given(zero_assignment, setnp_instruction);
@@ -6105,18 +6127,6 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//Now add this in after the setnp instruction
 			insert_instruction_after_given(first_move_to_dest, zero_assignment);
 
-			//The original CMOVNE destination 
-			three_addr_var_t* cmovne_destination = logical_not->assignee;
-
-			//Do we need to emit a special kind of assignee here that is 16 bits?
-			//If so, we will need to do that now by determining if th
-			if(destination_type->type_size <= 8){
-				//Emit a carbon copy
-				cmovne_destination = emit_var_copy(cmovne_destination);
-
-				//Make the size a u16
-				cmovne_destination->type = u16;
-			}
 
 			//Now we need the final conditional move
 			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->destination_register, NOT_EQUALS);
@@ -8161,7 +8171,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	i64 = lookup_type_name_only(cfg->type_symtab, "i64", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
 	u32 = lookup_type_name_only(cfg->type_symtab, "u32", NOT_MUTABLE)->type;
-	u8 = lookup_type_name_only(cfg->type_symtab, "u16", NOT_MUTABLE)->type;
+	u16 = lookup_type_name_only(cfg->type_symtab, "u16", NOT_MUTABLE)->type;
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
 	//Stash the stack pointer & instruction pointer
