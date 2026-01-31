@@ -1990,7 +1990,7 @@ void print_type_name(symtab_type_record_t* record){
 
 
 /**
- * Print the call graph's adjacency matrix out for debugging
+ * Print the call graph's adjacency matrix/transitive closure out for debugging
  */
 void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_symtab){
 	fprintf(fl, "=============== Function Call Graph ========================\n");
@@ -2039,6 +2039,8 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 	//Get the overall count
 	u_int32_t function_count = function_symtab->current_function_id;
 
+	fprintf(fl, "============= Adjacency Matrix ==============\n");
+
 	//Run through each row
 	for(u_int32_t i = 0; i < function_count; i++){
 		//Print out the row number
@@ -2054,6 +2056,25 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 		fprintf(fl, "\n");
 	}
 
+	fprintf(fl, "============= Adjacency Matrix ==============\n");
+	fprintf(fl, "============= Transitive Closure ==============\n");
+
+	//Run through each row
+	for(u_int32_t i = 0; i < function_count; i++){
+		//Print out the row number
+		fprintf(fl, "[%2d]: ", i);
+
+		//Now print out the columns
+		for(u_int32_t j = 0; j < function_count; j++){
+			//Will be 1(connected) or 0
+			fprintf(fl, "%d ", function_symtab->call_graph_transitive_closure[i * function_count + j]);
+		}
+
+		//Final newline
+		fprintf(fl, "\n");
+	}
+
+	fprintf(fl, "============= Transitive Closure ==============\n");
 	fprintf(fl, "=============== Function Call Graph ========================\n");
 }
 
@@ -2210,6 +2231,30 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 
 
 /**
+ * Compute the transitive closure of the call graph. This is done using Floyd-Warshall.
+ *
+ * NOTE: this graph is *not* acyclic. It is totally possible(and often common) for call
+ * cycles to arise
+ *
+ * This function assumes that the regular adjacency matrix has already been computed
+ */
+static inline void compute_call_graph_transitive_closure(function_symtab_t* symtab){
+	//Extract the number of functions
+	u_int32_t number_of_functions = symtab->current_function_id;
+
+	//Allocate the transitive closure
+	symtab->call_graph_transitive_closure = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
+
+	//Copy over the regular adjacency matrix to this
+	memcpy(symtab->call_graph_transitive_closure, symtab->call_graph_matrix, number_of_functions * number_of_functions * sizeof(u_int8_t));
+
+	//Now that we've made the copy, we can start on the actual transitive closure
+
+
+}
+
+
+/**
  * This function is intended to be called after parsing is complete.
  * Within it, we will finalize the function symtab including constructing
  * the adjacency matrix for the call graph
@@ -2257,6 +2302,9 @@ void finalize_function_symtab(function_symtab_t* symtab){
 			cursor = cursor->next;
 		}
 	}
+
+	//Now that we have the regular call graph created, we will create the transitive closure
+	compute_call_graph_transitive_closure(symtab);
 }
 
 

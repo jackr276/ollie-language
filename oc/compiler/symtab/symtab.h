@@ -345,6 +345,9 @@ struct function_symtab_t{
 	//The adjacency matrix for the call graph
 	u_int8_t* call_graph_matrix;
 
+	//The transitive closure for the call graph
+	u_int8_t* call_graph_transitive_closure;
+
 	//The current function id
 	u_int32_t current_function_id;
 
