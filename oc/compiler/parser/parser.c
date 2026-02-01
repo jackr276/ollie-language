@@ -5096,6 +5096,8 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Now we need to see an L_PAREN
 	if(lookahead.tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
+		num_errors++;
+		return FAILURE;
 	}
 
 	//Otherwise push this onto the grouping stack for later
@@ -6363,6 +6365,70 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	//Push it onto the grouping stack
 	push_token(&grouping_stack, lookahead);
 
+	//Once we've gotten past this point, we're safe to allocate this type. We need it to be allocated for use
+	//down the road
+	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, mutability);
+
+	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
+	//as an alternative way of saying this function takes no parameters
+	
+	//Grab the next token
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	//We can optionally see a void type that we need to consume
+	switch(lookahead.tok){
+		//We just need to consume this and move along
+		case VOID:
+			//Refresh the token
+			lookahead = get_next_token(stream, &parser_line_num);
+			break;
+
+		default:
+			//If we hit the default, then we need to push the token back
+			push_back_token(stream, &parser_line_num);
+			break;
+	}
+
+	//Keep processing so long as we keep seeing commas
+	do {
+		//Now we need to see a valid type
+		generic_type_t* type = type_specifier(stream);
+
+		//If this is NULL, we'll error out
+		if(type == NULL){
+			print_parse_message(PARSE_ERROR, "Invalid type specifier given in parameter list", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Add it to the mutable version
+		u_int8_t status = add_parameter_to_function_type(function_type, type);
+
+		//This means that we have been given too many parameters
+		if(status == FAILURE){
+			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(stream, &parser_line_num);
+
+	} while(lookahead.tok == COMMA);
+
+	//Now that we're done processing the list, we need to ensure that we have a right paren
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Ensure that we pop the grouping stack and get a match
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
 
 
 }
