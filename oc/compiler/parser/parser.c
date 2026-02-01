@@ -5085,6 +5085,9 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
  * enforce readability
  *
  * NOTE: We've already seen the "define" and "fn" keyword by the time that we arrive here
+ *
+ * This function will be used exclusively by the "declare" parent function. We will use
+ * a different function for live-parsing types inside of the type name itself
  */
 static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Declare a token for search-ahead
@@ -5124,7 +5127,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	}
 
 	//Keep processing so long as we keep seeing commas
-	do{
+	do {
 		//Now we need to see a valid type
 		generic_type_t* type = type_specifier(token_stream);
 
@@ -5259,13 +5262,26 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	generate_function_pointer_type_name(mutable_function_type);
 	generate_function_pointer_type_name(immutable_function_type);
 
-	//Now that we've created it, we'll store it in the symtab
-	symtab_type_record_t* mutable_record = create_type_record(mutable_function_type);
-	symtab_type_record_t* immutable_record = create_type_record(immutable_function_type);
+	//Do we have a type like this in the symtab? If not, insert it
+	if(lookup_type_name_only(type_symtab, mutable_function_type->type_name.string, MUTABLE) == NULL){
+		//Create it
+		symtab_type_record_t* mutable_record = create_type_record(mutable_function_type);
+		//Add it in
+		insert_type(type_symtab, mutable_record);
+	}
 
-	//Insert both of these in
-	insert_type(type_symtab, mutable_record);
-	insert_type(type_symtab, immutable_record);
+	//Do the exact same checking for the mutable type
+	if(lookup_type_name_only(type_symtab, immutable_function_type->type_name.string, NOT_MUTABLE) == NULL){
+		//Create its symtab record
+		symtab_type_record_t* immutable_record = create_type_record(immutable_function_type);
+		//Insert it in
+		insert_type(type_symtab, immutable_record);
+	}
+
+	/**
+	 * We've already done all of the needed checking above to ensure that the alias types are complete, so those
+	 * can go into the symtab with no issue
+	 */
 
 	//Now that we've done that part, we also need to create the mutable and immutable aliases for the type
 	generic_type_t* mutable_alias_type = create_aliased_type(identifier_name.string, mutable_function_type, parser_line_num, MUTABLE);
