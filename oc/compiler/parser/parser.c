@@ -6463,12 +6463,14 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//Unlike other type definers, this isn't disqualifying
 	if(type_record == NULL){
-
+		//Create this type and insert it
+		type_record = create_type_record(function_type);
+		insert_type(type_symtab, type_record);
 	}
 
-	
-
-
+	//When we get down here, we'll be returning an either pre-existing type or an entirely
+	//new one that we've made
+	return type_record;
 }
 
 
