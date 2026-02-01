@@ -6340,6 +6340,35 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 
 /**
+ * Handle all of the parsing for a function pointer type. Note that this rule will create the function pointer
+ * type if we cannot find it. It is unique in this way
+ *
+ * fn (<type-specifier>*) -> <type-specifier>
+ * NOTE: by the time we get here, we have already seen and consumed the "fn" token
+ */
+static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_stream_t* stream, mutability_type_t mutability){
+	//Lookahead token for our use
+	lexitem_t lookahead;
+
+	//We need to first see an open paren
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	//Fail if we don't see it
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Opening parenthesis expected after fn keyword", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Push it onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+
+
+}
+
+
+/**
  * A type name node is always a child of a type specifier. It consists
  * of all of our primitive types and any defined construct or
  * aliased types that we may have. It is important to note that any
@@ -6365,7 +6394,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
  * 						   | char 
  * 						   | enum <identifier>
  * 						   | union <identifier>
- * 						   | {pub | inline} fn <identifier>
+ * 						   | fn (<type-specifier>*) -> <type-specifier>
  * 						   | struct <identifier>
  * 						   | <identifier>
  */
@@ -6537,13 +6566,16 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		 * function pointer type here, then we will be creating one. The user has the reasonable
 		 * expectation that you don't need to define function types to use them
 		 */
-		case PUB:
 		case FN:
-		case INLINE:
+			//Let the helper deal with it - this is a larger effort than the others
+			true_type = handle_function_pointer_type_parsing(token_stream, mutability);
+
+			//It will either be NULL(failed) or a real symtab type record
+			return true_type; 
 
 		//If we hit down here, we have some invalid lexeme that isn't a type name at all
 		default:
-			sprintf(info, "Expected fn, pub, inline, union, struct, enum, but found %s instead", lexitem_to_string(&lookahead));
+			sprintf(info, "Expected fn, union, struct, enum, but found %s instead", lexitem_to_string(&lookahead));
 			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return NULL;
