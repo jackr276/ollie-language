@@ -6511,12 +6511,46 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 	symtab_type_record_t* record;
 
 	//Create a dstring for the type name
-	dynamic_string_t type_name = dynamic_string_alloc();
+	dynamic_string_t type_name_string = dynamic_string_alloc();
 
 	//Let's see what we have
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	switch(lookahead.tok){
+		//Users can encase type names insider of parenthesis to avoid
+		//ambiguous parses
+		case L_PAREN:
+			//Goes onto the stack
+			push_token(&grouping_stack, lookahead);
+
+			//Recursively call it again
+			record = type_name(token_stream, mutability);
+
+			//If it failed then why bother going further
+			if(record == NULL){
+				return record;
+			}
+
+			//We need to see the closing R_PAREN now
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Mismatched if we don't see it
+			if(lookahead.tok != R_PAREN){
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//Same thing if this happens
+			if(pop_token(&grouping_stack).tok != L_PAREN){
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//If we made it all the way down here, then we're fine to return the type
+			return record;
+
 		case VOID:
 		case U8:
 		case I8:
@@ -6546,7 +6580,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		//Enumerated type
 		case ENUM:
 			//We know that this keyword is in the name, so we'll add it in
-			dynamic_string_set(&type_name, "enum ");
+			dynamic_string_set(&type_name_string, "enum ");
 
 			//Now we need to see a valid identifier
 			lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6559,14 +6593,14 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			}
 
 			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
+			dynamic_string_concatenate(&type_name_string, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name.string, mutability);
+			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name_string.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name_string.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -6579,7 +6613,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		//Struct type
 		case STRUCT:
 			//First add the struct into the name
-			dynamic_string_set(&type_name, "struct ");
+			dynamic_string_set(&type_name_string, "struct ");
 
 			//We need to see an ident here
 			lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6593,14 +6627,14 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			}
 
 			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
+			dynamic_string_concatenate(&type_name_string, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name.string, mutability);
+			record = lookup_type_name_only(type_symtab, type_name_string.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name_string.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -6613,7 +6647,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		//Union type
 		case UNION:
 			//Add union into the name
-			dynamic_string_set(&type_name, "union ");
+			dynamic_string_set(&type_name_string, "union ");
 
 			//Now we'll need to see an ident
 			lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6627,14 +6661,14 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			}
 
 			//Add the name onto the "union" qualifier
-			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
+			dynamic_string_concatenate(&type_name_string, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name.string, mutability);
+			record = lookup_type_name_only(type_symtab, type_name_string.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name_string.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
