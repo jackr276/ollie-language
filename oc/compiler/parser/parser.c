@@ -6516,9 +6516,19 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			//Once we make it here, we should be all set to get out
 			return true_type;
 
+		/**
+		 * These function pointer values are unlike the other. If we are not able to find a valid
+		 * function pointer type here, then we will be creating one. The user has the reasonable
+		 * expectation that you don't need to define function types to use them
+		 */
+		case PUB:
+		case FN:
+		case INLINE:
+
 		//If we hit down here, we have some invalid lexeme that isn't a type name at all
 		default:
-			print_parse_message(PARSE_ERROR, "Type name expected but not found", parser_line_num);
+			sprintf(info, "Expected fn, pub, inline, union, struct, enum, but found %s instead", lexitem_to_string(&lookahead));
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return NULL;
 	}
