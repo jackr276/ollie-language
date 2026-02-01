@@ -155,13 +155,14 @@ int main(int argc, char** argv){
 	//Now we'll invoke the cfg builder
 	cfg_t* cfg = build_cfg(parse_results, &num_errors, &num_warnings);
 
+	//Print out the adjacency matrix for the call graph
+	print_call_graph_adjacency_matrix(stdout, parse_results->function_symtab);
+
 	//And once we're done - for the front end test, we'll want all of this printed
 	print_all_cfg_blocks(cfg);
 
 	//Deallocate everything at the end
 	ast_dealloc();
-	//Free the call graph holder
-	free(parse_results->os);
 	function_symtab_dealloc(parse_results->function_symtab);
 	type_symtab_dealloc(parse_results->type_symtab);
 	variable_symtab_dealloc(parse_results->variable_symtab);

@@ -5,6 +5,7 @@
 [![Global compiler test](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml)
 [![Dynamic array test](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_array_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_array_test.yml)
 [![Dynamic string test](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_string_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_string_test.yml)
+[![Dynamic set test](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_set_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_set_test.yml)
 [![Front End Test](https://github.com/jackr276/ollie-language/actions/workflows/front_end_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/front_end_test.yml)
 [![Middle End Test](https://github.com/jackr276/ollie-language/actions/workflows/middle_end_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/middle_end_test.yml)
 [![Instruction Selector Test](https://github.com/jackr276/ollie-language/actions/workflows/instruction_selector_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/instruction_selector_test.yml)

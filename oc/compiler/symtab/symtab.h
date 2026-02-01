@@ -12,6 +12,7 @@
 #include "../lexer/lexer.h"
 #include "../type_system/type_system.h"
 #include "../utils/stack/lightstack.h"
+#include "../utils/dynamic_set/dynamic_set.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/constants.h"
 //Every function record has one of these
@@ -27,7 +28,7 @@
 #define CONSTANT_KEYSPACE 256 
 
 //There's only one function keyspace per program, so it can be a bit larger
-#define FUNCTION_KEYSPACE 512
+#define FUNCTION_KEYSPACE 1024 
 
 //The maximum number of function paramaters
 #define MAX_FUNCTION_PARAMS 6
@@ -131,26 +132,30 @@ struct local_constant_t{
 /**
  * The symtab function record. This stores data about the function's name, parameter
  * numbers, parameter types, return types, etc.
+ *
+ * To enable call-graph functionality, the symtab function record itself also stores
+ * an adjacency list of all the functions that it calls. This allows us to have just one
+ * single source of truth for everything relating to a given function
  */
 struct symtab_function_record_t{
 	//The parameters for the function
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
 	//The name of the function
 	dynamic_string_t func_name;
-	//Functions have dynamic arrays for string/nonstring constants
-	dynamic_array_t local_string_constants;
-	dynamic_array_t local_f32_constants;
-	dynamic_array_t local_f64_constants;
+	//Functions have dynamic sets for string/nonstring constants
+	dynamic_set_t local_string_constants;
+	dynamic_set_t local_f32_constants;
+	dynamic_set_t local_f64_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The hash that we have
 	u_int64_t hash;
-	//The associated call graph node with this function
-	void* call_graph_node;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
 	//The type of the function
 	generic_type_t* signature;
+	//The list of all functions that this function calls out to
+	dynamic_set_t called_functions;
 	//What's the return type?
 	generic_type_t* return_type;
 	//The line number
@@ -159,12 +164,18 @@ struct symtab_function_record_t{
 	u_int32_t assigned_general_purpose_registers;
 	//A bitmap for all assigned SSE registers
 	u_int32_t assigned_sse_registers;
+	//How many functions call this function?
+	u_int32_t called_by_count;
+	//Unique identifier that is not a name
+	u_int32_t function_id;
 	//Number of parameters
 	u_int8_t number_of_params;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;
+	//Has this function been inlined?
+	u_int8_t inlined;
 	//Is this function public or private
 	function_visibility_t function_visibility;
 };
@@ -330,6 +341,16 @@ struct constants_symtab_t{
 struct function_symtab_t{
 	//How many records(names) we can have
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
+
+	//The adjacency matrix for the call graph
+	u_int8_t* call_graph_matrix;
+
+	//The transitive closure for the call graph
+	u_int8_t* call_graph_transitive_closure;
+
+	//The current function id
+	u_int32_t current_function_id;
+
 	//The level of this particular symtab
 	u_int8_t current_lexical_scope;
 };
@@ -416,7 +437,7 @@ u_int8_t add_function_parameter(symtab_function_record_t* function_record, symta
 /**
  * Make a function record
  */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int32_t line_number);
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number);
 
 /**
  * Create a type record for the symbol table
@@ -449,6 +470,18 @@ u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
  * Insert a constant into the symtab
  */
 u_int8_t insert_constant(constants_symtab_t* symtab, symtab_constant_record_t* record);
+
+/**
+ * Determine whether or not a function is directly recursive using the function
+ * symtab's adjacency matrix
+ */
+u_int8_t is_function_directly_recursive(function_symtab_t* symtab, symtab_function_record_t* record);
+
+/**
+ * Determine whether or not a function is recursive(direct or indirect) using the function
+ * symtab's transitive closure 
+ */
+u_int8_t is_function_recursive(function_symtab_t* symtab, symtab_function_record_t* record);
 
 /**
  * A helper function that adds all basic types to the type symtab
@@ -602,6 +635,13 @@ local_constant_t* get_f64_local_constant(symtab_function_record_t* record, doubl
 local_constant_t* get_string_local_constant(symtab_function_record_t* record, char* string_value);
 
 /**
+ * Record that a given source function calls the target
+ *
+ * This always goes as: source calls target
+ */
+void add_function_call(symtab_function_record_t* source, symtab_function_record_t* target);
+
+/**
  * A helper method for variable name printing
  */
 void print_variable_name(symtab_variable_record_t* record);
@@ -615,6 +655,18 @@ void print_constant_name(symtab_constant_record_t* record);
  * A helper method for type name printing
  */
 void print_type_name(symtab_type_record_t* record);
+
+/**
+ * Print the call graph's adjacency matrix out for debugging
+ */
+void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_symtab);
+
+/**
+ * This function is intended to be called after parsing is complete.
+ * Within it, we will finalize the function symtab including constructing
+ * the adjacency matrix for the call graph
+ */
+void finalize_function_symtab(function_symtab_t* symtab);
 
 /**
  * Destroy a function symtab

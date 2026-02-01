@@ -151,14 +151,14 @@ void reset_block_variable_tracking(basic_block_t* block){
 	if(block->assigned_variables.internal_array == NULL){
 		block->assigned_variables = dynamic_array_alloc();
 	} else {
-		reset_dynamic_array(&(block->assigned_variables));
+		clear_dynamic_array(&(block->assigned_variables));
 	}
 
 	//Do the same with the used variables
 	if(block->used_variables.internal_array == NULL){
 		block->used_variables = dynamic_array_alloc();
 	} else {
-		reset_dynamic_array(&(block->used_variables));
+		clear_dynamic_array(&(block->used_variables));
 	}
 
 	//Reset live in completely
@@ -5206,6 +5206,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//Emit the final call here
 	instruction_t* func_call_stmt = emit_indirect_function_call_instruction(function_pointer_var, assignee);
+
+	//This is a use of the function pointer variable itself - very important to track for SSA reasons
+	add_used_variable(basic_block, function_pointer_var);
 
 	//Mark this with whatever we have
 	func_call_stmt->is_branch_ending = is_branch_ending;

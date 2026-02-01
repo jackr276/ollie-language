@@ -11,7 +11,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../ast/ast.h"
-#include "../call_graph/call_graph.h"
 //For error printing
 #include "../utils/queue/min_priority_queue.h"
 #include "../utils/constants.h"
@@ -655,7 +654,7 @@ u_int8_t add_function_parameter(symtab_function_record_t* function_record, symta
 /**
  * Dynamically allocate a function record
 */
-symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int32_t line_number){
+symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t is_public, u_int8_t is_inlined, u_int32_t line_number){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -673,11 +672,14 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	//Store the line number
 	record->line_number = line_number;
 
-	//Create its call graph node
-	record->call_graph_node = create_call_graph_node(record);
+	//Allocate the list of all functions that this calls
+	record->called_functions = dynamic_set_alloc();
+
+	//Store the inline status
+	record->inlined = is_inlined;
 
 	//We know that we need to create this immediately
-	record->signature = create_function_pointer_type(is_public, line_number, NOT_MUTABLE);
+	record->signature = create_function_pointer_type(is_public, is_inlined, line_number, NOT_MUTABLE);
 
 	//And give it back
 	return record;
@@ -727,6 +729,11 @@ symtab_constant_record_t* create_constant_record(dynamic_string_t name){
  * RETURNS 0 if no collision, 1 if collision
  */
 u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record){
+	//Assign this a unique identifier. Once we've assigned the unique ID, bump the
+	//overall function ID for the next go around
+	record->function_id = symtab->current_function_id;
+	(symtab->current_function_id)++;
+
 	//If there's no collision
 	if(symtab->records[record->hash] == NULL){
 		//Store it and get out
@@ -1328,11 +1335,10 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 			//If we have no local constants, then we'll need to allocate
 			//the array
 			if(function->local_string_constants.internal_array == NULL){
-				function->local_string_constants = dynamic_array_alloc();
+				function->local_string_constants = dynamic_set_alloc();
 			}
 
-			//And add the function in
-			dynamic_array_add(&(function->local_string_constants), constant);
+			dynamic_set_add(&(function->local_string_constants), constant);
 
 			break;
 
@@ -1340,11 +1346,10 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 			//If we have no local constants, then we'll need to allocate
 			//the array
 			if(function->local_f32_constants.internal_array == NULL){
-				function->local_f32_constants = dynamic_array_alloc();
+				function->local_f32_constants = dynamic_set_alloc();
 			}
 
-			//And add the function in
-			dynamic_array_add(&(function->local_f32_constants), constant);
+			dynamic_set_add(&(function->local_f32_constants), constant);
 
 			break;
 
@@ -1352,11 +1357,10 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 			//If we have no local constants, then we'll need to allocate
 			//the array
 			if(function->local_f64_constants.internal_array == NULL){
-				function->local_f64_constants = dynamic_array_alloc();
+				function->local_f64_constants = dynamic_set_alloc();
 			}
 
-			//And add the function in
-			dynamic_array_add(&(function->local_f64_constants), constant);
+			dynamic_set_add(&(function->local_f64_constants), constant);
 
 			break;
 	}
@@ -1592,7 +1596,7 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 		//Run through every string constant
 		for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
 			//Grab the constant out
-			local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
+			local_constant_t* constant = dynamic_set_get_at(&(record->local_string_constants), i);
 
 			//Now print out every local string constant
 			fprintf(fl, ".LC%d:\n\t.string \"%s\"\n", constant->local_constant_id, constant->local_constant_value.string_value.string);
@@ -1607,7 +1611,7 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 		//Run through all constants
 		for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
 			//Grab the constant out
-			local_constant_t* constant = dynamic_array_get_at(&(record->local_f32_constants), i);
+			local_constant_t* constant = dynamic_set_get_at(&(record->local_f32_constants), i);
 
 			//Extract the floating point equivalent using the mask
 			int32_t float_equivalent = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
@@ -1625,7 +1629,7 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 		//Run through all constants
 		for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
 			//Grab the constant out
-			local_constant_t* constant = dynamic_array_get_at(&(record->local_f64_constants), i);
+			local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
 
 			//These are in little-endian order. Lower 32 bits comes first, then the upper 32 bits
 			int32_t lower32 = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
@@ -1647,7 +1651,7 @@ local_constant_t* get_string_local_constant(symtab_function_record_t* record, ch
 	//Run through all of the local constants
 	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_array_get_at(&(record->local_string_constants), i);
+		local_constant_t* candidate = dynamic_set_get_at(&(record->local_string_constants), i);
 
 		//If we have a match then we're good here, we'll return the candidate and leave
 		if(strcmp(candidate->local_constant_value.string_value.string, string_value) == 0){
@@ -1661,6 +1665,22 @@ local_constant_t* get_string_local_constant(symtab_function_record_t* record, ch
 
 
 /**
+ * Record that a given source function calls the target
+ *
+ * This always goes as: source calls target
+ */
+void add_function_call(symtab_function_record_t* source, symtab_function_record_t* target){
+	//Add it into the list of functions called by the source. Since we use a set here, we are
+	//guaranteed to never add the function in more than once even if the source function calls
+	//it multiple times in the body
+	dynamic_set_add(&(source->called_functions), target);
+
+	//This function has been called
+	target->called = TRUE;
+}
+
+
+/**
  * Get an f32 local constant whose value matches the given constant
  *
  * Returns NULL if no matching constant can be found
@@ -1669,7 +1689,7 @@ local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float
 	//Run through all of the local constants
 	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_array_get_at(&(record->local_f32_constants), i);
+		local_constant_t* candidate = dynamic_set_get_at(&(record->local_f32_constants), i);
 
 		//We will be comparing the values at a byte level. We do not compare the raw values because
 		//that would use FP comparison
@@ -1692,7 +1712,7 @@ local_constant_t* get_f64_local_constant(symtab_function_record_t* record, doubl
 	//Run through all of the local constants
 	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_array_get_at(&(record->local_f64_constants), i);
+		local_constant_t* candidate = dynamic_set_get_at(&(record->local_f64_constants), i);
 
 		//We will be comparing the values at a byte level. We do not compare the raw values because
 		//that would use FP comparison
@@ -1717,7 +1737,7 @@ void sweep_local_constants(symtab_function_record_t* record){
 	//Run through every string constant
 	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(&(record->local_string_constants), i);
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_string_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -1731,13 +1751,13 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_array_delete(&(record->local_string_constants), to_be_deleted);
+		dynamic_set_delete(&(record->local_string_constants), to_be_deleted);
 	}
 
 	//Now do the exact same thing for f32's. We can reuse the same array
 	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(&(record->local_f32_constants), i);
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_f32_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -1751,13 +1771,13 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_array_delete(&(record->local_f32_constants), to_be_deleted);
+		dynamic_set_delete(&(record->local_f32_constants), to_be_deleted);
 	}
 
 	//Now do the exact same thing for f64's. We can reuse the same array
 	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_array_get_at(&(record->local_f64_constants), i);
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -1771,7 +1791,7 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_array_delete(&(record->local_f64_constants), to_be_deleted);
+		dynamic_set_delete(&(record->local_f64_constants), to_be_deleted);
 	}
 
 	//Scrap this now that we're done with it
@@ -1967,6 +1987,125 @@ void print_type_name(symtab_type_record_t* record){
 
 
 /**
+ * Print the call graph's adjacency matrix/transitive closure out for debugging
+ */
+void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_symtab){
+	fprintf(fl, "=============== Function Call Graph ========================\n");
+	
+	//We need a min priority queue for this
+	min_priority_queue_t min_priority_queue = min_priority_queue_alloc();
+
+	//Run through and print all of these out first
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		//Skip ahead
+		if(function_symtab->records[i] == NULL){
+			continue;
+		}
+
+		//Otherwise grab it out
+		symtab_function_record_t* cursor = function_symtab->records[i];
+
+		//Crawl the whole thing
+		while(cursor != NULL){
+			//Use the min priority queue to insert based on the function ID
+			min_priority_queue_enqueue(&min_priority_queue, cursor, cursor->function_id);
+
+			//Bump it up
+			cursor = cursor->next;
+		}
+	}
+
+	//Now run through the priority queue and print the functions out
+	while(min_priority_queue_is_empty(&min_priority_queue) == FALSE){
+		//Get the function off
+		symtab_function_record_t* function = min_priority_queue_dequeue(&min_priority_queue);
+
+		//Now print it's name and ID out
+		fprintf(fl, "[%d]: %s\n", function->function_id, function->func_name.string);
+	}
+
+	//Dividing newline
+	fprintf(fl, "\n");
+
+	//Now we're done so deallocate it
+	min_priority_queue_dealloc(&min_priority_queue);
+
+	//Run through the entire symtab first and print out all of the functions with their
+	//IDs for the user
+
+	//Get the overall count
+	u_int32_t function_count = function_symtab->current_function_id;
+
+	fprintf(fl, "============= Adjacency Matrix ==============\n");
+
+	//Run through each row
+	for(u_int32_t i = 0; i < function_count; i++){
+		//Print out the row number
+		fprintf(fl, "[%2d]: ", i);
+
+		//Now print out the columns
+		for(u_int32_t j = 0; j < function_count; j++){
+			//Will be 1(connected) or 0
+			fprintf(fl, "%d ", function_symtab->call_graph_matrix[i * function_count + j]);
+		}
+
+		//Final newline
+		fprintf(fl, "\n");
+	}
+
+	fprintf(fl, "============= Adjacency Matrix ==============\n");
+	fprintf(fl, "============= Transitive Closure ==============\n");
+
+	//Run through each row
+	for(u_int32_t i = 0; i < function_count; i++){
+		//Print out the row number
+		fprintf(fl, "[%2d]: ", i);
+
+		//Now print out the columns
+		for(u_int32_t j = 0; j < function_count; j++){
+			//Will be 1(connected) or 0
+			fprintf(fl, "%d ", function_symtab->call_graph_transitive_closure[i * function_count + j]);
+		}
+
+		//Final newline
+		fprintf(fl, "\n");
+	}
+
+	fprintf(fl, "============= Transitive Closure ==============\n");
+	fprintf(fl, "=============== Function Call Graph ========================\n");
+}
+
+
+/**
+ * Determine whether or not a function is directly recursive using the function
+ * symtab's adjacency matrix
+ */
+u_int8_t is_function_directly_recursive(function_symtab_t* symtab, symtab_function_record_t* record){
+	//Extract for our uses
+	u_int32_t function_id = record->function_id;
+	u_int32_t num_functions = symtab->current_function_id;
+
+	//Extract the value contained at adjacency_matrix[func_id][func_id]
+	return symtab->call_graph_matrix[function_id * num_functions + function_id];
+
+}
+
+
+/**
+ * Determine whether or not a function is recursive(direct or indirect) using the function
+ * symtab's transitive closure 
+ */
+u_int8_t is_function_recursive(function_symtab_t* symtab, symtab_function_record_t* record){
+	//Extract for our uses
+	u_int32_t function_id = record->function_id;
+	u_int32_t num_functions = symtab->current_function_id;
+
+	//Extract the value contained at transitive_closure[func_id][func_id]
+	return symtab->call_graph_transitive_closure[function_id * num_functions + function_id];
+}
+
+
+/**
  * Crawl the symtab and check for any unused functions. We generate some hopefully helpful
  * warnings here for the user
  */
@@ -2118,6 +2257,96 @@ void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings){
 
 
 /**
+ * Compute the transitive closure of the call graph. This is done using Floyd-Warshall.
+ *
+ * NOTE: this graph is *not* acyclic. It is totally possible(and often common) for call
+ * cycles to arise
+ *
+ * This function assumes that the regular adjacency matrix has already been computed
+ */
+static inline void compute_call_graph_transitive_closure(function_symtab_t* symtab){
+	//Extract the number of functions
+	u_int32_t number_of_functions = symtab->current_function_id;
+
+	//Allocate the transitive closure
+	symtab->call_graph_transitive_closure = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
+
+	//Copy over the regular adjacency matrix to this
+	memcpy(symtab->call_graph_transitive_closure, symtab->call_graph_matrix, number_of_functions * number_of_functions * sizeof(u_int8_t));
+
+	//Now that we've made the copy, we can start on the actual transitive closure
+	
+	//For each node i(intermediate node)
+	for(u_int32_t i = 0; i < number_of_functions; i++){
+		for(u_int32_t j = 0; j < number_of_functions; j++){
+			for(u_int32_t k = 0; k < number_of_functions; k++){
+				//If there's a path from j to i, and a path from i to k
+				if(symtab->call_graph_transitive_closure[j * number_of_functions + i] == TRUE
+					&& symtab->call_graph_transitive_closure[i * number_of_functions + k] == TRUE){
+					//Flag that there is a path from j to k
+					symtab->call_graph_transitive_closure[j * number_of_functions + k] = TRUE;
+				}
+			}
+		}
+	}
+}
+
+
+/**
+ * This function is intended to be called after parsing is complete.
+ * Within it, we will finalize the function symtab including constructing
+ * the adjacency matrix for the call graph
+ */
+void finalize_function_symtab(function_symtab_t* symtab){
+	//Extract the number of functions
+	u_int32_t number_of_functions = symtab->current_function_id;
+
+	//Now that we have all of the possible functions added in, we need to create the
+	//overall adjacency matrix for all of these functions
+	symtab->call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
+
+	//We will now go through and populate the adjacency matrix. We need to run through the entire
+	//hashmap to do this
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		//Totally possible for this to happen
+		if(symtab->records[i] == NULL){
+			continue;
+		}
+
+		//Otherwise, we actually have a space that is populated so we need to
+		//populate here. Remember, every record is a linked list so we need
+		//to explore all of the nodes
+		symtab_function_record_t* cursor = symtab->records[i];
+
+		//So long as the cursor is not NULL
+		while(cursor != NULL){
+			//Grab the cursor's unique function ID
+			u_int32_t cursor_id = cursor->function_id;
+
+			//Run through all of the functions that this function
+			//itself calls
+			for(u_int16_t j = 0; j < cursor->called_functions.current_index; j++){
+				//Extract it
+				symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), j);
+
+				//Now let's get his ID
+				u_int32_t called_function_id = called_function->function_id;
+
+				//Insert this call into the adjacency matrix
+				symtab->call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
+			}
+
+			//Bump it up to the next one
+			cursor = cursor->next;
+		}
+	}
+
+	//Now that we have the regular call graph created, we will create the transitive closure
+	compute_call_graph_transitive_closure(symtab);
+}
+
+
+/**
  * Provide a function that will destroy the function symtab completely
  */
 void function_symtab_dealloc(function_symtab_t* symtab){
@@ -2134,43 +2363,41 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			temp = record;
 			record = record->next;
 
-			//If the call graph node has been defined, we will free that too
-			if(temp->call_graph_node != NULL){
-				free(temp->call_graph_node);
-			}
-
 			//Deallocation for local constants
 			if(temp->local_string_constants.internal_array != NULL){
 				//Deallocate each local constant
 				for(u_int16_t i = 0; i < temp->local_string_constants.current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(&(temp->local_string_constants), i));
+					local_constant_dealloc(dynamic_set_get_at(&(temp->local_string_constants), i));
 				}
 
-				//Then destroy the whole array
-				dynamic_array_dealloc(&(temp->local_string_constants));
+				//Then destroy the whole set 
+				dynamic_set_dealloc(&(temp->local_string_constants));
 			}
 
 			//Deallocation for local float constants
 			if(temp->local_f32_constants.internal_array != NULL){
 				//Deallocate each local constant
 				for(u_int16_t i = 0; i < temp->local_f32_constants.current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(&(temp->local_f32_constants), i));
+					local_constant_dealloc(dynamic_set_get_at(&(temp->local_f32_constants), i));
 				}
 
-				//Then destroy the whole array
-				dynamic_array_dealloc(&(temp->local_f32_constants));
+				//Then destroy the whole set 
+				dynamic_set_dealloc(&(temp->local_f32_constants));
 			}
 
 			//Deallocation for local float constants
 			if(temp->local_f64_constants.internal_array != NULL){
 				//Deallocate each local constant
 				for(u_int16_t i = 0; i < temp->local_f64_constants.current_index; i++){
-					local_constant_dealloc(dynamic_array_get_at(&(temp->local_f64_constants), i));
+					local_constant_dealloc(dynamic_set_get_at(&(temp->local_f64_constants), i));
 				}
 
 				//Then destroy the whole array
-				dynamic_array_dealloc(&(temp->local_f64_constants));
+				dynamic_set_dealloc(&(temp->local_f64_constants));
 			}
+
+			//Destroy the call graph infrastructure
+			dynamic_set_dealloc(&(temp->called_functions));
 
 			//Dealloate the function type
 			type_dealloc(temp->signature);
@@ -2181,6 +2408,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			free(temp);
 		}
 	}
+
+	//Free the adjacency matrix
+	free(symtab->call_graph_matrix);
 
 	//Free the entire symtab at the very end
 	free(symtab);

@@ -38,8 +38,6 @@ static variable_symtab_t* variable_symtab = NULL;
 static type_symtab_t* type_symtab = NULL;
 static constants_symtab_t* constant_symtab = NULL;
 
-//The "operating system" function that is symbolically referenced here
-static call_graph_node_t* os = NULL;
 //The entire AST is rooted here
 static generic_ast_node_t* prog = NULL;
 
@@ -80,13 +78,10 @@ static u_int32_t num_warnings;
 static u_int32_t parser_line_num = 1;
 
 //The overall node that holds all deferred statements for a function
-generic_ast_node_t* deferred_stmts_node = NULL;
+static generic_ast_node_t* deferred_stmts_node = NULL;
 
 //Are we enabling debug printing? By default no
-u_int8_t enable_debug_printing = FALSE;
-
-//Did we find a main function? By default no
-u_int8_t found_main_function = FALSE;
+static u_int8_t enable_debug_printing = FALSE;
 
 //The current file name
 static char* current_file_name = NULL;
@@ -978,8 +973,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//Store our function signature
 		function_signature = function_record->signature->internal_types.function_type;
 
-		//We'll also add in that the current function has called this one
-		call_function(current_function->call_graph_node, function_record->call_graph_node);
+		//Note that the current function calls out to the given one
+		add_function_call(current_function, function_record);
+
 		//We'll now note that this was indeed called
 		function_record->called = TRUE;
 
@@ -5103,9 +5099,9 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	push_token(&grouping_stack, lookahead);
 
 	//Once we've gotten past this point, we're safe to allocate this type. Function
-	//pointers are always private
-	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, parser_line_num, MUTABLE);
-	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, parser_line_num, NOT_MUTABLE);
+	//pointers are always private and never inlined
+	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, MUTABLE);
+	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, NOT_MUTABLE);
 
 	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
 	//as an alternative way of saying this function takes no parameters
@@ -9169,10 +9165,11 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 	//Go based on what we see here
 	switch(lookahead.tok){
-		//If we see either of these tokens, it means that the user is predeclaring a function.
+		//If we see any of these tokens, it means that the user is predeclaring a function.
 		//In this case, we push the token back and let the function predeclaration rule
 		//handle it
 		case PUB:
+		case INLINE:
 		case FN:
 			//If this is now global, then we cannot do this
 			if(is_global == FALSE){
@@ -10524,22 +10521,72 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
-	//Lookahead token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	//Is this a public function?
 	u_int8_t is_public = FALSE;
+	//Is this an inline function? Also assume no by default
+	u_int8_t is_inlined = FALSE;
 
-	//If we see the PUB keyword, that means we have a public function
-	if(lookahead.tok == PUB){
-		//Set the flag
-		is_public = TRUE;
-		//Refresh the lookahead
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
+	//Lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Now we need to see the "fn" keyword. If we don't, we leave
-	if(lookahead.tok != FN){
-		return print_and_return_error("fn keyword required in function predeclaration", parser_line_num);
+	//We could see pub fn or fn here, so we need to process both cases
+	switch(lookahead.tok){
+		//Explicit declaration that this function is visible to other partial programs
+		case PUB:
+			//Flag that it is public
+			is_public = TRUE;
+
+			//Refresh the lookahead token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case INLINE:
+					return print_and_return_error("Public functions may not be inlined", parser_line_num);
+
+				default:
+					return print_and_return_error("Expected \"fn\" keyword after \"pub\" in function declaration", parser_line_num);
+			}
+
+			//Otherwise we're all good if we get here, so break out
+			break;
+
+		//Explicit inline request. Note that inlining functions and functions being public are mutually exclusive. You cannot have
+		//one or the other
+		case INLINE:
+			//This is being inlined
+			is_inlined = TRUE;
+
+			//Refresh the lookahead token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case PUB:
+					return print_and_return_error("Inlined functions may not be made public", parser_line_num);
+
+				default:
+					return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
+			}
+
+			break;
+
+		//Nothing more to do here, just leave
+		case FN:
+			break;
+		
+		//It would be bizarre if we got here, but just in case
+		default:
+			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
 	}
 
 	//Following this, we need to see an identifier
@@ -10588,7 +10635,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(function_name, is_public, parser_line_num);
+	symtab_function_record_t* function_record = create_function_record(function_name, is_public, is_inlined, parser_line_num);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10698,7 +10745,7 @@ after_rparen:
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
- * BNF Rule: <function-definition> ::= {pub}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
+ * BNF Rule: <function-definition> ::= {pub | inline}? fn <identifer> {<parameter-list> -> <type-specifier> <compound-statement>
  */
 static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
 	//Freeze the line number
@@ -10711,6 +10758,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	u_int8_t is_main_function = FALSE;
 	//Is this function public or private? Unless explicitly stated, all functions are private
 	u_int8_t is_public = FALSE;
+	//Is this function inlined? By default no
+	u_int8_t is_inlined = FALSE;
 
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10725,12 +10774,44 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			//Refresh the lookahead token
 			lookahead = get_next_token(token_stream, &parser_line_num);
 
-			//Now we need to ensure that this is the FN keyword, if it isn't, we fail out
-			if(lookahead.tok != FN){
-				return print_and_return_error("\"fn\" keyword is required after \"pub\" keyword", parser_line_num);
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case INLINE:
+					return print_and_return_error("Public functions may not be inlined", parser_line_num);
+
+				default:
+					return print_and_return_error("Expected \"fn\" keyword after \"pub\" in function declaration", parser_line_num);
 			}
 
 			//Otherwise we're all good if we get here, so break out
+			break;
+
+		//Explicit inline request. Note that inlining functions and functions being public are mutually exclusive. You cannot have
+		//one or the other
+		case INLINE:
+			//This is being inlined
+			is_inlined = TRUE;
+
+			//Refresh the lookahead token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case PUB:
+					return print_and_return_error("Inlined functions may not be made public", parser_line_num);
+
+				default:
+					return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
+			}
+
 			break;
 
 		//Nothing more to do here, just leave
@@ -10739,7 +10820,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		
 		//It would be bizarre if we got here, but just in case
 		default:
-			sprintf(info, "Expected \"pub\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
+			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
 			return print_and_return_error(info, parser_line_num);
 	}
 
@@ -10808,7 +10889,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(function_name, is_public, parser_line_num);
+		function_record = create_function_record(function_name, is_public, is_inlined, parser_line_num);
 
 		//We'll put the function into the symbol table
 		//since we now know that everything worked
@@ -10835,12 +10916,21 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 		//Let's now check - if the is_public's don't match here, we can fail already
 		if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == FALSE){
-			sprintf(info, "Function %s was predeclared as public, but defined as private", function_record->func_name.string);
+			sprintf(info, "Function \"%s\" was predeclared as public, but defined as private", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 
 		//Other case, still a failure
 		} else if(function_record->signature->internal_types.function_type->is_public == TRUE && is_public == TRUE){
-			sprintf(info, "Function %s was predeclared as private, but defined as public", function_record->func_name.string);
+			sprintf(info, "Function \"%s\" was predeclared as private, but defined as public", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		if(function_record->inlined == TRUE && is_inlined == FALSE){
+			sprintf(info, "Function \"%s\" was predeclared as inline. Please add the inline keyword to the declaration", function_record->func_name.string);
+			return print_and_return_error(info, parser_line_num);
+
+		} else if(function_record->inlined == FALSE && is_inlined == TRUE){
+			sprintf(info, "Function \"%s\" was not predeclared as inline. Please add the inline keyword to the forward declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 	}
@@ -10962,8 +11052,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	if(is_main_function == TRUE){
 		//Mark that it's been called
 		function_record->called = TRUE;
-		//Call it
-		call_function(os, function_record->call_graph_node);
 	}
 	
 	//We're done with this, so destroy it
@@ -11187,8 +11275,9 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 
 	//Switch based on the token
 	switch(lookahead.tok){
-		//We can either see the "pub"(public) keyword or we can see a straight fn keyword
+		//We can either see the "pub"(public) keyword, "inline keyword" or we can see a straight fn keyword
 		case PUB:
+		case INLINE:
 		case FN:
 			//Put the token back, we'll let the rule handle it
 			push_back_token(token_stream, &parser_line_num);
@@ -11331,6 +11420,50 @@ static generic_ast_node_t* program(ollie_token_stream_t* token_stream){
 
 
 /**
+ * In Ollie, we do not allow the user to inline functions that are *directly or indirectly* recursive.
+ * We only look for this after the entire file has been parsed, so now that it has, we will
+ * check every function to make sure it adheres to this rule
+ */
+static inline u_int8_t validate_inlined_functions_are_non_revursive(function_symtab_t* symtab) {
+	//Use the error count so that we can do all functions at once
+	u_int32_t error_count = 0;
+
+	//Run through every cell in the symtab
+	for(u_int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		if(symtab->records[i] == NULL){
+			continue;
+		}
+
+		//Otherwise grab out a cursor
+		symtab_function_record_t* cursor = symtab->records[i];
+
+		//Run through any collisions in the hashmap
+		while(cursor != NULL){
+			//We only care if this is inlined(for now)
+			if(cursor->inlined == TRUE){
+				//Is it recursive? use the helper
+				u_int8_t is_recursive = is_function_recursive(symtab, cursor);
+
+				//This is our fail case - we may not have this
+				if(is_recursive == TRUE){
+					sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
+					print_parse_message(PARSE_ERROR, info, cursor->line_number);
+					num_errors++;
+					error_count++;
+				}
+			}
+
+			//Bump it up
+			cursor = cursor->next;
+		}
+	}
+
+	//Based on the error count give back what we got here
+	return error_count == 0 ? SUCCESS : FAILURE;
+}
+
+
+/**
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
  * static methods
 */
@@ -11358,9 +11491,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	type_symtab = type_symtab_alloc();
 	constant_symtab = constants_symtab_alloc(); 
 
-	//Initialize the OS call graph. This is because the OS always calls the main function
-	os = calloc(1, sizeof(call_graph_node_t));
-	
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
 	
@@ -11402,6 +11532,15 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//We'll only perform these tests if we want debug printing enabled
 	if(prog->ast_node_type != AST_NODE_TYPE_ERR_NODE){
+		//Finalize the function symtab
+		finalize_function_symtab(function_symtab);
+
+		//Validate that we have no recursive & inlined functions. If this fails, 
+		//we force to an error
+		if(validate_inlined_functions_are_non_revursive(function_symtab) == FAILURE){
+			prog->ast_node_type = AST_NODE_TYPE_ERR_NODE;
+		}
+
 		//Check for any unused functions
 		check_for_unused_functions(function_symtab, &num_warnings);
 		//Check for any bad variable declarations
@@ -11416,8 +11555,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	results->grouping_stack = grouping_stack;
 	//AST root
 	results->root = prog;
-	//Call graph OS root
-	results->os = os;
 	//Record how many errors that we had
 	results->num_errors = num_errors;
 	results->num_warnings = num_warnings;
