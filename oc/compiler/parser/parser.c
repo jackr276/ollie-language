@@ -5085,6 +5085,9 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
  * enforce readability
  *
  * NOTE: We've already seen the "define" and "fn" keyword by the time that we arrive here
+ *
+ * This function will be used exclusively by the "declare" parent function. We will use
+ * a different function for live-parsing types inside of the type name itself
  */
 static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Declare a token for search-ahead
@@ -5093,6 +5096,8 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Now we need to see an L_PAREN
 	if(lookahead.tok != L_PAREN){
 		print_parse_message(PARSE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
+		num_errors++;
+		return FAILURE;
 	}
 
 	//Otherwise push this onto the grouping stack for later
@@ -5124,7 +5129,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	}
 
 	//Keep processing so long as we keep seeing commas
-	do{
+	do {
 		//Now we need to see a valid type
 		generic_type_t* type = type_specifier(token_stream);
 
@@ -5259,13 +5264,26 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	generate_function_pointer_type_name(mutable_function_type);
 	generate_function_pointer_type_name(immutable_function_type);
 
-	//Now that we've created it, we'll store it in the symtab
-	symtab_type_record_t* mutable_record = create_type_record(mutable_function_type);
-	symtab_type_record_t* immutable_record = create_type_record(immutable_function_type);
+	//Do we have a type like this in the symtab? If not, insert it
+	if(lookup_type_name_only(type_symtab, mutable_function_type->type_name.string, MUTABLE) == NULL){
+		//Create it
+		symtab_type_record_t* mutable_record = create_type_record(mutable_function_type);
+		//Add it in
+		insert_type(type_symtab, mutable_record);
+	}
 
-	//Insert both of these in
-	insert_type(type_symtab, mutable_record);
-	insert_type(type_symtab, immutable_record);
+	//Do the exact same checking for the mutable type
+	if(lookup_type_name_only(type_symtab, immutable_function_type->type_name.string, NOT_MUTABLE) == NULL){
+		//Create its symtab record
+		symtab_type_record_t* immutable_record = create_type_record(immutable_function_type);
+		//Insert it in
+		insert_type(type_symtab, immutable_record);
+	}
+
+	/**
+	 * We've already done all of the needed checking above to ensure that the alias types are complete, so those
+	 * can go into the symtab with no issue
+	 */
 
 	//Now that we've done that part, we also need to create the mutable and immutable aliases for the type
 	generic_type_t* mutable_alias_type = create_aliased_type(identifier_name.string, mutable_function_type, parser_line_num, MUTABLE);
@@ -6324,6 +6342,139 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 
 /**
+ * Handle all of the parsing for a function pointer type. Note that this rule will create the function pointer
+ * type if we cannot find it. It is unique in this way
+ *
+ * fn (<type-specifier>*) -> <type-specifier>
+ * NOTE: by the time we get here, we have already seen and consumed the "fn" token
+ */
+static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_stream_t* stream, mutability_type_t mutability){
+	//Lookahead token for our use
+	lexitem_t lookahead;
+
+	//We need to first see an open paren
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	//Fail if we don't see it
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Opening parenthesis expected after fn keyword", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Push it onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	//Once we've gotten past this point, we're safe to allocate this type. We need it to be allocated for use
+	//down the road
+	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, mutability);
+
+	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
+	//as an alternative way of saying this function takes no parameters
+	
+	//Grab the next token
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	//We can optionally see a void type that we need to consume
+	switch(lookahead.tok){
+		//We just need to consume this and move along
+		case VOID:
+			//Refresh the token
+			lookahead = get_next_token(stream, &parser_line_num);
+			break;
+
+		default:
+			//If we hit the default, then we need to push the token back
+			push_back_token(stream, &parser_line_num);
+			break;
+	}
+
+	//Keep processing so long as we keep seeing commas
+	do {
+		//Now we need to see a valid type
+		generic_type_t* type = type_specifier(stream);
+
+		//If this is NULL, we'll error out
+		if(type == NULL){
+			print_parse_message(PARSE_ERROR, "Invalid type specifier given in parameter list", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Add it to the mutable version
+		u_int8_t status = add_parameter_to_function_type(function_type, type);
+
+		//This means that we have been given too many parameters
+		if(status == FAILURE){
+			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Refresh the lookahead token
+		lookahead = get_next_token(stream, &parser_line_num);
+
+	} while(lookahead.tok == COMMA);
+
+	//Now that we're done processing the list, we need to ensure that we have a right paren
+	if(lookahead.tok != R_PAREN){
+		print_parse_message(PARSE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Ensure that we pop the grouping stack and get a match
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//We now need to see the arrow token
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	if(lookahead.tok != ARROW){
+		print_parse_message(PARSE_ERROR, "\"->\" required after parameter list in function declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Now we need to see the return type specifier
+	generic_type_t* return_type = type_specifier(stream);
+
+	//Fail out if we find a bad one
+	if(return_type == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid return type given to function type", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Save the return type in here
+	function_type->internal_types.function_type->return_type = return_type;
+	//Also add the void flag in here just in case
+	function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
+
+	//Now we can generate the type name itself
+	generate_function_pointer_type_name(function_type);
+
+	//Once we have this down, we need to look for it inside of the type symtab. If we have it, great! If not,
+	//we'll need to make it ourselves
+	symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, function_type->type_name.string, mutability);
+
+	//Unlike other type definers, this isn't disqualifying
+	if(type_record == NULL){
+		//Create this type and insert it
+		type_record = create_type_record(function_type);
+		insert_type(type_symtab, type_record);
+	}
+
+	//When we get down here, we'll be returning an either pre-existing type or an entirely
+	//new one that we've made
+	return type_record;
+}
+
+
+/**
  * A type name node is always a child of a type specifier. It consists
  * of all of our primitive types and any defined construct or
  * aliased types that we may have. It is important to note that any
@@ -6349,6 +6500,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
  * 						   | char 
  * 						   | enum <identifier>
  * 						   | union <identifier>
+ * 						   | fn (<type-specifier>*) -> <type-specifier>
  * 						   | struct <identifier>
  * 						   | <identifier>
  */
@@ -6359,12 +6511,46 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 	symtab_type_record_t* record;
 
 	//Create a dstring for the type name
-	dynamic_string_t type_name = dynamic_string_alloc();
+	dynamic_string_t type_name_string = dynamic_string_alloc();
 
 	//Let's see what we have
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	switch(lookahead.tok){
+		//Users can encase type names insider of parenthesis to avoid
+		//ambiguous parses
+		case L_PAREN:
+			//Goes onto the stack
+			push_token(&grouping_stack, lookahead);
+
+			//Recursively call it again
+			record = type_name(token_stream, mutability);
+
+			//If it failed then why bother going further
+			if(record == NULL){
+				return record;
+			}
+
+			//We need to see the closing R_PAREN now
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Mismatched if we don't see it
+			if(lookahead.tok != R_PAREN){
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//Same thing if this happens
+			if(pop_token(&grouping_stack).tok != L_PAREN){
+				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				num_errors++;
+				return NULL;
+			}
+
+			//If we made it all the way down here, then we're fine to return the type
+			return record;
+
 		case VOID:
 		case U8:
 		case I8:
@@ -6394,7 +6580,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		//Enumerated type
 		case ENUM:
 			//We know that this keyword is in the name, so we'll add it in
-			dynamic_string_set(&type_name, "enum ");
+			dynamic_string_set(&type_name_string, "enum ");
 
 			//Now we need to see a valid identifier
 			lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6407,14 +6593,14 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			}
 
 			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
+			dynamic_string_concatenate(&type_name_string, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name.string, mutability);
+			symtab_type_record_t* record = lookup_type_name_only(type_symtab, type_name_string.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name_string.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -6427,7 +6613,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		//Struct type
 		case STRUCT:
 			//First add the struct into the name
-			dynamic_string_set(&type_name, "struct ");
+			dynamic_string_set(&type_name_string, "struct ");
 
 			//We need to see an ident here
 			lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6441,14 +6627,14 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			}
 
 			//Otherwise it actually did work, so we'll add it's name onto the already existing type node
-			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
+			dynamic_string_concatenate(&type_name_string, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name.string, mutability);
+			record = lookup_type_name_only(type_symtab, type_name_string.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name_string.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -6461,7 +6647,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		//Union type
 		case UNION:
 			//Add union into the name
-			dynamic_string_set(&type_name, "union ");
+			dynamic_string_set(&type_name_string, "union ");
 
 			//Now we'll need to see an ident
 			lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6475,14 +6661,14 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			}
 
 			//Add the name onto the "union" qualifier
-			dynamic_string_concatenate(&type_name, lookahead.lexeme.string);
+			dynamic_string_concatenate(&type_name_string, lookahead.lexeme.string);
 
 			//Now we'll look up the record in the symtab. As a reminder, it is required that we see it here
-			record = lookup_type_name_only(type_symtab, type_name.string, mutability);
+			record = lookup_type_name_only(type_symtab, type_name_string.string, mutability);
 
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
-				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name.string);
+				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name_string.string);
 				print_parse_message(PARSE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
@@ -6515,9 +6701,22 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			//Once we make it here, we should be all set to get out
 			return true_type;
 
+		/**
+		 * These function pointer values are unlike the other. If we are not able to find a valid
+		 * function pointer type here, then we will be creating one. The user has the reasonable
+		 * expectation that you don't need to define function types to use them
+		 */
+		case FN:
+			//Let the helper deal with it - this is a larger effort than the others
+			true_type = handle_function_pointer_type_parsing(token_stream, mutability);
+
+			//It will either be NULL(failed) or a real symtab type record
+			return true_type; 
+
 		//If we hit down here, we have some invalid lexeme that isn't a type name at all
 		default:
-			print_parse_message(PARSE_ERROR, "Type name expected but not found", parser_line_num);
+			sprintf(info, "Expected fn, union, struct, enum, but found %s instead", lexitem_to_string(&lookahead));
+			print_parse_message(PARSE_ERROR, info, parser_line_num);
 			num_errors++;
 			return NULL;
 	}
