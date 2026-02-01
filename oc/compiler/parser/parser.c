@@ -6430,6 +6430,44 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 		return NULL;
 	}
 
+	//We now need to see the arrow token
+	lookahead = get_next_token(stream, &parser_line_num);
+
+	if(lookahead.tok != ARROW){
+		print_parse_message(PARSE_ERROR, "\"->\" required after parameter list in function declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Now we need to see the return type specifier
+	generic_type_t* return_type = type_specifier(stream);
+
+	//Fail out if we find a bad one
+	if(return_type == NULL){
+		print_parse_message(PARSE_ERROR, "Invalid return type given to function type", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Save the return type in here
+	function_type->internal_types.function_type->return_type = return_type;
+	//Also add the void flag in here just in case
+	function_type->internal_types.function_type->returns_void = IS_VOID_TYPE(return_type);
+
+	//Now we can generate the type name itself
+	generate_function_pointer_type_name(function_type);
+
+	//Once we have this down, we need to look for it inside of the type symtab. If we have it, great! If not,
+	//we'll need to make it ourselves
+	symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, function_type->type_name.string, mutability);
+
+	//Unlike other type definers, this isn't disqualifying
+	if(type_record == NULL){
+
+	}
+
+	
+
 
 }
 
