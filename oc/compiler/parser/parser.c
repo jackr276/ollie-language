@@ -6349,6 +6349,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
  * 						   | char 
  * 						   | enum <identifier>
  * 						   | union <identifier>
+ * 						   | {pub | inline} fn <identifier>
  * 						   | struct <identifier>
  * 						   | <identifier>
  */
