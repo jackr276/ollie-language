@@ -18,6 +18,7 @@
 
 //We'll need this a lot, so we may as well have it here
 static generic_type_t* f64;
+static generic_type_t* f32;
 static generic_type_t* u64;
 static generic_type_t* i64;
 static generic_type_t* u32;
@@ -6391,6 +6392,59 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 
 
 /**
+ * Emit a direct local constant load instruction
+ */
+static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t* destination_type, local_constant_t* local_constant, u_int8_t use_aligned_load){
+	//First we allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Emit the destination variable here
+	three_addr_var_t* destination_variable = emit_temp_var(destination_type);
+
+	//Select the move instruction based on our type here
+	switch(destination_variable->variable_size){
+		case BYTE:
+			instruction->instruction_type = MOVB;
+			break;
+			
+		case WORD:
+			instruction->instruction_type = MOVW;
+			break;
+
+		case DOUBLE_WORD:
+			instruction->instruction_type = MOVL;
+			break;
+
+		case QUAD_WORD:
+			instruction->instruction_type = MOVQ;
+			break;
+
+		case SINGLE_PRECISION:
+			if(use_aligned_load == FALSE){
+				instruction->instruction_type = MOVSS;
+			} else {
+				instruction->instruction_type = MOVAPS;
+			}
+
+			break;
+
+		case DOUBLE_PRECISION:
+			if(use_aligned_load == FALSE){
+				instruction->instruction_type = MOVSD;
+			} else {
+				instruction->instruction_type = MOVAPD;
+			}
+
+			break;
+	}
+
+
+	//Give the instruction back
+	return instruction;
+}
+
+
+/**
  * Handle a negation instruction. It should be noted that there
  * are 2 different kinds of negation selection processes, one for
  * floating point instructions and one for GP instructions
@@ -6407,7 +6461,7 @@ static void handle_logical_and_instruction(instruction_window_t* window){
  * negation for float: <float_value> ^ 0x80000000
  * negation for double: <double_value> ^ 0x8000000000000000
  */
-static void handle_neg_instruction(instruction_window_t* window){
+static void handle_negation_instruction(instruction_window_t* window){
 	//Grab this pointer for convenience
 	instruction_t* negation_instruction = window->instruction1;
 
@@ -6450,6 +6504,9 @@ static void handle_neg_instruction(instruction_window_t* window){
 
 		//The local constant value. Will be allocated based on the size that we have
 		local_constant_t* local_constant;
+
+		//The move instruction that we need to allocate as well
+		instruction_t* local_constant_load_instruction;
 
 		//We'll need to emit the appropriate constant based on whether we have a float or not
 		switch(size){
@@ -8192,7 +8249,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_NEG_STATEMENT:
-			handle_neg_instruction(window);
+			handle_negation_instruction(window);
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
@@ -8269,6 +8326,7 @@ static void select_instructions(cfg_t* cfg){
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Grab these general use types first
 	f64 = lookup_type_name_only(cfg->type_symtab, "f64", NOT_MUTABLE)->type;
+	f32 = lookup_type_name_only(cfg->type_symtab, "f32", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64", NOT_MUTABLE)->type;
 	i64 = lookup_type_name_only(cfg->type_symtab, "i64", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
