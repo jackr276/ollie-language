@@ -92,6 +92,7 @@ typedef enum {
 	LOCAL_CONSTANT_TYPE_STRING,
 	LOCAL_CONSTANT_TYPE_F32,
 	LOCAL_CONSTANT_TYPE_F64,
+	LOCAL_CONSTANT_TYPE_XMM128 //Special case where a full 128 bit lane of xmm is needed
 } local_constant_type_t;
 
 /**

@@ -1301,7 +1301,7 @@ local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value
 
 
 /**
- * Create an F32 local constant
+ * Create an F64 local constant
  */
 local_constant_t* f64_local_constant_alloc(generic_type_t* f64_type, double value){
 	//Dynamically allocate it
@@ -1319,6 +1319,33 @@ local_constant_t* f64_local_constant_alloc(generic_type_t* f64_type, double valu
 
 	//Store what type we have
 	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_F64;
+
+	//And finally we'll add it back in
+	return local_const;
+}
+
+
+/**
+ * Create a 128 bit local constant
+ *
+ * NOTE: we will use an f64 for this, although we all know that this is truly a 128 bit type
+ */
+local_constant_t* xmm128_local_constant_alloc(generic_type_t* f64_type, int64_t upper_64_bits, int64_t lower_64_bits){
+	//Dynamically allocate it
+	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
+
+	//Store the type as well
+	local_const->type = f64_type;
+	
+	//Store the lower and upper 64 bits for this local constant
+	local_const->local_constant_value.lower_64_bits = lower_64_bits;
+	local_const->local_constant_value.upper_64_bits = upper_64_bits;
+
+	//Now we'll add the ID
+	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
+
+	//Store what type we have
+	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_XMM128;
 
 	//And finally we'll add it back in
 	return local_const;
@@ -1361,6 +1388,17 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 			}
 
 			dynamic_set_add(&(function->local_f64_constants), constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_XMM128:
+			//Allocate the array if need be
+			if(function->local_xmm_constants.internal_array == NULL){
+				function->local_xmm_constants = dynamic_set_alloc();
+			}
+
+			//Add this into the dynamic set
+			dynamic_set_add(&(function->local_xmm_constants), constant);
 
 			break;
 	}
