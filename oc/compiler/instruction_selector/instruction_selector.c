@@ -6390,32 +6390,49 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 
 
 /**
- * Handle a negation instruction. Very simple - all we need to do is select the suffix and
- * add it over
+ * Handle a negation instruction. It should be noted that there
+ * are 2 different kinds of negation selection processes, one for
+ * floating point instructions and one for GP instructions
+ *
+ * NOTE: It is assumed that the first instruction in the window is the negation
+ * instruction
  */
-static void handle_neg_instruction(instruction_t* instruction){
-	//Find out what size we have
-	variable_size_t size = get_type_size(instruction->assignee->type);
+static void handle_neg_instruction(instruction_window_t* window){
+	//Grab this pointer for convenience
+	instruction_t* negation_instruction = window->instruction1;
 
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = NEGQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = NEGL;
-			break;
-		case WORD:
-			instruction->instruction_type = NEGW;
-			break;
-		case BYTE:
-			instruction->instruction_type = NEGB;
-			break;
-		default:
-			break;
+	//If this is not a floating point variable we take the if path
+	if(IS_FLOATING_POINT(negation_instruction->assignee->type) == FALSE){
+		//Find out what size we have
+		variable_size_t size = get_type_size(negation_instruction->assignee->type);
+
+		switch(size){
+			case QUAD_WORD:
+				negation_instruction->instruction_type = NEGQ;
+				break;
+			case DOUBLE_WORD:
+				negation_instruction->instruction_type = NEGL;
+				break;
+			case WORD:
+				negation_instruction->instruction_type = NEGW;
+				break;
+			case BYTE:
+				negation_instruction->instruction_type = NEGB;
+				break;
+			default:
+				break;
+		}
+
+		//Now we'll just translate the assignee to be the destination(and source in this case) register
+		negation_instruction->destination_register = negation_instruction->assignee;
+
+	//Otherwise it is a floating point variable so we will need to do
+	//some extra work here
+	} else {
+		printf("TODO NOT YET SUPPORTED\n");
+		exit(0);
+
 	}
-
-	//Now we'll just translate the assignee to be the destination(and source in this case) register
-	instruction->destination_register = instruction->assignee;
 }
 
 
@@ -8127,8 +8144,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_NEG_STATEMENT:
-			//TODO WRONG
-			handle_neg_instruction(instruction);
+			handle_neg_instruction(window);
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
