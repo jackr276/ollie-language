@@ -17,6 +17,7 @@
 #include <sys/types.h>
 
 //We'll need this a lot, so we may as well have it here
+static generic_type_t* f64;
 static generic_type_t* u64;
 static generic_type_t* i64;
 static generic_type_t* u32;
@@ -6410,6 +6411,10 @@ static void handle_neg_instruction(instruction_window_t* window){
 	//Grab this pointer for convenience
 	instruction_t* negation_instruction = window->instruction1;
 
+	//Store the function that we're in. This will be relevant for the local constants
+	//in the float version
+	symtab_function_record_t* function_contained_in = negation_instruction->function;
+
 	//If this is not a floating point variable we take the if path
 	if(IS_FLOATING_POINT(negation_instruction->assignee->type) == FALSE){
 		//Find out what size we have
@@ -6428,8 +6433,10 @@ static void handle_neg_instruction(instruction_window_t* window){
 			case BYTE:
 				negation_instruction->instruction_type = NEGB;
 				break;
+			//This should never happen
 			default:
-				break;
+				printf("Fatal internal compiler error: unreachable path hit in negation selector\n");
+				exit(1);
 		}
 
 		//Now we'll just translate the assignee to be the destination(and source in this case) register
@@ -6438,6 +6445,38 @@ static void handle_neg_instruction(instruction_window_t* window){
 	//Otherwise it is a floating point variable so we will need to do
 	//some extra work here
 	} else {
+		//Find out what size we have
+		variable_size_t size = get_type_size(negation_instruction->assignee->type);
+
+		//The local constant value. Will be allocated based on the size that we have
+		local_constant_t* local_constant;
+
+		//We'll need to emit the appropriate constant based on whether we have a float or not
+		switch(size){
+			case DOUBLE_PRECISION:
+				//Allocate a local constant with a 1 at the end of the first 64 bits
+				local_constant = xmm128_local_constant_alloc(f64, 0x0000000000000000, 0x8000000000000000);
+
+				//Add this into the function
+				add_local_constant_to_function(function_contained_in, local_constant);
+
+				break;
+
+			case SINGLE_PRECISION:
+				//Allocate a local constant with a 1 at the end of the first 32 bits
+				local_constant = xmm128_local_constant_alloc(f64, 0x0000000000000000, 0x0000000080000000);
+
+				//Add this into the function
+				add_local_constant_to_function(function_contained_in, local_constant);
+
+				break;
+
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in negation selector\n");
+				exit(1);
+		}
+
+
 		printf("TODO NOT YET SUPPORTED\n");
 		exit(0);
 
@@ -8228,7 +8267,8 @@ static void select_instructions(cfg_t* cfg){
  * of code that we print out
  */
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
-	//Grab these two general use types first
+	//Grab these general use types first
+	f64 = lookup_type_name_only(cfg->type_symtab, "f64", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64", NOT_MUTABLE)->type;
 	i64 = lookup_type_name_only(cfg->type_symtab, "i64", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;
