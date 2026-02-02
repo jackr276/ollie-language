@@ -119,6 +119,10 @@ struct local_constant_t{
 		//In the case where we have f32/f64, we store the *bit equivalent*
 		//i32/i64 value inside of here and print that out
 		u_int64_t float_bit_equivalent;
+		//For the 128 bit section - we need to store the 2 64 bit sections
+		//separately
+		u_int64_t lower_64_bits;
+		u_int64_t upper_64_bits;
 	} local_constant_value;
 	//And the ID of it
 	u_int16_t local_constant_id;
@@ -146,6 +150,8 @@ struct symtab_function_record_t{
 	dynamic_set_t local_string_constants;
 	dynamic_set_t local_f32_constants;
 	dynamic_set_t local_f64_constants;
+	//Hold local 128 bit xmm constants
+	dynamic_set_t local_xmm_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The hash that we have

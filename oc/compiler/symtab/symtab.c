@@ -1636,7 +1636,28 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 			int32_t upper32 = (constant->local_constant_value.float_bit_equivalent >> 32) & 0xFFFFFFFF;
 
 			//Otherwise, we'll begin to print, starting with the constant name
-			fprintf(fl, "\t.align 4\n.LC%d:\n\t.long %d\n\t.long %d\n", constant->local_constant_id, lower32, upper32);
+			fprintf(fl, "\t.align 8\n.LC%d:\n\t.long %d\n\t.long %d\n", constant->local_constant_id, lower32, upper32);
+		}
+	}
+
+	//Now print the 128 bit XMM constants
+	if(record->local_xmm_constants.current_index != 0){
+		//Print out that we are in the 16 byte prog-bits section
+		fprintf(fl, "\t.section .rodata.cst16,\"aM\",@progbits,16\n");
+
+		//Run through all constants
+		for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
+			//Grab the constant out
+			local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
+
+			//TODO
+
+			//These are in little-endian order. Lower 32 bits comes first, then the upper 32 bits
+			int32_t lower32 = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
+			int32_t upper32 = (constant->local_constant_value.float_bit_equivalent >> 32) & 0xFFFFFFFF;
+
+			//Otherwise, we'll begin to print, starting with the constant name
+			fprintf(fl, "\t.align 16\n.LC%d:\n\t.long %d\n\t.long %d\n", constant->local_constant_id, lower32, upper32);
 		}
 	}
 }
