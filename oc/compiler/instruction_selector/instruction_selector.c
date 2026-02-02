@@ -6396,6 +6396,15 @@ static void handle_logical_and_instruction(instruction_window_t* window){
  *
  * NOTE: It is assumed that the first instruction in the window is the negation
  * instruction
+ *
+ * For floating point negation, the process is quite simple though it can
+ * look obscure from the outside. Really all we are doing is flipping the
+ * rightmost bit(MSB). We do this via XORing with a mask that has 1 in the MSB and
+ * 0 everywhere else. Doing this will result in the bit flipping to a 0(positive) if it was
+ * a 1(negative) and vice versa in the opposite case
+ *
+ * negation for float: <float_value> ^ 0x80000000
+ * negation for double: <double_value> ^ 0x8000000000000000
  */
 static void handle_neg_instruction(instruction_window_t* window){
 	//Grab this pointer for convenience
