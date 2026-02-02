@@ -378,6 +378,8 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 		case XORW:
 		case XORL:
 		case XORQ:
+		case XORPS:
+		case XORPD:
 		case ANDW:
 		case ANDB:
 		case ANDL:
@@ -3967,7 +3969,7 @@ static void print_or_instruction(FILE* fl, instruction_t* instruction, variable_
 /**
  * Print out a bitwise XOR instruction
  */
-static void print_xor_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static inline void print_xor_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	switch(instruction->instruction_type){
 		case XORQ:
 			fprintf(fl, "xorq ");
@@ -3980,6 +3982,12 @@ static void print_xor_instruction(FILE* fl, instruction_t* instruction, variable
 			break;
 		case XORB:
 			fprintf(fl, "xorb ");
+			break;
+		case XORPS:
+			fprintf(fl, "xorps ");
+			break;
+		case XORPD:
+			fprintf(fl, "xorpd ");
 			break;
 		default:
 			break;
@@ -4371,6 +4379,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case XORW:
 		case XORL:
 		case XORQ:
+		case XORPS:
+		case XORPD:
 			print_xor_instruction(fl, instruction, mode);
 			break;
 
