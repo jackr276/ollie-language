@@ -1650,14 +1650,14 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 			//Grab the constant out
 			local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
 
-			//TODO
-
-			//These are in little-endian order. Lower 32 bits comes first, then the upper 32 bits
-			int32_t lower32 = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
-			int32_t upper32 = (constant->local_constant_value.float_bit_equivalent >> 32) & 0xFFFFFFFF;
+			//Extract all of the value in 32 bit chunks
+			int32_t first32 = constant->local_constant_value.lower_64_bits & 0xFFFFFFFF;
+			int32_t second32 = (constant->local_constant_value.lower_64_bits >> 32) & 0xFFFFFFFF;
+			int32_t third32 = constant->local_constant_value.upper_64_bits & 0xFFFFFFFF;
+			int32_t fourth32 = (constant->local_constant_value.upper_64_bits >> 32) & 0xFFFFFFFF;
 
 			//Otherwise, we'll begin to print, starting with the constant name
-			fprintf(fl, "\t.align 16\n.LC%d:\n\t.long %d\n\t.long %d\n", constant->local_constant_id, lower32, upper32);
+			fprintf(fl, "\t.align 16\n.LC%d:\n\t.long %d\n\t.long %d\n\t.long %d\n\t.long %d\n", constant->local_constant_id, first32, second32, third32, fourth32);
 		}
 	}
 }
