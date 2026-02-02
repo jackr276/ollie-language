@@ -575,6 +575,13 @@ local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value
 local_constant_t* f64_local_constant_alloc(generic_type_t* f32_type, double value);
 
 /**
+ * Create a 128 bit local constant
+ *
+ * NOTE: we will use an f64 for this, although we all know that this is truly a 128 bit type
+ */
+local_constant_t* xmm128_local_constant_alloc(generic_type_t* f64_type, int64_t upper_64_bits, int64_t lower_64_bits);
+
+/**
  * Add a local constant to a function
  */
 void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant);
@@ -633,6 +640,13 @@ local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float
  * Returns NULL if no matching constant can be found
  */
 local_constant_t* get_f64_local_constant(symtab_function_record_t* record, double constant_value);
+
+/**
+ * Get a 128 bit local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_xmm128_local_constant(symtab_function_record_t* record, int64_t upper_64_bits, int64_t lower_64_bits);
 
 /**
  * Get a string local constant whose value matches the given constant

@@ -1786,6 +1786,30 @@ local_constant_t* get_f64_local_constant(symtab_function_record_t* record, doubl
 
 
 /**
+ * Get a 128 bit local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_xmm128_local_constant(symtab_function_record_t* record, int64_t upper_64_bits, int64_t lower_64_bits){
+	//Run through all of the local constants
+	for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
+		//Extract the candidate
+		local_constant_t* candidate = dynamic_set_get_at(&(record->local_xmm_constants), i);
+
+		//We will be comparing at the byte level for both the lower and upper 64 bits
+		if((candidate->local_constant_value.lower_64_bits ^ lower_64_bits) == 0
+			&& (candidate->local_constant_value.upper_64_bits ^ upper_64_bits) == 0){
+
+			return candidate;
+		}
+	}
+
+	//If we get down here it means that we found nothing
+	return NULL;
+}
+
+
+/**
  * Part of optimizer's mark and sweep - remove any local constants
  * with a reference count of 0
  */
@@ -1851,6 +1875,26 @@ void sweep_local_constants(symtab_function_record_t* record){
 
 		//Knock it out
 		dynamic_set_delete(&(record->local_f64_constants), to_be_deleted);
+	}
+
+	//Now do the exact same thing for xmm128's. We can reuse the same array
+	for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_xmm_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_set_delete(&(record->local_xmm_constants), to_be_deleted);
 	}
 
 	//Scrap this now that we're done with it
