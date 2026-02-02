@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <iso646.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -6444,6 +6445,9 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 	//This will be a rip-relative address calculation
 	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
+	//This is a read from memory movement
+	instruction->memory_access_type = READ_FROM_MEMORY;
+
 	//The first address calc will be the instruction pointer
 	instruction->address_calc_reg1 = instruction_pointer_variable;
 
@@ -6559,8 +6563,17 @@ static void handle_negation_instruction(instruction_window_t* window){
 				exit(1);
 		}
 
-		printf("TODO NOT YET SUPPORTED\n");
-		exit(0);
+		//First we will insert the local constant load
+		insert_instruction_before_given(local_constant_load_instruction, negation_instruction);
+
+		//Following that, we will insert the xorpX instruction
+		insert_instruction_before_given(xorpX_instruction, negation_instruction);
+
+		//This negation instruction itself is useless, so we will scrap it
+		delete_statement(negation_instruction);
+
+		//Reconstruct the entire window around the xor instruction
+		reconstruct_window(window, xorpX_instruction);
 	}
 }
 
