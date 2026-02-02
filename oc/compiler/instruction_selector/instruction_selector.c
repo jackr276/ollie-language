@@ -3424,6 +3424,42 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 
 
 /**
+ * Emit an xorps/xorpd instruction directly
+ *
+ * NOTE: this function assumes that the caller is already past the instruction simplification
+ * step and in the selection step, so this function will return an xorps/xorpd with the variables
+ * already in the right place for instruction selection
+ */
+static inline instruction_t* emit_direct_xmm_xorpX_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Go based on what kind of destination we've got
+	switch(destination->variable_size){
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = XORPD;
+			break;
+
+		case SINGLE_PRECISION:
+			instruction->instruction_type = XORPS;
+			break;
+
+		//This should neverf happen
+		default:
+			printf("Fatal internal compiler error: unrecognized type size in xorpd/xorps emitted\n");
+			exit(1);
+	}
+
+	//Preselected means that this is happening at the selector level, so we will be
+	//populating destination/source slots off the bat
+	instruction->destination_register = destination;
+	instruction->source_register = source;
+
+	return instruction;
+}
+
+
+/**
  * Emit a movX instruction
  *
  * This movement instruction will handle all converting move logic internally
@@ -8091,6 +8127,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_NEG_STATEMENT:
+			//TODO WRONG
 			handle_neg_instruction(instruction);
 			break;
 		//Handle a neg statement
