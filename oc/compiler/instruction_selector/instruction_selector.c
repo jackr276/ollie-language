@@ -6438,6 +6438,17 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 			break;
 	}
 
+	//Destination var is straightforward
+	instruction->destination_register = destination_variable;
+
+	//This will be a rip-relative address calculation
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+
+	//The first address calc will be the instruction pointer
+	instruction->address_calc_reg1 = instruction_pointer_variable;
+
+	//The local constant variable that we are using
+	instruction->rip_offset_variable = emit_local_constant_temp_var(local_constant);
 
 	//Give the instruction back
 	return instruction;
@@ -6508,6 +6519,9 @@ static void handle_negation_instruction(instruction_window_t* window){
 		//The move instruction that we need to allocate as well
 		instruction_t* local_constant_load_instruction;
 
+		//The holder for the final xorpX instruction
+		instruction_t* xorpX_instruction;
+
 		//We'll need to emit the appropriate constant based on whether we have a float or not
 		switch(size){
 			case DOUBLE_PRECISION:
@@ -6516,6 +6530,12 @@ static void handle_negation_instruction(instruction_window_t* window){
 
 				//Add this into the function
 				add_local_constant_to_function(function_contained_in, local_constant);
+
+				//Emit the load instruction with the aligned load set to true
+				local_constant_load_instruction = emit_local_constant_from_memory_load(f64, local_constant, TRUE);
+
+				//Emit the xorpd instruction that will do the actual bitflip
+				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->destination_register);
 
 				break;
 
@@ -6526,6 +6546,12 @@ static void handle_negation_instruction(instruction_window_t* window){
 				//Add this into the function
 				add_local_constant_to_function(function_contained_in, local_constant);
 
+				//Emit the load instruction with the aligned load set to true
+				local_constant_load_instruction = emit_local_constant_from_memory_load(f32, local_constant, TRUE);
+
+				//Emit the xorpd instruction that will do the actual bitflip
+				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->destination_register);
+
 				break;
 
 			default:
@@ -6533,10 +6559,8 @@ static void handle_negation_instruction(instruction_window_t* window){
 				exit(1);
 		}
 
-
 		printf("TODO NOT YET SUPPORTED\n");
 		exit(0);
-
 	}
 }
 
@@ -6545,7 +6569,7 @@ static void handle_negation_instruction(instruction_window_t* window){
  * Handle a bitwise not(one's complement) instruction. Very simple - all we need to do is select the suffix and
  * add it over
  */
-static void handle_not_instruction(instruction_t* instruction){
+static inline void handle_not_instruction(instruction_t* instruction){
 	//Find out what size we have
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
