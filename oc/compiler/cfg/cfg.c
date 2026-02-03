@@ -4321,8 +4321,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * x <- t;
 		 *
 		 * Uses strategy of: negl rdx
-		 *
-		 * TODO UPDATE
 		 */
 		case MINUS:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression

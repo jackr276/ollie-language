@@ -11,8 +11,6 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <iso646.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
