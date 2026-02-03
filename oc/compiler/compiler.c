@@ -405,7 +405,6 @@ static u_int8_t compile(compiler_options_t* options){
 	function_symtab_dealloc(results->function_symtab);
 	type_symtab_dealloc(results->type_symtab);
 	variable_symtab_dealloc(results->variable_symtab);
-	constants_symtab_dealloc(results->constant_symtab);
 	dealloc_cfg(cfg);
 
 	//Destroy the options array

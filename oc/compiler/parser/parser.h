@@ -52,7 +52,6 @@ struct front_end_results_package_t{
 	function_symtab_t* function_symtab;
 	variable_symtab_t* variable_symtab;
 	type_symtab_t* type_symtab;
-	constants_symtab_t* constant_symtab;
 	//Grouping stack
 	lex_stack_t grouping_stack;
 	//Number of errors

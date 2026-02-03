@@ -36,7 +36,6 @@ char type_name_buf2[MAX_IDENT_LENGTH];
 static function_symtab_t* function_symtab = NULL;
 static variable_symtab_t* variable_symtab = NULL;
 static type_symtab_t* type_symtab = NULL;
-static constants_symtab_t* constant_symtab = NULL;
 
 //The entire AST is rooted here
 static generic_ast_node_t* prog = NULL;
@@ -1397,17 +1396,6 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 			//Grab this out for convenience
 			char* var_name = ident->string_value.string;
-
-			//We have a few options here, we could find a constant that has been declared
-			//like this. If so, we'll return a duplicate of the constant node that we have
-			//inside of here
-			symtab_constant_record_t* found_const = lookup_constant(constant_symtab, var_name);
-			
-			//If this is in fact a constant, we'll duplicate the whole thing and send it
-			//out the door
-			if(found_const != NULL){
-				return duplicate_node(found_const->constant_node, side);
-			}
 
 			//Now we will look this up in the variable symbol table
 			symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
@@ -9419,20 +9407,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
-
-	//Fail out if this isn't null
-	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_constant_name(found_const);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	
 	//Now we need to see a colon
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -9955,19 +9929,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		//Also print out the original declaration
 		print_variable_name(found_var); num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
-
-	//Fail out if this isn't null
-	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_constant_name(found_const);
-		num_errors++;
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
@@ -10815,19 +10776,6 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name.string);
-
-	//Fail out if this isn't null
-	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_constant_name(found_const);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
 	//The main function may not be predeclared
 	if(strcmp(function_name.string, "main") == 0){
 		return print_and_return_error("The main function may not be predeclared", parser_line_num);
@@ -11071,19 +11019,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		//Check for duplicate types
 		if(do_duplicate_types_exist(function_name.string) == TRUE){
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-		}
-
-		//Let's see if we've already named a constant this
-		symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name.string);
-
-		//Fail out if this isn't null
-		if(found_const != NULL){
-			sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			//Also print out the original declaration
-			print_constant_name(found_const);
-			num_errors++;
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
@@ -11558,7 +11493,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	function_symtab = function_symtab_alloc();
 	variable_symtab = variable_symtab_alloc();
 	type_symtab = type_symtab_alloc();
-	constant_symtab = constants_symtab_alloc(); 
 
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
@@ -11620,7 +11554,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	results->function_symtab = function_symtab;
 	results->variable_symtab = variable_symtab;
 	results->type_symtab = type_symtab;
-	results->constant_symtab = constant_symtab;
 	results->grouping_stack = grouping_stack;
 	//AST root
 	results->root = prog;
