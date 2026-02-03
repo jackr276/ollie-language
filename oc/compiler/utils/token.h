@@ -22,6 +22,7 @@ typedef enum {
 	ASM_STATEMENT,
 	IF,
 	MACRO,
+	ENDMACRO,
 	//For preprocessor sections
 	DEPENDENCIES,
 	ELSE,
