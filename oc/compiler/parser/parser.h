@@ -13,6 +13,7 @@
 #include "../type_system/type_system.h"
 #include "../ast/ast.h"
 #include "../utils/utility_structs.h"
+#include "../utils/error_management.h"
 #include <sys/types.h>
 
 typedef struct front_end_results_package_t front_end_results_package_t;
@@ -43,7 +44,7 @@ struct front_end_results_package_t{
 /**
  * For printing formatted parser errors
  */
-void print_parse_message(parse_message_type_t message_type, char* info, u_int32_t line_num);
+void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num);
 
 /**
  * Parse the entirety of the file. Returns 0 if successful
