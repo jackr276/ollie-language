@@ -3,8 +3,8 @@
 * Saturating add test
 */
 
-replace TEST_INT with -1;
-replace my_char with 'c';
+#macro TEST_INT -1 #endmacro
+#macro my_char 'c' #endmacro
 
 /**
  * Addition of two's complement ints that saturates to TMAX or TMIN
