@@ -1684,9 +1684,9 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 		fprintf(fl, "\t.section .rodata.cst16,\"aM\",@progbits,16\n");
 
 		//Run through all constants
-		for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
+		for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
 			//Grab the constant out
-			local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
+			local_constant_t* constant = dynamic_set_get_at(&(record->local_xmm_constants), i);
 
 			//Extract all of the value in 32 bit chunks
 			int32_t first32 = constant->local_constant_value.lower_64_bits & 0xFFFFFFFF;

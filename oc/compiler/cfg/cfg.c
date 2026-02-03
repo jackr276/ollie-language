@@ -4346,7 +4346,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, assignment);
 
 			//Now emit the instruction itself
-			instruction_t* negation_instruction = emit_neg_instruction(emit_temp_var(assignee->type), assignment->assignee);
+			instruction_t* negation_instruction = emit_neg_instruction(assignment->assignee);
 			negation_instruction->is_branch_ending = is_branch_ending;
 
 			//This counts as a use

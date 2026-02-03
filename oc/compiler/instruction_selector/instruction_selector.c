@@ -12,6 +12,7 @@
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
 #include <iso646.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -6509,6 +6510,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 		}
 
 		//Now we'll just translate the assignee to be the destination(and source in this case) register
+		negation_instruction->source_register = negation_instruction->op1;
 		negation_instruction->destination_register = negation_instruction->assignee;
 
 	//Otherwise it is a floating point variable so we will need to do
@@ -6516,6 +6518,13 @@ static void handle_negation_instruction(instruction_window_t* window){
 	} else {
 		//Find out what size we have
 		variable_size_t size = get_type_size(negation_instruction->assignee->type);
+
+		//This is purely for bookkeeping. The IR works by having different variables for the source/destination. Since we will
+		//only be working with the destination, we have this symbolic move here that will later be coalesced away to fully track ownership
+		instruction_t* direct_move_instruction = emit_move_instruction(negation_instruction->assignee, negation_instruction->op1);
+
+		//This goes in before the move
+		insert_instruction_before_given(direct_move_instruction, negation_instruction);
 
 		//The local constant value. Will be allocated based on the size that we have
 		local_constant_t* local_constant;
@@ -6530,7 +6539,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 		switch(size){
 			case DOUBLE_PRECISION:
 				//Allocate a local constant with a 1 at the end of the first 64 bits
-				local_constant = xmm128_local_constant_alloc(f64, 0x0000000000000000, 0x8000000000000000);
+				local_constant = xmm128_local_constant_alloc(f64, 0, LONG_MIN);
 
 				//Add this into the function
 				add_local_constant_to_function(function_contained_in, local_constant);
@@ -6545,7 +6554,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 
 			case SINGLE_PRECISION:
 				//Allocate a local constant with a 1 at the end of the first 32 bits
-				local_constant = xmm128_local_constant_alloc(f64, 0x0000000000000000, 0x0000000080000000);
+				local_constant = xmm128_local_constant_alloc(f64, 0, INT_MIN);
 
 				//Add this into the function
 				add_local_constant_to_function(function_contained_in, local_constant);

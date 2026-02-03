@@ -984,10 +984,10 @@ static inline void construct_phi_function_live_range(dynamic_array_t* general_pu
 
 
 /**
- * An increment/decrement live range is a special case because the invisible "source" needs to be part of the
+ * An increment/decrement/neg live range is a special case because the invisible "source" needs to be part of the
  * same live range as the destination. We ensure that that happens within this rule
  */
-static inline void construct_inc_dec_live_range(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+static inline void construct_inc_dec_neg_live_range(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* basic_block, instruction_t* instruction){
 	//If this is not temporary, we can handle it like any other statement
 	if(instruction->destination_register->variable_type != VARIABLE_TYPE_TEMP){
 		//Handle the destination variable
@@ -1100,8 +1100,12 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 			case DECL:
 			case DECW:
 			case DECB:
+			case NEGB:
+			case NEGW:
+			case NEGL:
+			case NEGQ:
 				//These will always be general purpose
-				construct_inc_dec_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
+				construct_inc_dec_neg_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 			
 				//And we're done - no need to go further
 				current = current->next_statement;
