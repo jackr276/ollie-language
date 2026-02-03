@@ -59,6 +59,10 @@ struct lexitem_t {
 	u_int32_t line_num;
 	//The token associated with this item
 	ollie_token_t tok;
+	//Should this lexitem be ignored? This is mainly used
+	//by the preprocessor during it's traversal of the token
+	//streams
+	u_int8_t ignore;
 };
 
 
