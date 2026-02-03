@@ -46,6 +46,9 @@
 //Default length of the string is 60 characters
 #define DEFAULT_DYNAMIC_STRING_LENGTH 60
 
+//For the dynamic arrays/sets
+#define NOT_FOUND -1
+
 //Definitions for cycle counts on our known instructions
 //Load cycle count is 1, we perform the real estimation
 //later on in the scheduler

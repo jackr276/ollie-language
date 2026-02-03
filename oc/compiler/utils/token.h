@@ -4,6 +4,12 @@
  * This structure defines all of the tokens used in the language
 */
 
+#ifndef OLLIE_TOKEN_H
+#define OLLIE_TOKEN_H
+
+#include <sys/types.h>
+#include "dynamic_string/dynamic_string.h"
+
 /**
  * All valid tokens in Ollie
  */
@@ -134,3 +140,33 @@ typedef enum {
 	INLINE,
 } ollie_token_t;
 
+
+/**
+ * The lexitem_t struct holds everything that we could possibly
+ * need for one lexitem in the language
+ */
+struct lexitem_t {
+	//The string(lexeme) that got us this token
+	dynamic_string_t lexeme;
+	//This union will hold all of the constant values
+	//that a lexitem could possibly have
+	union {
+		double double_value;
+		float float_value;
+		u_int64_t unsigned_long_value;
+		int64_t signed_long_value;
+		u_int32_t unsigned_int_value;
+		int32_t signed_int_value;
+		u_int16_t unsigned_short_value;
+		int16_t signed_short_value;
+		u_int8_t unsigned_byte_value;
+		int8_t signed_byte_value;
+		char char_value;
+	} constant_values;
+	//The line number of the source that we found it on
+	u_int32_t line_num;
+	//The token associated with this item
+	ollie_token_t tok;
+};
+
+#endif /* OLLIE_TOKEN_H */

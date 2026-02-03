@@ -1,27 +1,27 @@
 /**
  * Author: Jack Robbins
- * A specified dynamic array that is to be used specifically for Ollie tokens
+ * A specified dynamic array that is to be used specifically for Ollie tokens. This is entirely
+ * separate from a normal dynamic array because we are specifically storing tokens, not pointers
+ * to tokens. Separately allocating every single token would be a performance nightmare
 */
 
 #ifndef OLLIE_TOKEN_ARRAY_H 
 #define OLLIE_TOKEN_ARRAY_H 
+
+#include "../../lexer/lexer.h"
+
 #include <sys/types.h>
 
-#define NOT_FOUND -1
-
-
-//The overall dynamic array structure
-typedef struct dynamic_array_t dynamic_array_t;
+typedef struct ollie_token_array_t ollie_token_array_t;
 
 /**
- * Allows for an automatically resizing, error-free
- * and thoughtless dynamic array. This is primarily
- * designed for the Worklists in SSA conversion, but
- * can be used anywhere
+ * A simple dynamic array structure for holding ollie tokens
+ *
+ * This is heavily used by the lexer/preprocessor
 */
-struct dynamic_array_t{
-	//The overall array - void* so it's generic
-	void** internal_array;
+struct ollie_token_array_t{
+	//The internal token array
+	lex** internal_array;
 	//The current maximum size
 	u_int16_t current_max_size;
 	//The current index that we're on - it also happens to be
