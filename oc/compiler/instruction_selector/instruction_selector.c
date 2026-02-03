@@ -6538,11 +6538,17 @@ static void handle_negation_instruction(instruction_window_t* window){
 		//We'll need to emit the appropriate constant based on whether we have a float or not
 		switch(size){
 			case DOUBLE_PRECISION:
-				//Allocate a local constant with a 1 at the end of the first 64 bits
-				local_constant = xmm128_local_constant_alloc(f64, 0, LONG_MIN);
+				//Let's see if we can find it
+				local_constant = get_xmm128_local_constant(function_contained_in, 0, 0x8000000000000000);
 
-				//Add this into the function
-				add_local_constant_to_function(function_contained_in, local_constant);
+				//If we can't we need to create it
+				if(local_constant == NULL){
+					//Allocate a local constant with a 1 at the end of the first 64 bits
+					local_constant = xmm128_local_constant_alloc(f64, 0, 0x8000000000000000);
+
+					//Add this into the function
+					add_local_constant_to_function(function_contained_in, local_constant);
+				}
 
 				//Emit the load instruction with the aligned load set to true
 				local_constant_load_instruction = emit_local_constant_from_memory_load(f64, local_constant, TRUE);
@@ -6553,11 +6559,17 @@ static void handle_negation_instruction(instruction_window_t* window){
 				break;
 
 			case SINGLE_PRECISION:
-				//Allocate a local constant with a 1 at the end of the first 32 bits
-				local_constant = xmm128_local_constant_alloc(f64, 0, INT_MIN);
+				//Let's see if we can find it
+				local_constant = get_xmm128_local_constant(function_contained_in, 0, 0x80000000);
 
-				//Add this into the function
-				add_local_constant_to_function(function_contained_in, local_constant);
+				//If we can't we need to create it
+				if(local_constant == NULL){
+					//Allocate a local constant with a 1 at the end of the first 32 bits
+					local_constant = xmm128_local_constant_alloc(f64, 0, 0x80000000);
+
+					//Add this into the function
+					add_local_constant_to_function(function_contained_in, local_constant);
+				}
 
 				//Emit the load instruction with the aligned load set to true
 				local_constant_load_instruction = emit_local_constant_from_memory_load(f32, local_constant, TRUE);

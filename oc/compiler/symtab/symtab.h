@@ -123,8 +123,9 @@ struct local_constant_t{
 		//For the 128 bit section - we need to store the 2 64 bit sections
 		//separately
 		u_int64_t lower_64_bits;
-		u_int64_t upper_64_bits;
 	} local_constant_value;
+	//Unfortunately we can't hold it all in the union
+	u_int64_t upper_64_bits;
 	//And the ID of it
 	u_int16_t local_constant_id;
 	//The reference count of the local constant

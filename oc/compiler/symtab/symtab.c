@@ -1339,7 +1339,7 @@ local_constant_t* xmm128_local_constant_alloc(generic_type_t* f64_type, int64_t 
 	
 	//Store the lower and upper 64 bits for this local constant
 	local_const->local_constant_value.lower_64_bits = lower_64_bits;
-	local_const->local_constant_value.upper_64_bits = upper_64_bits;
+	local_const->upper_64_bits = upper_64_bits;
 
 	//Now we'll add the ID
 	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
@@ -1691,8 +1691,8 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 			//Extract all of the value in 32 bit chunks
 			int32_t first32 = constant->local_constant_value.lower_64_bits & 0xFFFFFFFF;
 			int32_t second32 = (constant->local_constant_value.lower_64_bits >> 32) & 0xFFFFFFFF;
-			int32_t third32 = constant->local_constant_value.upper_64_bits & 0xFFFFFFFF;
-			int32_t fourth32 = (constant->local_constant_value.upper_64_bits >> 32) & 0xFFFFFFFF;
+			int32_t third32 = constant->upper_64_bits & 0xFFFFFFFF;
+			int32_t fourth32 = (constant->upper_64_bits >> 32) & 0xFFFFFFFF;
 
 			//Otherwise, we'll begin to print, starting with the constant name
 			fprintf(fl, "\t.align 16\n.LC%d:\n\t.long %d\n\t.long %d\n\t.long %d\n\t.long %d\n", constant->local_constant_id, first32, second32, third32, fourth32);
@@ -1798,7 +1798,7 @@ local_constant_t* get_xmm128_local_constant(symtab_function_record_t* record, in
 
 		//We will be comparing at the byte level for both the lower and upper 64 bits
 		if((candidate->local_constant_value.lower_64_bits ^ lower_64_bits) == 0
-			&& (candidate->local_constant_value.upper_64_bits ^ upper_64_bits) == 0){
+			&& (candidate->upper_64_bits ^ upper_64_bits) == 0){
 
 			return candidate;
 		}
