@@ -115,8 +115,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 */
 void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num){
 	//Now print it
-	//Mapped by index to the enum values
-	char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
 	//Print this out on a single line
 	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_name, line_num, type[message_type], info);

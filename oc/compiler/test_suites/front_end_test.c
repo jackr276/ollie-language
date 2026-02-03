@@ -114,7 +114,7 @@ int main(int argc, char** argv){
 
 	//If this fails, we need to leave
 	if(stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
 		//0 for test runs
 		exit(0);
 	}

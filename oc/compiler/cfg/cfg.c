@@ -576,7 +576,7 @@ dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
 static inline void print_cfg_message(error_message_type_t message_type, char* info, u_int32_t line_number){
 	//Now print it
 	//Mapped by index to the enum values
-	char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
 	//Print this out on a single line
 	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[message_type], info);

@@ -38,7 +38,6 @@ struct preprocessor_results_t {
  * will traverse the token stream and make replacements as it sees
  * fit with defined macros
  */
-preprocessor_results_t preprocess(ollie_token_stream_t* stream);
-
+preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream);
 
 #endif /* PREPROCESSOR_H */
