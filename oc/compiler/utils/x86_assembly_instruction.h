@@ -148,6 +148,8 @@ typedef enum{
 	XORW,
 	XORL,
 	XORQ,
+	XORPS,
+	XORPD,
 	ORB,
 	ORW,
 	ORL,

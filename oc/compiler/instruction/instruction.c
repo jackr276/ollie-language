@@ -378,6 +378,8 @@ u_int8_t is_destination_also_operand(instruction_t* instruction){
 		case XORW:
 		case XORL:
 		case XORQ:
+		case XORPS:
+		case XORPD:
 		case ANDW:
 		case ANDB:
 		case ANDL:
@@ -3967,7 +3969,7 @@ static void print_or_instruction(FILE* fl, instruction_t* instruction, variable_
 /**
  * Print out a bitwise XOR instruction
  */
-static void print_xor_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
+static inline void print_xor_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	switch(instruction->instruction_type){
 		case XORQ:
 			fprintf(fl, "xorq ");
@@ -3980,6 +3982,12 @@ static void print_xor_instruction(FILE* fl, instruction_t* instruction, variable
 			break;
 		case XORB:
 			fprintf(fl, "xorb ");
+			break;
+		case XORPS:
+			fprintf(fl, "xorps ");
+			break;
+		case XORPD:
+			fprintf(fl, "xorpd ");
 			break;
 		default:
 			break;
@@ -4371,6 +4379,8 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case XORW:
 		case XORL:
 		case XORQ:
+		case XORPS:
+		case XORPD:
 			print_xor_instruction(fl, instruction, mode);
 			break;
 
@@ -5367,13 +5377,24 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 /**
  * Emit a negation statement
  */
-instruction_t* emit_neg_instruction(three_addr_var_t* assignee, three_addr_var_t* negatee){
+instruction_t* emit_neg_instruction(three_addr_var_t* negatee){
 	//First we'll create the negation
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
-	//Now we'll assign whatever we need
+	//Now we populate
 	stmt->statement_type = THREE_ADDR_CODE_NEG_STATEMENT;
-	stmt->assignee = assignee;
+
+	//If this is not a temporary variable, then we'll
+	//emit an exact copy and let the SSA system handle it
+	if(negatee->variable_type != VARIABLE_TYPE_TEMP){
+		stmt->assignee = emit_var_copy(negatee);
+
+	//Otherwise, we'll need to spawn a new temporary variable
+	} else {
+		stmt->assignee = emit_temp_var(negatee->type);
+	}
+
+	//No matter what this is the op1
 	stmt->op1 = negatee;
 
 	//Give it back

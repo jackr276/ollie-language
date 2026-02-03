@@ -677,7 +677,7 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee);
 /**
  * Emit a negation(negX) statement
  */
-instruction_t* emit_neg_instruction(three_addr_var_t* assignee, three_addr_var_t* negatee);
+instruction_t* emit_neg_instruction(three_addr_var_t* negatee);
 
 /**
  * Emit a bitwise not instruction

@@ -17,6 +17,8 @@
 #include <sys/types.h>
 
 //We'll need this a lot, so we may as well have it here
+static generic_type_t* f64;
+static generic_type_t* f32;
 static generic_type_t* u64;
 static generic_type_t* i64;
 static generic_type_t* u32;
@@ -3424,6 +3426,42 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 
 
 /**
+ * Emit an xorps/xorpd instruction directly
+ *
+ * NOTE: this function assumes that the caller is already past the instruction simplification
+ * step and in the selection step, so this function will return an xorps/xorpd with the variables
+ * already in the right place for instruction selection
+ */
+static inline instruction_t* emit_direct_xmm_xorpX_instruction(three_addr_var_t* destination, three_addr_var_t* source){
+	//First we allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Go based on what kind of destination we've got
+	switch(destination->variable_size){
+		case DOUBLE_PRECISION:
+			instruction->instruction_type = XORPD;
+			break;
+
+		case SINGLE_PRECISION:
+			instruction->instruction_type = XORPS;
+			break;
+
+		//This should neverf happen
+		default:
+			printf("Fatal internal compiler error: unrecognized type size in xorpd/xorps emitted\n");
+			exit(1);
+	}
+
+	//Preselected means that this is happening at the selector level, so we will be
+	//populating destination/source slots off the bat
+	instruction->destination_register = destination;
+	instruction->source_register = source;
+
+	return instruction;
+}
+
+
+/**
  * Emit a movX instruction
  *
  * This movement instruction will handle all converting move logic internally
@@ -6354,32 +6392,208 @@ static void handle_logical_and_instruction(instruction_window_t* window){
 
 
 /**
- * Handle a negation instruction. Very simple - all we need to do is select the suffix and
- * add it over
+ * Emit a direct local constant load instruction
  */
-static void handle_neg_instruction(instruction_t* instruction){
-	//Find out what size we have
-	variable_size_t size = get_type_size(instruction->assignee->type);
+static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t* destination_type, local_constant_t* local_constant, u_int8_t use_aligned_load){
+	//First we allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
-	switch(size){
-		case QUAD_WORD:
-			instruction->instruction_type = NEGQ;
-			break;
-		case DOUBLE_WORD:
-			instruction->instruction_type = NEGL;
-			break;
-		case WORD:
-			instruction->instruction_type = NEGW;
-			break;
+	//Emit the destination variable here
+	three_addr_var_t* destination_variable = emit_temp_var(destination_type);
+
+	//Select the move instruction based on our type here
+	switch(destination_variable->variable_size){
 		case BYTE:
-			instruction->instruction_type = NEGB;
+			instruction->instruction_type = MOVB;
 			break;
-		default:
+			
+		case WORD:
+			instruction->instruction_type = MOVW;
+			break;
+
+		case DOUBLE_WORD:
+			instruction->instruction_type = MOVL;
+			break;
+
+		case QUAD_WORD:
+			instruction->instruction_type = MOVQ;
+			break;
+
+		case SINGLE_PRECISION:
+			if(use_aligned_load == FALSE){
+				instruction->instruction_type = MOVSS;
+			} else {
+				instruction->instruction_type = MOVAPS;
+			}
+
+			break;
+
+		case DOUBLE_PRECISION:
+			if(use_aligned_load == FALSE){
+				instruction->instruction_type = MOVSD;
+			} else {
+				instruction->instruction_type = MOVAPD;
+			}
+
 			break;
 	}
 
-	//Now we'll just translate the assignee to be the destination(and source in this case) register
-	instruction->destination_register = instruction->assignee;
+	//Destination var is straightforward
+	instruction->destination_register = destination_variable;
+
+	//This will be a rip-relative address calculation
+	instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+
+	//This is a read from memory movement
+	instruction->memory_access_type = READ_FROM_MEMORY;
+
+	//The first address calc will be the instruction pointer
+	instruction->address_calc_reg1 = instruction_pointer_variable;
+
+	//The local constant variable that we are using
+	instruction->rip_offset_variable = emit_local_constant_temp_var(local_constant);
+
+	//Give the instruction back
+	return instruction;
+}
+
+
+/**
+ * Handle a negation instruction. It should be noted that there
+ * are 2 different kinds of negation selection processes, one for
+ * floating point instructions and one for GP instructions
+ *
+ * NOTE: It is assumed that the first instruction in the window is the negation
+ * instruction
+ *
+ * For floating point negation, the process is quite simple though it can
+ * look obscure from the outside. Really all we are doing is flipping the
+ * rightmost bit(MSB). We do this via XORing with a mask that has 1 in the MSB and
+ * 0 everywhere else. Doing this will result in the bit flipping to a 0(positive) if it was
+ * a 1(negative) and vice versa in the opposite case
+ *
+ * negation for float: <float_value> ^ 0x80000000
+ * negation for double: <double_value> ^ 0x8000000000000000
+ */
+static void handle_negation_instruction(instruction_window_t* window){
+	//Grab this pointer for convenience
+	instruction_t* negation_instruction = window->instruction1;
+
+	//Store the function that we're in. This will be relevant for the local constants
+	//in the float version
+	symtab_function_record_t* function_contained_in = negation_instruction->function;
+
+	//If this is not a floating point variable we take the if path
+	if(IS_FLOATING_POINT(negation_instruction->assignee->type) == FALSE){
+		//Find out what size we have
+		variable_size_t size = get_type_size(negation_instruction->assignee->type);
+
+		switch(size){
+			case QUAD_WORD:
+				negation_instruction->instruction_type = NEGQ;
+				break;
+			case DOUBLE_WORD:
+				negation_instruction->instruction_type = NEGL;
+				break;
+			case WORD:
+				negation_instruction->instruction_type = NEGW;
+				break;
+			case BYTE:
+				negation_instruction->instruction_type = NEGB;
+				break;
+			//This should never happen
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in negation selector\n");
+				exit(1);
+		}
+
+		//Now we'll just translate the assignee to be the destination(and source in this case) register
+		negation_instruction->source_register = negation_instruction->op1;
+		negation_instruction->destination_register = negation_instruction->assignee;
+
+	//Otherwise it is a floating point variable so we will need to do
+	//some extra work here
+	} else {
+		//Find out what size we have
+		variable_size_t size = get_type_size(negation_instruction->assignee->type);
+
+		//This is purely for bookkeeping. The IR works by having different variables for the source/destination. Since we will
+		//only be working with the destination, we have this symbolic move here that will later be coalesced away to fully track ownership
+		instruction_t* direct_move_instruction = emit_move_instruction(negation_instruction->assignee, negation_instruction->op1);
+
+		//This goes in before the move
+		insert_instruction_before_given(direct_move_instruction, negation_instruction);
+
+		//The local constant value. Will be allocated based on the size that we have
+		local_constant_t* local_constant;
+
+		//The move instruction that we need to allocate as well
+		instruction_t* local_constant_load_instruction;
+
+		//The holder for the final xorpX instruction
+		instruction_t* xorpX_instruction;
+
+		//We'll need to emit the appropriate constant based on whether we have a float or not
+		switch(size){
+			case DOUBLE_PRECISION:
+				//Let's see if we can find it
+				local_constant = get_xmm128_local_constant(function_contained_in, 0, 0x8000000000000000);
+
+				//If we can't we need to create it
+				if(local_constant == NULL){
+					//Allocate a local constant with a 1 at the end of the first 64 bits
+					local_constant = xmm128_local_constant_alloc(f64, 0, 0x8000000000000000);
+
+					//Add this into the function
+					add_local_constant_to_function(function_contained_in, local_constant);
+				}
+
+				//Emit the load instruction with the aligned load set to true
+				local_constant_load_instruction = emit_local_constant_from_memory_load(f64, local_constant, TRUE);
+
+				//Emit the xorpd instruction that will do the actual bitflip
+				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->destination_register);
+
+				break;
+
+			case SINGLE_PRECISION:
+				//Let's see if we can find it
+				local_constant = get_xmm128_local_constant(function_contained_in, 0, 0x80000000);
+
+				//If we can't we need to create it
+				if(local_constant == NULL){
+					//Allocate a local constant with a 1 at the end of the first 32 bits
+					local_constant = xmm128_local_constant_alloc(f64, 0, 0x80000000);
+
+					//Add this into the function
+					add_local_constant_to_function(function_contained_in, local_constant);
+				}
+
+				//Emit the load instruction with the aligned load set to true
+				local_constant_load_instruction = emit_local_constant_from_memory_load(f32, local_constant, TRUE);
+
+				//Emit the xorpd instruction that will do the actual bitflip
+				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->assignee, local_constant_load_instruction->destination_register);
+
+				break;
+
+			default:
+				printf("Fatal internal compiler error: unreachable path hit in negation selector\n");
+				exit(1);
+		}
+
+		//First we will insert the local constant load
+		insert_instruction_before_given(local_constant_load_instruction, negation_instruction);
+
+		//Following that, we will insert the xorpX instruction
+		insert_instruction_before_given(xorpX_instruction, negation_instruction);
+
+		//This negation instruction itself is useless, so we will scrap it
+		delete_statement(negation_instruction);
+
+		//Reconstruct the entire window around the xor instruction
+		reconstruct_window(window, xorpX_instruction);
+	}
 }
 
 
@@ -6387,7 +6601,7 @@ static void handle_neg_instruction(instruction_t* instruction){
  * Handle a bitwise not(one's complement) instruction. Very simple - all we need to do is select the suffix and
  * add it over
  */
-static void handle_not_instruction(instruction_t* instruction){
+static inline void handle_not_instruction(instruction_t* instruction){
 	//Find out what size we have
 	variable_size_t size = get_type_size(instruction->assignee->type);
 
@@ -8091,7 +8305,7 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_NEG_STATEMENT:
-			handle_neg_instruction(instruction);
+			handle_negation_instruction(window);
 			break;
 		//Handle a neg statement
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
@@ -8166,7 +8380,9 @@ static void select_instructions(cfg_t* cfg){
  * of code that we print out
  */
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
-	//Grab these two general use types first
+	//Grab these general use types first
+	f64 = lookup_type_name_only(cfg->type_symtab, "f64", NOT_MUTABLE)->type;
+	f32 = lookup_type_name_only(cfg->type_symtab, "f32", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64", NOT_MUTABLE)->type;
 	i64 = lookup_type_name_only(cfg->type_symtab, "i64", NOT_MUTABLE)->type;
 	i32 = lookup_type_name_only(cfg->type_symtab, "i32", NOT_MUTABLE)->type;

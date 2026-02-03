@@ -1301,7 +1301,7 @@ local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value
 
 
 /**
- * Create an F32 local constant
+ * Create an F64 local constant
  */
 local_constant_t* f64_local_constant_alloc(generic_type_t* f64_type, double value){
 	//Dynamically allocate it
@@ -1319,6 +1319,33 @@ local_constant_t* f64_local_constant_alloc(generic_type_t* f64_type, double valu
 
 	//Store what type we have
 	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_F64;
+
+	//And finally we'll add it back in
+	return local_const;
+}
+
+
+/**
+ * Create a 128 bit local constant
+ *
+ * NOTE: we will use an f64 for this, although we all know that this is truly a 128 bit type
+ */
+local_constant_t* xmm128_local_constant_alloc(generic_type_t* f64_type, int64_t upper_64_bits, int64_t lower_64_bits){
+	//Dynamically allocate it
+	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
+
+	//Store the type as well
+	local_const->type = f64_type;
+	
+	//Store the lower and upper 64 bits for this local constant
+	local_const->local_constant_value.lower_64_bits = lower_64_bits;
+	local_const->upper_64_bits = upper_64_bits;
+
+	//Now we'll add the ID
+	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
+
+	//Store what type we have
+	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_XMM128;
 
 	//And finally we'll add it back in
 	return local_const;
@@ -1361,6 +1388,17 @@ void add_local_constant_to_function(symtab_function_record_t* function, local_co
 			}
 
 			dynamic_set_add(&(function->local_f64_constants), constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_XMM128:
+			//Allocate the array if need be
+			if(function->local_xmm_constants.internal_array == NULL){
+				function->local_xmm_constants = dynamic_set_alloc();
+			}
+
+			//Add this into the dynamic set
+			dynamic_set_add(&(function->local_xmm_constants), constant);
 
 			break;
 	}
@@ -1636,7 +1674,28 @@ void print_local_constants(FILE* fl, symtab_function_record_t* record){
 			int32_t upper32 = (constant->local_constant_value.float_bit_equivalent >> 32) & 0xFFFFFFFF;
 
 			//Otherwise, we'll begin to print, starting with the constant name
-			fprintf(fl, "\t.align 4\n.LC%d:\n\t.long %d\n\t.long %d\n", constant->local_constant_id, lower32, upper32);
+			fprintf(fl, "\t.align 8\n.LC%d:\n\t.long %d\n\t.long %d\n", constant->local_constant_id, lower32, upper32);
+		}
+	}
+
+	//Now print the 128 bit XMM constants
+	if(record->local_xmm_constants.current_index != 0){
+		//Print out that we are in the 16 byte prog-bits section
+		fprintf(fl, "\t.section .rodata.cst16,\"aM\",@progbits,16\n");
+
+		//Run through all constants
+		for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
+			//Grab the constant out
+			local_constant_t* constant = dynamic_set_get_at(&(record->local_xmm_constants), i);
+
+			//Extract all of the value in 32 bit chunks
+			int32_t first32 = constant->local_constant_value.lower_64_bits & 0xFFFFFFFF;
+			int32_t second32 = (constant->local_constant_value.lower_64_bits >> 32) & 0xFFFFFFFF;
+			int32_t third32 = constant->upper_64_bits & 0xFFFFFFFF;
+			int32_t fourth32 = (constant->upper_64_bits >> 32) & 0xFFFFFFFF;
+
+			//Otherwise, we'll begin to print, starting with the constant name
+			fprintf(fl, "\t.align 16\n.LC%d:\n\t.long %d\n\t.long %d\n\t.long %d\n\t.long %d\n", constant->local_constant_id, first32, second32, third32, fourth32);
 		}
 	}
 }
@@ -1727,6 +1786,30 @@ local_constant_t* get_f64_local_constant(symtab_function_record_t* record, doubl
 
 
 /**
+ * Get a 128 bit local constant whose value matches the given constant
+ *
+ * Returns NULL if no matching constant can be found
+ */
+local_constant_t* get_xmm128_local_constant(symtab_function_record_t* record, int64_t upper_64_bits, int64_t lower_64_bits){
+	//Run through all of the local constants
+	for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
+		//Extract the candidate
+		local_constant_t* candidate = dynamic_set_get_at(&(record->local_xmm_constants), i);
+
+		//We will be comparing at the byte level for both the lower and upper 64 bits
+		if((candidate->local_constant_value.lower_64_bits ^ lower_64_bits) == 0
+			&& (candidate->upper_64_bits ^ upper_64_bits) == 0){
+
+			return candidate;
+		}
+	}
+
+	//If we get down here it means that we found nothing
+	return NULL;
+}
+
+
+/**
  * Part of optimizer's mark and sweep - remove any local constants
  * with a reference count of 0
  */
@@ -1792,6 +1875,26 @@ void sweep_local_constants(symtab_function_record_t* record){
 
 		//Knock it out
 		dynamic_set_delete(&(record->local_f64_constants), to_be_deleted);
+	}
+
+	//Now do the exact same thing for xmm128's. We can reuse the same array
+	for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_xmm_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_set_delete(&(record->local_xmm_constants), to_be_deleted);
 	}
 
 	//Scrap this now that we're done with it
