@@ -20,9 +20,16 @@ static char* current_file_name;
 //Define a basic struct for macro storage
 typedef struct ollie_macro_t ollie_macro_t;
 
+
+/**
+ * An overall struct that contains the macros that we are after
+ */
 struct ollie_macro_t {
-	//TODO
+	//An array of lexitems that are the tokens we would
+	//like to store inside of this macro
+	lexitem_t* token_segment;
 	
+
 	//What line number was this macro defined on
 	u_int32_t line_number;
 };
@@ -41,6 +48,14 @@ static inline void print_preprocessor_message(error_message_type_t message, char
 
 
 /**
+ * Process a macro starting at the begin index
+ */
+static ollie_macro_t* process_macro(ollie_token_stream_t* stream, u_int32_t beginning_index) {
+
+}
+
+
+/**
  * Put simply, the consumption pass will run through the entire token
  * stream looking for macros. When it finds a macro, it will flag that section
  * of the token stream to be ignored by future passes(in reality this means
@@ -50,7 +65,24 @@ static inline void print_preprocessor_message(error_message_type_t message, char
  * pass
  */
 static void macro_consumption_pass(ollie_token_stream_t* stream){
+	//Run through every token in the token stream
+	for(u_int32_t i = 0; i < stream->current_token_index; i++){
+		//Get a pointer to the token that we are after
+		lexitem_t* token = &(stream->token_stream[i]);
 
+		//Go based on the kind of token that we have in here
+		switch(token->tok){
+			//We are seeing the beginning of a macro
+			case MACRO:
+				break;
+
+
+			//Default is that we do nothing
+			default:
+				break;
+		}
+
+	}
 }
 
 
