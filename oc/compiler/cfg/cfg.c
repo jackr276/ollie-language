@@ -573,23 +573,13 @@ dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
  * Simply prints a parse message in a nice formatted way. For the CFG, there
  * are no parser line numbers
 */
-static void print_cfg_message(parse_message_type_t message_type, char* info, u_int16_t line_number){
-	//Build and populate the message
-	parse_message_t parse_message;
-	parse_message.message = message_type;
-	parse_message.info = info;
-
-	//Fatal if error
-	if(message_type == PARSE_ERROR){
-		parse_message.fatal = 1;
-	}
-
+static inline void print_cfg_message(parse_message_type_t message_type, char* info, u_int32_t line_number){
 	//Now print it
 	//Mapped by index to the enum values
 	char* type[] = {"WARNING", "ERROR", "INFO"};
 
 	//Print this out on a single line
-	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[parse_message.message], parse_message.info);
+	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[message_type], info);
 }
 
 

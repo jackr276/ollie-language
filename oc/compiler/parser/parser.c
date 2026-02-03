@@ -114,18 +114,12 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
  * Simply prints a parse message in a nice formatted way
 */
 void print_parse_message(parse_message_type_t message_type, char* info, u_int32_t line_num){
-	//Build and populate the message
-	parse_message_t parse_message;
-	parse_message.message = message_type;
-	parse_message.info = info;
-	parse_message.line_num = line_num;
-
 	//Now print it
 	//Mapped by index to the enum values
 	char* type[] = {"WARNING", "ERROR", "INFO"};
 
 	//Print this out on a single line
-	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_name, parse_message.line_num, type[parse_message.message], parse_message.info);
+	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_name, line_num, type[message_type], info);
 }
 
 

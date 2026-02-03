@@ -166,7 +166,6 @@ int main(int argc, char** argv){
 	function_symtab_dealloc(parse_results->function_symtab);
 	type_symtab_dealloc(parse_results->type_symtab);
 	variable_symtab_dealloc(parse_results->variable_symtab);
-	constants_symtab_dealloc(parse_results->constant_symtab);
 	dealloc_cfg(cfg);
 
 	//Now stop the clock - we want to test the deallocation overhead too
