@@ -10,6 +10,9 @@
 #include <sys/types.h>
 #include "dynamic_string/dynamic_string.h"
 
+//Forward declare the lexitem struct
+typedef struct lexitem_t lexitem_t;
+
 /**
  * All valid tokens in Ollie
  */

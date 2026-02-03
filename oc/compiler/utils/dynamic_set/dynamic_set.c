@@ -71,8 +71,8 @@ dynamic_set_t clone_dynamic_set(dynamic_set_t* set){
 	//Now we'll create the array for it - of the exact same size as the original
 	cloned.internal_array = calloc(set->current_max_size, sizeof(void*));
 
-	//Now we'll perform a memory copy
-	memcpy(cloned.internal_array, set->internal_array, set->current_max_size * sizeof(void*));
+	//Now we'll perform a memory copy. Only clone up to the current index
+	memcpy(cloned.internal_array, set->internal_array, set->current_index * sizeof(void*));
 	
 	//Finally copy over the rest of the information
 	cloned.current_index = set->current_index;

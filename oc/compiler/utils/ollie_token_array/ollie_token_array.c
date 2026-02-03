@@ -4,109 +4,81 @@
 */
 
 //Link to header
-#include "dynamic_array.h"
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
+#include "ollie_token_array.h"
+#include "../constants.h"
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include "../constants.h"
 
 /**
- * Allocate an entire dynamic array. The resulting control
- * structure will be stack allocated
-*/
-dynamic_array_t dynamic_array_alloc(){
-	//First we'll create the overall structure
- 	dynamic_array_t array;
+ * Initialize a token array. The resulting
+ * control structure will be stack allocated
+ */
+ollie_token_array_t token_array_alloc(){
+	//Stack allocate this
+	ollie_token_array_t array;
 
-	//Set the max size using the sane default 
-	array.current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
+	//The default token array size
+	array.current_max_size = TOKEN_ARRAY_DEFAULT_SIZE;
 
-	//Starts off at 0
+	//Store the current index as well
 	array.current_index = 0;
 
-	//Now we'll allocate the overall internal array
-	array.internal_array = calloc(array.current_max_size, sizeof(void*));
+	//And now reserve the internal space that we need
+	array.internal_array = calloc(array.current_max_size, sizeof(lexitem_t));
 
-	//Now we're all set
-	return array;
-} 
-
-
-/**
- * Initialize a dynamic array on the heap 
- * specifically. This should only be used
- * when you absolutely need it
- */
-dynamic_array_t* dynamic_array_heap_alloc(){
-	//First we'll create the overall structure
- 	dynamic_array_t* array = calloc(1, sizeof(dynamic_array_t));
-
-	//Set the max size using the sane default 
-	array->current_max_size = DYNAMIC_ARRAY_DEFAULT_SIZE;
-
-	//Starts off at 0
-	array->current_index = 0;
-
-	//Now we'll allocate the overall internal array
-	array->internal_array = calloc(array->current_max_size, sizeof(void*));
-
-	//Now we're all set
+	//Give back a copy of the control structure
 	return array;
 }
 
 
 /**
- * Initialize a dynamic array with an initial
+ * Initialize a token array with an initial
  * size. This is useful if we already know
  * the size we need
  */
-dynamic_array_t dynamic_array_alloc_initial_size(u_int16_t initial_size){
-//First we'll create the overall structure
- 	dynamic_array_t array;
+ollie_token_array_t token_array_alloc_initial_size(u_int32_t initial_size){
+	//Stack allocate this
+	ollie_token_array_t array;
 
-	//Set the max size using the sane default 
+	//Use the size provided by the caller
 	array.current_max_size = initial_size;
 
-	//Set the current index flag
+	//Store the current index as well
 	array.current_index = 0;
 
-	//Now we'll allocate the overall internal array
-	array.internal_array = calloc(array.current_max_size, sizeof(void*));
+	//And now reserve the internal space that we need
+	array.internal_array = calloc(array.current_max_size, sizeof(lexitem_t));
 
-	//Now we're all set
+	//Give back a copy of the control structure
 	return array;
 }
 
 
 /**
- * Create an exact clone of the dynamic array that we're given
+ * Create an exact clone of the token array that we're given
  */
-dynamic_array_t clone_dynamic_array(dynamic_array_t* array){
-	//If it's null then we'll just allocate for the user
-	if(array == NULL || array->current_index == 0){
-		return dynamic_array_alloc();
+ollie_token_array_t clone_token_array(ollie_token_array_t* array){
+	//If it's null then we just allocate
+	if(array == NULL || array->current_max_size == 0){
+		return token_array_alloc();
 	}
 
-	//First we create the overall structure
-	dynamic_array_t cloned;
+	//Otherwise let's allocate a structure
+	ollie_token_array_t clone;
 
-	//Now we'll create the array for it - of the exact same size as the original
-	cloned.internal_array = calloc(array->current_max_size, sizeof(void*));
+	//Copy both of these values over
+	clone.current_max_size = array->current_max_size;
+	clone.current_index = array->current_index;
 
-	//Now we'll perform a memory copy
-	memcpy(cloned.internal_array, array->internal_array, array->current_max_size * sizeof(void*));
-	
-	//Finally copy over the rest of the information
-	cloned.current_index = array->current_index;
-	cloned.current_max_size = array->current_max_size;
+	//Now allocate an internal array of the exact desired size
+	clone.internal_array = calloc(array->current_max_size, sizeof(lexitem_t));
 
-	//And return this pointer
-	return cloned;
+	//Following this, we will duplicate the entire token array using a memcpy
+	memcpy(clone.internal_array, array->internal_array, sizeof(lexitem_t) * array->current_index);
+
+	//Finally we can return the token array
+	return clone;
 }
-
 
 /**
  * Does the dynamic array contain this pointer?
@@ -394,24 +366,4 @@ void dynamic_array_dealloc(dynamic_array_t* array){
 	array->internal_array = NULL;
 	array->current_index = 0;
 	array->current_max_size = 0;
-}
-
-
-/**
- * Deallocate a dynamic array that was on the heap
- */
-void dynamic_array_heap_dealloc(dynamic_array_t** array){
-	//Let's just make sure here...
-	if((*array)->internal_array == NULL){
-		return;
-	}
-
-	//First we'll free the internal array
-	free((*array)->internal_array);
-
-	//Free the overall structure too
-	free(*array);
-
-	//Set this as a warning
-	*array = NULL;
 }

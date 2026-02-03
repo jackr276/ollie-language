@@ -96,8 +96,8 @@ dynamic_array_t clone_dynamic_array(dynamic_array_t* array){
 	//Now we'll create the array for it - of the exact same size as the original
 	cloned.internal_array = calloc(array->current_max_size, sizeof(void*));
 
-	//Now we'll perform a memory copy
-	memcpy(cloned.internal_array, array->internal_array, array->current_max_size * sizeof(void*));
+	//Now we'll perform a memory copy. Only clone up to the current index
+	memcpy(cloned.internal_array, array->internal_array, array->current_index * sizeof(void*));
 	
 	//Finally copy over the rest of the information
 	cloned.current_index = array->current_index;

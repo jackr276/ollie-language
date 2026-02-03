@@ -40,6 +40,10 @@
 //A large prime for hashing
 #define LARGE_PRIME 611593
 
+//Default size for a token array is 5. This is smaller because we don't likely
+//have tons of tokens in our macro
+#define TOKEN_ARRAY_DEFAULT_SIZE 5
+
 //The default is 20 -- this can always be reupped
 #define DYNAMIC_ARRAY_DEFAULT_SIZE 20 
 

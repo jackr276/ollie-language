@@ -15,8 +15,6 @@
 #define MAX_TOKEN_LENGTH 500
 #define MAX_IDENT_LENGTH 200
 
-//The lexitem_t struct
-typedef struct lexitem_t lexitem_t;
 //The overall token stream value
 typedef struct ollie_token_stream_t ollie_token_stream_t;
 
