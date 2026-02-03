@@ -9068,9 +9068,9 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		case ASM:
 			return assembly_inline_statement(token_stream);
 		
-		//Replace statement is an error here
-		case REPLACE:
-			return print_and_return_error("Replace statements have global effects, and therefore must be declared in the global scope", parser_line_num);
+		//A macro here would be an error
+		case MACRO:
+			return print_and_return_error("Macros have global effects, and therefore must be declared in the global scope", parser_line_num);
 
 		//By default push this back and return an expression statement
 		default:
@@ -11271,122 +11271,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 
 /**
- * Handle a replace statement. A replace statement allows the programmer to eliminate any/all
- * magic numbers in the program. A replace statement is the only kind of statement that 
- *
- * Example:
- * #replace MY_INT with 2;
- */
-static u_int8_t replace_statement(ollie_token_stream_t* token_stream){
-	//Lookahead token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we failed, we're done here
-	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given to replace statement", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-	
-	//Now that we have the ident, we need to make sure that it's not a duplicate
-	//Let's get a pointer to the name for convenience
-	dynamic_string_t name = lookahead.lexeme;
-
-	//Check for function duplicates
-	if(do_duplicate_functions_exist(name.string) == TRUE){
-		return FAILURE;
-	}
-
-	//Check for type duplicates
-	if(do_duplicate_types_exist(name.string) == TRUE){
-		return FAILURE;
-	}
-
-	//Check that it isn't some duplicated variable name. We will only check in the
-	//local scope for this one
-	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var); num_errors++;
-		return FAILURE;
-	}
-
-	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
-
-	//Fail out if this isn't null
-	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_constant_name(found_const);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//We now need to see the with keyword
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we don't see it, then we're done here
-	if(lookahead.tok != WITH){
-		print_parse_message(PARSE_ERROR, "With keyword required in replace statement", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	/**
-	 * We now need to see a constant expression, but we will allow for some leniency
-	 * by the logical or expression parsing. If a user types something like typesize(int)
-	 * in, then that should still work for our replace statement
-	 */
-	generic_ast_node_t* constant_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
-
-	switch(constant_node->ast_node_type){
-		//THis is a straight failure, error has already happened
-		case AST_NODE_TYPE_ERR_NODE:
-			return FAILURE;
-
-		//The one good case here
-		case AST_NODE_TYPE_CONSTANT:
-			break;
-
-		//Anything else is invalid, we'll fail out if that's the case
-		default:
-			print_parse_message(PARSE_ERROR, "Replace statements must have an expression that simplifies to a single constant", parser_line_num);
-			return FAILURE;
-	}
-
-	//One last thing, we need to see a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we don't see this, we're done
-	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required after replace statement", parser_line_num);
-		printf("%s\n\n\n", lexitem_to_string(&lookahead));
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Now we're ready for assembly and insertion
-	symtab_constant_record_t* created_const = create_constant_record(name);
-
-	//Once we've created it, we'll pack it with values
-	created_const->constant_node = constant_node;
-	created_const->line_number = parser_line_num;
-
-	//Insert the record into the symtab
-	insert_constant(constant_symtab, created_const);
-
-	//And we're all set, return success(1)
-	return SUCCESS;
-}
-
-
-/**
  * Handle a global declare statement. Note that be the time we arrive here, we've
  * already seen and consumed the DECLARE token
  */
@@ -11455,7 +11339,6 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
  * <declaration-partition>::= <function-definition>
  *                        	| <declaration>
  *                        	| <definition>
- *                        	| <replace-statement>
  */
 static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_stream){
 	//Lookahead token
@@ -11502,19 +11385,6 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		case ALIAS:
 			//Call the helper
 			status = alias_statement(token_stream);
-
-			//If it's bad, we'll return an error node
-			if(status == FAILURE){
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-			}
-
-			//Otherwise we'll just return null, the caller will know what to do with it
-			return NULL;
-
-		//Let the replace rule handle this
-		case REPLACE:	
-			//We don't need to put it back
-			status = replace_statement(token_stream);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){

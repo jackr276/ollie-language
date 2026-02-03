@@ -44,20 +44,20 @@ static char* file_name;
 static char info[2000];
 
 //Token array, we will index using their enum values
-static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
-				    EXTERNAL, TRUE_CONST, FALSE_CONST, INLINE};
+				    EXTERNAL, TRUE_CONST, FALSE_CONST, INLINE, MACRO};
 
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
-						 "require", "replace", "u8", "i8", "u16",
+						 "require", "u8", "i8", "u16",
 						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false", "inline"};
+						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false", "inline", "#macro"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -192,8 +192,8 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "jump";
 		case REQUIRE:
 			return "require";
-		case REPLACE:
-			return "replace";
+		case MACRO:
+			return "#macro";
 		case U8:
 			return "u8";
 		case I8:
