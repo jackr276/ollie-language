@@ -45,8 +45,33 @@ static inline u_int8_t lexitems_equal(lexitem_t* a, lexitem_t* b) {
 			}
 
 			break;
+
+		case BYTE_CONST:
+		case BYTE_CONST_FORCE_U:
+		case CHAR_CONST:
+			if(a->constant_values.unsigned_byte_value != b->constant_values.unsigned_byte_value){
+				return FALSE;
+			}
+
+			break;
+
+		//These both carry internal lexemes that we need to compare
+		case IDENT:
+		case STR_CONST:
+			//Let the helper do the comparison
+			if(dynamic_strings_equal(&(a->lexeme), &(b->lexeme)) == FALSE){
+				return FALSE;
+			}
+
+			break;
+
+		//Do nothing by default
+		default:
+			break;
 	}
 
+	//If we made it all the way down here then this worked
+	return TRUE;
 }
 
 
