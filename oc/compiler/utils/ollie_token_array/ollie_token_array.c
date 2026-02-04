@@ -6,6 +6,7 @@
 //Link to header
 #include "ollie_token_array.h"
 #include "../constants.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -185,6 +186,33 @@ u_int8_t token_array_is_empty(ollie_token_array_t* array){
 	} else {
 		return FALSE;
 	}
+}
+
+
+/**
+ * Add an item into the array. Note that we pass by copy for convenience, but we are
+ * not storing pointers in the array
+ *
+ * This function will handle our dynamic resize
+ */
+void token_array_add(ollie_token_array_t* array, lexitem_t* lexitem){
+	//If this is happening then something has gone wrong
+	if(lexitem == NULL){
+		printf("ERROR: Attempting to insert a NULL lexitem into a token array\n");
+		exit(1);
+	}
+
+	//If we've hit the limit we need to reup
+	if(array->current_index == array->current_max_size){
+		//Double the array size
+		array->current_max_size *= 2;
+
+		//Reup the array nowj:w
+		array->internal_array = realloc(array->internal_array, array->current_max_size * sizeof(lexitem_t));
+	}
+
+	//Now that we've handled any needed resize we can add in
+
 }
 
 
