@@ -53,7 +53,7 @@ ollie_token_array_t clone_token_array(ollie_token_array_t* array);
  * 
  * RETURNS: the index if true, -1 if not
 */
-int16_t token_array_contains(ollie_token_array_t* array, lexitem_t* lexitem);
+int32_t token_array_contains(ollie_token_array_t* array, lexitem_t* lexitem);
 
 /**
  * Is the token array is empty?

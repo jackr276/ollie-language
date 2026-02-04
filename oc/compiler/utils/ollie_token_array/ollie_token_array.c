@@ -8,6 +8,47 @@
 #include "../constants.h"
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+
+
+/**
+ * Perform a deep comparison of two lexitems
+ */
+static inline u_int8_t lexitems_equal(lexitem_t* a, lexitem_t* b) {
+	//If these are not equal, then we must exit
+	if(a->tok != b->tok) {
+		return FALSE;
+	}
+
+	//If we have certain constants, we need to check for equality there too
+	switch(a->tok){
+		case LONG_CONST:
+		case LONG_CONST_FORCE_U:
+			if(a->constant_values.unsigned_long_value != b->constant_values.unsigned_long_value){
+				return FALSE;
+			}
+
+			break;
+
+		case INT_CONST:
+		case INT_CONST_FORCE_U:
+			if(a->constant_values.unsigned_int_value != b->constant_values.unsigned_int_value){
+				return FALSE;
+			}
+			
+			break;
+
+		case SHORT_CONST:
+		case SHORT_CONST_FORCE_U:
+			if(a->constant_values.unsigned_short_value != b->constant_values.unsigned_short_value){
+				return FALSE;
+			}
+
+			break;
+	}
+
+}
+
 
 /**
  * Initialize a token array. The resulting
@@ -78,6 +119,31 @@ ollie_token_array_t clone_token_array(ollie_token_array_t* array){
 
 	//Finally we can return the token array
 	return clone;
+}
+
+
+/**
+ * Does the token array contain this pointer?
+ * 
+ * RETURNS: the index if true, -1 if not
+*/
+int32_t token_array_contains(ollie_token_array_t* array, lexitem_t* lexitem){
+	//This by default means nothing is in there
+	if(array == NULL || array->current_index == 0){
+		return NOT_FOUND;
+	}
+
+	//Run through the entire array
+	for(u_int32_t i = 0; i < array->current_index; i++){
+		lexitem_t 
+
+
+		if(array->internal_array[i] == *lexitem){
+
+		}
+
+	}
+
 }
 
 /**
