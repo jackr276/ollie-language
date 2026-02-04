@@ -212,54 +212,28 @@ void token_array_add(ollie_token_array_t* array, lexitem_t* lexitem){
 	}
 
 	//Now that we've handled any needed resize we can add in
+	array->internal_array[array->current_index] = *lexitem;
 
+	//Now bump this up for the next go around
+	(array->current_index)++;
 }
 
 
 /**
- * Add an element into the dynamic array
- */
-void dynamic_array_add(dynamic_array_t* array, void* ptr){
-	//Let's just double check here. Hard fail if this happens
-	if(ptr == NULL){
-		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
-		exit(1);
-	}
-	
-	//Now we'll see if we need to reallocate this
-	if(array->current_index == array->current_max_size){
-		//We'll double the current max size
-		array->current_max_size *= 2;
-
-		//And we'll reallocate the array
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
-	}
-
-	//Now that we're all set, we can add our element in. Elements are always added in at the very end
-	array->internal_array[array->current_index] = ptr;
-
-	//Bump this up by 1
-	array->current_index++;
-
-	//And we're all set
-}
-
-
-/**
- * Clear a dynamic array entirely - keeps the size unchanged, but
+ * Clear a token array entirely - keeps the size unchanged, but
  * sets the entire internal array to 0
  */
-void clear_dynamic_array(dynamic_array_t* array){
-	//Just to be safe
+void clear_token_array(ollie_token_array_t* array){
+	//Just so we don't end up with any nasty surprises
 	if(array == NULL){
-		printf("ERROR: Attempting to clear a NULL dynamic array\n");
+		printf("ERROR: Attempting to clear a NULL token array");
 		exit(1);
 	}
 
 	//Wipe the entire thing out
-	memset(array->internal_array, 0, sizeof(void*) * array->current_max_size);
+	memset(array->internal_array, 0, sizeof(lexitem_t) * array->current_max_size);
 
-	//Our current index is now 0
+	//Now go in here and reset the current index
 	array->current_index = 0;
 }
 
