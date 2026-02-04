@@ -160,48 +160,26 @@ int32_t token_array_contains(ollie_token_array_t* array, lexitem_t* lexitem){
 
 	//Run through the entire array
 	for(u_int32_t i = 0; i < array->current_index; i++){
-		lexitem_t 
+		//Get a pointer to the current item
+		lexitem_t* lexitem_ptr = &(array->internal_array[i]);
 
-
-		if(array->internal_array[i] == *lexitem){
-
-		}
-
-	}
-
-}
-
-/**
- * Does the dynamic array contain this pointer?
- *
- * NOTE: This will currently do a linear scan. O(n) time, should be fast
- * enough for our purposes here. If it's really slowing things down, consider
- * sorting the array and binary searching
-*/
-int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
-	//If it's null just return false
-	if(array == NULL || array->internal_array == NULL){
-		return NOT_FOUND;
-	}
-
-	//We'll run through the entire array, comparing pointer by pointer
-	for(u_int16_t i = 0; i < array->current_index; i++){
-		//If we find an exact memory address match return true
-		if(array->internal_array[i] == ptr){
+		//If these are equal, give back the index where we found
+		//them
+		if(lexitems_equal(lexitem_ptr, lexitem) == TRUE){
 			return i;
 		}
 	}
 
-	//If we make it here, we found nothing so
-	return NOT_FOUND;
+	//If we made it all the way down here, then we've exhausted all of our
+	//options in the array so this has to be false
+	return FALSE;
 }
 
 
 /**
- * Is the dynamic array is empty?
+ * Is the token arrakj
 */
-u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
-	//We'll just return what the next index is
+u_int8_t token_array_is_empty(ollie_token_array_t* array){
 	if(array->current_index == 0){
 		return TRUE;
 	} else {
