@@ -374,18 +374,15 @@ function_symtab_t* function_symtab_alloc();
  */
 variable_symtab_t* variable_symtab_alloc();
 
-
 /**
  * Initialize a symbol table for types
  */
 type_symtab_t* type_symtab_alloc();
 
-
 /**
- * Initialize a symbol table for constants
+ * Initialize a symbol table for compiler macros 
  */
-constants_symtab_t* constants_symtab_alloc();
-
+macro_symtab_t* macro_symtab_alloc();
 
 /**
  * NOTE: Functions only have one scope, which is why they do not
@@ -453,11 +450,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 symtab_type_record_t* create_type_record(generic_type_t* type);
 
 /**
- * Create a type record for the constant table. Unlike our
- * other rules, this rule will actually have most of it's processing
- * done by the client
+ * Create a macro record for the macro table
  */
-symtab_constant_record_t* create_constant_record(dynamic_string_t name);
+symtab_macro_record_t* create_macro_record(dynamic_string_t name);
 
 /**
  * Insert a function into the symbol table
@@ -475,9 +470,9 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
 u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
 
 /**
- * Insert a constant into the symtab
+ * Insert a macro into the symtab
  */
-u_int8_t insert_constant(constants_symtab_t* symtab, symtab_constant_record_t* record);
+u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record);
 
 /**
  * Determine whether or not a function is directly recursive using the function
@@ -517,9 +512,9 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name);
 
 /**
- * Lookup a constant in the symtab
+ * Lookup a macro in the symtab
  */
-symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name);
+symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name);
 
 /**
  * Lookup a variable name in the symtab, only one scope
@@ -671,7 +666,7 @@ void print_variable_name(symtab_variable_record_t* record);
 /**
  * A helper method for constant name printing
  */
-void print_constant_name(symtab_constant_record_t* record);
+void print_macro_name(macro_symtab_t* record);
 
 /**
  * A helper method for type name printing
@@ -706,9 +701,9 @@ void variable_symtab_dealloc(variable_symtab_t* symtab);
 void type_symtab_dealloc(type_symtab_t* symtab);
 
 /**
- * Destroy a constants symtab
+ * Destroy a macro symtab
  */
-void constants_symtab_dealloc(constants_symtab_t* symtab);
+void macro_symtab_dealloc(macro_symtab_t* symtab);
 
 /**
  * Destroy a local constant

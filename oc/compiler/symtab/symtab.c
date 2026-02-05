@@ -104,11 +104,10 @@ type_symtab_t* type_symtab_alloc(){
 
 
 /**
- * Initialize a symbol table for constants
+ * Initialize a symbol table for compiler macros 
  */
-constants_symtab_t* constants_symtab_alloc(){
-	//Simply allocate with the standard allocator
-	constants_symtab_t* symtab = calloc(1, sizeof(constants_symtab_t));
+macro_symtab_t* macro_symtab_alloc(){
+	macro_symtab_t* symtab = calloc(1, sizeof(macro_symtab_t));
 	return symtab;
 }
 
@@ -202,7 +201,7 @@ void finalize_type_scope(type_symtab_t* symtab){
  *
  * 	return key
 */
-static u_int64_t hash_variable(char* name){
+static inline u_int64_t hash_variable(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
@@ -242,7 +241,7 @@ static u_int64_t hash_variable(char* name){
  *
  * 	return key
 */
-static u_int64_t hash_constant(char* name){
+static inline u_int64_t hash_macro_name(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
@@ -264,7 +263,7 @@ static u_int64_t hash_constant(char* name){
 	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
-	return hash & (CONSTANT_KEYSPACE - 1);
+	return hash & (MACRO_KEYSPACE - 1);
 }
 
 
@@ -282,7 +281,7 @@ static u_int64_t hash_constant(char* name){
  *
  * 	return key
 */
-static u_int64_t hash_function(char* name){
+static inline u_int64_t hash_function(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
@@ -322,7 +321,7 @@ static u_int64_t hash_function(char* name){
  *
  * 	return key
  */
-static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
+static inline u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
 	//Char pointer for the name
 	char* cursor = type_name;
 
@@ -373,7 +372,7 @@ static u_int64_t hash_type_name(char* type_name, mutability_type_t mutability){
  *
  * 	return key
  */
-static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
+static inline u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mutability_type_t mutability){
 	//Char pointer for the name
 	char* cursor = type_name;
 
@@ -433,7 +432,7 @@ static u_int64_t hash_array_type_name(char* type_name, u_int32_t num_members, mu
  *
  * 	return key
 */
-static u_int64_t hash_type(generic_type_t* type){
+static inline u_int64_t hash_type(generic_type_t* type){
 	//Pointer to the type name
 	char* type_name = type->type_name.string;
 
@@ -706,18 +705,19 @@ symtab_type_record_t* create_type_record(generic_type_t* type){
 
 
 /**
- * Dynamically allocate and create a constant record
- * NOTE: we just need the name here to make the hash
+ * Create a macro record for the macro table
  */
-symtab_constant_record_t* create_constant_record(dynamic_string_t name){
-	//Allocate it
-	symtab_constant_record_t* record = calloc(1, sizeof(symtab_constant_record_t));
-	
-	//Hash the name and store it
-	record->hash = hash_constant(name.string);
-	//Store the name
+symtab_macro_record_t* create_macro_record(dynamic_string_t name){
+	//Allocate the space needed for the record
+	symtab_macro_record_t* record = calloc(1, sizeof(symtab_macro_record_t));
+
+	//Get & store the hash here
+	record->hash = hash_macro_name(name.string);
+
+	//Store the name as well
 	record->name = name;
-	//Everything else will be handled by caller, just give this back
+
+	//And give back the record
 	return record;
 }
 
