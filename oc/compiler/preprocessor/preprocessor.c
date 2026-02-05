@@ -12,6 +12,7 @@
 
 #include "preprocessor.h"
 #include "../utils/error_management.h"
+#include "../utils/constants.h"
 #include <sys/types.h>
 
 //What is the name of the file that we are preprocessing
@@ -51,7 +52,8 @@ static inline void print_preprocessor_message(error_message_type_t message, char
  * Process a macro starting at the begin index
  */
 static ollie_macro_t* process_macro(ollie_token_stream_t* stream, u_int32_t beginning_index) {
-
+	//TODO placeholder
+	return NULL;
 }
 
 
@@ -64,11 +66,11 @@ static ollie_macro_t* process_macro(ollie_token_stream_t* stream, u_int32_t begi
  * to do with macro replacement. This will come after in the replacement
  * pass
  */
-static void macro_consumption_pass(ollie_token_stream_t* stream){
+static u_int8_t macro_consumption_pass(ollie_token_stream_t* stream){
 	//Run through every token in the token stream
-	for(u_int32_t i = 0; i < stream->current_token_index; i++){
+	for(u_int32_t i = 0; i < stream->token_stream.current_index; i++){
 		//Get a pointer to the token that we are after
-		lexitem_t* token = &(stream->token_stream[i]);
+		lexitem_t* token = &(stream->token_stream.internal_array[i]);
 
 		//Go based on the kind of token that we have in here
 		switch(token->tok){
@@ -76,6 +78,10 @@ static void macro_consumption_pass(ollie_token_stream_t* stream){
 			case MACRO:
 				break;
 
+			//If we see this, that means we have a floating endmacro in there
+			case ENDMACRO:
+				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Floating #endmacro directive declared. Are you missing a #macro directive", token->line_num);
+				return FAILURE;
 
 			//Default is that we do nothing
 			default:
@@ -112,6 +118,14 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 
 	//Store the file name up top globally
 	current_file_name = file_name;
+
+	/**
+	 * Step 1: perform the initial consumption pass on the token stream. This pass has 2
+	 * purposes. First, it will consume all of the macros in our initial token stream and parse
+	 * them into usable ollie_macro_t definitions. Second, it will flag all of the tokens that are
+	 * involved in that macro as "ignorable". This will cause the second replacement pass to ignore
+	 * those tokens when we go through the stream again, avoiding reconsumption
+	*/
 
 	//Give the results back
 	return results;
