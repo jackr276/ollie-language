@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include "../utils/dynamic_string/dynamic_string.h"
+#include "../utils/ollie_token_array/ollie_token_array.h"
 #include "../utils/token.h"
 
 //The maximum token length is 500 
@@ -36,15 +37,11 @@ typedef enum {
 
 
 struct ollie_token_stream_t {
-	//Array of tokens
-	lexitem_t* token_stream;
-	//Current token index
-	u_int32_t current_token_index;
+	//The token array
+	ollie_token_array_t token_stream;
 	//This is the value that we're looking
 	//at from the parser perspective
 	u_int32_t token_pointer;
-	//Max index, needed to know when we resize
-	u_int32_t max_token_index;
 	//Let the caller know if this worked or not
 	token_stream_status_t status;
 };
