@@ -13,6 +13,7 @@
 #include "preprocessor.h"
 #include "../utils/error_management.h"
 #include "../utils/constants.h"
+#include "../utils/ollie_token_array/ollie_token_array.h"
 #include <sys/types.h>
 
 //What is the name of the file that we are preprocessing
@@ -26,12 +27,12 @@ typedef struct ollie_macro_t ollie_macro_t;
  * An overall struct that contains the macros that we are after
  */
 struct ollie_macro_t {
-	//An array of lexitems that are the tokens we would
-	//like to store inside of this macro
-	lexitem_t* token_segment;
-	
+	//The array of tokens that this macro is made up of. Note that
+	//the start and endmacro tokens are not in here
+	ollie_token_array_t macro_tokens;
 
-	//What line number was this macro defined on
+	//What line number was this macro defined on. This will be
+	//where the initial macro was stored
 	u_int32_t line_number;
 };
 
@@ -50,6 +51,8 @@ static inline void print_preprocessor_message(error_message_type_t message, char
 
 /**
  * Process a macro starting at the begin index
+ *
+ * NOTE: it is assumed that we have already seent the beginning #macro tag here when we arrive
  */
 static ollie_macro_t* process_macro(ollie_token_stream_t* stream, u_int32_t beginning_index) {
 	//TODO placeholder
@@ -89,6 +92,9 @@ static u_int8_t macro_consumption_pass(ollie_token_stream_t* stream){
 		}
 
 	}
+
+	//If we made it down here, then we can declare success
+	return SUCCESS;
 }
 
 
