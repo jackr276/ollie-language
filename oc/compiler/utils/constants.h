@@ -40,11 +40,18 @@
 //A large prime for hashing
 #define LARGE_PRIME 611593
 
+//Default size for a token array is 5. This is smaller because we don't likely
+//have tons of tokens in our macro
+#define TOKEN_ARRAY_DEFAULT_SIZE 5
+
 //The default is 20 -- this can always be reupped
 #define DYNAMIC_ARRAY_DEFAULT_SIZE 20 
 
 //Default length of the string is 60 characters
 #define DEFAULT_DYNAMIC_STRING_LENGTH 60
+
+//For the dynamic arrays/sets
+#define NOT_FOUND -1
 
 //Definitions for cycle counts on our known instructions
 //Load cycle count is 1, we perform the real estimation

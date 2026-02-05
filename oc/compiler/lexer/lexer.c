@@ -526,15 +526,18 @@ lexitem_t get_next_token(ollie_token_stream_t* stream, u_int32_t* parser_line_nu
 	u_int32_t token_index = stream->token_pointer;
 
 	//Safe to read here
-	if(token_index < stream->current_token_index){
+	if(token_index < stream->token_stream.current_index){
 		//Push up the pointer for the next call
 		(stream->token_pointer)++;
 
+		//Get the item that we want
+		lexitem_t returned_item = stream->token_stream.internal_array[token_index];
+
 		//Update the parser line number in here as well
-		*parser_line_number = stream->token_stream[token_index].line_num;
+		*parser_line_number = returned_item.line_num;
 
 		//Give back the token at this given index
-		return stream->token_stream[token_index];
+		return returned_item;
 
 	//This should never happen in normal operation
 	} else {
@@ -552,29 +555,32 @@ void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number
 	(stream->token_pointer)--;
 
 	//Revert the line number to be whatever this current token's line number is
-	*parser_line_number = stream->token_stream[stream->token_pointer].line_num;
+	*parser_line_number = stream->token_stream.internal_array[stream->token_pointer].line_num;
 }
 
 
 /**
  * Add a token into the stream. This also handles dynamic resizing if
  * it's needed
+ *
+ * This performs the same functionality as the token_array_add, but it is inlined here for
+ * our strict performance requirements
  */
 static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t lexitem){
 	//Dynamic resize for the token stream
-	if(stream->current_token_index == stream->max_token_index){
+	if(stream->token_stream.current_index == stream->token_stream.current_max_size){
 		//Double it
-		stream->max_token_index *= 2;
+		stream->token_stream.current_max_size *= 2;
 
 		//Reallocate the entire array
-		stream->token_stream = realloc(stream->token_stream, sizeof(lexitem_t) * stream->max_token_index);
+		stream->token_stream.internal_array = realloc(stream->token_stream.internal_array, sizeof(lexitem_t) * stream->token_stream.current_max_size);
 	}
 
 	//Add it into the stream
-	stream->token_stream[stream->current_token_index] = lexitem;
+	stream->token_stream.internal_array[stream->token_stream.current_index] = lexitem;
 
 	//Update the index for next time
-	(stream->current_token_index)++;
+	(stream->token_stream.current_index)++;
 }
 
 
@@ -1629,12 +1635,8 @@ ollie_token_stream_t tokenize(char* current_file_name){
 
 	//Stack allocate
 	ollie_token_stream_t token_stream;
-	//Initialize the internal storage for our token
-	token_stream.token_stream = calloc(DEFAULT_TOKEN_COUNT, sizeof(lexitem_t));
-	//Initialize to our default
-	token_stream.max_token_index = DEFAULT_TOKEN_COUNT;
-	//Initialize to 0
-	token_stream.current_token_index = 0;
+	//Allocate the token stream with a large initial size
+	token_stream.token_stream = token_array_alloc_initial_size(DEFAULT_TOKEN_COUNT);
 	//From the parsing perspective
 	token_stream.token_pointer = 0;
 
@@ -1670,5 +1672,6 @@ ollie_token_stream_t tokenize(char* current_file_name){
  * just means freeing the array
  */
 void destroy_token_stream(ollie_token_stream_t* stream){
-	free(stream->token_stream);
+	//Let the token array helper handle it
+	token_array_dealloc(&(stream->token_stream));
 }

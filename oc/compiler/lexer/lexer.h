@@ -9,14 +9,13 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include "../utils/dynamic_string/dynamic_string.h"
+#include "../utils/ollie_token_array/ollie_token_array.h"
 #include "../utils/token.h"
 
 //The maximum token length is 500 
 #define MAX_TOKEN_LENGTH 500
 #define MAX_IDENT_LENGTH 200
 
-//The lexitem_t struct
-typedef struct lexitem_t lexitem_t;
 //The overall token stream value
 typedef struct ollie_token_stream_t ollie_token_stream_t;
 
@@ -37,45 +36,12 @@ typedef enum {
 } token_stream_status_t;
 
 
-struct lexitem_t {
-	//The string(lexeme) that got us this token
-	dynamic_string_t lexeme;
-	//This union will hold all of the constant values
-	//that a lexitem could possibly have
-	union {
-		double double_value;
-		float float_value;
-		u_int64_t unsigned_long_value;
-		int64_t signed_long_value;
-		u_int32_t unsigned_int_value;
-		int32_t signed_int_value;
-		u_int16_t unsigned_short_value;
-		int16_t signed_short_value;
-		u_int8_t unsigned_byte_value;
-		int8_t signed_byte_value;
-		char char_value;
-	} constant_values;
-	//The line number of the source that we found it on
-	u_int32_t line_num;
-	//The token associated with this item
-	ollie_token_t tok;
-	//Should this lexitem be ignored? This is mainly used
-	//by the preprocessor during it's traversal of the token
-	//streams
-	u_int8_t ignore;
-};
-
-
 struct ollie_token_stream_t {
-	//Array of tokens
-	lexitem_t* token_stream;
-	//Current token index
-	u_int32_t current_token_index;
+	//The token array
+	ollie_token_array_t token_stream;
 	//This is the value that we're looking
 	//at from the parser perspective
 	u_int32_t token_pointer;
-	//Max index, needed to know when we resize
-	u_int32_t max_token_index;
 	//Let the caller know if this worked or not
 	token_stream_status_t status;
 };
