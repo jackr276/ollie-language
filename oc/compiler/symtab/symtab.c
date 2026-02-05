@@ -761,34 +761,33 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 
 
 /**
- * Insert a constant into the symtab. This assumes that the user has already checked
- * to see if this constant exists or not
- *
- * RETURNS 0 if no collision, 1 if collision
+ * Insert a macro into the symtab
  */
-u_int8_t insert_constant(constants_symtab_t* symtab, symtab_constant_record_t* record){
-	//Let's see if we have a collision or not
-	if(symtab->records[record->hash] == NULL){
-		//No collision, just store it and we're done here
+u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record){
+	//Grab a cursor to whatever is in the hash's spot
+	symtab_macro_record_t* cursor = symtab->records[record->hash];
+
+	//No collision. Just insert and move on
+	if(cursor == NULL){
 		symtab->records[record->hash] = record;
+		//Return 0 - no collision
 		return 0;
 	}
 
-	//Otherwise there is a collision, so we'll need to store this new record
-	//at the end of the linked list
-	symtab_constant_record_t* cursor = symtab->records[record->hash];
-	
-	//So long as the next isn't null, we keep drilling
-	while(cursor->next != NULL){
+	//Otherwise we have a collision, so we need to drill down
+	//to the end
+	while(cursor != NULL){
+		//Keep advancing it up
 		cursor = cursor->next;
 	}
 
-	//Now that we're here, we append this guy onto the end
+	//Now that we're at the end, we will append our record to the cursor
 	cursor->next = record;
-	//This should be null, but insurance never hurts
+
+	//It should already be NULL, but this doesn't hurt
 	record->next = NULL;
 
-	//We had a collision here
+	//We did indeed have a collision here
 	return 1;
 }
 
@@ -1065,7 +1064,7 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 	//We could have had collisions so we'll have to hunt here
 	while(record_cursor != NULL){
 		//If we find the right one, then we can get out
-		if(strcmp(record_cursor->func_name.string, name) == 0){
+		if(strncmp(record_cursor->func_name.string, name, record_cursor->func_name.current_length) == 0){
 			return record_cursor;
 		}
 		//Advance it if we didn't have the right name
@@ -1078,30 +1077,26 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 
 
 /**
- * Lookup the record in the constants symtab that corresponds to the following name, if
- * such a record exists. There is only one lexical scope for constants(global scope) so
- * this lookup should be quite easy
+ * Lookup a macro in the symtab. This is a simpler lookup then most because
+ * there are no nested lexical scopes here, we only need to check one table
  */
-symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name){
-	//First we'll grab the hash
-	u_int64_t h = hash_constant(name);
+symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name){
+	//Grab the name's hash
+	u_int64_t hash = hash_macro_name(name);
 
-	//Grab whatever record is at that hash
-	symtab_constant_record_t* cursor = symtab->records[h];
+	//Go to this area in the hash table
+	symtab_macro_record_t* cursor = symtab->records[hash];
 
-	//So long as this isn't null, we'll do string comparisons to find our match. Recall
-	//that it is possible to have collisions, so two records having the same hash is not 
-	//always enough to know for sure
+	//Remember that we could have collisions here, so we're going
+	//to need to account for that
 	while(cursor != NULL){
-		if(strcmp(cursor->name.string, name) == 0){
+		//If this is a match, then we're set
+		if(strncmp(cursor->name.string, name, cursor->name.current_length) == 0){
 			return cursor;
 		}
-
-		//Otherwise we keep moving
-		cursor = cursor->next;
 	}
 
-	//If we made it here, that means there's no match, so return null
+	//If we make it all of the way down here, then we have no match, so return NULL
 	return NULL;
 }
 
@@ -1128,7 +1123,7 @@ symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name)
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->var_name.string, name) == 0){
+			if(strncmp(records_cursor->var_name.string, name, records_cursor->var_name.current_length) == 0){
 				return records_cursor;
 			}
 			//Advance it
@@ -1161,7 +1156,7 @@ symtab_variable_record_t* lookup_variable_local_scope(variable_symtab_t* symtab,
 	//We could have had collisions so we'll have to hunt here
 	while(records_cursor != NULL){
 		//If we find the right one, then we can get out
-		if(strcmp(records_cursor->var_name.string, name) == 0){
+		if(strncmp(records_cursor->var_name.string, name, records_cursor->var_name.current_length) == 0){
 			return records_cursor;
 		}
 		//Advance it
@@ -1198,7 +1193,7 @@ symtab_variable_record_t* lookup_variable_lower_scope(variable_symtab_t* symtab,
 		while(records_cursor != NULL){
 		
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->var_name.string, name) == 0){
+			if(strncmp(records_cursor->var_name.string, name, records_cursor->var_name.current_length) == 0){
 				return records_cursor;
 			}
 
@@ -1231,7 +1226,7 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->type->type_name.string, name) == 0
+			if(strncmp(records_cursor->type->type_name.string, name, records_cursor->type->type_name.current_length) == 0
 				//The mutability must also match
 				&& records_cursor->type->mutability == mutability){
 
@@ -1436,7 +1431,7 @@ symtab_type_record_t* lookup_pointer_type(type_symtab_t* symtab, generic_type_t*
 		//We could have had collisions so we'll have to hunt here
 		while(record_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(record_cursor->type->type_name.string, type_name) == 0){
+			if(strncmp(record_cursor->type->type_name.string, type_name, record_cursor->type->type_name.current_length) == 0){
 				//We have a match
 				return record_cursor;
 			}
@@ -1482,7 +1477,7 @@ symtab_type_record_t* lookup_reference_type(type_symtab_t* symtab, generic_type_
 		//We could have had collisions so we'll have to hunt here
 		while(record_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(record_cursor->type->type_name.string, type_name) == 0){
+			if(strncmp(record_cursor->type->type_name.string, type_name, record_cursor->type->type_name.current_length) == 0){
 				//We have a match
 				return record_cursor;
 			}
@@ -1534,7 +1529,7 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 			}
 
 			//If we find the right one, then we can get out
-			if(strcmp(record_cursor->type->type_name.string, type_name) == 0
+			if(strncmp(record_cursor->type->type_name.string, type_name, record_cursor->type->type_name.current_length) == 0
 				//The member counts also need to match
 				&& record_cursor->type->internal_values.num_members == num_members){
 
@@ -1582,7 +1577,7 @@ symtab_type_record_t* lookup_type(type_symtab_t* symtab, generic_type_t* type){
 		//We could have had collisions so we'll have to hunt here
 		while(records_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strcmp(records_cursor->type->type_name.string, type->type_name.string) == 0){
+			if(strncmp(records_cursor->type->type_name.string, type->type_name.string, type->type_name.current_length) == 0){
 				//If we have an array type, we must compare bounds and they must match
 				if(type->type_class == TYPE_CLASS_ARRAY
 					&& type->internal_values.num_members != records_cursor->type->internal_values.num_members){
@@ -1713,7 +1708,7 @@ local_constant_t* get_string_local_constant(symtab_function_record_t* record, ch
 		local_constant_t* candidate = dynamic_set_get_at(&(record->local_string_constants), i);
 
 		//If we have a match then we're good here, we'll return the candidate and leave
-		if(strcmp(candidate->local_constant_value.string_value.string, string_value) == 0){
+		if(strncmp(candidate->local_constant_value.string_value.string, string_value, candidate->local_constant_value.string_value.current_length) == 0){
 			return candidate;
 		}
 	}
