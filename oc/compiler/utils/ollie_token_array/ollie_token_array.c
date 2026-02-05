@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/types.h>
 
 
@@ -291,35 +292,43 @@ void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, u_int32_
 
 
 /**
- * Delete an element from a specified index. The element itself
- * is returned, allowing this to be used as a search & delete function
- * all in one
+ * Delete an element from the token array at a given index. Returns a copy
+ * the element at said index
  */
-void* dynamic_array_delete_at(dynamic_array_t* array, u_int16_t index){
-	//Again if we can't do this, we won't disrupt the program. Just return NULL
-	if(array->current_index <= index){
-		return NULL;
+lexitem_t token_array_delete_at(ollie_token_array_t* array, u_int32_t index){
+	//Validations here
+	if(array->current_max_size <= index){
+		printf("ERROR: attempting to delete an element at index %d in an array of size %d\n", index, array->current_max_size);
+		exit(1);
 	}
 
-	//We'll grab the element at this index first
-	void* deleted = array->internal_array[index];
-
-	//Now we'll run through everything from that index up until the end, 
-	//shifting left every time
-	for(u_int16_t i = index; i < array->current_index - 1; i++){
-		//Shift left here
+	//Grab the copy that we will be returning
+	lexitem_t deleted = array->internal_array[index];
+	
+	//Shift everything over by the list to backfill
+	for(u_int32_t i = index; i < array->current_index - 1; i++){
 		array->internal_array[i] = array->internal_array[i + 1];
 	}
 
-	//Null this out
-	array->internal_array[array->current_index - 1] = NULL;
+	//Very last thing should be blanked out
+	array->internal_array[array->current_index - 1].constant_values.unsigned_long_value = 0;
+	array->internal_array[array->current_index - 1].line_num = 0;
+	array->internal_array[array->current_index - 1].tok = BLANK;
 
-	//We've seen one less of these now
-	(array->current_index)--;
-
-	//And once we've done that shifting, we're done so
+	//Current index is now one less
+	array->current_index--;
+	
+	//Give back the copy
 	return deleted;
 }
+
+/**
+ * Delete the pointer itself from the dynamic array
+ *
+ * Will not complain if it cannot be found - it simply won't be deleted
+ */
+void token_array_delete(ollie_token_array_t* array, lexitem_t* lexitem);
+
 
 
 /**
@@ -345,26 +354,6 @@ void dynamic_array_delete(dynamic_array_t* array, void* ptr){
 	dynamic_array_delete_at(array, index);
 
 	//And we're done
-}
-
-
-/**
- * Remove an element from the back of the dynamic array - O(1) removal
- */
-void* dynamic_array_delete_from_back(dynamic_array_t* array){
-	//Already empty
-	if(array->current_index == 0){
-		return NULL;
-	}
-
-	//Grab off of the very end
-	void* deleted = array->internal_array[array->current_index - 1];
-
-	//Decrement the index
-	(array->current_index)--;
-
-	//Give back the pointer
-	return deleted;
 }
 
 
