@@ -327,109 +327,38 @@ lexitem_t token_array_delete_at(ollie_token_array_t* array, u_int32_t index){
  *
  * Will not complain if it cannot be found - it simply won't be deleted
  */
-void token_array_delete(ollie_token_array_t* array, lexitem_t* lexitem);
-
-
-
-/**
- * Delete the pointer itself from the dynamic array
- *
- * Will not complain if it cannot be found - it simply won't be deleted
- */
-void dynamic_array_delete(dynamic_array_t* array, void* ptr){
-	//If this is NULL or empty we'll just return
-	if(ptr == NULL || array == NULL || array->current_index == 0){
+void token_array_delete(ollie_token_array_t* array, lexitem_t* lexitem){
+	//No point in going further here
+	if(array == NULL || array->internal_array == NULL || lexitem == NULL){
 		return;
 	}
 
-	//Otherwise we'll need to grab this index
-	int16_t index = dynamic_array_contains(array, ptr);
+	//Get the index if the token array contains this
+	int32_t index = token_array_contains(array, lexitem);
 
-	//If we couldn't find it - no harm, we just won't do anything
+	//Couldn't find it, leave
 	if(index == NOT_FOUND){
 		return;
 	}
 
-	//Now we'll use the index to delete
-	dynamic_array_delete_at(array, index);
-
-	//And we're done
+	//Otherwise, use the helper to do the deletion
+	token_array_delete_at(array, index);
 }
 
 
 /**
- * Are two dynamic arrays completely equal? A "deep equals" 
- * will ensure that every single element in one array is also inside of the
- * other, and that no elements in one array are different
+ * Deallocate an entire token array. 
  */
-u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
-	//Safety check here 
-	if(a == NULL || b == NULL){
-		return FALSE;
-	}
-
-	//Do they have the same number of elements? If not - they can't
-	//possibly be equal
-	if(a->current_index != b->current_index){
-		return FALSE;
-	}
-	
-	//If we get here, we know that they have the same number of elements.
-	//Now we'll have to check if every single element matches. An important
-	//note is that order does not matter here. In fact, most of the time
-	//arrays that are the same have different orders
-	
-	//Did we find the a_ptr?
-	u_int8_t found_a;
-	
-	//For every node in the "a" array
-	for(u_int16_t i = 0; i < a->current_index; i++){
-		//Let's grab out this pointer
-		void* a_ptr = a->internal_array[i];
-
-		//Assume by default we can't find it
-		found_a = FALSE;
-
-		//Now we must find this a_ptr in b. If we can't find
-		//it, the whole thing is over
-		for(u_int16_t j = 0; j < b->current_index; j++){
-			//If we have a match, set the flag to
-			//true and get out
-			if(a_ptr == b->internal_array[j]){
-				found_a = TRUE;
-				break;
-			}
-			//Otherwise we keep chugging along
-		}
-
-		//If we get out here AND we did not find A, we
-		//have a difference. As such, we're done here
-		if(found_a == FALSE){
-			return FALSE;
-		}
-
-		//Otherwise we did find a_ptr, so we'll go onto the next one
-	}
-
-	//If we made it all the way down here, then they're the same
-	return TRUE;
-}
-
-
-/**
- * Deallocate an entire dynamic array
-*/
-void dynamic_array_dealloc(dynamic_array_t* array){
-	//Let's just make sure here...
+void token_array_dealloc(ollie_token_array_t* array){
+	//No point in going on here
 	if(array->internal_array == NULL){
 		return;
 	}
 
-	//First we'll free the internal array
+	//Free the internal array
 	free(array->internal_array);
 
-	//Set this to NULL as a warning
-	array->internal_array = NULL;
+	//Set everything to 0
 	array->current_index = 0;
 	array->current_max_size = 0;
 }
