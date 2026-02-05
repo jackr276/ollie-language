@@ -67,6 +67,11 @@ void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch);
 void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string);
 
 /**
+ * Are two dynamic strings identical?
+ */
+u_int8_t dynamic_strings_equal(dynamic_string_t* a, dynamic_string_t* b);
+
+/**
  * Completely wipe a dynamic string. This allows us to use the same memory that
  * we've allocated once over and over again. This is particularly useful in the lexer
  */

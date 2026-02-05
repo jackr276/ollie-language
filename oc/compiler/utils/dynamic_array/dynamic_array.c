@@ -96,8 +96,8 @@ dynamic_array_t clone_dynamic_array(dynamic_array_t* array){
 	//Now we'll create the array for it - of the exact same size as the original
 	cloned.internal_array = calloc(array->current_max_size, sizeof(void*));
 
-	//Now we'll perform a memory copy
-	memcpy(cloned.internal_array, array->internal_array, array->current_max_size * sizeof(void*));
+	//Now we'll perform a memory copy. Only clone up to the current index
+	memcpy(cloned.internal_array, array->internal_array, array->current_index * sizeof(void*));
 	
 	//Finally copy over the rest of the information
 	cloned.current_index = array->current_index;
@@ -202,7 +202,7 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
 	//Return NULL here. It is the caller's responsibility
 	//to check this
 	if(array->current_max_size <= index){
-		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_index);
+		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
 		exit(1);
 	}
 
@@ -223,14 +223,9 @@ void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index){
 		exit(1);
 	}
 
-	//There is always a chance that we'll need to resize here. If so, we'll resize
-	//enough to comfortably fix the new index
+	//This is not allowed
 	if(array->current_max_size <= index){
-		//The current max size is now double the index
-		array->current_max_size = index * 2;
-
-		//We'll now want to realloc
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
+		printf("ERROR: Attempting to set index %d in an array of size %d", index, array->current_max_size);
 	}
 
 	//Now that we've taken care of all that, we'll perform the setting

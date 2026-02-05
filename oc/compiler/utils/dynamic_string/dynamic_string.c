@@ -153,6 +153,30 @@ void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string){
 
 
 /**
+ * Are two dynamic strings identical?
+ */
+u_int8_t dynamic_strings_equal(dynamic_string_t* a, dynamic_string_t* b){
+	//Mismatched lengths mean that they can't be equal
+	if(a->current_length != b->current_length){
+		return FALSE;
+	}
+
+	//Even if both of them are NULL, we do not consider unallocated
+	//strings to have any kind of equality
+	if(a->string == NULL || b->string == NULL){
+		return FALSE;
+	}
+
+	//Now we do a string compare. TRUE if they're equal, false if not
+	if(strncmp(a->string, b->string, a->current_length) == 0){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
  * Completely wipe a dynamic string. This allows us to use the same memory that
  * we've allocated once over and over again. This is particularly useful in the lexer
  */

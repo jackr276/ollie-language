@@ -7,9 +7,6 @@
 #define DYNAMIC_ARRAY_H
 #include <sys/types.h>
 
-#define NOT_FOUND -1
-
-
 //The overall dynamic array structure
 typedef struct dynamic_array_t dynamic_array_t;
 

@@ -8,8 +8,6 @@
 #define DYNAMIC_SET_H
 #include <sys/types.h>
 
-#define NOT_FOUND -1
-
 typedef struct dynamic_set_t dynamic_set_t;
 
 /**
