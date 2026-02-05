@@ -40,7 +40,7 @@ typedef struct variable_symtab_t variable_symtab_t;
 typedef struct function_symtab_t function_symtab_t;
 //A type symtab
 typedef struct type_symtab_t type_symtab_t;
-//A constants symtab for #macro directives
+//A symtab for #macro directives
 typedef struct macro_symtab_t macro_symtab_t;
 
 //The sheafs in the variable symtab
@@ -54,7 +54,7 @@ typedef struct symtab_function_record_t symtab_function_record_t;
 typedef struct symtab_variable_record_t symtab_variable_record_t;
 //The records in a type symtab
 typedef struct symtab_type_record_t symtab_type_record_t;
-//The records in a constants symtab
+//The records in a macro symtab
 typedef struct symtab_macro_record_t symtab_macro_record_t;
 //The definition of a local constant(.LCx) block
 typedef struct local_constant_t local_constant_t;
@@ -332,13 +332,12 @@ struct type_symtab_t{
 
 
 /**
- * This struct represents the constants symtab. Much like the function symtab, 
- * there is only one lexical level, so no sheafs exist here. All constants
- * declared with #replace are global across all files
+ * This struct represents the macro symtab. Much like the function symtab, 
+ * there is only one lexical level, so no sheafs exist here
  */
 struct macro_symtab_t{
 	//How many records(names) we can have
-	macro_symtab_t* records[MACRO_KEYSPACE];
+	symtab_macro_record_t* records[MACRO_KEYSPACE];
 };
 
 
@@ -662,11 +661,6 @@ void add_function_call(symtab_function_record_t* source, symtab_function_record_
  * A helper method for variable name printing
  */
 void print_variable_name(symtab_variable_record_t* record);
-
-/**
- * A helper method for constant name printing
- */
-void print_macro_name(macro_symtab_t* record);
 
 /**
  * A helper method for type name printing

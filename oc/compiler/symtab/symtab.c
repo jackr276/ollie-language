@@ -2023,52 +2023,6 @@ void print_variable_name(symtab_variable_record_t* record){
 
 
 /**
- * A helper method for constant name printing
- * Intended for use by error messages
- */
-void print_constant_name(symtab_constant_record_t* record){
-	//First the record
-	printf("\n---> %d | replace %s with ", record->line_number, record->name.string);
-	
-	generic_ast_node_t* const_node = record->constant_node;
-
-	//We'll now switch based on what kind of constant that we have
-	switch (const_node->constant_type) {
-		case INT_CONST:
-			printf("%d\n", const_node->constant_value.signed_int_value);
-			break;
-		case INT_CONST_FORCE_U:
-			printf("%ud\n", const_node->constant_value.unsigned_int_value);
-			break;
-		case LONG_CONST_FORCE_U:
-			printf("%ld\n", const_node->constant_value.unsigned_long_value);
-			break;
-		case LONG_CONST:
-			printf("%ld\n", const_node->constant_value.signed_long_value);
-			break;
-		case CHAR_CONST:
-			printf("%d\n", const_node->constant_value.char_value);
-			break;
-		case STR_CONST:
-			printf("%s", const_node->string_value.string);
-			break;
-		case FLOAT_CONST:
-			printf("%f\n", const_node->constant_value.float_value);
-			break;
-		case DOUBLE_CONST:
-			printf("%fd\n", const_node->constant_value.float_value);
-			break;
-		//We should never get here
-		default:
-			break;
-	}
-
-	//Now print out the semicolon
-	printf(";\n");
-}
-
-
-/**
  * Print a type name. Intended for error messages
  */
 void print_type_name(symtab_type_record_t* record){
@@ -2606,31 +2560,32 @@ void type_symtab_dealloc(type_symtab_t* symtab){
 
 
 /**
- * Destroy a constants symtab
+ * Destroy a macro symtab
  */
-void constants_symtab_dealloc(constants_symtab_t* symtab){
-	//Create a temp record and cursor for ourselves
-	symtab_constant_record_t* cursor = NULL;
-	symtab_constant_record_t* temp;
+void macro_symtab_dealloc(macro_symtab_t* symtab){
+	//Create temp/cursor for traversal
+	symtab_macro_record_t* cursor = NULL;
+	symtab_macro_record_t* temp;
 
-	//Run through every single record. If it isn't null, we free it
-	for(u_int16_t i = 0; i < CONSTANT_KEYSPACE; i++){
-		//Grab the record here
+	//Run through every single macro record
+	for(u_int32_t i = 0; i < MACRO_KEYSPACE; i++){
+		//Extract it
 		cursor = symtab->records[i];
 
-		//If this isn't NULL, we need to traverse the potential
-		//linked list and free everything
+		//Run through any collision records
 		while(cursor != NULL){
-			//Hold onto it
+			//Reassign
 			temp = cursor;
+
 			//Advance it up
 			cursor = cursor->next;
-			//Free the temp
+
+			//Dealloc
 			free(temp);
 		}
 	}
 
-	//Once, we're done, free the overall thing
+	//At the very end free the overall control structure
 	free(symtab);
 }
 
