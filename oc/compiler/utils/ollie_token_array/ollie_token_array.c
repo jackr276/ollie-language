@@ -253,34 +253,40 @@ lexitem_t token_array_get_at(ollie_token_array_t* array, u_int32_t index){
 }
 
 
+/**
+ * Get a pointer to an element at a given index. Do not remove the element
+ */
+lexitem_t* token_array_get_pointer_at(ollie_token_array_t* array, u_int32_t index){
+	if(array->current_max_size <= index){
+		printf("Fatal internal compiler error: Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
+		exit(1);
+	}
+
+	//Give back a copy for this function
+	return &(array->internal_array[index]);
+}
+
 
 /**
  * Set an element at a specified index. No check will be performed
  * to see if the element is already there. Dynamic resize
  * will be in effect here
  */
-void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index){
-	//Let's just double check here
-	if(ptr == NULL){
-		printf("ERROR: Attempting to set index %d to a NULL pointer ino a dynamic array\n", index);
+void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, u_int32_t index){
+	//Just for safety's sake
+	if(lexitem == NULL){
+		printf("ERROR: Attempting to insert a NULL pointer into a token array\n");
 		exit(1);
 	}
 
-	//There is always a chance that we'll need to resize here. If so, we'll resize
-	//enough to comfortably fix the new index
+	//If we're trying to overrun the bounds, that is bad
 	if(array->current_max_size <= index){
-		//The current max size is now double the index
-		array->current_max_size = index * 2;
-
-		//We'll now want to realloc
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
+		printf("ERROR: Attempting to insert at index %d in an array of size %d\n", array->current_max_size, index);
+		exit(1);
 	}
 
-	//Now that we've taken care of all that, we'll perform the setting
-	array->internal_array[index] = ptr;
-
-	//NOTE: we will NOT modify the so-called "current-index" that is used for setting. If the user
-	//mixes these two together, they are responsible for the consequences
+	//Otherwise we're fine to copy it in
+	array->internal_array[index] = *lexitem;
 }
 
 

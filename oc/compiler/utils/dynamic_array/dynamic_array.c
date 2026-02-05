@@ -223,14 +223,9 @@ void dynamic_array_set_at(dynamic_array_t* array, void* ptr, u_int16_t index){
 		exit(1);
 	}
 
-	//There is always a chance that we'll need to resize here. If so, we'll resize
-	//enough to comfortably fix the new index
+	//This is not allowed
 	if(array->current_max_size <= index){
-		//The current max size is now double the index
-		array->current_max_size = index * 2;
-
-		//We'll now want to realloc
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
+		printf("ERROR: Attempting to set index %d in an array of size %d", index, array->current_max_size);
 	}
 
 	//Now that we've taken care of all that, we'll perform the setting
