@@ -21,11 +21,12 @@
 //Variables and types have a new sheaf added upon every new lexical scope. As such,
 //we don't need enormous sizes to hold all of them
 #define VARIABLE_KEYSPACE 128
+
 //Type keyspace is made larger to accomodate more basic type classes, aliases & variants
 #define TYPE_KEYSPACE 256
 
-//Constants are also one per program
-#define CONSTANT_KEYSPACE 256 
+//The macro keyspace is also one per program
+#define MACRO_KEYSPACE 256 
 
 //There's only one function keyspace per program, so it can be a bit larger
 #define FUNCTION_KEYSPACE 1024 
@@ -39,8 +40,8 @@ typedef struct variable_symtab_t variable_symtab_t;
 typedef struct function_symtab_t function_symtab_t;
 //A type symtab
 typedef struct type_symtab_t type_symtab_t;
-//A constants symtab for #replace directives
-typedef struct constants_symtab_t constants_symtab_t;
+//A constants symtab for #macro directives
+typedef struct macro_symtab_t macro_symtab_t;
 
 //The sheafs in the variable symtab
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
@@ -54,7 +55,7 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 //The records in a type symtab
 typedef struct symtab_type_record_t symtab_type_record_t;
 //The records in a constants symtab
-typedef struct symtab_constant_record_t symtab_constant_record_t;
+typedef struct symtab_macro_record_t symtab_macro_record_t;
 //The definition of a local constant(.LCx) block
 typedef struct local_constant_t local_constant_t;
 
@@ -262,18 +263,17 @@ struct symtab_type_record_t{
 
 
 /**
- * This struct represents a specific constant record in the compiler. This is
- * how we will keep references to constants as they're defined by the user
+ * This struct represents a specific macro record in the compiler. This is
+ * how we will keep references to macros as they're defined by the user
  */
-struct symtab_constant_record_t{
+struct symtab_macro_record_t{
 	//The name as a dynamic string
 	dynamic_string_t name;
 	//The hash of it
 	u_int64_t hash;
-	//We'll link directly to the constant node here
-	void* constant_node;
+	//TODO node linkage
 	//For linked list functionality
-	symtab_constant_record_t* next;
+	symtab_macro_record_t* next;
 	//Line number of declaration
 	u_int32_t line_number;
 };
@@ -336,9 +336,9 @@ struct type_symtab_t{
  * there is only one lexical level, so no sheafs exist here. All constants
  * declared with #replace are global across all files
  */
-struct constants_symtab_t{
+struct macro_symtab_t{
 	//How many records(names) we can have
-	symtab_constant_record_t* records[CONSTANT_KEYSPACE];
+	macro_symtab_t* records[MACRO_KEYSPACE];
 };
 
 
