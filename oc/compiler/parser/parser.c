@@ -1745,7 +1745,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 	u_int32_t token_pointer = token_stream->token_pointer;
 	while(TRUE){
 		//Grab the lookahead
-		lookahead = token_stream->token_stream[token_pointer];
+		lookahead = token_stream->token_stream.internal_array[token_pointer];
 
 		//If we see an assignment operator or something that indicates the end
 		//of a statement, we're done here
