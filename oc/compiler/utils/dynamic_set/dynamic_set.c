@@ -190,7 +190,7 @@ void clear_dynamic_set(dynamic_set_t* set){
 void* dynamic_set_get_at(dynamic_set_t* set, u_int16_t index){
 	//This should never be happening
 	if(set->current_max_size <= index){
-		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, set->current_index);
+		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, set->current_max_size);
 		exit(1);
 	}
 

@@ -237,21 +237,21 @@ void clear_token_array(ollie_token_array_t* array){
 	array->current_index = 0;
 }
 
-
 /**
  * Get an element at a specified index. Do not remove the element
+ *
+ * Returns a copy of the specified element
  */
-void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
-	//Return NULL here. It is the caller's responsibility
-	//to check this
+lexitem_t token_array_get_at(ollie_token_array_t* array, u_int32_t index){
 	if(array->current_max_size <= index){
-		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_index);
+		printf("Fatal internal compiler error: Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
 		exit(1);
 	}
 
-	//Otherwise we should be good to grab. Again we do not delete here
+	//Give back a copy for this function
 	return array->internal_array[index];
 }
+
 
 
 /**

@@ -202,7 +202,7 @@ void* dynamic_array_get_at(dynamic_array_t* array, u_int16_t index){
 	//Return NULL here. It is the caller's responsibility
 	//to check this
 	if(array->current_max_size <= index){
-		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_index);
+		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
 		exit(1);
 	}
 
