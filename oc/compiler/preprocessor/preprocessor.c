@@ -177,6 +177,8 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 	u_int8_t result;
 
 	//Run through every token in the token stream
+	//
+	//TODO THIS LOOP STRUCTURE WILL PROBABLY CAUSE ISSUES with i++
 	for(u_int32_t i = 0; i < stream->token_stream.current_index; i++){
 		//Get a pointer to the token that we are after.
 		//
@@ -223,11 +225,50 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * The macro replacement pass will produce an entirely new token stream in which all of our replacements have been
  * made. This is done to avoid the inefficiencies of inserting tokens into the original dynamic array over
  * and over again which causes a need to shift everything to the right by one each time
+ *
+ * NOTE: This pass is going to replace the token stream that we currently have with a new one that has the
+ * macro definitions removed, and has all of the macro replacement sites populated
  */
-static ollie_token_stream_t* macro_replacement_pass(ollie_token_stream_t* stream){
+static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream){
+	//Pointer to the current token in the old array
+	lexitem_t* current_token_pointer;
 
-	//TODO TOTAL DUMMY - do not mistake
-	return stream;
+	//This is the old token array, with all of the macros in it
+	ollie_token_array_t* old_array =  &(stream->token_stream);
+
+	//This is the entirely new token array, that we will eventually be parsing in
+	//the parser
+	ollie_token_array_t new_array = token_array_alloc();
+
+	//The index into the old token array
+	u_int32_t old_array_index = 0;
+
+	//So long as we're within the acceptable bounds of the array
+	while(old_array_index < old_array->current_index){
+		//Extract a pointer to the current token
+		current_token_pointer = token_array_get_pointer_at(old_array, old_array_index);
+
+		//Go based on what kind of token this is. If we have an identifier, then
+		//that could possibly be a macro for us
+		switch(current_token_pointer->tok){
+
+			//Not an identifier
+			default:
+				//If we are not told to ignore it, add it into
+				//the new array
+				if(current_token_pointer->ignore == FALSE){
+					token_array_add(&new_array, current_token_pointer);
+				}
+
+				//Either way bump the index
+				old_array_index++;
+
+				break;
+		}
+	}
+
+	//If we made it all the way down here then this worked
+	return SUCCESS;
 }
 
 
