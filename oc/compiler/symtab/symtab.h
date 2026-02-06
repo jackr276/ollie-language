@@ -453,7 +453,7 @@ symtab_type_record_t* create_type_record(generic_type_t* type);
 /**
  * Create a macro record for the macro table
  */
-symtab_macro_record_t* create_macro_record(dynamic_string_t name);
+symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line_number);
 
 /**
  * Insert a function into the symbol table

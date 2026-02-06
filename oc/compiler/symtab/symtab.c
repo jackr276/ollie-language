@@ -707,7 +707,7 @@ symtab_type_record_t* create_type_record(generic_type_t* type){
 /**
  * Create a macro record for the macro table
  */
-symtab_macro_record_t* create_macro_record(dynamic_string_t name){
+symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line_number){
 	//Allocate the space needed for the record
 	symtab_macro_record_t* record = calloc(1, sizeof(symtab_macro_record_t));
 
@@ -716,6 +716,9 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name){
 
 	//Allocate the token array here as well
 	record->tokens = token_array_alloc();
+
+	//Store the line number where this was defined
+	record->line_number = line_number;
 
 	//Store the name as well
 	record->name = name;

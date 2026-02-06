@@ -27,11 +27,7 @@ static u_int32_t preprocessor_error_count = 0;
 static u_int32_t preprocessor_warning_count = 0;
 
 //For generic error printing
-char info_message[2000];
-
-//Tracking for the current line number
-static u_int32_t line_number = 1;
-
+static char info_message[2000];
 
 /**
  * A generic printer for any preprocessor errors that we may encounter
@@ -103,7 +99,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	lookahead->ignore = TRUE;
 
 	//Now that we have a valid identifier, we have all that we need to create the symtab record for this macro
-	symtab_macro_record_t* macro_record = create_macro_record(lookahead->lexeme);
+	symtab_macro_record_t* macro_record = create_macro_record(lookahead->lexeme, lookahead->line_num);
 
 	//Grab a pointer to this macro's token array
 	ollie_token_array_t* macro_token_array = &(macro_record->tokens);
@@ -122,10 +118,22 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 				preprocessor_error_count++;
 				return FAILURE;
 
-
+			//This could be good or bad depending on what we're after
 			case ENDMACRO:
-				//TODO
-				
+				//IMPORTANT - flag that this token needs to be ignored by the replacer
+				lookahead->ignore = TRUE;
+
+				//This is invalid, we cannot have a completely 
+				//empty macro
+				if(macro_token_array->current_index == 0){
+					sprintf(info_message, "Ollie macro %s is empty and is therefore invalid", macro_record->name.string);
+					print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, macro_record->line_number);
+					preprocessor_error_count++;
+					return FAILURE;
+				}
+
+				//Otherwise this should be fine, so we will go ahead and add this on in
+				goto finalize_macro;
 
 			//In theory anything else that we see in here is valid, so we'll
 			//just do our bookkeeping and move along
@@ -139,6 +147,13 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 				break;
 		}
 	}
+
+finalize_macro:
+	//Get it into the symtab
+	insert_macro(macro_symtab, macro_record);
+
+	//Return that we succeeded
+	return SUCCESS;
 }
 
 
