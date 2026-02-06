@@ -222,6 +222,14 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 
 /**
+ * TODO - substitution itself
+ */
+static u_int8_t perform_macro_substitution(){
+	//TODO
+}
+
+
+/**
  * The macro replacement pass will produce an entirely new token stream in which all of our replacements have been
  * made. This is done to avoid the inefficiencies of inserting tokens into the original dynamic array over
  * and over again which causes a need to shift everything to the right by one each time
@@ -229,9 +237,12 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * NOTE: This pass is going to replace the token stream that we currently have with a new one that has the
  * macro definitions removed, and has all of the macro replacement sites populated
  */
-static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream){
+static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab){
 	//Pointer to the current token in the old array
 	lexitem_t* current_token_pointer;
+
+	//The macro record(if one exists)
+	symtab_macro_record_t* found_record = NULL;
 
 	//This is the old token array, with all of the macros in it
 	ollie_token_array_t* old_array =  &(stream->token_stream);
@@ -251,6 +262,29 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream){
 		//Go based on what kind of token this is. If we have an identifier, then
 		//that could possibly be a macro for us
 		switch(current_token_pointer->tok){
+			//If we have an identifier, then there is a chance but not a guarantee
+			//that we are performing a macro substitution
+			case IDENT:
+				//Let's see if we have anything here
+				found_record = lookup_macro(macro_symtab, current_token_pointer->lexeme.string);
+
+				//We didn't find a macro name match, which is fine - we'll just
+				//treat this like a regular token. We expect that this is the
+				//most common case
+				if(found_record == NULL){
+					//Add it into the new array if we aren't being
+					//told to ignore it
+					if(current_token_pointer->ignore == FALSE){
+						token_array_add(&new_array, current_token_pointer);
+					}
+
+					//Bump the old array inde
+					old_array_index++;
+				}
+
+				//TODO - perform macro substitution
+				
+				
 
 			//Not an identifier
 			default:
