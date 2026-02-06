@@ -176,15 +176,16 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 	//Standard holder for the result of each macro consumption
 	u_int8_t result;
 
-	//Run through every token in the token stream
-	//
-	//TODO THIS LOOP STRUCTURE WILL PROBABLY CAUSE ISSUES with i++
-	for(u_int32_t i = 0; i < stream->token_stream.current_index; i++){
+	//Keep track of the current array index
+	u_int32_t array_index = 0;
+
+	//Loop through the entire structure
+	while(array_index < stream->token_stream.current_index){
 		//Get a pointer to the token that we are after.
 		//
 		//IMPORTANT - we want to modify this token in the stream, so a pointer
 		//is critical. We *cannot* use a local copy for this
-		lexitem_t* token = &(stream->token_stream.internal_array[i]);
+		lexitem_t* token = &(stream->token_stream.internal_array[array_index]);
 
 		//Go based on the kind of token that we have in here
 		switch(token->tok){
@@ -192,7 +193,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 			case MACRO:
 				//Now we will invoke the helper to parse this entire token
 				//stream(until we see the ENDMACRO directive)
-				result = process_macro(stream, macro_symtab, &i);
+				result = process_macro(stream, macro_symtab, &array_index);
 
 				//This indicates some kind of failure. The error message
 				//will have already been printed by the processor, so we just
@@ -209,11 +210,11 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 				preprocessor_error_count++;
 				return FAILURE;
 
-			//Default is that we do nothing
+			//We haven't seen a macro, but the array index needs to be bumped
 			default:
+				array_index++;
 				break;
 		}
-
 	}
 
 	//If we made it down here, then we can declare success
@@ -280,11 +281,14 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 
 					//Bump the old array inde
 					old_array_index++;
+
+					//Get out of the case
+					break;
 				}
 
+
 				//TODO - perform macro substitution
-				
-				
+				perform_macro_substitution();
 
 			//Not an identifier
 			default:
