@@ -267,13 +267,15 @@ struct symtab_type_record_t{
  * how we will keep references to macros as they're defined by the user
  */
 struct symtab_macro_record_t{
+	//For linked list functionality
+	symtab_macro_record_t* next;
 	//The name as a dynamic string
 	dynamic_string_t name;
 	//The hash of it
 	u_int64_t hash;
-	//TODO node linkage
-	//For linked list functionality
-	symtab_macro_record_t* next;
+	//The array of all tokens in the macro
+	//TODO ADD MORE
+	ollie_token_array_t tokens;
 	//Line number of declaration
 	u_int32_t line_number;
 };

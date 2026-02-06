@@ -14,6 +14,7 @@
 #include "../utils/error_management.h"
 #include "../utils/constants.h"
 #include "../utils/ollie_token_array/ollie_token_array.h"
+#include "../symtab/symtab.h"
 #include <sys/types.h>
 
 //What is the name of the file that we are preprocessing
@@ -22,25 +23,6 @@ static char* current_file_name;
 //Define some holders for failures/warnings
 static u_int32_t preprocessor_error_count = 0;
 static u_int32_t preprocessor_warning_count = 0;
-
-//Define a basic struct for macro storage
-typedef struct ollie_macro_t ollie_macro_t;
-
-
-/**
- * An overall struct that contains the macros that we are after
- */
-struct ollie_macro_t {
-	//The array of tokens that this macro is made up of. Note that
-	//the start and endmacro tokens are not in here
-	ollie_token_array_t macro_tokens;
-
-	//What line number was this macro defined on. This will be
-	//where the initial macro was stored
-	u_int32_t line_number;
-};
-
-//TODO macro allocator
 
 /**
  * A generic printer for any preprocessor errors that we may encounter
@@ -61,7 +43,7 @@ static inline void print_preprocessor_message(error_message_type_t message, char
  * returns in a success state, the index will be pointing to the token after the ENDMACRO
  * token
  */
-static ollie_macro_t* process_macro(ollie_token_stream_t* stream, u_int32_t* index) {
+static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* index) {
 	//TODO placeholder
 	return NULL;
 }
@@ -77,8 +59,8 @@ static ollie_macro_t* process_macro(ollie_token_stream_t* stream, u_int32_t* ind
  * pass
  */
 static u_int8_t macro_consumption_pass(ollie_token_stream_t* stream){
-	//Holder for the result macro
-	ollie_macro_t* result_macro;
+	//Standard holder for the result of each macro consumption
+	u_int8_t result;
 
 	//Run through every token in the token stream
 	for(u_int32_t i = 0; i < stream->token_stream.current_index; i++){
@@ -94,12 +76,12 @@ static u_int8_t macro_consumption_pass(ollie_token_stream_t* stream){
 			case MACRO:
 				//Now we will invoke the helper to parse this entire token
 				//stream(until we see the ENDMACRO directive)
-				result_macro = process_macro(stream, &i);
+				result = process_macro(stream, &i);
 
 				//This indicates some kind of failure. The error message
 				//will have already been printed by the processor, so we just
 				//pass this along
-				if(result_macro == NULL){
+				if(result == FAILURE){
 					return FAILURE;
 				}
 
@@ -151,6 +133,12 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	current_file_name = file_name;
 
 	/**
+	 * Step 0: we need a customized macro symtab for ease of lookup. This symtab
+	 * will allow us to store everything we need we near O(1) access
+	 */
+	macro_symtab_t* macro_symtab = macro_symtab_alloc();
+
+	/**
 	 * Step 1: perform the initial consumption pass on the token stream. This pass has 2
 	 * purposes. First, it will consume all of the macros in our initial token stream and parse
 	 * them into usable ollie_macro_t definitions. Second, it will flag all of the tokens that are
@@ -161,6 +149,12 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	//Package with this the errors & warnings
 	results.error_count = preprocessor_error_count;
 	results.warning_count = preprocessor_warning_count;
+
+	/**
+	 * Once done, we no longer need the macro symtab so we can completely deallocate
+	 * it
+	*/
+	macro_symtab_dealloc(macro_symtab);
 
 	//Give the results back
 	return results;
