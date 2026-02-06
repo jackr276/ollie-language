@@ -84,6 +84,9 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		return FAILURE;
 	}
 
+	//IMPORTANT - flag that this token needs to be ignored by the replacer
+	lookahead->ignore = TRUE;
+
 	//Now that we've seen the #macro keyword, we need to see the name
 	//of the macro via an identifier
 	lookahead = get_token_pointer_and_increment(token_array, index);
@@ -96,18 +99,45 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		return FAILURE;
 	}
 
+	//IMPORTANT - flag that this token needs to be ignored by the replacer
+	lookahead->ignore = TRUE;
+
 	//Now that we have a valid identifier, we have all that we need to create the symtab record for this macro
 	symtab_macro_record_t* macro_record = create_macro_record(lookahead->lexeme);
 
+	//Grab a pointer to this macro's token array
+	ollie_token_array_t* macro_token_array = &(macro_record->tokens);
 
 	//Unbounded loop through the entire macro
 	while(TRUE){
+		//Refresh the lookahead token
+		lookahead = get_token_pointer_and_increment(token_array, index);
 
 		//Based on our token here we'll do a few things
 		switch(lookahead->tok){
+			//This is bad - there is no such thing as a nested macro and we are already
+			//in one
+			case MACRO:
+				print_preprocessor_message(MESSAGE_TYPE_ERROR, "#macro keyword found inside of a macro definition", lookahead->line_num);
+				preprocessor_error_count++;
+				return FAILURE;
 
+
+			case ENDMACRO:
+				//TODO
+				
+
+			//In theory anything else that we see in here is valid, so we'll
+			//just do our bookkeeping and move along
+			default:
+				//IMPORTANT - flag that this token needs to be ignored by the replacer
+				lookahead->ignore = TRUE;
+
+				//Add this into the token array
+				token_array_add(macro_token_array, lookahead);
+				
+				break;
 		}
-
 	}
 }
 

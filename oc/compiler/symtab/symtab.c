@@ -714,6 +714,9 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name){
 	//Get & store the hash here
 	record->hash = hash_macro_name(name.string);
 
+	//Allocate the token array here as well
+	record->tokens = token_array_alloc();
+
 	//Store the name as well
 	record->name = name;
 
