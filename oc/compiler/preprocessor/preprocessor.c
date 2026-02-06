@@ -29,6 +29,9 @@ static u_int32_t preprocessor_warning_count = 0;
 //For generic error printing
 static char info_message[2000];
 
+//The current line number that we're after
+static u_int32_t current_line_number;
+
 /**
  * A generic printer for any preprocessor errors that we may encounter
  */
@@ -51,6 +54,9 @@ static inline lexitem_t* get_token_pointer_and_increment(ollie_token_array_t* ar
 
 	//Bump the index
 	(*index)++;
+
+	//Update the line number
+	current_line_number = token_pointer->line_num;
 
 	//Give back the pointer
 	return token_pointer;
@@ -166,7 +172,7 @@ finalize_macro:
  * to do with macro replacement. This will come after in the replacement
  * pass
  */
-static u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab){
+static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab){
 	//Standard holder for the result of each macro consumption
 	u_int8_t result;
 
@@ -253,7 +259,16 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	 * involved in that macro as "ignorable". This will cause the second replacement pass to ignore
 	 * those tokens when we go through the stream again, avoiding reconsumption
 	*/
+	u_int8_t consumption_pass_result = macro_consumption_pass(stream, macro_symtab);
 
+	//If we failed here then there's no point in going further
+	if(consumption_pass_result == FAILURE){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros detected. Please rememdy the errors and recompile", current_line_number);
+		goto finalizer;
+	}
+
+
+finalizer:
 	//Package with this the errors & warnings
 	results.error_count = preprocessor_error_count;
 	results.warning_count = preprocessor_warning_count;

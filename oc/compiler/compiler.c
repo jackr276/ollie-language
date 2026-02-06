@@ -185,6 +185,7 @@ static u_int8_t compile(compiler_options_t* options){
 	//And we'll keep track of everything we have here
 	clock_t begin = 0;
 	clock_t lexer_end = 0;
+	clock_t preprocessor_end = 0;
 	clock_t parser_end = 0;
 	clock_t cfg_end = 0;
 	clock_t optimizer_end = 0;
@@ -240,6 +241,8 @@ static u_int8_t compile(compiler_options_t* options){
 	//Now we cache the token stream reference inside of the options. The parser will reference this for
 	//all of its operations
 	options->token_stream = &token_stream;
+
+	//TODO - preprocessing goes here
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
