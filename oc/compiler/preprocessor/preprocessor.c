@@ -15,6 +15,7 @@
 #include "../utils/constants.h"
 #include "../utils/ollie_token_array/ollie_token_array.h"
 #include "../symtab/symtab.h"
+#include <strings.h>
 #include <sys/types.h>
 
 //What is the name of the file that we are preprocessing
@@ -23,6 +24,10 @@ static char* current_file_name;
 //Define some holders for failures/warnings
 static u_int32_t preprocessor_error_count = 0;
 static u_int32_t preprocessor_warning_count = 0;
+
+//Tracking for the current line number
+static u_int32_t line_number = 1;
+
 
 /**
  * A generic printer for any preprocessor errors that we may encounter
@@ -37,6 +42,22 @@ static inline void print_preprocessor_message(error_message_type_t message, char
 
 
 /**
+ * Simple helper that just wraps the token_array_get_pointer_at and takes care of the index bumping
+ * for us
+ */
+static inline lexitem_t* get_token_pointer_and_increment(ollie_token_array_t* array, u_int32_t* index){
+	//Extract the token pointer
+	lexitem_t* token_pointer = token_array_get_pointer_at(array, *index);
+
+	//Bump the index
+	(*index)++;
+
+	//Give back the pointer
+	return token_pointer;
+}
+
+
+/**
  * Process a macro starting at the begin index
  *
  * NOTE: this function will update the index that is in use here. If this function
@@ -44,8 +65,27 @@ static inline void print_preprocessor_message(error_message_type_t message, char
  * token
  */
 static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* index) {
-	//TODO placeholder
-	return NULL;
+	//Hang onto this here for convenience
+	ollie_token_array_t* token_array = &(stream->token_stream);
+
+	//Let's get the first pointer here
+	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
+
+
+	//Unbounded loop through the entire macro
+	while(TRUE){
+		//Grab the lookahead at our given index
+		lookahead = &(stream->token_stream.internal_array[*index]);
+
+		//IMPORTANT - bump the index up
+		(*index)++;
+
+		//Based on our token here we'll do a few things
+		switch(lookahead->tok){
+
+		}
+
+	}
 }
 
 
@@ -58,7 +98,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
  * to do with macro replacement. This will come after in the replacement
  * pass
  */
-static u_int8_t macro_consumption_pass(ollie_token_stream_t* stream){
+static u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab){
 	//Standard holder for the result of each macro consumption
 	u_int8_t result;
 
@@ -76,7 +116,7 @@ static u_int8_t macro_consumption_pass(ollie_token_stream_t* stream){
 			case MACRO:
 				//Now we will invoke the helper to parse this entire token
 				//stream(until we see the ENDMACRO directive)
-				result = process_macro(stream, &i);
+				result = process_macro(stream, macro_symtab, &i);
 
 				//This indicates some kind of failure. The error message
 				//will have already been printed by the processor, so we just
