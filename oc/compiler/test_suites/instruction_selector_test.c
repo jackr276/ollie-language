@@ -15,6 +15,8 @@
 #include "../parser/parser.h"
 //Link to cfg
 #include "../cfg/cfg.h"
+//Link to the preprocessor
+#include "../preprocessor/preprocessor.h"
 //Link to the ollie optimizer
 #include "../optimizer/optimizer.h"
 //Link to the instruction selector
@@ -122,6 +124,16 @@ int main(int argc, char** argv){
 	//If this fails, we need to leave
 	if(stream.status == STREAM_STATUS_FAILURE){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
+		exit(0);
+	}
+
+	//We now need to preprocess
+	preprocessor_results_t results = preprocess(options->file_name, options->token_stream);
+
+	//If we failed then bail out
+	if(results.success == FALSE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
+		//0 for test runs
 		exit(0);
 	}
 

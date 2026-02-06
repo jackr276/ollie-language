@@ -12,6 +12,8 @@
 
 //Link to the parser
 #include "../parser/parser.h"
+//Link to the preprocessor
+#include "../preprocessor/preprocessor.h"
 //Link to cfg
 #include "../cfg/cfg.h"
 #include "../utils/constants.h"
@@ -121,6 +123,16 @@ int main(int argc, char** argv){
 	
 	//Store it inside of the token stream
 	options->token_stream = &stream;
+
+	//We now need to preprocess
+	preprocessor_results_t results = preprocess(options->file_name, options->token_stream);
+
+	//If we failed then bail out
+	if(results.success == FALSE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
+		//0 for test runs
+		exit(0);
+	}
 
 	//Now that we can actually open the file, we'll parse
 	front_end_results_package_t* parse_results = parse(options);
