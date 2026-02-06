@@ -223,11 +223,24 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 
 /**
- * TODO - substitution itself
+ * Perform the macro substitution itself. This involves splicing in the
+ * token stream that our given macro expands to
+ *
+ * TODO - currently this is just raw replacement. Eventually we will need to do macros with parameters
  */
-static u_int8_t perform_macro_substitution(){
-	//TODO
-	return FALSE;
+static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, symtab_macro_record_t* macro){
+	//Run through all of the tokens in this macro, and splice them over into
+	//the target macro
+	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
+		//Get a a pointer to this token
+		lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
+
+		//Add it in here - this does do a complete copy
+		token_array_add(target_array, token_pointer);
+	}
+
+	//This worked so
+	return SUCCESS;
 }
 
 
@@ -244,7 +257,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 	lexitem_t* current_token_pointer;
 
 	//The macro record(if one exists)
-	symtab_macro_record_t* found_record = NULL;
+	symtab_macro_record_t* found_macro = NULL;
 
 	//This is the old token array, with all of the macros in it
 	ollie_token_array_t* old_array =  &(stream->token_stream);
@@ -268,28 +281,33 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 			//that we are performing a macro substitution
 			case IDENT:
 				//Let's see if we have anything here
-				found_record = lookup_macro(macro_symtab, current_token_pointer->lexeme.string);
+				found_macro = lookup_macro(macro_symtab, current_token_pointer->lexeme.string);
 
 				//We didn't find a macro name match, which is fine - we'll just
 				//treat this like a regular token. We expect that this is the
 				//most common case
-				if(found_record == NULL){
+				if(found_macro == NULL){
 					//Add it into the new array if we aren't being
 					//told to ignore it
 					if(current_token_pointer->ignore == FALSE){
 						token_array_add(&new_array, current_token_pointer);
 					}
 
-					//Bump the old array inde
+					//Bump the old array index regardless of what happened
 					old_array_index++;
 
 					//Get out of the case
 					break;
 				}
 
+				//TODO - index manip.
 
-				//TODO - perform macro substitution
-				perform_macro_substitution();
+				//Use the new array and the macro we found to do our substitution
+				u_int8_t substitution_result = perform_macro_substitution(&new_array, found_macro);
+
+				if(substitution_result == FAILURE){
+					return FAILURE;
+				}
 
 			//Not an identifier
 			default:

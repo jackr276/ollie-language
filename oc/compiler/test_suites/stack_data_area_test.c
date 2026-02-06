@@ -103,10 +103,10 @@ int main(int argc, char** argv){
 	options->token_stream = &stream;
 
 	//We now need to preprocess
-	preprocessor_results_t results = preprocess(options->file_name, options->token_stream);
+	preprocessor_results_t preprocessor_results = preprocess(options->file_name, options->token_stream);
 
 	//If we failed then bail out
-	if(results.success == FALSE){
+	if(preprocessor_results.success == FALSE){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
 		//0 for test runs
 		exit(0);
