@@ -30,6 +30,8 @@ struct preprocessor_results_t {
 	u_int32_t warning_count;
 	//The number of macros processed(more of novelty info but it's fine to have)
 	u_int32_t macros_processed;
+	//Did this work or not?
+	u_int8_t success;
 };
 
 

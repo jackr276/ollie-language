@@ -227,6 +227,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  */
 static u_int8_t perform_macro_substitution(){
 	//TODO
+	return FALSE;
 }
 
 
@@ -319,8 +320,12 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	//Store the preprocessor results
 	preprocessor_results_t results;
 
-	//The stream is always the original stream
+	//The stream is always the original stream. This is done more so for code
+	//flow reasons. We don't expect to actually be modifying this
 	results.stream = stream;
+
+	//Initially assume everything worked. This will be flipped if need be
+	results.success = TRUE;
 
 	//Store the file name up top globally
 	current_file_name = file_name;
@@ -343,6 +348,8 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	//If we failed here then there's no point in going further
 	if(consumption_pass_result == FAILURE){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros detected. Please rememdy the errors and recompile", current_line_number);
+		//Note a failure
+		results.success = FALSE;
 		goto finalizer;
 	}
 

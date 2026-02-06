@@ -12,6 +12,7 @@
 #include "ast/ast.h"
 #include "lexer/lexer.h"
 #include "parser/parser.h"
+#include "preprocessor/preprocessor.h"
 #include "symtab/symtab.h"
 #include "cfg/cfg.h"
 #include "register_allocator/register_allocator.h"
@@ -172,7 +173,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
  */
 static u_int8_t compile(compiler_options_t* options){
 	//Declare our times and set all to 0
-	module_times_t times = {0, 0, 0, 0, 0, 0, 0, 0};
+	module_times_t times = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 	//Print out the file name if we're debug printing
 	printf("Compiling source file: %s\n\n\n", options->file_name);
@@ -242,7 +243,46 @@ static u_int8_t compile(compiler_options_t* options){
 	//all of its operations
 	options->token_stream = &token_stream;
 
-	//TODO - preprocessing goes here
+	/**
+	 * Let the preprocessor handle everything to do with macros. Note that this does have the potential
+	 * to fail
+	 */
+	preprocessor_results_t preprocessor_results = preprocess(options->file_name, options->token_stream);
+
+	//Update the warnings/errors if there are any
+	num_errors += preprocessor_results.error_count;
+	num_warnings += preprocessor_results.warning_count;
+
+	//If we failed here then we are done 
+	if(preprocessor_results.success == FALSE){
+		//Timer end
+		end = clock();
+
+		//Crude time calculation
+		times.total_time = (double)(end - begin) / CLOCKS_PER_SEC;
+
+		//Print summary with a failure here
+		if(options->show_summary == TRUE){
+			print_summary(options, &times, 0, num_errors, num_warnings, FALSE);
+		}
+
+		//If this is a test run, we will return 0 because we don't want to show a makefile error. If it 
+		//is not, we'll return 1 to show the error
+		if(options->is_test_run == TRUE){
+			return 0;
+		} else {
+			return 1;
+		}
+	}
+
+	//If we are doing module specific timing, store the preprocessor time
+	if(options->module_specific_timing == TRUE){
+		//End the parser timer
+		preprocessor_end = clock();
+
+		//Crude time calculation
+		times.preprocessor_time = (double)(preprocessor_end - lexer_end) / CLOCKS_PER_SEC;
+	}
 
 	//Now we'll parse the whole thing
 	//results = parse(fl, dependencies.file_name);
@@ -280,7 +320,7 @@ static u_int8_t compile(compiler_options_t* options){
 		parser_end = clock();
 
 		//Crude time calculation
-		times.parser_time = (double)(parser_end - lexer_end) / CLOCKS_PER_SEC;
+		times.parser_time = (double)(parser_end - preprocessor_end) / CLOCKS_PER_SEC;
 	}
 
 	//Now we'll build the cfg using our results
