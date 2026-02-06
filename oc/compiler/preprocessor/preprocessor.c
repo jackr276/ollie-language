@@ -15,6 +15,7 @@
 #include "../utils/constants.h"
 #include "../utils/ollie_token_array/ollie_token_array.h"
 #include "../symtab/symtab.h"
+#include <stdio.h>
 #include <strings.h>
 #include <sys/types.h>
 
@@ -24,6 +25,9 @@ static char* current_file_name;
 //Define some holders for failures/warnings
 static u_int32_t preprocessor_error_count = 0;
 static u_int32_t preprocessor_warning_count = 0;
+
+//For generic error printing
+char info_message[2000];
 
 //Tracking for the current line number
 static u_int32_t line_number = 1;
@@ -71,14 +75,33 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//Let's get the first pointer here
 	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
 
+	//This really shouldn't happen because
+	//we've already seen the #macro to get here,
+	//but we'll catch it just in case
+	if(lookahead->tok != MACRO){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "#macro keyword expected before macro declaration", lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Now that we've seen the #macro keyword, we need to see the name
+	//of the macro via an identifier
+	lookahead = get_token_pointer_and_increment(token_array, index);
+
+	//If we did not see an identifier then we are in bad shape here
+	if(lookahead->tok != IDENT){
+		sprintf(info_message, "Expected identifier after #macro keyword but got %s", lexitem_to_string(lookahead));
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Now that we have a valid identifier, we have all that we need to create the symtab record for this macro
+	symtab_macro_record_t* macro_record = create_macro_record(lookahead->lexeme);
+
 
 	//Unbounded loop through the entire macro
 	while(TRUE){
-		//Grab the lookahead at our given index
-		lookahead = &(stream->token_stream.internal_array[*index]);
-
-		//IMPORTANT - bump the index up
-		(*index)++;
 
 		//Based on our token here we'll do a few things
 		switch(lookahead->tok){
