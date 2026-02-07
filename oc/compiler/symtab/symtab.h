@@ -21,11 +21,12 @@
 //Variables and types have a new sheaf added upon every new lexical scope. As such,
 //we don't need enormous sizes to hold all of them
 #define VARIABLE_KEYSPACE 128
+
 //Type keyspace is made larger to accomodate more basic type classes, aliases & variants
 #define TYPE_KEYSPACE 256
 
-//Constants are also one per program
-#define CONSTANT_KEYSPACE 256 
+//The macro keyspace is also one per program
+#define MACRO_KEYSPACE 256 
 
 //There's only one function keyspace per program, so it can be a bit larger
 #define FUNCTION_KEYSPACE 1024 
@@ -39,8 +40,8 @@ typedef struct variable_symtab_t variable_symtab_t;
 typedef struct function_symtab_t function_symtab_t;
 //A type symtab
 typedef struct type_symtab_t type_symtab_t;
-//A constants symtab for #replace directives
-typedef struct constants_symtab_t constants_symtab_t;
+//A symtab for #macro directives
+typedef struct macro_symtab_t macro_symtab_t;
 
 //The sheafs in the variable symtab
 typedef struct symtab_variable_sheaf_t symtab_variable_sheaf_t;
@@ -53,8 +54,8 @@ typedef struct symtab_function_record_t symtab_function_record_t;
 typedef struct symtab_variable_record_t symtab_variable_record_t;
 //The records in a type symtab
 typedef struct symtab_type_record_t symtab_type_record_t;
-//The records in a constants symtab
-typedef struct symtab_constant_record_t symtab_constant_record_t;
+//The records in a macro symtab
+typedef struct symtab_macro_record_t symtab_macro_record_t;
 //The definition of a local constant(.LCx) block
 typedef struct local_constant_t local_constant_t;
 
@@ -262,18 +263,20 @@ struct symtab_type_record_t{
 
 
 /**
- * This struct represents a specific constant record in the compiler. This is
- * how we will keep references to constants as they're defined by the user
+ * This struct represents a specific macro record in the compiler. This is
+ * how we will keep references to macros as they're defined by the user
  */
-struct symtab_constant_record_t{
+struct symtab_macro_record_t{
+	//For linked list functionality
+	symtab_macro_record_t* next;
 	//The name as a dynamic string
 	dynamic_string_t name;
 	//The hash of it
 	u_int64_t hash;
-	//We'll link directly to the constant node here
-	void* constant_node;
-	//For linked list functionality
-	symtab_constant_record_t* next;
+	//The array of all tokens in the macro
+	ollie_token_array_t tokens;
+	//The total token lenght, including the begin/end tokens
+	u_int32_t total_token_count;
 	//Line number of declaration
 	u_int32_t line_number;
 };
@@ -332,13 +335,12 @@ struct type_symtab_t{
 
 
 /**
- * This struct represents the constants symtab. Much like the function symtab, 
- * there is only one lexical level, so no sheafs exist here. All constants
- * declared with #replace are global across all files
+ * This struct represents the macro symtab. Much like the function symtab, 
+ * there is only one lexical level, so no sheafs exist here
  */
-struct constants_symtab_t{
+struct macro_symtab_t{
 	//How many records(names) we can have
-	symtab_constant_record_t* records[CONSTANT_KEYSPACE];
+	symtab_macro_record_t* records[MACRO_KEYSPACE];
 };
 
 
@@ -374,18 +376,15 @@ function_symtab_t* function_symtab_alloc();
  */
 variable_symtab_t* variable_symtab_alloc();
 
-
 /**
  * Initialize a symbol table for types
  */
 type_symtab_t* type_symtab_alloc();
 
-
 /**
- * Initialize a symbol table for constants
+ * Initialize a symbol table for compiler macros 
  */
-constants_symtab_t* constants_symtab_alloc();
-
+macro_symtab_t* macro_symtab_alloc();
 
 /**
  * NOTE: Functions only have one scope, which is why they do not
@@ -453,11 +452,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 symtab_type_record_t* create_type_record(generic_type_t* type);
 
 /**
- * Create a type record for the constant table. Unlike our
- * other rules, this rule will actually have most of it's processing
- * done by the client
+ * Create a macro record for the macro table
  */
-symtab_constant_record_t* create_constant_record(dynamic_string_t name);
+symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line_number);
 
 /**
  * Insert a function into the symbol table
@@ -475,9 +472,9 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
 u_int8_t insert_type(type_symtab_t* symtab, symtab_type_record_t* record);
 
 /**
- * Insert a constant into the symtab
+ * Insert a macro into the symtab
  */
-u_int8_t insert_constant(constants_symtab_t* symtab, symtab_constant_record_t* record);
+u_int8_t insert_macro(macro_symtab_t* symtab, symtab_macro_record_t* record);
 
 /**
  * Determine whether or not a function is directly recursive using the function
@@ -517,9 +514,9 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 symtab_variable_record_t* lookup_variable(variable_symtab_t* symtab, char* name);
 
 /**
- * Lookup a constant in the symtab
+ * Lookup a macro in the symtab
  */
-symtab_constant_record_t* lookup_constant(constants_symtab_t* symtab, char* name);
+symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name);
 
 /**
  * Lookup a variable name in the symtab, only one scope
@@ -669,11 +666,6 @@ void add_function_call(symtab_function_record_t* source, symtab_function_record_
 void print_variable_name(symtab_variable_record_t* record);
 
 /**
- * A helper method for constant name printing
- */
-void print_constant_name(symtab_constant_record_t* record);
-
-/**
  * A helper method for type name printing
  */
 void print_type_name(symtab_type_record_t* record);
@@ -706,9 +698,9 @@ void variable_symtab_dealloc(variable_symtab_t* symtab);
 void type_symtab_dealloc(type_symtab_t* symtab);
 
 /**
- * Destroy a constants symtab
+ * Destroy a macro symtab
  */
-void constants_symtab_dealloc(constants_symtab_t* symtab);
+void macro_symtab_dealloc(macro_symtab_t* symtab);
 
 /**
  * Destroy a local constant

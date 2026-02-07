@@ -36,7 +36,6 @@ char type_name_buf2[MAX_IDENT_LENGTH];
 static function_symtab_t* function_symtab = NULL;
 static variable_symtab_t* variable_symtab = NULL;
 static type_symtab_t* type_symtab = NULL;
-static constants_symtab_t* constant_symtab = NULL;
 
 //The entire AST is rooted here
 static generic_ast_node_t* prog = NULL;
@@ -114,19 +113,12 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 /**
  * Simply prints a parse message in a nice formatted way
 */
-void print_parse_message(parse_message_type_t message_type, char* info, u_int32_t line_num){
-	//Build and populate the message
-	parse_message_t parse_message;
-	parse_message.message = message_type;
-	parse_message.info = info;
-	parse_message.line_num = line_num;
-
+void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num){
 	//Now print it
-	//Mapped by index to the enum values
-	char* type[] = {"WARNING", "ERROR", "INFO"};
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
 	//Print this out on a single line
-	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_name, parse_message.line_num, type[parse_message.message], parse_message.info);
+	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", current_file_name, line_num, type[message_type], info);
 }
 
 
@@ -277,7 +269,7 @@ static inline u_int8_t do_duplicate_functions_exist(char* name){
 	//Fail out here
 	if(found != NULL){
 		sprintf(info, "Attempt to redefine function \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the function declaration
 		print_function_name(found);
 		num_errors++;
@@ -305,7 +297,7 @@ static inline u_int8_t do_duplicate_variables_exist(char* name){
 	//Means that we have a duplicate
 	if(found != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found);
 		num_errors++;
@@ -333,7 +325,7 @@ static inline u_int8_t do_duplicate_member_variables_exist(char* name, generic_t
 	//Means that we have a duplicate
 	if(found != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, current_type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		print_variable_name(found);
 		num_errors++;
 
@@ -361,7 +353,7 @@ static inline u_int8_t do_duplicate_types_exist(char* name){
 	//If the immutable one was found, we can leave out
 	if(found != NULL){
 		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found);
 		num_errors++;
@@ -376,7 +368,7 @@ static inline u_int8_t do_duplicate_types_exist(char* name){
 	//If the immutable one was found, we can leave out
 	if(found != NULL){
 		sprintf(info, "Attempt to redefine type \"%s\". First defined here:", name);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_type_name(found);
 		num_errors++;
@@ -461,7 +453,7 @@ static inline u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_n
 		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
 			break;
 		default:
-			print_parse_message(PARSE_ERROR, "Invalid return value for address operation &", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid return value for address operation &", parser_line_num);
 			return FAILURE;
 	}
 
@@ -541,7 +533,7 @@ static generic_type_t* determine_required_minimum_signed_integer_type_size(int64
  */
 static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t parser_line_num){
 	//Display the error
-	print_parse_message(PARSE_ERROR, error_message, parser_line_num);
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
 	//Increment the number of errors
 	num_errors++;
 	//Allocate and return an error node
@@ -1031,7 +1023,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//If it's not an R_PAREN, then we fail
 		if(lookahead.tok != R_PAREN){
 			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name.string, function_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, current_line);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, current_line);
 			//Print out the actual function record as well
 			num_errors++;
 			//Return the error node
@@ -1193,7 +1185,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	if(num_params != function_signature->num_params){
 		sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
 		  function_name.string, function_signature->num_params, num_params, function_type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
 		//Error out
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
@@ -1241,7 +1233,7 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	
 	//If it's an error
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		print_parse_message(PARSE_ERROR, "Unable to use sizeof on invalid expression",  parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unable to use sizeof on invalid expression",  parser_line_num);
 		num_errors++;
 		//It's already an error, so give it back that way
 		return expr_node;
@@ -1397,17 +1389,6 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 			//Grab this out for convenience
 			char* var_name = ident->string_value.string;
-
-			//We have a few options here, we could find a constant that has been declared
-			//like this. If so, we'll return a duplicate of the constant node that we have
-			//inside of here
-			symtab_constant_record_t* found_const = lookup_constant(constant_symtab, var_name);
-			
-			//If this is in fact a constant, we'll duplicate the whole thing and send it
-			//out the door
-			if(found_const != NULL){
-				return duplicate_node(found_const->constant_node, side);
-			}
 
 			//Now we will look this up in the variable symbol table
 			symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
@@ -1685,7 +1666,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		//This is the case where we have a plain variable assignment
 		if(can_variable_be_assigned_to(assignee) == FALSE){
 			sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			print_variable_name(assignee);
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
@@ -4914,7 +4895,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 
 	//Let's make sure it actually worked
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given as struct member name", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as struct member name", parser_line_num);
 		num_errors++;
 		//It's an error, so we'll propogate it up
 		return FAILURE;
@@ -4930,7 +4911,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
 		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, mutable_struct_type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		print_variable_name(duplicate);
 		num_errors++;
 		return FAILURE;
@@ -4951,7 +4932,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 
 	//Fail out here
 	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required between ident and type specifier in struct member declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required between ident and type specifier in struct member declaration", parser_line_num);
 		num_errors++;
 		//Error out
 		return FAILURE;
@@ -4962,7 +4943,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 
 	//If this is an error, the whole thing fails
 	if(type_spec == NULL){
-		print_parse_message(PARSE_ERROR, "Attempt to use undefined type in struct member", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Attempt to use undefined type in struct member", parser_line_num);
 		num_errors++;
 		//It's already an error, so just send it up
 		return FAILURE;
@@ -4970,7 +4951,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 
 	//Error out if this happens
 	if(type_spec == immut_void){
-		print_parse_message(PARSE_ERROR, "Struct members may not be typed as void", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Struct members may not be typed as void", parser_line_num);
 		num_errors++;
 		return FAILURE;;
 	}
@@ -4979,7 +4960,7 @@ static u_int8_t struct_member(ollie_token_stream_t* token_stream, generic_type_t
 	//the user from adding a field the mut a:char[] that is unknown at compile time
 	if(type_spec->type_complete == FALSE){
 		sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", type_spec->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		return FAILURE;
 	}
 
@@ -5014,7 +4995,7 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
 
 	//Fail case here
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unelaborated struct definition is not supported", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unelaborated struct definition is not supported", parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -5036,7 +5017,7 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
 
 		//If it's an error, we'll fail right out
 		if(status == FAILURE){
-			print_parse_message(PARSE_ERROR, "Invalid struct member declaration", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member declaration", parser_line_num);
 			num_errors++;
 			//It's already an error node so just let it propogate
 			return FAILURE;
@@ -5047,7 +5028,7 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
 
 		//We must now see a valid semicolon
 		if(lookahead.tok != SEMICOLON){
-			print_parse_message(PARSE_ERROR, "Struct members must be delimited by ;", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Struct members must be delimited by ;", parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
@@ -5060,7 +5041,7 @@ static u_int8_t struct_member_list(ollie_token_stream_t* token_stream, generic_t
 
 	//Check for unamtched curlies
 	if(pop_token(&grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces in struct definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched curly braces in struct definition", parser_line_num);
 		num_errors++;
 		//Fail out here
 		return FAILURE;
@@ -5095,7 +5076,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//Now we need to see an L_PAREN
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Left parenthesis required after fn keyword", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -5143,7 +5124,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 		//This means that we have been given too many parameters
 		if(status == FAILURE){
-			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
 			return FALSE;
 		}
 
@@ -5152,7 +5133,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 		//This means that we have been given too many parameters
 		if(status == FAILURE){
-			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
 			return FALSE;
 		}
 
@@ -5164,7 +5145,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
 		//Fail out
-		print_parse_message(PARSE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
 		num_errors++;
 		return FALSE;
 	}
@@ -5172,7 +5153,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Ensure that we pop the grouping stack and get a match
 	if(pop_token(&grouping_stack).tok != L_PAREN){
 		//Fail out
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
 		num_errors++;
 		return FALSE;
 	}
@@ -5183,7 +5164,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//If we don't see it, we fail out
 	if(lookahead.tok != ARROW){
 		//Fail out
-		print_parse_message(PARSE_ERROR, "Arrow (->) required after function parameter list", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Arrow (->) required after function parameter list", parser_line_num);
 		num_errors++;
 		return FALSE;
 	}
@@ -5193,7 +5174,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If this is NULL, then we have an invalid return type
 	if(return_type == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid return type given in function type definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid return type given in function type definition", parser_line_num);
 		num_errors++;
 		return FALSE;
 	}
@@ -5214,7 +5195,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If it isn't an AS keyword, we're done
 	if(lookahead.tok != AS){
-		print_parse_message(PARSE_ERROR, "\"as\" keyword is required after function type definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "\"as\" keyword is required after function type definition", parser_line_num);
 		num_errors++;
 		return FALSE;
 	}
@@ -5225,7 +5206,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If this is an error, then we're going to fail out
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias type", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as alias type", parser_line_num);
 		num_errors++;
 		return FALSE;
 	}
@@ -5240,7 +5221,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If we didn't see it, then we fail out
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required after definition statement", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon required after definition statement", parser_line_num);
 		num_errors++;
 		return FALSE;
 	}
@@ -5330,7 +5311,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//Fail case
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Valid identifier required after struct keyword", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Valid identifier required after struct keyword", parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -5358,7 +5339,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//Automatic fail case here
 	if(success == FAILURE){
-		print_parse_message(PARSE_ERROR, "Invalid struct member list given in construct definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct member list given in construct definition", parser_line_num);
 		//Fail out
 		return FAILURE;
 	}
@@ -5380,7 +5361,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 	
 	//Otherwise, if this is correct, we should've seen the as keyword
 	if(lookahead.tok != AS){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after construct definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition", parser_line_num);
 		num_errors++;
 		//Make an error and get out of here
 		return FAILURE;
@@ -5392,7 +5373,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//If it was invalid leave
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
 		return FAILURE;
@@ -5408,7 +5389,7 @@ static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 
 	//Last chance for us to fail syntactically 
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after construct definition",  parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -5513,7 +5494,7 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 		//It is not possible to have a void type as a union member
 		if(current_type_record->type == immut_void
 			|| current_type_record->type == mut_void){
-			print_parse_message(PARSE_ERROR, "Unions may not have members that are void", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unions may not have members that are void", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -5556,7 +5537,7 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 
 		//If it failed, then we're done here
 		if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid constant given in array declaration", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant given in array declaration", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -5567,7 +5548,7 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 
 		//Fail case here 
 		if(lookahead.tok != R_BRACKET){
-			print_parse_message(PARSE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -5576,7 +5557,7 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 		switch(const_node->constant_type){
 			case FLOAT_CONST:
 			case STR_CONST:
-				print_parse_message(PARSE_ERROR, "Illegal constant given as array bounds", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Illegal constant given as array bounds", parser_line_num);
 				num_errors++;
 				return NULL;
 			default:
@@ -5589,14 +5570,14 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 		//What if this is a negative or zero?
 		//If it's negative we fail like this
 		if(constant_numeric_value < 0){
-			print_parse_message(PARSE_ERROR, "Array bounds may not be negative", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be negative", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
 
 		//If it's zero we fail like this
 		if(constant_numeric_value == 0){
-			print_parse_message(PARSE_ERROR, "Array bounds may not be zero", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be zero", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -5621,7 +5602,7 @@ static generic_type_t* union_type_specifier(ollie_token_stream_t* token_stream, 
 		//initially define them as blank if and only if we're using an initializer
 		if(current_type_record->type->type_class != TYPE_CLASS_ARRAY && current_type_record->type->type_complete == FALSE){
 			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -5678,7 +5659,7 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 
 	//Once we're here, we need to see an identifier token. If we don't, we'll fail out
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Identifier expected in union member declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Identifier expected in union member declaration", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -5707,7 +5688,7 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 
 	//Fail out if we don't have it
 	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required after identifier in union member definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required after identifier in union member definition", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -5728,7 +5709,7 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 
 	//If this is NULL we've failed
 	if(mutable_type == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type given to union type", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type given to union type", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -5737,7 +5718,7 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 	//the user from adding a field the mut a:char[] that is unknown at compile time
 	if(mutable_type->type_complete == FALSE){
 		sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", mutable_type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		return FAILURE;
 	}
 
@@ -5753,7 +5734,7 @@ static u_int8_t union_member(ollie_token_stream_t* token_stream, generic_type_t*
 
 	//Fail out here if we don't have it
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required after union member declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon required after union member declaration", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -5793,7 +5774,7 @@ static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_ty
 
 	//If it's not a curly we fail
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Left curly required after union name", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Left curly required after union name", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -5814,7 +5795,7 @@ static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_ty
 
 		//If one of them fails, then we're out
 		if(status == FAILURE){
-			print_parse_message(PARSE_ERROR, "Invalid union member defition", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid union member defition", parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
@@ -5828,7 +5809,7 @@ static u_int8_t union_member_list(ollie_token_stream_t* token_stream, generic_ty
 	//Once we get down here then we know that we've got an R_CURLY. Let's ensure that we have a grouping
 	//stack match
 	if(pop_token(&grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched curly braces detected", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -5859,7 +5840,7 @@ static u_int8_t union_definer(ollie_token_stream_t* token_stream){
 
 	//If this is an error fail out
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given as union name", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as union name", parser_line_num);
 		return FAILURE;
 	}
 
@@ -5908,7 +5889,7 @@ static u_int8_t union_definer(ollie_token_stream_t* token_stream){
 		case AS:
 			break;
 		default:
-			print_parse_message(PARSE_ERROR, "AS keyword or semicolon expected after union definition", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "AS keyword or semicolon expected after union definition", parser_line_num);
 			num_errors++;
 			return FAILURE;
 	}
@@ -5918,7 +5899,7 @@ static u_int8_t union_definer(ollie_token_stream_t* token_stream){
 
 	//If it's not an IDENT we're done
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Identifier expected after as keyword", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Identifier expected after as keyword", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -5932,7 +5913,7 @@ static u_int8_t union_definer(ollie_token_stream_t* token_stream){
 
 	//If it's not here we're out
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required after union definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon required after union definition", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -5998,7 +5979,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 	//Fail case here
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid name given to enum definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid name given to enum definition", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
 		return FAILURE;
@@ -6026,7 +6007,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 	//Fail case here
 	if(lookahead.tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Left curly expected before enumerator list", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Left curly expected before enumerator list", parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -6052,7 +6033,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 		//If it's not an identifier, we're done
 		if(lookahead.tok != IDENT){
-			print_parse_message(PARSE_ERROR, "Identifier expected as enum member", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Identifier expected as enum member", parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
@@ -6104,7 +6085,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			//then we have an error
 			if(user_defined_enum_values == FALSE){
 				sprintf(info, "%s has been set as an auto-defined enum. No enum values can be assigned with the = operator", mutable_enum_type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
@@ -6117,7 +6098,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			switch (constant_expression->ast_node_type) {
 				//Error so obviously we fail
 				case AST_NODE_TYPE_ERR_NODE:
-					print_parse_message(PARSE_ERROR, "Invalid constant expression given in enum definer", parser_line_num);
+					print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant expression given in enum definer", parser_line_num);
 					return FAILURE;
 
 				//A constant is completely fine
@@ -6126,7 +6107,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 				//Anything else means that we did not expand to a constant in the end. This is invalid
 				default:
-					print_parse_message(PARSE_ERROR, "Expression does not simplify to compile-time constant", parser_line_num);
+					print_parse_message(MESSAGE_TYPE_ERROR, "Expression does not simplify to compile-time constant", parser_line_num);
 					return FAILURE;
 			}
 
@@ -6174,7 +6155,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 				//If we see anything else, leave
 				default:
-					print_parse_message(PARSE_ERROR, "Integer or char constant expected after = in enum definer", parser_line_num);
+					print_parse_message(MESSAGE_TYPE_ERROR, "Integer or char constant expected after = in enum definer", parser_line_num);
 					num_errors++;
 					return FAILURE;
 			}
@@ -6196,7 +6177,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			//then this is wrong
 			if(user_defined_enum_values == TRUE){
 				sprintf(info, "%s has been set as a user-defined enum. All enum values must be assigned with the = operator", mutable_enum_type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
@@ -6214,7 +6195,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 		//This means that the user attempted to add a duplicate value
 		if(success == FAILURE){
 			sprintf(info, "Duplicate enum value %d", member_record->enum_member_value);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
@@ -6225,7 +6206,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 		//This means that the user attempted to add a duplicate value
 		if(success == FAILURE){
 			sprintf(info, "Duplicate enum value %d", member_record->enum_member_value);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
@@ -6238,14 +6219,14 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 	//If we get out here, then the lookahead must be an RCURLY. If we don't see it, then fail out
 	if(lookahead.tok != R_CURLY){
-		print_parse_message(PARSE_ERROR, "Closing curly brace expected after enumeration definition", parser_line_num); 
+		print_parse_message(MESSAGE_TYPE_ERROR, "Closing curly brace expected after enumeration definition", parser_line_num); 
 		num_errors++;
 		return FAILURE;
 	}
 
 	//Ensure that the grouping stack matches
 	if(pop_token(&grouping_stack).tok != L_CURLY){
-		print_parse_message(PARSE_ERROR, "Unmatched curly braces detected", parser_line_num); 
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched curly braces detected", parser_line_num); 
 		num_errors++;
 		return FAILURE;
 	}
@@ -6279,7 +6260,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 	//Otherwise, it is a requirement that we see the as keyword, so if we don't we're in trouble
 	if(lookahead.tok != AS){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after enum definition", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after enum definition", parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -6291,7 +6272,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 	//If it was invalid
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given as alias", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as alias", parser_line_num);
 		num_errors++;
 		//Deallocate and fail
 		return FAILURE;
@@ -6305,7 +6286,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 
 	//Last chance for us to fail syntactically 
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected after enum definition",  parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected after enum definition",  parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -6357,7 +6338,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//Fail if we don't see it
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Opening parenthesis expected after fn keyword", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis expected after fn keyword", parser_line_num);
 		num_errors++;
 		return NULL;
 	}
@@ -6396,7 +6377,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 		//If this is NULL, we'll error out
 		if(type == NULL){
-			print_parse_message(PARSE_ERROR, "Invalid type specifier given in parameter list", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type specifier given in parameter list", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -6406,7 +6387,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 		//This means that we have been given too many parameters
 		if(status == FAILURE){
-			print_parse_message(PARSE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -6418,14 +6399,14 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//Now that we're done processing the list, we need to ensure that we have a right paren
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
 		num_errors++;
 		return NULL;
 	}
 
 	//Ensure that we pop the grouping stack and get a match
 	if(pop_token(&grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
 		num_errors++;
 		return NULL;
 	}
@@ -6434,7 +6415,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	lookahead = get_next_token(stream, &parser_line_num);
 
 	if(lookahead.tok != ARROW){
-		print_parse_message(PARSE_ERROR, "\"->\" required after parameter list in function declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "\"->\" required after parameter list in function declaration", parser_line_num);
 		num_errors++;
 		return NULL;
 	}
@@ -6444,7 +6425,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//Fail out if we find a bad one
 	if(return_type == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid return type given to function type", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid return type given to function type", parser_line_num);
 		num_errors++;
 		return NULL;
 	}
@@ -6536,14 +6517,14 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 
 			//Mismatched if we don't see it
 			if(lookahead.tok != R_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 				num_errors++;
 				return NULL;
 			}
 
 			//Same thing if this happens
 			if(pop_token(&grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 				num_errors++;
 				return NULL;
 			}
@@ -6569,7 +6550,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 
 			//Sanity check, if this is null something is very wrong
 			if(record == NULL){
-				print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Fatal internal compiler error. Primitive type could not be found in symtab", parser_line_num);
 				//Create and give back an error node
 				return NULL;
 			}
@@ -6587,7 +6568,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 
 			//If we fail, we'll bail out
 			if(lookahead.tok != IDENT){
-				print_parse_message(PARSE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as enum type name", parser_line_num);
 				//It's already an error so just give it back
 				return NULL;
 			}
@@ -6601,7 +6582,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
 				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name_string.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
 				return NULL;
@@ -6620,7 +6601,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 
 			//If it's not an ident, leave
 			if(lookahead.tok != IDENT){
-				print_parse_message(PARSE_ERROR, "Invalid identifier given as struct type name", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as struct type name", parser_line_num);
 				num_errors++;
 				//Throw an error up
 				return NULL;
@@ -6635,7 +6616,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
 				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name_string.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
 				return NULL;
@@ -6654,7 +6635,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 
 			//If we don't have one, then we need to fail out
 			if(lookahead.tok != IDENT){
-				print_parse_message(PARSE_ERROR, "Invalid identifier given as union type name", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as union type name", parser_line_num);
 				num_errors++;
 				//Send an error up the chain
 				return NULL;
@@ -6669,7 +6650,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
 				sprintf(info, "Type %s was never defined. Types must be defined before use", type_name_string.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
 				return NULL;
@@ -6686,7 +6667,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 			//If we didn't find it it's an instant fail
 			if(record == NULL){
 				sprintf(info, "Type %s was never defined. Types must be defined before use", lookahead.lexeme.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				//Create and return an error node
 				return NULL;
@@ -6716,7 +6697,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 		//If we hit down here, we have some invalid lexeme that isn't a type name at all
 		default:
 			sprintf(info, "Expected fn, union, struct, enum, but found %s instead", lexitem_to_string(&lookahead));
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			return NULL;
 	}
@@ -6856,7 +6837,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		 * mut void
 		 */
 		if(current_type_record->type == mut_void){
-			print_parse_message(PARSE_ERROR, "Void types do not contain values and therefore cannot be declared mutable. Remove the \"mut\" specificer", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Void types do not contain values and therefore cannot be declared mutable. Remove the \"mut\" specificer", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -6899,7 +6880,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 
 		//If it failed, then we're done here
 		if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			print_parse_message(PARSE_ERROR, "Invalid constant given in array declaration", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant given in array declaration", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -6910,7 +6891,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 
 		//Fail case here 
 		if(lookahead.tok != R_BRACKET){
-			print_parse_message(PARSE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -6919,7 +6900,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		switch(const_node->constant_type){
 			case FLOAT_CONST:
 			case STR_CONST:
-				print_parse_message(PARSE_ERROR, "Illegal constant given as array bounds", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Illegal constant given as array bounds", parser_line_num);
 				num_errors++;
 				return NULL;
 			default:
@@ -6932,14 +6913,14 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		//What if this is a negative or zero?
 		//If it's negative we fail like this
 		if(constant_numeric_value < 0){
-			print_parse_message(PARSE_ERROR, "Array bounds may not be negative", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be negative", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
 
 		//If it's zero we fail like this
 		if(constant_numeric_value == 0){
-			print_parse_message(PARSE_ERROR, "Array bounds may not be zero", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be zero", parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -6964,7 +6945,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		//initially define them as blank if and only if we're using an initializer
 		if(current_type_record->type->type_class != TYPE_CLASS_ARRAY && current_type_record->type->type_complete == FALSE){
 			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			return NULL;
 		}
@@ -7217,7 +7198,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	//If we did find it, that's bad
 	if(found_variable != NULL){
 		sprintf(info, "Identiifer %s has already been declared. First declared here: ", label_name.string); 
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		print_variable_name(found_variable);
 		num_errors++;
 		//give back an error node
@@ -7758,7 +7739,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		//If this is the case, the return type had better be void
 		if(current_function->signature->internal_types.function_type->returns_void == FALSE){
 			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function->return_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
 			num_errors++;
@@ -7772,7 +7753,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		//If we get here, but we do expect a void return, then this is an issue
 		if(current_function->signature->internal_types.function_type->returns_void == TRUE){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			//Also print the function name
 			print_function_name(current_function);
 			num_errors++;
@@ -7802,7 +7783,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	if(final_type == NULL){
 		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function->return_type->type_name.string,
 		  		expr_node->inferred_type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the function
 		print_function_name(current_function);
 		num_errors++;
@@ -8825,7 +8806,7 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
 	push_token(&grouping_stack, lookahead);
 
 	//Let's warn the user. Assembly inline statements are a great way to shoot yourself in the foot
-	print_parse_message(INFO, "Assembly inline statements are not analyzed by OC. Whatever is written will be executed verbatim. Please double check your assembly statements.", parser_line_num);
+	print_parse_message(MESSAGE_TYPE_INFO, "Assembly inline statements are not analyzed by OC. Whatever is written will be executed verbatim. Please double check your assembly statements.", parser_line_num);
 
 	//Grab the string constant
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -9068,9 +9049,9 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 		case ASM:
 			return assembly_inline_statement(token_stream);
 		
-		//Replace statement is an error here
-		case REPLACE:
-			return print_and_return_error("Replace statements have global effects, and therefore must be declared in the global scope", parser_line_num);
+		//A macro here would be an error
+		case MACRO:
+			return print_and_return_error("Macros have global effects, and therefore must be declared in the global scope", parser_line_num);
 
 		//By default push this back and return an expression statement
 		default:
@@ -9411,7 +9392,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	//Fail out here
 	if(found_var != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
 		num_errors++;
@@ -9419,20 +9400,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
-
-	//Fail out if this isn't null
-	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_constant_name(found_const);
-		num_errors++;
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	
 	//Now we need to see a colon
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -9510,7 +9477,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 				sprintf(info, "Type \"%s\" is immutable. If you declare variable \"%s\" with this type, you may never be able to initialize it",
 								declared_var->type_defined_as->type_name.string,
 								declared_var->var_name.string);
-				print_parse_message(WARNING, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 			}
 
 			//Fall through
@@ -9599,7 +9566,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 		//Validate that they match here
 		if(num_members != initializer_list_members){
 			sprintf(info, "Attempt to assign %d members to an array of size %d", initializer_list_members, num_members);
-			print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
 			return FALSE;
 		}
 	//Otherwise, we'll need to set the number of members accordingly here
@@ -9644,7 +9611,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		//If we exceed the number of fields given, we error out
 		if(seen_count > num_fields){
 			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_count);
-			print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
 			return FALSE;
 		}
 
@@ -9669,7 +9636,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 	//One final validation - we need to check if the field counts match
 	if(num_fields != seen_count){
 		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_count);
-		print_parse_message(PARSE_ERROR, info, initializer_list_node->line_number);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
 		return FALSE;
 	}
 
@@ -9755,7 +9722,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 		//If it's in error itself, we just leave
 		case AST_NODE_TYPE_ERR_NODE:
 			//Throw an error here
-			print_parse_message(PARSE_ERROR, "Invalid expression given as intializer", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid expression given as intializer", parser_line_num);
 			//Return null to mean failure
 			return NULL;
 
@@ -9765,7 +9732,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
 			if(target_type->type_class != TYPE_CLASS_ARRAY){
 				sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", target_type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				//Null signifies failure
 				return NULL;
 			}
@@ -9775,7 +9742,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
-				print_parse_message(PARSE_ERROR, "Invalid array intializer given", initializer_node->line_number);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid array intializer given", initializer_node->line_number);
 				return NULL;
 			}
 
@@ -9787,7 +9754,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
 			if(target_type->type_class != TYPE_CLASS_STRUCT){
 				sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", target_type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				//Null signifies failure
 				return NULL;
 			}
@@ -9797,7 +9764,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
-				print_parse_message(PARSE_ERROR, "Invalid struct intializer given", initializer_node->line_number);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct intializer given", initializer_node->line_number);
 				return NULL;
 			}
 
@@ -9829,7 +9796,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//If it's a global VAR, the initialization here must be a constant
 			if(is_global == TRUE && initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
 				//Fail out if we hit this
-				print_parse_message(PARSE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
 				return NULL;
 			}
 
@@ -9840,7 +9807,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			 */
 			if(is_memory_region(target_type) == TRUE){
 				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return NULL;
 			}
 
@@ -9850,7 +9817,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 			//Will be null if we have a failure
 			if(final_type == NULL){
 				generate_types_assignable_failure_message(info, initializer_node->inferred_type, return_type);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return NULL;
 			}
 
@@ -9870,7 +9837,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 								initializer_node->inferred_type->mutability == MUTABLE ? "mut " : "",
 								initializer_node->inferred_type->type_name.string);
 
-					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 					//NULL signifies failure
 					return NULL;
 				}
@@ -9891,7 +9858,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				if(does_enum_contain_integer_member(return_type, initializer_node->constant_value.signed_int_value) == FALSE){
 					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
 								return_type->type_name.string, initializer_node->constant_value.signed_int_value);
-					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
 					//Fail out here
 					return NULL;
@@ -9951,23 +9918,10 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Fail out here
 	if(found_var != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var); num_errors++;
 		//Return a fresh error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
-
-	//Fail out if this isn't null
-	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_constant_name(found_const);
-		num_errors++;
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
@@ -10127,7 +10081,7 @@ static u_int8_t alias_statement(ollie_token_stream_t* token_stream){
 
 	//If it is bad, we'll bail out
 	if(type_spec == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier given to alias statement", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type specifier given to alias statement", parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -10140,7 +10094,7 @@ static u_int8_t alias_statement(ollie_token_stream_t* token_stream){
 
 	//If we don't see it we're out
 	if(lookahead.tok != AS){
-		print_parse_message(PARSE_ERROR, "As keyword expected in alias statement", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "As keyword expected in alias statement", parser_line_num);
 		num_errors++;
 		//Fail out
 		return FAILURE;
@@ -10151,7 +10105,7 @@ static u_int8_t alias_statement(ollie_token_stream_t* token_stream){
 
 	//If it's bad, we're also done here
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given to alias statement", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given to alias statement", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -10164,7 +10118,7 @@ static u_int8_t alias_statement(ollie_token_stream_t* token_stream){
 
 	//If we don't see a semicolon we're out
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon expected at the end of alias statement",  parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon expected at the end of alias statement",  parser_line_num);
 		num_errors++;
 		//Fail out here
 		return FAILURE;
@@ -10224,7 +10178,7 @@ static u_int8_t definition(ollie_token_stream_t* token_stream){
 
 		//Some failure here
 		default:
-			print_parse_message(PARSE_ERROR, "Expected \"union\", \"struct\", \"fn\" or \"enum\" definer keywords", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Expected \"union\", \"struct\", \"fn\" or \"enum\" definer keywords", parser_line_num);
 			num_errors++;
 			return FAILURE;
 	}
@@ -10257,7 +10211,7 @@ static int8_t check_jump_labels(){
 		//If we didn't find it, we fail out
 		if(label == NULL){
 			sprintf(info, "Attempt to jump to nonexistent label \"%s\".", name);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			//Fail out
 			return FAILURE;
 		}
@@ -10265,14 +10219,14 @@ static int8_t check_jump_labels(){
 		//This can also happen - where we have a user trying to jump to a non-label
 		if(label->membership != LABEL_VARIABLE){
 			sprintf(info, "Variable %s exists but is not a label, so it cannot be jumped to", label->var_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			return FAILURE;
 		}
 
 		//We can also have a case where this is not null, but it isn't in the correct function scope(also bad)
 		if(strcmp(current_function->func_name.string, label->function_declared_in->func_name.string) != 0){
 			sprintf(info, "Label \"%s\" was declared in function \"%s\". You cannot jump outside of a function" , name, label->function_declared_in->func_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			return FAILURE;
 		}
 
@@ -10295,7 +10249,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 
 	//If the main function is not public, then we fail
 	if(signature->is_public == FALSE){
-		print_parse_message(PARSE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
 		return FALSE;
 	}
 
@@ -10318,7 +10272,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			//If it isn't a basic type and it isn't an i32, we fail
 			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
 				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return FALSE;
 			}
 
@@ -10328,7 +10282,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			//This must be a char** type. If it's not, we fail out
 			if(is_type_string_array(parameter_type) == FALSE){
 				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return FALSE;
 			}
 
@@ -10338,14 +10292,14 @@ static u_int8_t validate_main_function(generic_type_t* type){
 		//We'll print an error and leave if this is the case
 		default:
 			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			return FALSE;
 	}
 
 	//Finally, we'll validate the return type of the main function. It must also always be an i32
 	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
 		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		return FALSE;
 	}
 
@@ -10373,7 +10327,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 	//If it didn't work we fail immediately
 	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Expected identifier in function parameter declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Expected identifier in function parameter declaration", parser_line_num);
 		num_errors++;
 		return NULL;
 	}
@@ -10388,7 +10342,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	//Fail out here
 	if(found_var != NULL){
 		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		//Also print out the original declaration
 		print_variable_name(found_var);
 		num_errors++;
@@ -10406,7 +10360,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 	//If it isn't a colon, we're out
 	if(lookahead.tok != COLON){
-		print_parse_message(PARSE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
 		num_errors++;
 		//Return NULL to signify failure
 		return NULL;
@@ -10417,7 +10371,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	
 	//If the node fails, we'll just send the error up the chain
 	if(type == NULL){
-		print_parse_message(PARSE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
 		num_errors++;
 		//It's already an error, just propogate it up
 		return NULL;
@@ -10426,7 +10380,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	//If this is an incomplete type, then we also fail
 	if(type->type_complete == FALSE){
 		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", type->type_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
 		//It's already an error, just propogate it up
 		return NULL;
@@ -10498,7 +10452,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 
 	//If we didn't find it, no point in going further
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Left parenthesis expected before parameter list", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Left parenthesis expected before parameter list", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -10515,7 +10469,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		case R_PAREN:
 			//If we have a mismatch, we can return these
 			if(pop_token(&grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
@@ -10526,7 +10480,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 				//If we have a mismatch, we fail out
 				if(internal_function_type->num_params != 0){
 					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->num_params);
-					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 					num_errors++;
 					return FAILURE;
 				}
@@ -10542,14 +10496,14 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 
 			//Fail out if we don't see this
 			if(lookahead.tok != R_PAREN){
-				print_parse_message(PARSE_ERROR, "Closing parenthesis expected after void parameter list declaration", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected after void parameter list declaration", parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
 
 			//Also check for grouping
 			if(pop_token(&grouping_stack).tok != L_PAREN){
-				print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
@@ -10560,7 +10514,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 				//If we have a mismatch, we fail out
 				if(internal_function_type->num_params != 0){
 					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->num_params);
-					print_parse_message(PARSE_ERROR, info, parser_line_num);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 					num_errors++;
 					return FAILURE;
 				}
@@ -10588,7 +10542,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 
 		//It's invalid, we'll just send it up the chain
 		if(parameter == NULL){
-			print_parse_message(PARSE_ERROR, "Invalid parameter declaration found in parameter list", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid parameter declaration found in parameter list", parser_line_num);
 			num_errors++;
 			return FAILURE;;
 		}
@@ -10606,7 +10560,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 
 			//This means that we exceeded the number of parameters
 			if(status == FAILURE){
-				print_parse_message(PARSE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
@@ -10618,7 +10572,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			//Check if we've got too many parameters
 			if(absolute_parameter_number > internal_function_type->num_params){
 				sprintf(info, "Function %s was defined with only %d parameters", function_record->func_name.string, internal_function_type->num_params);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
@@ -10626,14 +10580,14 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			//We need to ensure that the mutability levels match here
 			if(internal_function_type->parameters[absolute_parameter_number - 1]->mutability == MUTABLE && parameter->type_defined_as->mutability == NOT_MUTABLE){
 				sprintf(info, "Parameter %s was defined as immutable, but predeclared as mutable", parameter->var_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 
 			//The other option for a mismatch
 			} else if(internal_function_type->parameters[absolute_parameter_number - 1]->mutability == NOT_MUTABLE && parameter->type_defined_as->mutability == MUTABLE){
 				sprintf(info, "Parameter %s was defined as mutable, but predeclared as immutable", parameter->var_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
@@ -10641,7 +10595,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			//If the mutability levels are off, we fail out
 			if(internal_function_type->parameters[absolute_parameter_number - 1]->mutability != parameter->type_defined_as->mutability){
 				sprintf(info, "Mutability mismatch for parameter %d", absolute_parameter_number);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
@@ -10654,7 +10608,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			//If these 2 don't match, we fail
 			if(defined_type != declared_type){
 				sprintf(info, "Parameter %d was defined with type %s, but declared with type %s",  absolute_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
-				print_parse_message(PARSE_ERROR, info, parser_line_num);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
@@ -10668,7 +10622,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		//If this fails that means we exceeded the maximum number of parameters
 		//This means that we exceeded the number of parameters
 		if(status == FAILURE){
-			print_parse_message(PARSE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
 			num_errors++;
 			return FAILURE;
 		}
@@ -10686,21 +10640,21 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 	//If we're predeclaring, we need to check that the parameter count matches
 	if(defining_predeclared_function == TRUE && function_record->number_of_params != internal_function_type->num_params){
 		sprintf(info, "Function %s was declared with %d parameters, but was only defined with %d", function_record->func_name.string, internal_function_type->num_params, function_record->number_of_params);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
 
 	//Once we reach here, we need to check for the R_PAREN
 	if(lookahead.tok != R_PAREN){
-		print_parse_message(PARSE_ERROR, "Closing parenthesis expected after parameter list", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected after parameter list", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
 
 	//Otherwise it worked, so we need to check matching
 	if(pop_token(&grouping_stack).tok != L_PAREN){
-		print_parse_message(PARSE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 		num_errors++;
 		return FAILURE;
 	}
@@ -10812,19 +10766,6 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//Check for duplicate types
 	if(do_duplicate_types_exist(function_name.string) == TRUE){
 		//Create and return an error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name.string);
-
-	//Fail out if this isn't null
-	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_constant_name(found_const);
-		num_errors++;
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
@@ -11053,7 +10994,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Fail out if found and it's already been defined
 	if(function_record != NULL && function_record->defined == TRUE){
 		sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name.string);
-		print_parse_message(PARSE_ERROR, info, current_line);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, current_line);
 		print_function_name(function_record);
 		num_errors++;
 		//Create and return an error node
@@ -11071,19 +11012,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		//Check for duplicate types
 		if(do_duplicate_types_exist(function_name.string) == TRUE){
 			//Create and return an error node
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-		}
-
-		//Let's see if we've already named a constant this
-		symtab_constant_record_t* found_const = lookup_constant(constant_symtab, function_name.string);
-
-		//Fail out if this isn't null
-		if(found_const != NULL){
-			sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", function_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
-			//Also print out the original declaration
-			print_constant_name(found_const);
-			num_errors++;
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
@@ -11177,7 +11105,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	if(definining_predeclared_function == TRUE){
 		if(strcmp(type->type_name.string, function_record->return_type->type_name.string) != 0){
 			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_record->return_type->type_name.string);
-			print_parse_message(PARSE_ERROR, info, parser_line_num);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			print_function_name(function_record);
 			num_errors++;
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
@@ -11244,7 +11172,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	} else {
 		sprintf(info, "Function %s has no body", function_record->func_name.string);
-		print_parse_message(WARNING, info, parser_line_num);
+		print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 	}
 
 	//If this is the main funcition, it has been called implicitly
@@ -11267,122 +11195,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//All good so we can get out
 	return function_node;
-}
-
-
-/**
- * Handle a replace statement. A replace statement allows the programmer to eliminate any/all
- * magic numbers in the program. A replace statement is the only kind of statement that 
- *
- * Example:
- * #replace MY_INT with 2;
- */
-static u_int8_t replace_statement(ollie_token_stream_t* token_stream){
-	//Lookahead token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we failed, we're done here
-	if(lookahead.tok != IDENT){
-		print_parse_message(PARSE_ERROR, "Invalid identifier given to replace statement", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-	
-	//Now that we have the ident, we need to make sure that it's not a duplicate
-	//Let's get a pointer to the name for convenience
-	dynamic_string_t name = lookahead.lexeme;
-
-	//Check for function duplicates
-	if(do_duplicate_functions_exist(name.string) == TRUE){
-		return FAILURE;
-	}
-
-	//Check for type duplicates
-	if(do_duplicate_types_exist(name.string) == TRUE){
-		return FAILURE;
-	}
-
-	//Check that it isn't some duplicated variable name. We will only check in the
-	//local scope for this one
-	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_variable_name(found_var); num_errors++;
-		return FAILURE;
-	}
-
-	//Let's see if we've already named a constant this
-	symtab_constant_record_t* found_const = lookup_constant(constant_symtab, name.string);
-
-	//Fail out if this isn't null
-	if(found_const != NULL){
-		sprintf(info, "Attempt to redefine constant \"%s\". First defined here:", name.string);
-		print_parse_message(PARSE_ERROR, info, parser_line_num);
-		//Also print out the original declaration
-		print_constant_name(found_const);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//We now need to see the with keyword
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we don't see it, then we're done here
-	if(lookahead.tok != WITH){
-		print_parse_message(PARSE_ERROR, "With keyword required in replace statement", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	/**
-	 * We now need to see a constant expression, but we will allow for some leniency
-	 * by the logical or expression parsing. If a user types something like typesize(int)
-	 * in, then that should still work for our replace statement
-	 */
-	generic_ast_node_t* constant_node = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
-
-	switch(constant_node->ast_node_type){
-		//THis is a straight failure, error has already happened
-		case AST_NODE_TYPE_ERR_NODE:
-			return FAILURE;
-
-		//The one good case here
-		case AST_NODE_TYPE_CONSTANT:
-			break;
-
-		//Anything else is invalid, we'll fail out if that's the case
-		default:
-			print_parse_message(PARSE_ERROR, "Replace statements must have an expression that simplifies to a single constant", parser_line_num);
-			return FAILURE;
-	}
-
-	//One last thing, we need to see a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we don't see this, we're done
-	if(lookahead.tok != SEMICOLON){
-		print_parse_message(PARSE_ERROR, "Semicolon required after replace statement", parser_line_num);
-		printf("%s\n\n\n", lexitem_to_string(&lookahead));
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Now we're ready for assembly and insertion
-	symtab_constant_record_t* created_const = create_constant_record(name);
-
-	//Once we've created it, we'll pack it with values
-	created_const->constant_node = constant_node;
-	created_const->line_number = parser_line_num;
-
-	//Insert the record into the symtab
-	insert_constant(constant_symtab, created_const);
-
-	//And we're all set, return success(1)
-	return SUCCESS;
 }
 
 
@@ -11455,7 +11267,6 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
  * <declaration-partition>::= <function-definition>
  *                        	| <declaration>
  *                        	| <definition>
- *                        	| <replace-statement>
  */
 static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_stream){
 	//Lookahead token
@@ -11467,7 +11278,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	if(lookahead.tok == ERROR){
-		print_parse_message(PARSE_ERROR, "Fatal error. Found error token\n", lookahead.line_num);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Fatal error. Found error token\n", lookahead.line_num);
 		num_errors++;
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
@@ -11502,19 +11313,6 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 		case ALIAS:
 			//Call the helper
 			status = alias_statement(token_stream);
-
-			//If it's bad, we'll return an error node
-			if(status == FAILURE){
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-			}
-
-			//Otherwise we'll just return null, the caller will know what to do with it
-			return NULL;
-
-		//Let the replace rule handle this
-		case REPLACE:	
-			//We don't need to put it back
-			status = replace_statement(token_stream);
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
@@ -11646,7 +11444,7 @@ static inline u_int8_t validate_inlined_functions_are_non_revursive(function_sym
 				//This is our fail case - we may not have this
 				if(is_recursive == TRUE){
 					sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
-					print_parse_message(PARSE_ERROR, info, cursor->line_number);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, cursor->line_number);
 					num_errors++;
 					error_count++;
 				}
@@ -11688,7 +11486,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	function_symtab = function_symtab_alloc();
 	variable_symtab = variable_symtab_alloc();
 	type_symtab = type_symtab_alloc();
-	constant_symtab = constants_symtab_alloc(); 
 
 	//For the type and variable symtabs, their scope needs to be initialized before
 	//anything else happens
@@ -11750,7 +11547,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	results->function_symtab = function_symtab;
 	results->variable_symtab = variable_symtab;
 	results->type_symtab = type_symtab;
-	results->constant_symtab = constant_symtab;
 	results->grouping_stack = grouping_stack;
 	//AST root
 	results->root = prog;

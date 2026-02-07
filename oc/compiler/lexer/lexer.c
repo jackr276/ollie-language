@@ -22,7 +22,7 @@
 #include "../utils/constants.h"
 
 //Total number of keywords
-#define KEYWORD_COUNT 53
+#define KEYWORD_COUNT 54
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -44,20 +44,20 @@ static char* file_name;
 static char info[2000];
 
 //Token array, we will index using their enum values
-static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
-				    EXTERNAL, TRUE_CONST, FALSE_CONST, INLINE};
+				    EXTERNAL, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO};
 
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
-						 "require", "replace", "u8", "i8", "u16",
+						 "require", "u8", "i8", "u16",
 						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false", "inline"};
+						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false", "inline", "$macro", "$endmacro"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -192,8 +192,10 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "jump";
 		case REQUIRE:
 			return "require";
-		case REPLACE:
-			return "replace";
+		case MACRO:
+			return "$macro";
+		case ENDMACRO:
+			return "$endmacro";
 		case U8:
 			return "u8";
 		case I8:
@@ -702,7 +704,6 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 						break;
 
-					//Pound for label identifiers
 					case '#':
 						lex_item.tok = POUND;
 						lex_item.line_num = line_number;
@@ -1225,7 +1226,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						break;
 
 					default:
-						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#' || ch == '_'){
+						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') 
+							|| ch == '$'
+							|| ch == '%' 
+							|| ch == '_'){
 							lexeme = dynamic_string_alloc();
 							dynamic_string_add_char_to_back(&lexeme, ch);
 							current_state = IN_IDENT;
@@ -1249,8 +1253,11 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 			case IN_IDENT:
 				//Is it a number, letter, or _ or $?. If so, we can have it in our ident
-				if(ch == '_' || ch == '$' || (ch >= 'a' && ch <= 'z') 
-				   || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')){
+				if(ch == '_' 
+					|| ch == '$' 
+					|| (ch >= 'a' && ch <= 'z') 
+				   	|| (ch >= 'A' && ch <= 'Z') 
+					|| (ch >= '0' && ch <= '9')){
 					dynamic_string_add_char_to_back(&lexeme, ch);
 
 				} else {

@@ -573,23 +573,13 @@ dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
  * Simply prints a parse message in a nice formatted way. For the CFG, there
  * are no parser line numbers
 */
-static void print_cfg_message(parse_message_type_t message_type, char* info, u_int16_t line_number){
-	//Build and populate the message
-	parse_message_t parse_message;
-	parse_message.message = message_type;
-	parse_message.info = info;
-
-	//Fatal if error
-	if(message_type == PARSE_ERROR){
-		parse_message.fatal = 1;
-	}
-
+static inline void print_cfg_message(error_message_type_t message_type, char* info, u_int32_t line_number){
 	//Now print it
 	//Mapped by index to the enum values
-	char* type[] = {"WARNING", "ERROR", "INFO"};
+	const char* type[] = {"WARNING", "ERROR", "INFO", "DEBUG"};
 
 	//Print this out on a single line
-	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[parse_message.message], parse_message.info);
+	fprintf(stdout, "\n[LINE %d: COMPILER %s]: %s\n", line_number, type[message_type], info);
 }
 
 
@@ -947,7 +937,7 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 static void add_phi_statement(basic_block_t* target, instruction_t* phi_statement){
 	//Generic fail case - this should never happen
 	if(target == NULL){
-		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);
+		print_parse_message(MESSAGE_TYPE_ERROR, "NULL BASIC BLOCK FOUND", 0);
 		exit(1);
 	}
 
@@ -1000,7 +990,7 @@ static void add_phi_parameter(instruction_t* phi_statement, three_addr_var_t* va
 void add_statement(basic_block_t* target, instruction_t* statement_node){
 	//Generic fail case
 	if(target == NULL){
-		print_parse_message(PARSE_ERROR, "NULL BASIC BLOCK FOUND", 0);
+		print_parse_message(MESSAGE_TYPE_ERROR, "NULL BASIC BLOCK FOUND", 0);
 		exit(1);
 	}
 
@@ -4501,7 +4491,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				//This should never occur
 				default:
-					print_parse_message(PARSE_ERROR, "Fatal internal compiler error. Unrecognized node type for address operation", unary_expression_child->line_number);
+					print_parse_message(MESSAGE_TYPE_ERROR, "Fatal internal compiler error. Unrecognized node type for address operation", unary_expression_child->line_number);
 					exit(0);
 			}
 
@@ -7236,7 +7226,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
+					print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
 					(*num_warnings_ref)++;
 				}
 
@@ -7658,7 +7648,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 		if(current_block == function_exit_block){
 			//Warn that we have unreachable code here
 			if(ast_cursor->next_sibling != NULL){
-				print_cfg_message(WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
+				print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
 			}
 
 			break;
@@ -7730,7 +7720,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//If there is anything after this statement, it is UNREACHABLE
 				if(ast_cursor->next_sibling != NULL){
-					print_cfg_message(WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
+					print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after return statement", ast_cursor->next_sibling->line_number);
 					(*num_warnings_ref)++;
 				}
 
@@ -8155,7 +8145,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 		if(current_block == function_exit_block){
 			//Warn that we have unreachable code here
 			if(ast_cursor->next_sibling != NULL){
-				print_cfg_message(WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
+				print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
 			}
 
 			break;
@@ -8199,7 +8189,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				|| function_defined_in->return_type->basic_type_token != VOID)
 				//It's a technically supported use-case to not put a return on main
 				&& is_main_function == FALSE){
-				print_parse_message(WARNING, "Non-void function does not return in all control paths", 0);
+				print_parse_message(MESSAGE_TYPE_WARNING, "Non-void function does not return in all control paths", 0);
 			}
 
 			//If it's not a void type, we do one thing
@@ -8849,7 +8839,7 @@ static cfg_result_package_t emit_complex_initialization(basic_block_t* current_b
 
 		//We should never actually hit this. If we do it's bad news
 		default:
-			print_parse_message(PARSE_ERROR, "Fatal Internal Compiler Error. Unreachable path reached", 0);
+			print_parse_message(MESSAGE_TYPE_ERROR, "Fatal Internal Compiler Error. Unreachable path reached", 0);
 			exit(1);
 	}
 }
@@ -9296,7 +9286,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 
 	// -1 block ID, this means that the whole thing failed
 	if(visit_prog_node(cfg, results->root) == FALSE){
-		print_parse_message(PARSE_ERROR, "CFG was unable to be constructed", 0);
+		print_parse_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
 
