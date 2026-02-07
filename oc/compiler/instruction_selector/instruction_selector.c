@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -3590,85 +3591,69 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	//Extract the assignee and the op1
 	three_addr_var_t* assignee = instruction->assignee;
 	three_addr_var_t* op1 = instruction->op1;
-
+	
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
 	if(is_type_unsigned_64_bit(assignee->type) == TRUE){
+		//We only case if the op1 is a 32 bit int
+		if(is_type_32_bit_int(op1->type) == TRUE){
+			//Emit a variable copy of the source
+			op1 = emit_var_copy(op1);
 
-	} else if(is_type)
+			//Reassign it's type to be the desired type
+			op1->type = assignee->type;
 
+			//Select the size appropriately after the type is reassigned
+			op1->variable_size = get_type_size(op1->type);
+		}
 
-	//Go based on the basic type token here, if one exists
-	switch(assignee->type->basic_type_token){
-		//Special case if there's a U64
-		/**
-		 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-		 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-		 * zero pad when 32 bit moves happen
-		 */
-		case U64:
-			if(is_type_32_bit_int(op1->type) == TRUE){
-				//Emit a variable copy of the source
-				op1 = emit_var_copy(op1);
+	/**
+	 * If we have a case where we are trying to move an 8/16 bit
+	 * value into an f32/f64 value, unfortunately no x86-64 instructions
+	 * exist to do that conversion. Instead, we'll need to first convert
+	 * this value into a 32 bit integer, and then convert that into
+	 * a floating point value
+	 */
+	} else if(is_type_floating_point(assignee->type) == TRUE){
+		switch(op1->type->basic_type_token){
+			//Signed values, we will use an i32
+			case CHAR:
+			case I8:
+			case I16:
+				//Move the old value into an i32 slot
+				type_adjusted_op1 = emit_temp_var(i32);
+				converting_move = emit_move_instruction(type_adjusted_op1, op1);
 
-				//Reassign it's type to be the desired type
-				op1->type = assignee->type;
+				//This goes before our given instruction
+				insert_instruction_before_given(converting_move, instruction);
 
-				//Select the size appropriately after the type is reassigned
-				op1->variable_size = get_type_size(op1->type);
-			}
-			
-			break;
+				//Our real op1 is now where this one came from
+				op1 = converting_move->destination_register;
 
-		/**
-		 * If we have a case where we are trying to move an 8/16 bit
-		 * value into an f32/f64 value, unfortunately no x86-64 instructions
-		 * exist to do that conversion. Instead, we'll need to first convert
-		 * this value into a 32 bit integer, and then convert that into
-		 * a floating point value
-		 */
-		case F32:
-		case F64:
-			switch(op1->type->basic_type_token){
-				//Signed values, we will use an i32
-				case CHAR:
-				case I8:
-				case I16:
-					//Move the old value into an i32 slot
-					type_adjusted_op1 = emit_temp_var(i32);
-					converting_move = emit_move_instruction(type_adjusted_op1, op1);
+				break;
 
-					//This goes before our given instruction
-					insert_instruction_before_given(converting_move, instruction);
+			//Unsigned values, we'll use a u32
+			case U8:
+			case U16:
+				//Move the old value into a u32 slot
+				type_adjusted_op1 = emit_temp_var(u32);
+				converting_move = emit_move_instruction(type_adjusted_op1, op1);
 
-					//Our real op1 is now where this one came from
-					op1 = converting_move->destination_register;
+				//This goes before our given instruction
+				insert_instruction_before_given(converting_move, instruction);
 
-					break;
+				//Our real op1 is now where this one came from
+				op1 = converting_move->destination_register;
 
-				//Unsigned values, we'll use a u32
-				case U8:
-				case U16:
-					//Move the old value into a u32 slot
-					type_adjusted_op1 = emit_temp_var(u32);
-					converting_move = emit_move_instruction(type_adjusted_op1, op1);
+				break;
 
-					//This goes before our given instruction
-					insert_instruction_before_given(converting_move, instruction);
-
-					//Our real op1 is now where this one came from
-					op1 = converting_move->destination_register;
-
-					break;
-
-				//Everything else do nothing
-				default:
-					break;
-			}
-			
-			break;
-			
-		//Just leave
-		default:
-			break;
+			//Everything else do nothing
+			default:
+				break;
+		}
 	}
 
 	//We have both a destination and source size to look at here
@@ -3748,83 +3733,72 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 	//For byte/short to float/double
 	three_addr_var_t* type_adjusted_source;
 
-	//Go based on the basic type token here, if one exists
-	switch(destination_type->basic_type_token){
-		//Special case if there's a U64
-		/**
-		 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-		 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-		 * zero pad when 32 bit moves happen
-		 */
-		case U64:
-			if(is_type_32_bit_int(source->type) == TRUE){
-				//Emit a variable copy of the source
-				source = emit_var_copy(source);
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
+	if(is_type_unsigned_64_bit(destination_type) == TRUE){
+		if(is_type_32_bit_int(source->type) == TRUE){
+			//Emit a variable copy of the source
+			source = emit_var_copy(source);
 
-				//Reassign it's type to be the desired type
-				source->type = source->type;
+			//Reassign it's type to be the desired type
+			source->type = destination_type;
 
-				//Select the size appropriately after the type is reassigned
-				source->variable_size = get_type_size(source->type);
+			//Select the size appropriately after the type is reassigned
+			source->variable_size = get_type_size(source->type);
 
-				//We don't need to go on here, we've already done the work that we
-				//need to
-				return source;
-			}
-			
-			break;
+			//We don't need to go on here, we've already done the work that we
+			//need to
+			return source;
+		}
 
-		/**
-		 * If we have a case where we are trying to move an 8/16 bit
-		 * value into an f32/f64 value, unfortunately no x86-64 instructions
-		 * exist to do that conversion. Instead, we'll need to first convert
-		 * this value into a 32 bit integer, and then convert that into
-		 * a floating point value
-		 */
-		case F32:
-		case F64:
-			switch(source->type->basic_type_token){
-				//Signed values, we will use an i32
-				case CHAR:
-				case I8:
-				case I16:
-					//Move the old value into an i32 slot
-					type_adjusted_source = emit_temp_var(i32);
-					converting_move = emit_move_instruction(type_adjusted_source, source);
+	/**
+	 * If we have a case where we are trying to move an 8/16 bit
+	 * value into an f32/f64 value, unfortunately no x86-64 instructions
+	 * exist to do that conversion. Instead, we'll need to first convert
+	 * this value into a 32 bit integer, and then convert that into
+	 * a floating point value
+	 */
+	} else if(is_type_floating_point(destination_type) == TRUE){
+		switch(source->type->basic_type_token){
+			//Signed values, we will use an i32
+			case CHAR:
+			case I8:
+			case I16:
+				//Move the old value into an i32 slot
+				type_adjusted_source = emit_temp_var(i32);
+				converting_move = emit_move_instruction(type_adjusted_source, source);
 
-					//This goes before our given instruction
-					insert_instruction_before_given(converting_move, after_instruction);
+				//This goes before our given instruction
+				insert_instruction_before_given(converting_move, after_instruction);
 
-					//Our real op1 is now where this one came from
-					source = converting_move->destination_register;
+				//Our real op1 is now where this one came from
+				source = converting_move->destination_register;
 
-					break;
+				break;
 
-				//Unsigned values, we'll use a u32
-				case U8:
-				case U16:
-					//Move the old value into a u32 slot
-					type_adjusted_source = emit_temp_var(u32);
-					converting_move = emit_move_instruction(type_adjusted_source, source);
+			//Unsigned values, we'll use a u32
+			case U8:
+			case U16:
+				//Move the old value into a u32 slot
+				type_adjusted_source = emit_temp_var(u32);
+				converting_move = emit_move_instruction(type_adjusted_source, source);
 
-					//This goes before our given instruction
-					insert_instruction_before_given(converting_move, after_instruction);
+				//This goes before our given instruction
+				insert_instruction_before_given(converting_move, after_instruction);
 
-					//Our real op1 is now where this one came from
-					source = converting_move->destination_register;
+				//Our real op1 is now where this one came from
+				source = converting_move->destination_register;
 
-					break;
+				break;
 
-				//Everything else do nothing
-				default:
-					break;
-			}
-			
-			break;
-			
-		//Just leave
-		default:
-			break;
+			//Everything else do nothing
+			default:
+				break;
+		}
+
 	}
 
 	//We have a temp var based on the destination type
