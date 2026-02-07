@@ -172,7 +172,7 @@ finalize_macro:
  * to do with macro replacement. This will come after in the replacement
  * pass
  */
-static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab){
+static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* num_macros){
 	//Standard holder for the result of each macro consumption
 	u_int8_t result;
 
@@ -202,11 +202,14 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 					return FAILURE;
 				}
 
+				//We've seen one more macro here
+				(*num_macros)++;
+
 				break;
 
 			//If we see this, that means we have a floating endmacro in there
 			case ENDMACRO:
-				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Floating #endmacro directive declared. Are you missing a #macro directive", token->line_num);
+				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Floating #endmacro directive declared. Are you missing a #macro directive?", token->line_num);
 				preprocessor_error_count++;
 				return FAILURE;
 
@@ -324,6 +327,8 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 		}
 	}
 
+	//At the very end - we 
+
 	//If we made it all the way down here then this worked
 	return SUCCESS;
 }
@@ -348,6 +353,9 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	//Store the file name up top globally
 	current_file_name = file_name;
 
+	//Keep trace of how many macros we've seen
+	u_int32_t num_macros = 0;
+
 	/**
 	 * Step 0: we need a customized macro symtab for ease of lookup. This symtab
 	 * will allow us to store everything we need we near O(1) access
@@ -361,7 +369,7 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	 * involved in that macro as "ignorable". This will cause the second replacement pass to ignore
 	 * those tokens when we go through the stream again, avoiding reconsumption
 	*/
-	u_int8_t consumption_pass_result = macro_consumption_pass(stream, macro_symtab);
+	u_int8_t consumption_pass_result = macro_consumption_pass(stream, macro_symtab, &num_macros);
 
 	//If we failed here then there's no point in going further
 	if(consumption_pass_result == FAILURE){
@@ -371,6 +379,8 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 		goto finalizer;
 	}
 
+
+	//TODO - if num macros is 0, then we do *not* need a replacement pass, it would be a complete waste
 
 finalizer:
 	//Package with this the errors & warnings
