@@ -86,8 +86,6 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		return FAILURE;
 	}
 
-	printf("FOUND MACRO\n");
-
 	//IMPORTANT - flag that this token needs to be ignored by the replacer
 	lookahead->ignore = TRUE;
 
@@ -98,6 +96,18 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//If we did not see an identifier then we are in bad shape here
 	if(lookahead->tok != IDENT){
 		sprintf(info_message, "Expected identifier after #macro keyword but got %s", lexitem_to_string(lookahead));
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Let's see if we're able to find this macro record. If we are, then we have an issue because that would
+	//be a duplicated name
+	symtab_macro_record_t* found_macro = lookup_macro(macro_symtab, lookahead->lexeme.string);
+
+	//Fail case - we have a duplicate
+	if(found_macro != NULL){
+		sprintf(info_message, "The macro \"%s\" has already been defined. Originally defined on line %d", lookahead->lexeme.string, found_macro->line_number);
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
 		preprocessor_error_count++;
 		return FAILURE;
@@ -305,7 +315,8 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 					break;
 				}
 
-				//TODO - index manip.
+				//Bump the old array index up here by the length of the macro
+				old_array_index += found_macro->tokens.current_index;
 
 				//Use the new array and the macro we found to do our substitution
 				u_int8_t substitution_result = perform_macro_substitution(&new_array, found_macro);
@@ -381,8 +392,18 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 		goto finalizer;
 	}
 
+	/**
+	 * If we found no macros at all, then we do not need to do anything with a replacement
+	 * pass. This would just be wasteful. Instead, we will just go right to the end
+	 */
+	if(num_macros == 0){
+		goto finalizer;
+	}
 
-	//TODO - if num macros is 0, then we do *not* need a replacement pass, it would be a complete waste
+	//Otherwise, we did see at least one macro. This is the point where we need to do a replacement
+	//pass
+	//TODO replacmenet pass
+	
 
 finalizer:
 	//Package with this the errors & warnings

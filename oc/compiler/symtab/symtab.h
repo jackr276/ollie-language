@@ -274,8 +274,9 @@ struct symtab_macro_record_t{
 	//The hash of it
 	u_int64_t hash;
 	//The array of all tokens in the macro
-	//TODO ADD MORE
 	ollie_token_array_t tokens;
+	//The total token lenght, including the begin/end tokens
+	u_int32_t total_token_count;
 	//Line number of declaration
 	u_int32_t line_number;
 };
