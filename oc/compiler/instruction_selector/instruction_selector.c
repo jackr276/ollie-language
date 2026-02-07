@@ -217,6 +217,26 @@ static inline u_int8_t is_type_32_bit_int(generic_type_t* type){
 }
 
 
+/**
+ * Is the given type a floating point value
+ */
+static inline u_int8_t is_type_floating_point(generic_type_t* type){
+	//If it's not a basic type we're done
+	if(type->type_class != TYPE_CLASS_BASIC){
+		return FALSE;
+	}
+
+	//Otherwise it is a basic type
+	switch(type->basic_type_token){
+		//Our only real cases here
+		case F32:
+		case F64:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
 
 /**
  * Is the source register for a given move instruction "clean" or not. Clean means
@@ -3517,6 +3537,10 @@ static inline instruction_t* emit_direct_xmm_xorpX_instruction(three_addr_var_t*
  * Emit a movX instruction
  *
  * This movement instruction will handle all converting move logic internally
+ *
+ *
+ * TODO - how are we going to handle the potential that this emits more than one instruction? Will that
+ * ever even happen?
  */
 static instruction_t* emit_move_instruction(three_addr_var_t* destination, three_addr_var_t* source){
 	//First we'll allocate it
@@ -3566,6 +3590,11 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	//Extract the assignee and the op1
 	three_addr_var_t* assignee = instruction->assignee;
 	three_addr_var_t* op1 = instruction->op1;
+
+	if(is_type_unsigned_64_bit(assignee->type) == TRUE){
+
+	} else if(is_type)
+
 
 	//Go based on the basic type token here, if one exists
 	switch(assignee->type->basic_type_token){
@@ -3714,21 +3743,88 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
  * finding the converting moves, and inserting
  */
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
-	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-	//zero pad when 32 bit moves happen
-	if(is_type_unsigned_64_bit(destination_type) == TRUE && is_type_32_bit_int(source->type) == TRUE){
-		//Emit a variable copy of the source
-		three_addr_var_t* converted = emit_var_copy(source);
+	//The conversion instruction, if we need one
+	instruction_t* converting_move;
+	//For byte/short to float/double
+	three_addr_var_t* type_adjusted_source;
 
-		//Reassign it's type to be the desired type
-		converted->type = destination_type;
+	//Go based on the basic type token here, if one exists
+	switch(destination_type->basic_type_token){
+		//Special case if there's a U64
+		/**
+		 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+		 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+		 * zero pad when 32 bit moves happen
+		 */
+		case U64:
+			if(is_type_32_bit_int(source->type) == TRUE){
+				//Emit a variable copy of the source
+				source = emit_var_copy(source);
 
-		//Select the size appropriately after the type is reassigned
-		converted->variable_size = get_type_size(converted->type);
+				//Reassign it's type to be the desired type
+				source->type = source->type;
 
-		//We don't need to deal with a move at all in this case, we can just leave here
-		return converted;
+				//Select the size appropriately after the type is reassigned
+				source->variable_size = get_type_size(source->type);
+
+				//We don't need to go on here, we've already done the work that we
+				//need to
+				return source;
+			}
+			
+			break;
+
+		/**
+		 * If we have a case where we are trying to move an 8/16 bit
+		 * value into an f32/f64 value, unfortunately no x86-64 instructions
+		 * exist to do that conversion. Instead, we'll need to first convert
+		 * this value into a 32 bit integer, and then convert that into
+		 * a floating point value
+		 */
+		case F32:
+		case F64:
+			switch(source->type->basic_type_token){
+				//Signed values, we will use an i32
+				case CHAR:
+				case I8:
+				case I16:
+					//Move the old value into an i32 slot
+					type_adjusted_source = emit_temp_var(i32);
+					converting_move = emit_move_instruction(type_adjusted_source, source);
+
+					//This goes before our given instruction
+					insert_instruction_before_given(converting_move, after_instruction);
+
+					//Our real op1 is now where this one came from
+					source = converting_move->destination_register;
+
+					break;
+
+				//Unsigned values, we'll use a u32
+				case U8:
+				case U16:
+					//Move the old value into a u32 slot
+					type_adjusted_source = emit_temp_var(u32);
+					converting_move = emit_move_instruction(type_adjusted_source, source);
+
+					//This goes before our given instruction
+					insert_instruction_before_given(converting_move, after_instruction);
+
+					//Our real op1 is now where this one came from
+					source = converting_move->destination_register;
+
+					break;
+
+				//Everything else do nothing
+				default:
+					break;
+			}
+			
+			break;
+			
+		//Just leave
+		default:
+			break;
 	}
 
 	//We have a temp var based on the destination type
