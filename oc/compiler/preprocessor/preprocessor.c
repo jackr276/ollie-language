@@ -127,6 +127,9 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		//Refresh the lookahead token
 		lookahead = get_token_pointer_and_increment(token_array, index);
 
+		//Bump the number of tokens in this macro
+		macro_record->total_token_count++;
+
 		//Based on our token here we'll do a few things
 		switch(lookahead->tok){
 			//This is bad - there is no such thing as a nested macro and we are already
@@ -144,7 +147,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 				//This is invalid, we cannot have a completely 
 				//empty macro
 				if(macro_token_array->current_index == 0){
-					sprintf(info_message, "Ollie macro %s is empty and is therefore invalid", macro_record->name.string);
+					sprintf(info_message, "Ollie macro \"%s\" is empty and is therefore invalid", macro_record->name.string);
 					print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, macro_record->line_number);
 					preprocessor_error_count++;
 					return FAILURE;
@@ -152,6 +155,16 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 
 				//Otherwise this should be fine, so we will go ahead and add this on in
 				goto finalize_macro;
+
+			/**
+			 * If we've seen the done token that is bad. It means that the user never added the $endmacro
+			 * binder for the preprocessor to hit. This is also a fail case
+			 */
+			case DONE:
+				sprintf(info_message, "End of file hit. Are you missing a \"$endmacro\" directive for macro \"%s\"?", macro_record->name.string);
+				print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, macro_record->line_number);
+				preprocessor_error_count++;
+				return FAILURE;
 
 			//In theory anything else that we see in here is valid, so we'll
 			//just do our bookkeeping and move along
@@ -275,19 +288,19 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 	symtab_macro_record_t* found_macro = NULL;
 
 	//This is the old token array, with all of the macros in it
-	ollie_token_array_t* old_array =  &(stream->token_stream);
+	ollie_token_array_t* old_token_array =  &(stream->token_stream);
 
 	//This is the entirely new token array, that we will eventually be parsing in
 	//the parser
-	ollie_token_array_t new_array = token_array_alloc();
+	ollie_token_array_t new_token_array = token_array_alloc();
 
 	//The index into the old token array
-	u_int32_t old_array_index = 0;
+	u_int32_t old_token_array_index = 0;
 
 	//So long as we're within the acceptable bounds of the array
-	while(old_array_index < old_array->current_index){
+	while(old_token_array_index < old_token_array->current_index){
 		//Extract a pointer to the current token
-		current_token_pointer = token_array_get_pointer_at(old_array, old_array_index);
+		current_token_pointer = token_array_get_pointer_at(old_token_array, old_token_array_index);
 
 		//Go based on what kind of token this is. If we have an identifier, then
 		//that could possibly be a macro for us
@@ -295,6 +308,9 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 			//If we have an identifier, then there is a chance but not a guarantee
 			//that we are performing a macro substitution
 			case IDENT:
+				//Advance this no matter what
+				old_token_array_index++;
+
 				//Let's see if we have anything here
 				found_macro = lookup_macro(macro_symtab, current_token_pointer->lexeme.string);
 
@@ -305,42 +321,39 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 					//Add it into the new array if we aren't being
 					//told to ignore it
 					if(current_token_pointer->ignore == FALSE){
-						token_array_add(&new_array, current_token_pointer);
+						token_array_add(&new_token_array, current_token_pointer);
 					}
-
-					//Bump the old array index regardless of what happened
-					old_array_index++;
 
 					//Get out of the case
 					break;
 				}
 
-				//Bump the old array index up here by the length of the macro
-				old_array_index += found_macro->tokens.current_index;
-
 				//Use the new array and the macro we found to do our substitution
-				u_int8_t substitution_result = perform_macro_substitution(&new_array, found_macro);
+				u_int8_t substitution_result = perform_macro_substitution(&new_token_array, found_macro);
 
 				if(substitution_result == FAILURE){
 					return FAILURE;
 				}
+
+				break;
 
 			//Not an identifier
 			default:
 				//If we are not told to ignore it, add it into
 				//the new array
 				if(current_token_pointer->ignore == FALSE){
-					token_array_add(&new_array, current_token_pointer);
+					token_array_add(&new_token_array, current_token_pointer);
 				}
 
 				//Either way bump the index
-				old_array_index++;
+				old_token_array_index++;
 
 				break;
 		}
 	}
 
-	//At the very end - we 
+	//At the very end - we will replace the old token stream with the new one
+	stream->token_stream = new_token_array;
 
 	//If we made it all the way down here then this worked
 	return SUCCESS;
@@ -400,8 +413,14 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 		goto finalizer;
 	}
 
-	//Otherwise, we did see at least one macro. This is the point where we need to do a replacement
-	//pass
+	/**
+	 * Step 2: if we did find macros, then we need to perform a replacement pass. The replacement
+	 * pass will do 2 things. First, it will replace all of the macro calls with their appropriate token streams and second, it
+	 * will remove all of the macros/macro calls from the token stream. The replacement pass will under the covers
+	 * create a secondary token stream object that will replace the original one, which will be deallocated
+	 */
+
+	//Otherwise, we did see at least one macro. This is the point where we need to do a replacement pass
 	//TODO replacmenet pass
 	
 
@@ -412,7 +431,8 @@ finalizer:
 
 	/**
 	 * Once done, we no longer need the macro symtab so we can completely deallocate
-	 * it
+	 * it. If the user has mistakenly replaced variables with macro names, then that is
+	 * on them to figure out
 	*/
 	macro_symtab_dealloc(macro_symtab);
 
