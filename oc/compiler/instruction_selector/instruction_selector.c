@@ -3557,13 +3557,15 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
  * to float/double
  */
 static void handle_register_movement_instruction(instruction_t* instruction){
+	//For any type adjusting that we need(down below)
+	three_addr_var_t* type_adjusted_op1;
+
+	//For any converting moves that we need to do
+	instruction_t* converting_move;
+
 	//Extract the assignee and the op1
 	three_addr_var_t* assignee = instruction->assignee;
 	three_addr_var_t* op1 = instruction->op1;
-
-	//We have both a destination and source size to look at here
-	variable_size_t destination_size = get_type_size(assignee->type);
-	variable_size_t source_size = get_type_size(op1->type);
 
 	//Go based on the basic type token here, if one exists
 	switch(assignee->type->basic_type_token){
@@ -3588,13 +3590,49 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 			break;
 
 		/**
-		 *
+		 * If we have a case where we are trying to move an 8/16 bit
+		 * value into an f32/f64 value, unfortunately no x86-64 instructions
+		 * exist to do that conversion. Instead, we'll need to first convert
+		 * this value into a 32 bit integer, and then convert that into
+		 * a floating point value
 		 */
 		case F32:
 		case F64:
-			if(op1->type->type_size < 32){
-				printf("HERE\n");
+			switch(op1->type->basic_type_token){
+				//Signed values, we will use an i32
+				case CHAR:
+				case I8:
+				case I16:
+					//Move the old value into an i32 slot
+					type_adjusted_op1 = emit_temp_var(i32);
+					converting_move = emit_move_instruction(type_adjusted_op1, op1);
 
+					//This goes before our given instruction
+					insert_instruction_before_given(converting_move, instruction);
+
+					//Our real op1 is now where this one came from
+					op1 = converting_move->destination_register;
+
+					break;
+
+				//Unsigned values, we'll use a u32
+				case U8:
+				case U16:
+					//Move the old value into a u32 slot
+					type_adjusted_op1 = emit_temp_var(u32);
+					converting_move = emit_move_instruction(type_adjusted_op1, op1);
+
+					//This goes before our given instruction
+					insert_instruction_before_given(converting_move, instruction);
+
+					//Our real op1 is now where this one came from
+					op1 = converting_move->destination_register;
+
+					break;
+
+				//Everything else do nothing
+				default:
+					break;
 			}
 			
 			break;
@@ -3603,6 +3641,10 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 		default:
 			break;
 	}
+
+	//We have both a destination and source size to look at here
+	variable_size_t destination_size = get_type_size(assignee->type);
+	variable_size_t source_size = get_type_size(op1->type);
 
 	//Let the helper rule determine what our instruction is
 	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), is_source_register_clean(op1));
