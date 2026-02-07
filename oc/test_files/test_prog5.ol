@@ -1,5 +1,5 @@
-#macro TEST_INT -1 #endmacro
-#macro my_char 'c' #endmacro
+$macro TEST_INT -1 $endmacro
+$macro my_char 'c' $endmacro
 
 fn tester() -> void{
 	let x:mut i32 = !3;

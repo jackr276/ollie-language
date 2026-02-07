@@ -86,6 +86,8 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		return FAILURE;
 	}
 
+	printf("FOUND MACRO\n");
+
 	//IMPORTANT - flag that this token needs to be ignored by the replacer
 	lookahead->ignore = TRUE;
 

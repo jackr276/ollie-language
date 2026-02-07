@@ -4,7 +4,7 @@
 */
 
 //Ollie macro definition
-#macro NULL 0l #endmacro
+$macro NULL 0l $endmacro
 
 define struct my_struct {
 	next:mut struct my_struct*;

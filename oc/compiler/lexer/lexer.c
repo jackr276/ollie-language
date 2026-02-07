@@ -57,7 +57,7 @@ static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false", "inline", "#macro", "#endmacro"};
+						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false", "inline", "$macro", "$endmacro"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -193,7 +193,9 @@ char* lexitem_to_string(lexitem_t* lexitem){
 		case REQUIRE:
 			return "require";
 		case MACRO:
-			return "#macro";
+			return "$macro";
+		case ENDMACRO:
+			return "$endmacro";
 		case U8:
 			return "u8";
 		case I8:
@@ -702,7 +704,6 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 						break;
 
-					//Pound for label identifiers
 					case '#':
 						lex_item.tok = POUND;
 						lex_item.line_num = line_number;
@@ -1225,7 +1226,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						break;
 
 					default:
-						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#' || ch == '_'){
+						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') 
+							|| ch == '$'
+							|| ch == '%' 
+							|| ch == '_'){
 							lexeme = dynamic_string_alloc();
 							dynamic_string_add_char_to_back(&lexeme, ch);
 							current_state = IN_IDENT;
@@ -1249,8 +1253,11 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 			case IN_IDENT:
 				//Is it a number, letter, or _ or $?. If so, we can have it in our ident
-				if(ch == '_' || ch == '$' || (ch >= 'a' && ch <= 'z') 
-				   || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')){
+				if(ch == '_' 
+					|| ch == '$' 
+					|| (ch >= 'a' && ch <= 'z') 
+				   	|| (ch >= 'A' && ch <= 'Z') 
+					|| (ch >= '0' && ch <= '9')){
 					dynamic_string_add_char_to_back(&lexeme, ch);
 
 				} else {
