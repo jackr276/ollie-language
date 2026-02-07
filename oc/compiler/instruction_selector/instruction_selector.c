@@ -3568,29 +3568,40 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	//Go based on the basic type token here, if one exists
 	switch(assignee->type->basic_type_token){
 		//Special case if there's a U64
+		/**
+		 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+		 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+		 * zero pad when 32 bit moves happen
+		 */
 		case U64:
+			if(is_type_32_bit_int(op1->type) == TRUE){
+				//Emit a variable copy of the source
+				op1 = emit_var_copy(op1);
+
+				//Reassign it's type to be the desired type
+				op1->type = assignee->type;
+
+				//Select the size appropriately after the type is reassigned
+				op1->variable_size = get_type_size(op1->type);
+			}
 			
+			break;
+
+		/**
+		 *
+		 */
+		case F32:
+		case F64:
+			if(op1->type->type_size < 32){
+				printf("HERE\n");
+
+			}
 			
-
-
-
+			break;
+			
 		//Just leave
 		default:
 			break;
-	}
-
-	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-	//zero pad when 32 bit moves happen
-	if(is_type_unsigned_64_bit(assignee->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
-		//Emit a variable copy of the source
-		op1 = emit_var_copy(op1);
-
-		//Reassign it's type to be the desired type
-		op1->type = assignee->type;
-
-		//Select the size appropriately after the type is reassigned
-		op1->variable_size = get_type_size(op1->type);
 	}
 
 	//Let the helper rule determine what our instruction is
