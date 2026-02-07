@@ -167,6 +167,58 @@ static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token
 
 
 /**
+ * Is a type an unsigned 64 bit type? This is used for type conversions in 
+ * the instruction selector
+ */
+static inline u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
+	//Switch based on the class
+	switch(type->type_class){
+		//These are memory addresses - so yes
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_REFERENCE:
+		case TYPE_CLASS_STRUCT:
+			return TRUE;
+
+		//Let's see what we have here
+		case TYPE_CLASS_BASIC:
+			//If it's a u64 then yes
+			if(type->basic_type_token == U64){
+				return TRUE;
+			}
+
+			return FALSE; 
+
+		//By default fail out
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is the given type a 32 bit integer type?
+ */
+static inline u_int8_t is_type_32_bit_int(generic_type_t* type){
+	//If it's not a basic type we're done
+	if(type->type_class != TYPE_CLASS_BASIC){
+		return FALSE;
+	}
+
+	//Otherwise it is a basic type
+	switch(type->basic_type_token){
+		//Our only real cases here
+		case U32:
+		case I32:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+
+/**
  * Is the source register for a given move instruction "clean" or not. Clean means
  * that we know where it comes from *and* we know where it's going. For example, 
  * temporary variables that are not returned are known to be clean, as well as variables
@@ -3499,6 +3551,10 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 /**
  * Handle a simple movement instruction. In this context, simple just means that
  * we have a source and a destination, and now address calculation moves in between
+ *
+ * NOTE: Even though this does not take in an instruction window as a parameter, this
+ * will insert instructions before the given one in certain special scenarios(short/byte)
+ * to float/double
  */
 static void handle_register_movement_instruction(instruction_t* instruction){
 	//Extract the assignee and the op1
@@ -3508,6 +3564,20 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	//We have both a destination and source size to look at here
 	variable_size_t destination_size = get_type_size(assignee->type);
 	variable_size_t source_size = get_type_size(op1->type);
+
+	//Go based on the basic type token here, if one exists
+	switch(assignee->type->basic_type_token){
+		//Special case if there's a U64
+		case U64:
+			
+			
+
+
+
+		//Just leave
+		default:
+			break;
+	}
 
 	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
 	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically

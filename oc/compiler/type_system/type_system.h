@@ -200,16 +200,6 @@ generic_type_t* get_base_alignment_type(generic_type_t* type);
  */
 u_int32_t get_data_section_alignment(generic_type_t* type);
 
-/**
- * Is a type an unsigned 64 bit type? This is used for type conversions in 
- * the instruction selector
- */
-u_int8_t is_type_unsigned_64_bit(generic_type_t* type);
-
-/**
- * Is the given type a 32 bit integer type?
- */
-u_int8_t is_type_32_bit_int(generic_type_t* type);
 
 /**
  * Get the referenced type regardless of how many indirection levels there are
