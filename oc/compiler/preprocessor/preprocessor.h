@@ -14,6 +14,13 @@
 #include "../lexer/lexer.h"
 #include <sys/types.h>
 
+//Hold the status of the preprocessor
+typedef enum {
+	PREPROCESSOR_FAILURE,
+	PREPROCESSOR_SUCCESS,
+} preprocessor_status_t;
+
+
 //The generic result struct for the preprocessor
 typedef struct preprocessor_results_t preprocessor_results_t;
 
@@ -31,7 +38,7 @@ struct preprocessor_results_t {
 	//The number of macros processed(more of novelty info but it's fine to have)
 	u_int32_t macros_processed;
 	//Did this work or not?
-	u_int8_t success;
+	preprocessor_status_t status;
 };
 
 

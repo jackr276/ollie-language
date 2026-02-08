@@ -134,10 +134,19 @@ int main(int argc, char** argv){
 	preprocessor_results_t results = preprocess(options->file_name, options->token_stream);
 	
 	//This did not work, get out
-	if(results.success == FALSE){
+	if(results.status == PREPROCESSOR_FAILURE){
 		printf("PREPROCESSOR FAILED\n");
 		printf("==================================== END  ================================================\n");
 	}
+
+	//Print out the post-preprocssing token stream
+	printf("============================= AFTER PREPROCESSOR =====================================\n");
+
+	for(u_int32_t i = 0; i < stream.token_stream.current_index; i++){
+		printf("%d: %s\n", i, lexitem_to_string(token_array_get_pointer_at(&(stream.token_stream), i)));
+	}
+
+	printf("============================= AFTER PREPROCESSOR =====================================\n");
 
 	//Now stop the clock - we want to test the deallocation overhead too
 	//Timer end

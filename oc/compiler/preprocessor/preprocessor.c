@@ -368,7 +368,7 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	results.stream = stream;
 
 	//Initially assume everything worked. This will be flipped if need be
-	results.success = TRUE;
+	results.status = PREPROCESSOR_SUCCESS;
 
 	//Store the file name up top globally
 	current_file_name = file_name;
@@ -395,7 +395,7 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	if(consumption_pass_result == FAILURE){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros detected. Please rememdy the errors and recompile", current_line_number);
 		//Note a failure
-		results.success = FALSE;
+		results.status = PREPROCESSOR_FAILURE;
 		goto finalizer;
 	}
 
@@ -419,7 +419,7 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	if(replacement_pass_result == FAILURE){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros detected. Please rememdy the errors and recompile", current_line_number);
 		//Note a failure
-		results.success = FALSE;
+		results.status = PREPROCESSOR_FAILURE;
 	}
 	
 
