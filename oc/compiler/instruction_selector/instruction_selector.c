@@ -7170,6 +7170,9 @@ static instruction_t* handle_load_instruction_type_and_destination(instruction_t
 	//What is the very last instruction that we've touched. By default it's just what was passed
 	instruction_t* last_instruction = load_instruction;
 
+	//For any copying we need
+	instruction_t* converting_copy_instruction;
+
 	//Local variables for our eventual move selection
 	variable_size_t destination_size;
 	variable_size_t source_size;
@@ -7215,6 +7218,69 @@ static instruction_t* handle_load_instruction_type_and_destination(instruction_t
 	} else if(is_type_floating_point(destination_register->type)
 				&& memory_region_type->type_size <= 2){
 
+		//We will need an intermediary destination to use in the load
+		three_addr_var_t* intermediary_destination;
+
+		switch(memory_region_type->basic_type_token){
+			//Signed types will use an I32 as the stopgap
+			case CHAR:
+			case I8:
+			case I16:
+				//The load instruction's destination will be the intermediary
+				intermediary_destination = emit_temp_var(i32);
+				load_instruction->destination_register = intermediary_destination;
+
+				//Populate all of these values now
+				destination_size = get_type_size(intermediary_destination->type);
+				source_size = get_type_size(memory_region_type);
+				is_destination_signed = is_type_signed(intermediary_destination->type);
+
+				//Let the helper select for us. We are passing clean as true, since we are coming from memory
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+
+				//Now we need to add a separate copy instruction into the true destination
+				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->assignee, intermediary_destination);
+
+				//This goes right after the load
+				insert_instruction_after_given(converting_copy_instruction, load_instruction);
+
+				//This now is the last instruction
+				last_instruction = converting_copy_instruction;
+
+				break;
+
+			//Unsigned types will use a U32 as the stopgap
+			case U8:
+			case U16:
+				//The load instruction's destination will be the intermediary
+				intermediary_destination = emit_temp_var(u32);
+				load_instruction->destination_register = intermediary_destination;
+
+				//Populate all of these values now
+				destination_size = get_type_size(intermediary_destination->type);
+				source_size = get_type_size(memory_region_type);
+				is_destination_signed = is_type_signed(intermediary_destination->type);
+
+				//Let the helper select for us. We are passing clean as true, since we are coming from memory
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+
+				//Now we need to add a separate copy instruction into the true destination
+				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->assignee, intermediary_destination);
+
+				//This goes right after the load
+				insert_instruction_after_given(converting_copy_instruction, load_instruction);
+
+				//This now is the last instruction
+				last_instruction = converting_copy_instruction;
+
+				break;
+
+			//This should be unreachable
+			default:
+				break;
+		}
+
+
 		//Let the helper select for us. We are passing clean as true, since we are coming from memory
 		//load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 	
@@ -7237,7 +7303,7 @@ static instruction_t* handle_load_instruction_type_and_destination(instruction_t
 
 
 	//Give back whether or not the window needs to be rebuilt
-	return load_instruction;
+	return last_instruction;
 }
 
 
