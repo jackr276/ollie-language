@@ -3537,10 +3537,6 @@ static inline instruction_t* emit_direct_xmm_xorpX_instruction(three_addr_var_t*
  * Emit a movX instruction
  *
  * This movement instruction will handle all converting move logic internally
- *
- *
- * TODO - how are we going to handle the potential that this emits more than one instruction? Will that
- * ever even happen?
  */
 static instruction_t* emit_move_instruction(three_addr_var_t* destination, three_addr_var_t* source){
 	//First we'll allocate it
@@ -7172,6 +7168,9 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 	//What is the very last instruction that we've touched. By default it's just what was passed
 	instruction_t* last_instruction = load_instruction;
 
+	//For any converting moves that we may have
+	instruction_t* pxor_instruction;
+
 	//For any copying we need
 	instruction_t* converting_copy_instruction;
 
@@ -7240,17 +7239,20 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
 				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
+				//Since we know that this is a floating point conversion, we will emit the PXOR here
+				pxor_instruction = emit_direct_pxor_instruction(destination_register);
+
+				//Get this in right before the given
+				insert_instruction_after_given(pxor_instruction, load_instruction);
+
 				//Now we need to add a separate copy instruction into the true destination
 				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->assignee, intermediary_destination);
 
-				//This goes right after the load
-				insert_instruction_after_given(converting_copy_instruction, load_instruction);
+				//This goes right after the pxor 
+				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
 
 				//This now is the last instruction
 				last_instruction = converting_copy_instruction;
-
-				//Rebuild the window around it
-				reconstruct_window(window, last_instruction);
 
 				break;
 
@@ -7269,17 +7271,20 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				//Let the helper select for us. We are passing clean as true, since we are coming from memory
 				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
+				//Since we know that this is a floating point conversion, we will emit the PXOR here
+				pxor_instruction = emit_direct_pxor_instruction(destination_register);
+
+				//Get this in right before the given
+				insert_instruction_after_given(pxor_instruction, load_instruction);
+
 				//Now we need to add a separate copy instruction into the true destination
 				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->assignee, intermediary_destination);
 
-				//This goes right after the load
-				insert_instruction_after_given(converting_copy_instruction, load_instruction);
+				//This goes right after the pxor
+				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
 
 				//This now is the last instruction
 				last_instruction = converting_copy_instruction;
-
-				//Rebuild the window around it
-				reconstruct_window(window, last_instruction);
 
 				break;
 
@@ -7304,10 +7309,26 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 
 		//Let the helper select for us. We are passing clean as true, since we are coming from memory
 		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+
+		/**
+		 * If we have a conversion instruction that has an SSE destination, we need to emit
+		 * a special "pxor" statement beforehand to completely wipe out said register
+		 */
+		if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
+			//We need to completely zero out the destination register here, so we will emit a pxor to do
+			//just that
+			pxor_instruction = emit_direct_pxor_instruction(load_instruction->assignee);
+
+			//Get this in right before the given
+			insert_instruction_before_given(pxor_instruction, load_instruction);
+		}
 	}
 
 	//Load is from memory always
 	load_instruction->memory_access_type = READ_FROM_MEMORY;
+
+	//Rebuild the window around the last instruction, whatever that may be
+	reconstruct_window(window, last_instruction);
 }
 
 
@@ -7323,21 +7344,6 @@ static void handle_load_instruction(instruction_window_t* window){
 
 	//Invoke the helper to handle the assignee and any edge cases
 	handle_load_instruction_type_and_destination(window);
-
-	/**
-	 * If we have a conversion instruction that has an SSE destination, we need to emit
-	 * a special "pxor" statement beforehand to completely wipe out said register
-	 *
-	 * TODO CHECK THIS
-	 */
-	if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
-		//We need to completely zero out the destination register here, so we will emit a pxor to do
-		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_instruction->assignee);
-
-		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, load_instruction);
-	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -7409,21 +7415,6 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 	//Handle destination assignment based on op1
 	handle_load_instruction_type_and_destination(window);
 
-	/**
-	 * If we have a conversion instruction that has an SSE destination, we need to emit
-	 * a special "pxor" statement beforehand to completely wipe out said register
-	 *
-	 * TODO CHECK
-	 */
-	if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
-		//We need to completely zero out the destination register here, so we will emit a pxor to do
-		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_instruction->assignee);
-
-		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, load_instruction);
-	}
-
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
 	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
@@ -7492,24 +7483,8 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 	//As noted above, this is the assumption
 	instruction_t* load_instruction = window->instruction1;
 
-
 	//Handle the destination assignment
 	handle_load_instruction_type_and_destination(window);
-
-	/**
-	 * If we have a conversion instruction that has an SSE destination, we need to emit
-	 * a special "pxor" statement beforehand to completely wipe out said register
-	 *
-	 * TODO CHECK
-	 */
-	if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
-		//We need to completely zero out the destination register here, so we will emit a pxor to do
-		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_instruction->assignee);
-
-		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, load_instruction);
-	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
@@ -7791,33 +7766,14 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		//it quits. This ensures uniform behavior and correctness
 		default:
 			handle_lea_statement(lea_statement);
-			handle_load_with_variable_offset_instruction(variable_offset_load);
-
-			//Reconstruct around the last one(the load)
-			reconstruct_window(window, variable_offset_load);
+			handle_load_with_variable_offset_instruction(window);
 
 			//And get out
 			return;
 	}
 	
 	//Handle the destination assignment
-	handle_load_instruction_type_and_destination(variable_offset_load);
-
-	/**
-	 * If we have a conversion instruction that has an SSE destination, we need to emit
-	 * a special "pxor" statement beforehand to completely wipe out said register
-	 */
-	if(is_integer_to_sse_conversion_instruction(variable_offset_load->instruction_type) == TRUE){
-		//We need to completely zero out the destination register here, so we will emit a pxor to do
-		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(variable_offset_load->destination_register);
-
-		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, variable_offset_load);
-	}
-
-	//The window always needs to be rebuilt around the last instruction that we touched
-	reconstruct_window(window, variable_offset_load);
+	handle_load_instruction_type_and_destination(window);
 }
 
 
@@ -7833,20 +7789,7 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 		 */
 		case OIR_LEA_TYPE_RIP_RELATIVE:
 			//Let the helper deal with the load instruction's destination
-			handle_load_instruction_type_and_destination(load_statement);
-
-			/**
-			 * If we have a conversion instruction that has an SSE destination, we need to emit
-			 * a special "pxor" statement beforehand to completely wipe out said register
-			 */
-			if(is_integer_to_sse_conversion_instruction(load_statement->instruction_type) == TRUE){
-				//We need to completely zero out the destination register here, so we will emit a pxor to do
-				//just that
-				instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_statement->destination_register);
-
-				//Get this in right before the given
-				insert_instruction_before_given(pxor_instruction, load_statement);
-			}
+			handle_load_instruction_type_and_destination(window);
 
 			//We are reading from memory here
 			load_statement->memory_access_type = READ_FROM_MEMORY;
