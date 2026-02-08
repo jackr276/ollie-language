@@ -6858,6 +6858,9 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 	//A secondary conversion. This is only required for the case of byte/short to floating point
 	instruction_t* second_conversion;
 
+	//The pxor instruction in case we have a float destination
+	instruction_t* pxor_instruction;
+
 	//The destination type is always stored in the instruction itself
 	generic_type_t* destination_type = store_instruction->memory_read_write_type;
 
@@ -6917,6 +6920,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							//converting moves so we'll need to do this now
 							type_adjusted_source = emit_temp_var(destination_type);
 
+							//Since this is a floating point destination, we need to 0 it out first
+							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+
+							//Put it in after the converting move
+							insert_instruction_after_given(pxor_instruction, converting_move);
+
 							//Emit the second convervsion between to go from an i32 to a float
 							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
 
@@ -6944,6 +6953,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							//Final type adjustment here, we don't have any store
 							//converting moves so we'll need to do this now
 							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Since this is a floating point destination, we need to 0 it out first
+							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+
+							//Put it in after the converting move
+							insert_instruction_after_given(pxor_instruction, converting_move);
 
 							//Emit the second convervsion between to go from an i32 to a float
 							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
@@ -6978,6 +6993,19 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
+
+					/**
+					 * If we have a conversion instruction that has an SSE destination, we need to emit
+					 * a special "pxor" statement beforehand to completely wipe out said register
+					 */
+					if(is_integer_to_sse_conversion_instruction(converting_move->instruction_type) == TRUE){
+						//We need to completely zero out the destination register here, so we will emit a pxor to do
+						//just that
+						pxor_instruction = emit_direct_pxor_instruction(new_source);
+
+						//Get this in right before the given
+						insert_instruction_before_given(pxor_instruction, converting_move);
+					}
 
 					//Now, our source type is the destination's type
 					source_type = destination_type;
@@ -7054,6 +7082,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							//converting moves so we'll need to do this now
 							type_adjusted_source = emit_temp_var(destination_type);
 
+							//Since this is a floating point destination, we need to 0 it out first
+							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+
+							//Put it in after the converting move
+							insert_instruction_after_given(pxor_instruction, converting_move);
+
 							//Emit the second convervsion between to go from an i32 to a float
 							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
 
@@ -7081,6 +7115,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							//Final type adjustment here, we don't have any store
 							//converting moves so we'll need to do this now
 							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Since this is a floating point destination, we need to 0 it out first
+							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+
+							//Put it in after the converting move
+							insert_instruction_after_given(pxor_instruction, converting_move);
 
 							//Emit the second convervsion between to go from an i32 to a float
 							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
@@ -7115,6 +7155,20 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
+
+					/**
+					 * If we have a conversion instruction that has an SSE destination, we need to emit
+					 * a special "pxor" statement beforehand to completely wipe out said register
+					 */
+					if(is_integer_to_sse_conversion_instruction(converting_move->instruction_type) == TRUE){
+						//We need to completely zero out the destination register here, so we will emit a pxor to do
+						//just that
+						pxor_instruction = emit_direct_pxor_instruction(new_source);
+
+						//Get this in right before the given
+						insert_instruction_before_given(pxor_instruction, converting_move);
+					}
+
 
 					//Now, our source type is the new destination's type
 					source_type = destination_type;
