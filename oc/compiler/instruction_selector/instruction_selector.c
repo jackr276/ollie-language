@@ -11,7 +11,6 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -7203,6 +7202,9 @@ static instruction_t* handle_load_instruction_type_and_destination(instruction_t
 		//And we need to adjust this to be a MOVL type
 		load_instruction->instruction_type = MOVL;
 
+		//For this instance, we do not need to allow the helper to select for us since it's already done
+		//in here
+
 	/**
 	 * If we have a case where we are trying to move an 8/16 bit
 	 * value into an f32/f64 value, unfortunately no x86-64 instructions
@@ -7213,6 +7215,8 @@ static instruction_t* handle_load_instruction_type_and_destination(instruction_t
 	} else if(is_type_floating_point(destination_register->type)
 				&& memory_region_type->type_size <= 2){
 
+		//Let the helper select for us. We are passing clean as true, since we are coming from memory
+		//load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 	
 	//Otherwise, we just assign the destination to be the destination
 	//register
@@ -7223,13 +7227,14 @@ static instruction_t* handle_load_instruction_type_and_destination(instruction_t
 		destination_size = get_type_size(destination_register->type);
 		source_size = get_type_size(memory_region_type);
 		is_destination_signed = is_type_signed(destination_register->type);
+
+		//Let the helper select for us. We are passing clean as true, since we are coming from memory
+		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 	}
 
 	//Load is from memory always
 	load_instruction->memory_access_type = READ_FROM_MEMORY;
 
-	//Let the helper select for us. We are passing clean as true, since we are coming from memory
-	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 	//Give back whether or not the window needs to be rebuilt
 	return load_instruction;
