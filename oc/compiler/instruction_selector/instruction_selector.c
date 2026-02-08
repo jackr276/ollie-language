@@ -6854,6 +6854,15 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
  * point areas coming from bytes/shorts
  */
 static void handle_store_instruction_sources_and_instruction_type(instruction_t* store_instruction){
+	//For holding the type adjusted source if we need it
+	three_addr_var_t* type_adjusted_source;
+
+	//A converting move instruction placeholder for the float case
+	instruction_t* converting_move;
+
+	//A secondary conversion. This is only required for the case of byte/short to floating point
+	instruction_t* second_conversion;
+
 	//The destination type is always stored in the instruction itself
 	generic_type_t* destination_type = store_instruction->memory_read_write_type;
 
@@ -6895,21 +6904,36 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				 * this value into a 32 bit integer, and then convert that into
 				 * a floating point value
 				 */
-				} else if(is_type_floating_point(destination_type) == TRUE){
+				} else if(is_type_floating_point(destination_type) == TRUE 
+					&& source_type->type_size <= 16){
+
 					switch(source_type->basic_type_token){
 						//Signed values, we will use an i32
 						case CHAR:
 						case I8:
 						case I16:
 							//Move the old value into an i32 slot
-							type_adjusted_op1 = emit_temp_var(i32);
-							converting_move = emit_move_instruction(type_adjusted_op1, op1);
+							type_adjusted_source = emit_temp_var(i32);
+							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->op1);
 
 							//This goes before our given instruction
-							insert_instruction_before_given(converting_move, instruction);
+							insert_instruction_before_given(converting_move, store_instruction);
 
-							//Our real op1 is now where this one came from
-							op1 = converting_move->destination_register;
+							//Final type adjustment here, we don't have any store
+							//converting moves so we'll need to do this now
+							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Emit the second convervsion between to go from an i32 to a float
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+
+							//Get this into the block
+							insert_instruction_before_given(second_conversion, store_instruction);
+
+							//Finally, the store's source will be this final source varialbe
+							store_instruction->source_register = second_conversion->destination_register;
+
+							//Once we're here the source type really is now the destination type
+							source_type = destination_type;
 
 							break;
 
@@ -6917,14 +6941,27 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 						case U8:
 						case U16:
 							//Move the old value into a u32 slot
-							type_adjusted_op1 = emit_temp_var(u32);
-							converting_move = emit_move_instruction(type_adjusted_op1, op1);
+							type_adjusted_source = emit_temp_var(u32);
+							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->op1);
 
 							//This goes before our given instruction
-							insert_instruction_before_given(converting_move, instruction);
+							insert_instruction_before_given(converting_move, store_instruction);
 
-							//Our real op1 is now where this one came from
-							op1 = converting_move->destination_register;
+							//Final type adjustment here, we don't have any store
+							//converting moves so we'll need to do this now
+							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Emit the second convervsion between to go from an i32 to a float
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+
+							//Get this into the block
+							insert_instruction_before_given(second_conversion, store_instruction);
+
+							//Finally, the store's source will be this final source varialbe
+							store_instruction->source_register = second_conversion->destination_register;
+
+							//Once we're here the source type really is now the destination type
+							source_type = destination_type;
 
 							break;
 
