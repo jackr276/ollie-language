@@ -167,6 +167,78 @@ static inline u_int8_t is_operation_valid_for_op1_assignment_folding(ollie_token
 
 
 /**
+ * Is a type an unsigned 64 bit type? This is used for type conversions in 
+ * the instruction selector
+ */
+static inline u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
+	//Switch based on the class
+	switch(type->type_class){
+		//These are memory addresses - so yes
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_REFERENCE:
+		case TYPE_CLASS_STRUCT:
+			return TRUE;
+
+		//Let's see what we have here
+		case TYPE_CLASS_BASIC:
+			//If it's a u64 then yes
+			if(type->basic_type_token == U64){
+				return TRUE;
+			}
+
+			return FALSE; 
+
+		//By default fail out
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is the given type a 32 bit integer type?
+ */
+static inline u_int8_t is_type_32_bit_int(generic_type_t* type){
+	//If it's not a basic type we're done
+	if(type->type_class != TYPE_CLASS_BASIC){
+		return FALSE;
+	}
+
+	//Otherwise it is a basic type
+	switch(type->basic_type_token){
+		//Our only real cases here
+		case U32:
+		case I32:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Is the given type a floating point value
+ */
+static inline u_int8_t is_type_floating_point(generic_type_t* type){
+	//If it's not a basic type we're done
+	if(type->type_class != TYPE_CLASS_BASIC){
+		return FALSE;
+	}
+
+	//Otherwise it is a basic type
+	switch(type->basic_type_token){
+		//Our only real cases here
+		case F32:
+		case F64:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is the source register for a given move instruction "clean" or not. Clean means
  * that we know where it comes from *and* we know where it's going. For example, 
  * temporary variables that are not returned are known to be clean, as well as variables
@@ -3499,29 +3571,89 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 /**
  * Handle a simple movement instruction. In this context, simple just means that
  * we have a source and a destination, and now address calculation moves in between
+ *
+ * NOTE: Even though this does not take in an instruction window as a parameter, this
+ * will insert instructions before the given one in certain special scenarios(short/byte)
+ * to float/double
  */
 static void handle_register_movement_instruction(instruction_t* instruction){
+	//For any type adjusting that we need(down below)
+	three_addr_var_t* type_adjusted_op1;
+
+	//For any converting moves that we need to do
+	instruction_t* converting_move;
+
 	//Extract the assignee and the op1
 	three_addr_var_t* assignee = instruction->assignee;
 	three_addr_var_t* op1 = instruction->op1;
+	
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
+	if(is_type_unsigned_64_bit(assignee->type) == TRUE){
+		//We only case if the op1 is a 32 bit int
+		if(is_type_32_bit_int(op1->type) == TRUE){
+			//Emit a variable copy of the source
+			op1 = emit_var_copy(op1);
+
+			//Reassign it's type to be the desired type
+			op1->type = assignee->type;
+
+			//Select the size appropriately after the type is reassigned
+			op1->variable_size = get_type_size(op1->type);
+		}
+
+	/**
+	 * If we have a case where we are trying to move an 8/16 bit
+	 * value into an f32/f64 value, unfortunately no x86-64 instructions
+	 * exist to do that conversion. Instead, we'll need to first convert
+	 * this value into a 32 bit integer, and then convert that into
+	 * a floating point value
+	 */
+	} else if(is_type_floating_point(assignee->type) == TRUE){
+		switch(op1->type->basic_type_token){
+			//Signed values, we will use an i32
+			case CHAR:
+			case I8:
+			case I16:
+				//Move the old value into an i32 slot
+				type_adjusted_op1 = emit_temp_var(i32);
+				converting_move = emit_move_instruction(type_adjusted_op1, op1);
+
+				//This goes before our given instruction
+				insert_instruction_before_given(converting_move, instruction);
+
+				//Our real op1 is now where this one came from
+				op1 = converting_move->destination_register;
+
+				break;
+
+			//Unsigned values, we'll use a u32
+			case U8:
+			case U16:
+				//Move the old value into a u32 slot
+				type_adjusted_op1 = emit_temp_var(u32);
+				converting_move = emit_move_instruction(type_adjusted_op1, op1);
+
+				//This goes before our given instruction
+				insert_instruction_before_given(converting_move, instruction);
+
+				//Our real op1 is now where this one came from
+				op1 = converting_move->destination_register;
+
+				break;
+
+			//Everything else do nothing
+			default:
+				break;
+		}
+	}
 
 	//We have both a destination and source size to look at here
 	variable_size_t destination_size = get_type_size(assignee->type);
 	variable_size_t source_size = get_type_size(op1->type);
-
-	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-	//zero pad when 32 bit moves happen
-	if(is_type_unsigned_64_bit(assignee->type) == TRUE && is_type_32_bit_int(op1->type) == TRUE){
-		//Emit a variable copy of the source
-		op1 = emit_var_copy(op1);
-
-		//Reassign it's type to be the desired type
-		op1->type = assignee->type;
-
-		//Select the size appropriately after the type is reassigned
-		op1->variable_size = get_type_size(op1->type);
-	}
 
 	//Let the helper rule determine what our instruction is
 	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_type_signed(assignee->type), is_source_register_clean(op1));
@@ -3591,21 +3723,77 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
  * finding the converting moves, and inserting
  */
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type){
-	//Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
-	//movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
-	//zero pad when 32 bit moves happen
-	if(is_type_unsigned_64_bit(destination_type) == TRUE && is_type_32_bit_int(source->type) == TRUE){
-		//Emit a variable copy of the source
-		three_addr_var_t* converted = emit_var_copy(source);
+	//The conversion instruction, if we need one
+	instruction_t* converting_move;
+	//For byte/short to float/double
+	three_addr_var_t* type_adjusted_source;
 
-		//Reassign it's type to be the desired type
-		converted->type = destination_type;
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
+	if(is_type_unsigned_64_bit(destination_type) == TRUE){
+		if(is_type_32_bit_int(source->type) == TRUE){
+			//Emit a variable copy of the source
+			source = emit_var_copy(source);
 
-		//Select the size appropriately after the type is reassigned
-		converted->variable_size = get_type_size(converted->type);
+			//Reassign it's type to be the desired type
+			source->type = destination_type;
 
-		//We don't need to deal with a move at all in this case, we can just leave here
-		return converted;
+			//Select the size appropriately after the type is reassigned
+			source->variable_size = get_type_size(source->type);
+
+			//We don't need to go on here, we've already done the work that we
+			//need to
+			return source;
+		}
+
+	/**
+	 * If we have a case where we are trying to move an 8/16 bit
+	 * value into an f32/f64 value, unfortunately no x86-64 instructions
+	 * exist to do that conversion. Instead, we'll need to first convert
+	 * this value into a 32 bit integer, and then convert that into
+	 * a floating point value
+	 */
+	} else if(is_type_floating_point(destination_type) == TRUE){
+		switch(source->type->basic_type_token){
+			//Signed values, we will use an i32
+			case CHAR:
+			case I8:
+			case I16:
+				//Move the old value into an i32 slot
+				type_adjusted_source = emit_temp_var(i32);
+				converting_move = emit_move_instruction(type_adjusted_source, source);
+
+				//This goes before our given instruction
+				insert_instruction_before_given(converting_move, after_instruction);
+
+				//Our real op1 is now where this one came from
+				source = converting_move->destination_register;
+
+				break;
+
+			//Unsigned values, we'll use a u32
+			case U8:
+			case U16:
+				//Move the old value into a u32 slot
+				type_adjusted_source = emit_temp_var(u32);
+				converting_move = emit_move_instruction(type_adjusted_source, source);
+
+				//This goes before our given instruction
+				insert_instruction_before_given(converting_move, after_instruction);
+
+				//Our real op1 is now where this one came from
+				source = converting_move->destination_register;
+
+				break;
+
+			//Everything else do nothing
+			default:
+				break;
+		}
+
 	}
 
 	//We have a temp var based on the destination type
@@ -6657,9 +6845,22 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
  *
  * This function will account for all edge cases(op1 vs op2 vs op1_const), as well
  * as the unique case where our source is a 32 bit integer *but* we are saving to an
- * unsigned 64 bit memory region
+ * unsigned 64 bit memory region, as well as the unique case where we need to handle floating
+ * point areas coming from bytes/shorts
  */
 static void handle_store_instruction_sources_and_instruction_type(instruction_t* store_instruction){
+	//For holding the type adjusted source if we need it
+	three_addr_var_t* type_adjusted_source;
+
+	//A converting move instruction placeholder for the float case
+	instruction_t* converting_move;
+
+	//A secondary conversion. This is only required for the case of byte/short to floating point
+	instruction_t* second_conversion;
+
+	//The pxor instruction in case we have a float destination
+	instruction_t* pxor_instruction;
+
 	//The destination type is always stored in the instruction itself
 	generic_type_t* destination_type = store_instruction->memory_read_write_type;
 
@@ -6676,13 +6877,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				source_type = store_instruction->op1->type;
 
 				/**
-				 * This is a special edgecase where we are moving from 32 bit to 64 bit
-				 * In the event that we do this, we need to emit a simple copy of the source
-				 * variable and give it the 64 bit type so that we have a quad word register
+				 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+				 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+				 * zero pad when 32 bit moves happen
 				 */
-				if(is_type_unsigned_64_bit(destination_type) == TRUE
-					&& is_type_32_bit_int(store_instruction->op1->type) == TRUE){
-
+				if(is_type_unsigned_64_bit(destination_type) == TRUE 
+					&& is_type_32_bit_int(source_type) == TRUE){
 					//First we duplicate it
 					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op1);
 
@@ -6692,6 +6892,92 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 
 					//And this will be our source
 					store_instruction->source_register = duplicate_64_bit;
+
+				/**
+				 * If we have a case where we are trying to move an 8/16 bit
+				 * value into an f32/f64 value, unfortunately no x86-64 instructions
+				 * exist to do that conversion. Instead, we'll need to first convert
+				 * this value into a 32 bit integer, and then convert that into
+				 * a floating point value
+				 */
+				} else if(is_type_floating_point(destination_type) == TRUE 
+					&& source_type->type_size <= 2){
+
+					//Go based on the source type token
+					switch(source_type->basic_type_token){
+						//Signed values, we will use an i32
+						case CHAR:
+						case I8:
+						case I16:
+							//Move the old value into an i32 slot
+							type_adjusted_source = emit_temp_var(i32);
+							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->op1);
+
+							//This goes before our given instruction
+							insert_instruction_before_given(converting_move, store_instruction);
+
+							//Final type adjustment here, we don't have any store
+							//converting moves so we'll need to do this now
+							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Since this is a floating point destination, we need to 0 it out first
+							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+
+							//Put it in after the converting move
+							insert_instruction_after_given(pxor_instruction, converting_move);
+
+							//Emit the second convervsion between to go from an i32 to a float
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+
+							//Get this into the block
+							insert_instruction_before_given(second_conversion, store_instruction);
+
+							//Finally, the store's source will be this final source varialbe
+							store_instruction->source_register = second_conversion->destination_register;
+
+							//Once we're here the source type really is now the destination type
+							source_type = destination_type;
+
+							break;
+
+						//Unsigned values, we'll use a u32
+						case U8:
+						case U16:
+							//Move the old value into a u32 slot
+							type_adjusted_source = emit_temp_var(u32);
+							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->op1);
+
+							//This goes before our given instruction
+							insert_instruction_before_given(converting_move, store_instruction);
+
+							//Final type adjustment here, we don't have any store
+							//converting moves so we'll need to do this now
+							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Since this is a floating point destination, we need to 0 it out first
+							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+
+							//Put it in after the converting move
+							insert_instruction_after_given(pxor_instruction, converting_move);
+
+							//Emit the second convervsion between to go from an i32 to a float
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+
+							//Get this into the block
+							insert_instruction_before_given(second_conversion, store_instruction);
+
+							//Finally, the store's source will be this final source varialbe
+							store_instruction->source_register = second_conversion->destination_register;
+
+							//Once we're here the source type really is now the destination type
+							source_type = destination_type;
+
+							break;
+
+						//Everything else do nothing
+						default:
+							break;
+					}
 
 				/**
 				 * In the event that a converting move is required, we need to insert the converting
@@ -6708,8 +6994,21 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
 
-					//Now, our source type is the new source's type
-					source_type = new_source->type;
+					/**
+					 * If we have a conversion instruction that has an SSE destination, we need to emit
+					 * a special "pxor" statement beforehand to completely wipe out said register
+					 */
+					if(is_integer_to_sse_conversion_instruction(converting_move->instruction_type) == TRUE){
+						//We need to completely zero out the destination register here, so we will emit a pxor to do
+						//just that
+						pxor_instruction = emit_direct_pxor_instruction(new_source);
+
+						//Get this in right before the given
+						insert_instruction_before_given(pxor_instruction, converting_move);
+					}
+
+					//Now, our source type is the destination's type
+					source_type = destination_type;
 
 					//And the source register is the new source, not the old one
 					store_instruction->source_register = new_source;
@@ -6740,13 +7039,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				source_type = store_instruction->op2->type;
 
 				/**
-				 * This is a special edgecase where we are moving from 32 bit to 64 bit
-				 * In the event that we do this, we need to emit a simple copy of the source
-				 * variable and give it the 64 bit type so that we have a quad word register
+				 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+				 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+				 * zero pad when 32 bit moves happen
 				 */
-				if(is_type_unsigned_64_bit(destination_type) == TRUE
-					&& is_type_32_bit_int(store_instruction->op2->type) == TRUE){
-
+				if(is_type_unsigned_64_bit(destination_type) == TRUE 
+					&& is_type_32_bit_int(source_type) == TRUE){
 					//First we duplicate it
 					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op2);
 
@@ -6756,6 +7054,92 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 
 					//And this will be our source
 					store_instruction->source_register = duplicate_64_bit;
+
+				/**
+				 * If we have a case where we are trying to move an 8/16 bit
+				 * value into an f32/f64 value, unfortunately no x86-64 instructions
+				 * exist to do that conversion. Instead, we'll need to first convert
+				 * this value into a 32 bit integer, and then convert that into
+				 * a floating point value
+				 */
+				} else if(is_type_floating_point(destination_type) == TRUE 
+					&& source_type->type_size <= 2){
+
+					//Go based on the source type token
+					switch(source_type->basic_type_token){
+						//Signed values, we will use an i32
+						case CHAR:
+						case I8:
+						case I16:
+							//Move the old value into an i32 slot
+							type_adjusted_source = emit_temp_var(i32);
+							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->op2);
+
+							//This goes before our given instruction
+							insert_instruction_before_given(converting_move, store_instruction);
+
+							//Final type adjustment here, we don't have any store
+							//converting moves so we'll need to do this now
+							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Since this is a floating point destination, we need to 0 it out first
+							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+
+							//Put it in after the converting move
+							insert_instruction_after_given(pxor_instruction, converting_move);
+
+							//Emit the second convervsion between to go from an i32 to a float
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+
+							//Get this into the block
+							insert_instruction_before_given(second_conversion, store_instruction);
+
+							//Finally, the store's source will be this final source varialbe
+							store_instruction->source_register = second_conversion->destination_register;
+
+							//Once we're here the source type really is now the destination type
+							source_type = destination_type;
+
+							break;
+
+						//Unsigned values, we'll use a u32
+						case U8:
+						case U16:
+							//Move the old value into a u32 slot
+							type_adjusted_source = emit_temp_var(u32);
+							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->op2);
+
+							//This goes before our given instruction
+							insert_instruction_before_given(converting_move, store_instruction);
+
+							//Final type adjustment here, we don't have any store
+							//converting moves so we'll need to do this now
+							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Since this is a floating point destination, we need to 0 it out first
+							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+
+							//Put it in after the converting move
+							insert_instruction_after_given(pxor_instruction, converting_move);
+
+							//Emit the second convervsion between to go from an i32 to a float
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+
+							//Get this into the block
+							insert_instruction_before_given(second_conversion, store_instruction);
+
+							//Finally, the store's source will be this final source varialbe
+							store_instruction->source_register = second_conversion->destination_register;
+
+							//Once we're here the source type really is now the destination type
+							source_type = destination_type;
+
+							break;
+
+						//Everything else do nothing
+						default:
+							break;
+					}
 
 				/**
 				 * In the event that a converting move is required, we need to insert the converting
@@ -6772,8 +7156,22 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
 
-					//Now, our source type is the new source's type
-					source_type = new_source->type;
+					/**
+					 * If we have a conversion instruction that has an SSE destination, we need to emit
+					 * a special "pxor" statement beforehand to completely wipe out said register
+					 */
+					if(is_integer_to_sse_conversion_instruction(converting_move->instruction_type) == TRUE){
+						//We need to completely zero out the destination register here, so we will emit a pxor to do
+						//just that
+						pxor_instruction = emit_direct_pxor_instruction(new_source);
+
+						//Get this in right before the given
+						insert_instruction_before_given(pxor_instruction, converting_move);
+					}
+
+
+					//Now, our source type is the new destination's type
+					source_type = destination_type;
 
 					//And the source register is the new source, not the old one
 					store_instruction->source_register = new_source;
@@ -6810,15 +7208,42 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
  * This helper function will handle the source and destination assignment
  * of a load instruction. This will also handle the edge case where we are
  * loading from a 32 bit memory region into an unsigned 64 bit region
+ *
+ * Unlike stores, load instructions are capable of doing converting moves. This will impact how
+ * we handle our byte/short to float/double logic. This function will return a destination
+ * register that the rest of the load process will have to use
+ *
+ * NOTE: We assume that the load instruction is the very first instruction
  */
-static inline void handle_load_instruction_destination_assignment(instruction_t* load_instruction){
+static void handle_load_instruction_type_and_destination(instruction_window_t* window){
+	//As noted above this is the assumption
+	instruction_t* load_instruction = window->instruction1;
+
+	//What is the very last instruction that we've touched. By default it's just what was passed
+	instruction_t* last_instruction = load_instruction;
+
+	//For any converting moves that we may have
+	instruction_t* pxor_instruction;
+
+	//For any copying we need
+	instruction_t* converting_copy_instruction;
+
+	//Local variables for our eventual move selection
+	variable_size_t destination_size;
+	variable_size_t source_size;
+	u_int8_t is_destination_signed;
+
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
 
 	//This is always the memory region type
 	generic_type_t* memory_region_type = load_instruction->memory_read_write_type;
 
-	//Let's look for the special case here
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
 	if(is_type_32_bit_int(memory_region_type) == TRUE
 		&& is_type_unsigned_64_bit(destination_register->type) == TRUE){
 
@@ -6834,99 +7259,196 @@ static inline void handle_load_instruction_destination_assignment(instruction_t*
 
 		//And we need to adjust this to be a MOVL type
 		load_instruction->instruction_type = MOVL;
+
+		//For this instance, we do not need to allow the helper to select for us since it's already done
+		//in here
+
+	/**
+	 * If we have a case where we are trying to move an 8/16 bit
+	 * value into an f32/f64 value, unfortunately no x86-64 instructions
+	 * exist to do that conversion. Instead, we'll need to first convert
+	 * this value into a 32 bit integer, and then convert that into
+	 * a floating point value
+	 */
+	} else if(is_type_floating_point(destination_register->type)
+				&& memory_region_type->type_size <= 2){
+
+		//We will need an intermediary destination to use in the load
+		three_addr_var_t* intermediary_destination;
+
+		switch(memory_region_type->basic_type_token){
+			//Signed types will use an I32 as the stopgap
+			case CHAR:
+			case I8:
+			case I16:
+				//The load instruction's destination will be the intermediary
+				intermediary_destination = emit_temp_var(i32);
+				load_instruction->destination_register = intermediary_destination;
+
+				//Populate all of these values now
+				destination_size = get_type_size(intermediary_destination->type);
+				source_size = get_type_size(memory_region_type);
+				is_destination_signed = is_type_signed(intermediary_destination->type);
+
+				//Let the helper select for us. We are passing clean as true, since we are coming from memory
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+
+				//Since we know that this is a floating point conversion, we will emit the PXOR here
+				pxor_instruction = emit_direct_pxor_instruction(destination_register);
+
+				//Get this in right before the given
+				insert_instruction_after_given(pxor_instruction, load_instruction);
+
+				//Now we need to add a separate copy instruction into the true destination
+				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->assignee, intermediary_destination);
+
+				//This goes right after the pxor 
+				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
+
+				//This now is the last instruction
+				last_instruction = converting_copy_instruction;
+
+				break;
+
+			//Unsigned types will use a U32 as the stopgap
+			case U8:
+			case U16:
+				//The load instruction's destination will be the intermediary
+				intermediary_destination = emit_temp_var(u32);
+				load_instruction->destination_register = intermediary_destination;
+
+				//Populate all of these values now
+				destination_size = get_type_size(intermediary_destination->type);
+				source_size = get_type_size(memory_region_type);
+				is_destination_signed = is_type_signed(intermediary_destination->type);
+
+				//Let the helper select for us. We are passing clean as true, since we are coming from memory
+				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+
+				//Since we know that this is a floating point conversion, we will emit the PXOR here
+				pxor_instruction = emit_direct_pxor_instruction(destination_register);
+
+				//Get this in right before the given
+				insert_instruction_after_given(pxor_instruction, load_instruction);
+
+				//Now we need to add a separate copy instruction into the true destination
+				converting_copy_instruction = emit_register_movement_instruction_directly(load_instruction->assignee, intermediary_destination);
+
+				//This goes right after the pxor
+				insert_instruction_after_given(converting_copy_instruction, pxor_instruction);
+
+				//This now is the last instruction
+				last_instruction = converting_copy_instruction;
+
+				break;
+
+			//This should be unreachable
+			default:
+				break;
+		}
+
+
+		//Let the helper select for us. We are passing clean as true, since we are coming from memory
+		//load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 	
 	//Otherwise, we just assign the destination to be the destination
 	//register
 	} else {
 		load_instruction->destination_register = destination_register;
+
+		//Populate all of these variables
+		destination_size = get_type_size(destination_register->type);
+		source_size = get_type_size(memory_region_type);
+		is_destination_signed = is_type_signed(destination_register->type);
+
+		//Let the helper select for us. We are passing clean as true, since we are coming from memory
+		load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+
+		/**
+		 * If we have a conversion instruction that has an SSE destination, we need to emit
+		 * a special "pxor" statement beforehand to completely wipe out said register
+		 */
+		if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
+			//We need to completely zero out the destination register here, so we will emit a pxor to do
+			//just that
+			pxor_instruction = emit_direct_pxor_instruction(load_instruction->assignee);
+
+			//Get this in right before the given
+			insert_instruction_before_given(pxor_instruction, load_instruction);
+		}
 	}
+
+	//Load is from memory always
+	load_instruction->memory_access_type = READ_FROM_MEMORY;
+
+	//Rebuild the window around the last instruction, whatever that may be
+	reconstruct_window(window, last_instruction);
 }
 
 
 /**
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
+ *
+ * NOTE: We assume that the very fist instruction in this window is what we're after
  */
-static void handle_load_instruction(instruction_t* instruction){
-	//We need the destination and source sizes to determine our movement instruction
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	//Is the destination signed? This is also required inof
-	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-	//For a load, the source size is stored in the instruction itself
-	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
-
-	//Let the helper select for us. We are passing clean as true, since we are coming from memory
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-
-	//Load is from memory
-	instruction->memory_access_type = READ_FROM_MEMORY;
+static void handle_load_instruction(instruction_window_t* window){
+	//The load instruction itself
+	instruction_t* load_instruction = window->instruction1;
 
 	//Invoke the helper to handle the assignee and any edge cases
-	handle_load_instruction_destination_assignment(instruction);
-
-	/**
-	 * If we have a conversion instruction that has an SSE destination, we need to emit
-	 * a special "pxor" statement beforehand to completely wipe out said register
-	 */
-	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
-		//We need to completely zero out the destination register here, so we will emit a pxor to do
-		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
-
-		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, instruction);
-	}
+	handle_load_instruction_type_and_destination(window);
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
-	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//If this is *not* a global variable
-		if(instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = instruction->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->base_address;
 
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
 				//Let's get the offset from this memory address
-				three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->op1->linked_var->stack_region->base_address, u64);
+				three_addr_const_t* offset = emit_direct_integer_or_char_constant(load_instruction->op1->linked_var->stack_region->base_address, u64);
 
 				//We now will have something like <offset>(%rsp)
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 				//This will be the stack pointer
-				instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
 
 				//Store the offset too
-				instruction->offset = offset;
+				load_instruction->offset = offset;
 
 			//Otherwise there's no stack offset, so we're just dereferencing the
 			//stack pointer
 			} else {
 				//Change the mode
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
 				
 				//Source is now just the stack pointer
-				instruction->source_register = stack_pointer_variable;
+				load_instruction->source_register = stack_pointer_variable;
 			}
 
 		//Otherwise, we are loading a global variable
 		} else {
 			//This is going to be a global variable movement
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
 			//The address calc reg1 is the instruction pointer
-			instruction->address_calc_reg1 = instruction_pointer_variable;
+			load_instruction->address_calc_reg1 = instruction_pointer_variable;
 
 			//The offset field holds the global var's name
-			instruction->rip_offset_variable = instruction->op1;
+			load_instruction->rip_offset_variable = load_instruction->op1;
 		}
 
 	} else {
 		//This will always be a SOURCE_ONLY
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+		load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
 
 		//And the op1 is our source
-		instruction->source_register = instruction->op1;
+		load_instruction->source_register = load_instruction->op1;
 	}
 }
 
@@ -6937,88 +7459,67 @@ static void handle_load_instruction(instruction_t* instruction){
  * load t5 <- MEM<t23>[8] --> movx 16(%rsp), t5
  *
  * This will usually generate an address calculation mode of OFFSET_ONLY
+ *
+ * NOTE: we assume that the first instruction in the window is the load instruction
  */
-static void handle_load_with_constant_offset_instruction(instruction_t* instruction){
-	//We need the destination and source sizes to determine our movement instruction
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	//Is the destination signed? This is also required inof
-	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-	//For a load, the source size is stored in the destination itself
-	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
-
-	//Let the helper decide for us. We are selecting clean as true, since we are coming from memory
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-
-	//Load is from memory
-	instruction->memory_access_type = READ_FROM_MEMORY;
+static void handle_load_with_constant_offset_instruction(instruction_window_t* window){
+	//This is the load that we're after
+	instruction_t* load_instruction = window->instruction1;
 
 	//Handle destination assignment based on op1
-	handle_load_instruction_destination_assignment(instruction);
-
-	/**
-	 * If we have a conversion instruction that has an SSE destination, we need to emit
-	 * a special "pxor" statement beforehand to completely wipe out said register
-	 */
-	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
-		//We need to completely zero out the destination register here, so we will emit a pxor to do
-		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
-
-		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, instruction);
-	}
+	handle_load_instruction_type_and_destination(window);
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
-	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//If this is *not* a global variable
-		if(instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = instruction->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->base_address;
 
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
 				//We need to sum the existing offset with the stack offset to get an accurate picture
-				sum_constant_with_raw_int64_value(instruction->offset, i64, stack_offset);
+				sum_constant_with_raw_int64_value(load_instruction->offset, i64, stack_offset);
 
 				//We now will have something like <offset>(%rsp)
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 				//This will be the stack pointer
-				instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
 
 			//Otherwise there's no stack offset, so we're just dereferencing the
 			//stack pointer with the pre-existing offset
 			} else {
 				//Change the mode
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 				
 				//Address calc just needs the stack pointer
-				instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
 			}
 
 		//Otherwise, we are loading a global variable with a subsequent offset. We can use a special
 		//rip-relative addressing mode to make this happen in one instruction
 		} else {
 			//The first address calc register is the instruction pointer
-			instruction->address_calc_reg1 = instruction_pointer_variable;
+			load_instruction->address_calc_reg1 = instruction_pointer_variable;
 
 			//The global var comes from op1
-			instruction->rip_offset_variable = instruction->op1;
+			load_instruction->rip_offset_variable = load_instruction->op1;
 
 			//The offset is already where it needs to be
 			//Now we just need to change the mode to make this work
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 		}
 
 	//Otherwise we aren't on the stack, it's just an offset. In that case, we'll keep the
 	//offset here and just
 	} else {
 		//This will always be a SOURCE_ONLY
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 		//Op1 is the only address calc needed
-		instruction->address_calc_reg1 = instruction->op1;
+		load_instruction->address_calc_reg1 = load_instruction->op1;
 	}
 }
 
@@ -7029,80 +7530,59 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
  * load t5 <- MEM<t23>[t24] --> movx 4(%rsp, t24), t5
  *
  * This usually generates addressing mode expressions with registers and offsets
+ *
+ * NOTE: We assume that the load instruction is always the first in the window
  */
-static void handle_load_with_variable_offset_instruction(instruction_t* instruction){
-	//We need the destination and source sizes to determine our movement instruction
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	//Is the destination signed? This is also required inof
-	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-	//For a load, the source size is stored in the destination itself
-	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
-
-	//Let the helper decide for us. We are selecting the source register as clean, since we're moving from memory
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-
-	//This is a read from memory type
-	instruction->memory_access_type = READ_FROM_MEMORY;
+static void handle_load_with_variable_offset_instruction(instruction_window_t* window){
+	//As noted above, this is the assumption
+	instruction_t* load_instruction = window->instruction1;
 
 	//Handle the destination assignment
-	handle_load_instruction_destination_assignment(instruction);
-
-	/**
-	 * If we have a conversion instruction that has an SSE destination, we need to emit
-	 * a special "pxor" statement beforehand to completely wipe out said register
-	 */
-	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
-		//We need to completely zero out the destination register here, so we will emit a pxor to do
-		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
-
-		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, instruction);
-	}
+	handle_load_instruction_type_and_destination(window);
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
-	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//If this is *not* a global variable
-		if(instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = instruction->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->base_address;
 
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
 				//We'll have something like <offset>(%rsp, t4)
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 				//Emit the offset
-				instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+				load_instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
 				//This will be the stack pointer
-				instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
 
 				//And this is whatever was there before
-				instruction->address_calc_reg2 = instruction->op2;
+				load_instruction->address_calc_reg2 = load_instruction->op2;
 
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-					instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+					load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 				}
 
 			//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
 			} else {
 				//Change the mode
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 				
 				//Copy both over
-				instruction->address_calc_reg1 = stack_pointer_variable;
-				instruction->address_calc_reg2 = instruction->op2;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg2 = load_instruction->op2;
 
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-					instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+					load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 				}
 			}
 
@@ -7111,43 +7591,43 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 		//are not able to combine the 2 in such a way
 		} else {
 			//Let the helper do the work
-			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(instruction->op1, instruction_pointer_variable, u64);
+			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_instruction->op1, instruction_pointer_variable, u64);
 
 			//Now insert this before the given instruction
-			insert_instruction_before_given(global_variable_address, instruction);
+			insert_instruction_before_given(global_variable_address, load_instruction);
 
 			//These are registers only
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
 			//The destination of the global variable address will be our new address calc reg 1. 
 			//We already have the offset loaded in, so that remains unchanged
-			instruction->address_calc_reg1 = global_variable_address->destination_register;
+			load_instruction->address_calc_reg1 = global_variable_address->destination_register;
 
 			//The second address calc register is whatever is in op2
-			instruction->address_calc_reg2 = instruction->op2;
+			load_instruction->address_calc_reg2 = load_instruction->op2;
 
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-				instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+				load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 			}
 		}
 
 	//Otherwise we aren't on the stack, so we can just keep both registers
 	} else {
 		//Just have registers here
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+		load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
 		//Assign over like such
-		instruction->address_calc_reg1 = instruction->op1;
-		instruction->address_calc_reg2 = instruction->op2;
+		load_instruction->address_calc_reg1 = load_instruction->op1;
+		load_instruction->address_calc_reg2 = load_instruction->op2;
 
 		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 		//must adhere to this one's type
-		if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-			instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+		if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+			load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 		}
 	}
 }
@@ -7214,12 +7694,6 @@ static void handle_load_statement_base_address(instruction_t* load_statement){
  * of the given lea statement at the end
  */
 static void combine_lea_with_variable_offset_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* variable_offset_load){
-	//Cache all of these now before we do any manipulations
-	variable_size_t destination_size = get_type_size(variable_offset_load->assignee->type);
-	u_int8_t is_destination_signed = is_type_signed(variable_offset_load->assignee->type);
-	//For a load, the source size is stored in the destination itself
-	variable_size_t source_size = get_type_size(variable_offset_load->memory_read_write_type);
-
 	/**
 	 * Go through all valid cases here. Note that anything where we have 2 registers in the lea
 	 * will not work because we then wouldn't have enough room for the base address/rsp register
@@ -7263,6 +7737,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//The lea is now useless so get rid of it
 			delete_statement(lea_statement);
 
+			//Rebuild the window around the load
+			reconstruct_window(window, variable_offset_load);
+
+			//Handle the destination assignment
+			handle_load_instruction_type_and_destination(window);
+
 			break;
 			
 		/**
@@ -7298,6 +7778,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 
 			//The lea is now useless so get rid of it
 			delete_statement(lea_statement);
+
+			//Rebuild the window around the load
+			reconstruct_window(window, variable_offset_load);
+
+			//Handle the destination assignment
+			handle_load_instruction_type_and_destination(window);
 
 			break;
 
@@ -7340,44 +7826,27 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//The lea is now useless so get rid of it
 			delete_statement(lea_statement);
 
+			//Rebuild around the load
+			reconstruct_window(window, variable_offset_load);
+
+			//Handle the destination assignment
+			handle_load_instruction_type_and_destination(window);
+
 			break;
 
 		//By default - if we can't handle it, we just invoke the other helpers and call
 		//it quits. This ensures uniform behavior and correctness
 		default:
 			handle_lea_statement(lea_statement);
-			handle_load_with_variable_offset_instruction(variable_offset_load);
 
-			//Reconstruct around the last one(the load)
+			//Rebuild around the load
 			reconstruct_window(window, variable_offset_load);
 
-			//And get out
-			return;
+			//Now deal with this
+			handle_load_with_variable_offset_instruction(window);
+
+			break;
 	}
-	
-	//NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
-	//Let the helper decide for us. We are choosing the source as clean, since it is coming from memory
-	variable_offset_load->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-	//This is a read from memory type
-	variable_offset_load->memory_access_type = READ_FROM_MEMORY;
-	//Handle the destination assignment
-	handle_load_instruction_destination_assignment(variable_offset_load);
-
-	/**
-	 * If we have a conversion instruction that has an SSE destination, we need to emit
-	 * a special "pxor" statement beforehand to completely wipe out said register
-	 */
-	if(is_integer_to_sse_conversion_instruction(variable_offset_load->instruction_type) == TRUE){
-		//We need to completely zero out the destination register here, so we will emit a pxor to do
-		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(variable_offset_load->destination_register);
-
-		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, variable_offset_load);
-	}
-
-	//The window always needs to be rebuilt around the last instruction that we touched
-	reconstruct_window(window, variable_offset_load);
 }
 
 
@@ -7386,46 +7855,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
  * rip relative constant addressing, but we may extend it in the future
  */
 static void combine_lea_with_regular_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* load_statement){
-	//Local variable declarations
-	variable_size_t destination_size;
-	variable_size_t source_size;
-	u_int8_t is_destination_signed;
-	
 	//Go based on what kind of lea we have
 	switch(lea_statement->lea_statement_type){
 		/**
 		 * This is our main target with this rule
 		 */
 		case OIR_LEA_TYPE_RIP_RELATIVE:
-			//We need the destination and source sizes to determine our movement instruction
-			destination_size = get_type_size(load_statement->assignee->type);
-			//Is the destination signed? This is also required inof
-			is_destination_signed = is_type_signed(load_statement->assignee->type);
-			//For a load, the source size is stored in the instruction itself
-			source_size = get_type_size(load_statement->memory_read_write_type);
-
-			//Let the helper select for us. The source is guaranteed to be clean since it's coming from memory
-			load_statement->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-
-			//Let the helper deal with the load instruction's destination
-			handle_load_instruction_destination_assignment(load_statement);
-
-			/**
-			 * If we have a conversion instruction that has an SSE destination, we need to emit
-			 * a special "pxor" statement beforehand to completely wipe out said register
-			 */
-			if(is_integer_to_sse_conversion_instruction(load_statement->instruction_type) == TRUE){
-				//We need to completely zero out the destination register here, so we will emit a pxor to do
-				//just that
-				instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_statement->destination_register);
-
-				//Get this in right before the given
-				insert_instruction_before_given(pxor_instruction, load_statement);
-			}
-
-			//We are reading from memory here
-			load_statement->memory_access_type = READ_FROM_MEMORY;
-
 			//This will be a rip-relative address
 			load_statement->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
@@ -7440,6 +7875,9 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 
 			//Rebuild the window based on the load statement
 			reconstruct_window(window, load_statement);
+
+			//Let the helper deal with the load instruction's destination
+			handle_load_instruction_type_and_destination(window);
 
 			break;
 
@@ -8313,13 +8751,13 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
-			handle_load_instruction(instruction);
+			handle_load_instruction(window);
 			break;
 		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
-			handle_load_with_constant_offset_instruction(instruction);
+			handle_load_with_constant_offset_instruction(window);
 			break;
 		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
-			handle_load_with_variable_offset_instruction(instruction);
+			handle_load_with_variable_offset_instruction(window);
 			break;
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			handle_store_instruction(instruction);
