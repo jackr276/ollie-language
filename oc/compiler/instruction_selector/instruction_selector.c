@@ -7683,6 +7683,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//The lea is now useless so get rid of it
 			delete_statement(lea_statement);
 
+			//Rebuild the window around the load
+			reconstruct_window(window, variable_offset_load);
+
+			//Handle the destination assignment
+			handle_load_instruction_type_and_destination(window);
+
 			break;
 			
 		/**
@@ -7718,6 +7724,12 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 
 			//The lea is now useless so get rid of it
 			delete_statement(lea_statement);
+
+			//Rebuild the window around the load
+			reconstruct_window(window, variable_offset_load);
+
+			//Handle the destination assignment
+			handle_load_instruction_type_and_destination(window);
 
 			break;
 
@@ -7760,6 +7772,9 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//The lea is now useless so get rid of it
 			delete_statement(lea_statement);
 
+			//Handle the destination assignment
+			handle_load_instruction_type_and_destination(window);
+
 			break;
 
 		//By default - if we can't handle it, we just invoke the other helpers and call
@@ -7768,12 +7783,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			handle_lea_statement(lea_statement);
 			handle_load_with_variable_offset_instruction(window);
 
-			//And get out
-			return;
+			break;
 	}
-	
-	//Handle the destination assignment
-	handle_load_instruction_type_and_destination(window);
 }
 
 
@@ -7788,12 +7799,6 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 		 * This is our main target with this rule
 		 */
 		case OIR_LEA_TYPE_RIP_RELATIVE:
-			//Let the helper deal with the load instruction's destination
-			handle_load_instruction_type_and_destination(window);
-
-			//We are reading from memory here
-			load_statement->memory_access_type = READ_FROM_MEMORY;
-
 			//This will be a rip-relative address
 			load_statement->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
@@ -7808,6 +7813,9 @@ static void combine_lea_with_regular_load_instruction(instruction_window_t* wind
 
 			//Rebuild the window based on the load statement
 			reconstruct_window(window, load_statement);
+
+			//Let the helper deal with the load instruction's destination
+			handle_load_instruction_type_and_destination(window);
 
 			break;
 
