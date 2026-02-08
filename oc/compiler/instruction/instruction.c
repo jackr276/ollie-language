@@ -1070,7 +1070,7 @@ instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_
  * be used by the instruction selector when we need to insert pxor functions for clearing
  * SSE registers
  */
-instruction_t* emit_direct_pxor_instruction(three_addr_var_t* target){
+instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_var_t* source){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -1078,8 +1078,8 @@ instruction_t* emit_direct_pxor_instruction(three_addr_var_t* target){
 	instruction->instruction_type = PXOR;
 
 	//The source and destination are the exact same
-	instruction->destination_register = target;
-	instruction->source_register = target;
+	instruction->destination_register = destination;
+	instruction->source_register = source;
 
 	//Now give it back
 	return instruction;

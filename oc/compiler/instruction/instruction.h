@@ -550,11 +550,9 @@ instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_
 instruction_t* emit_pop_instruction(three_addr_var_t* popee);
 
 /**
- * Emit a PXOR instruction that's already been instruction selected. This is intended to
- * be used by the instruction selector when we need to insert pxor functions for clearing
- * SSE registers
+ * Emit a PXOR instruction that's already been instruction selected
  */
-instruction_t* emit_direct_pxor_instruction(three_addr_var_t* target);
+instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_var_t* source);
 
 /**
  * Emit a lea statement that has one operand and an offset

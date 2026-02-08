@@ -230,6 +230,7 @@ typedef enum{
 	CMOVP,
 	//End conditional moves
 	PXOR, //Packed logical exclusive or
+	PXOR_CLEAR, //A specialized PXOR clear instruction. This is only used for clearing xmm live ranges
 	PAND, //Packed logical and
 	PANDN, //Packed logical and not
 	POR, //Packed logical or

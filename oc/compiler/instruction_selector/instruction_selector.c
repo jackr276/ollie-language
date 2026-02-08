@@ -3569,6 +3569,27 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
 
 
 /**
+ * Emit a PXOR instruction that's already been instruction selected. This is intended to
+ * be used by the instruction selector when we need to insert pxor functions for clearing
+ * SSE registers
+ */
+static inline instruction_t* emit_direct_pxor_instruction(three_addr_var_t* target){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Set the type
+	instruction->instruction_type = PXOR;
+
+	//The source and destination are the exact same
+	instruction->destination_register = target;
+	instruction->source_register = target;
+
+	//Now give it back
+	return instruction;
+}
+
+
+/**
  * Handle a simple movement instruction. In this context, simple just means that
  * we have a source and a destination, and now address calculation moves in between
  *
