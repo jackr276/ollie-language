@@ -41,10 +41,14 @@ int main(int argc, char** argv){
 		//This is usually how called functions will reference this
 		ollie_token_stream_t* token_stream_pointer = &token_stream;
 
+		//The token number
+		u_int32_t token_number = 0;
+
 		//Grab the first one
 		l = get_next_token(token_stream_pointer, &parser_line_num);
 
 		//Print it
+		printf("%d: ", token_number);
 		print_token(&l);
 
 		//The first token's seek
@@ -52,6 +56,8 @@ int main(int argc, char** argv){
 
 		//Very rudimentary here
 		while((l = get_next_token(token_stream_pointer, &parser_line_num)).tok != DONE){
+			token_number++;
+			printf("%d: ", token_number);
 			print_token(&l);
 		}
 
@@ -61,11 +67,18 @@ int main(int argc, char** argv){
 		//Reset the stream to the very start
 		reset_stream_to_given_index(token_stream_pointer, first_token_index);
 
+		//Reset
+		token_number = 0;
+
 		//Very rudimentary here
 		while((l = get_next_token(token_stream_pointer, &parser_line_num)).tok != DONE){
+			token_number++;
+			printf("%d: ", token_number);
 			print_token(&l);
 		}
+
 		//Print the last one
+		printf("%d: ", token_number);
 		print_token(&l);
 
 		//Let's see if we can now "Reconsume" the tokens starting at a given position

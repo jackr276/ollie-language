@@ -12,6 +12,8 @@
 
 //Link to the parser
 #include "../parser/parser.h"
+//Link to the preprocessor
+#include "../preprocessor/preprocessor.h"
 //Link to cfg
 #include "../cfg/cfg.h"
 #include "../utils/constants.h"
@@ -114,13 +116,23 @@ int main(int argc, char** argv){
 
 	//If this fails, we need to leave
 	if(stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
 		//0 for test runs
 		exit(0);
 	}
 	
 	//Store it inside of the token stream
 	options->token_stream = &stream;
+
+	//We now need to preprocess
+	preprocessor_results_t results = preprocess(options->file_name, options->token_stream);
+
+	//If we failed then bail out
+	if(results.status == PREPROCESSOR_FAILURE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Preprocessing Failed", 0);
+		//0 for test runs
+		exit(0);
+	}
 
 	//Now that we can actually open the file, we'll parse
 	front_end_results_package_t* parse_results = parse(options);
@@ -166,7 +178,6 @@ int main(int argc, char** argv){
 	function_symtab_dealloc(parse_results->function_symtab);
 	type_symtab_dealloc(parse_results->type_symtab);
 	variable_symtab_dealloc(parse_results->variable_symtab);
-	constants_symtab_dealloc(parse_results->constant_symtab);
 	dealloc_cfg(cfg);
 
 	//Now stop the clock - we want to test the deallocation overhead too

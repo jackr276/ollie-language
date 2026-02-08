@@ -476,7 +476,7 @@ static void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
  * This is used to manage when we need to swap a variable out and handle all use case
  * modifications
  */
-static void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
+static inline void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
 	//Decrement the old one's use count
 	old->use_count--;
 
@@ -501,7 +501,7 @@ static void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
  * 0010 >> 1 = 0001 != 1, current power: 3 
  *
  */
-static u_int32_t log2_of_known_power_of_2(u_int64_t value){
+static inline u_int32_t log2_of_known_power_of_2(u_int64_t value){
 	//Store a counter, initialize to 0
 	u_int32_t counter = 0;
 

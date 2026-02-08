@@ -11,6 +11,7 @@
 #include "../parser/parser.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/constants.h"
+#include "../preprocessor/preprocessor.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -94,12 +95,22 @@ int main(int argc, char** argv){
 
 	//If this fails, we need to leave
 	if(stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
 		exit(1);
 	}
 	
 	//Store it inside of the token stream
 	options->token_stream = &stream;
+
+	//We now need to preprocess
+	preprocessor_results_t preprocessor_results = preprocess(options->file_name, options->token_stream);
+
+	//If we failed then bail out
+	if(preprocessor_results.status == PREPROCESSOR_FAILURE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Preprocessing Failed", 0);
+		//0 for test runs
+		exit(0);
+	}
 
 	//Leverage the parser to do all of the heavy lifting
 	front_end_results_package_t* results = parse(options);

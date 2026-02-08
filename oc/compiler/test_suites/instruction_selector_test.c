@@ -15,6 +15,8 @@
 #include "../parser/parser.h"
 //Link to cfg
 #include "../cfg/cfg.h"
+//Link to the preprocessor
+#include "../preprocessor/preprocessor.h"
 //Link to the ollie optimizer
 #include "../optimizer/optimizer.h"
 //Link to the instruction selector
@@ -121,7 +123,17 @@ int main(int argc, char** argv){
 
 	//If this fails, we need to leave
 	if(stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
+		exit(0);
+	}
+
+	//We now need to preprocess
+	preprocessor_results_t results = preprocess(options->file_name, options->token_stream);
+
+	//If we failed then bail out
+	if(results.status == PREPROCESSOR_FAILURE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Preprocessing Failed", 0);
+		//0 for test runs
 		exit(0);
 	}
 
@@ -169,7 +181,6 @@ int main(int argc, char** argv){
 	function_symtab_dealloc(parse_results->function_symtab);
 	type_symtab_dealloc(parse_results->type_symtab);
 	variable_symtab_dealloc(parse_results->variable_symtab);
-	constants_symtab_dealloc(parse_results->constant_symtab);
 	dealloc_cfg(cfg);
 
 	//Now stop the clock - we want to test the deallocation overhead too

@@ -3,13 +3,14 @@
 * Test what happens if we take the address of an array twice
 */
 
+//Ollie macro definition
+$macro NULL 0l $endmacro
+
 define struct my_struct {
 	next:mut struct my_struct*;
 	a:mut i32;
 	b:mut char;
 } as custom_struct;
-
-replace NULL with 0;
 
 pub fn mutate_struct(a:mut custom_struct**) -> i32{
 	(*a)=>a = 3;

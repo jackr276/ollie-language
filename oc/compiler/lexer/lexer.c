@@ -22,7 +22,7 @@
 #include "../utils/constants.h"
 
 //Total number of keywords
-#define KEYWORD_COUNT 53
+#define KEYWORD_COUNT 54
 
 //We will use this to keep track of what the current lexer state is
 typedef enum {
@@ -44,20 +44,20 @@ static char* file_name;
 static char info[2000];
 
 //Token array, we will index using their enum values
-static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, REPLACE, 
+static const ollie_token_t tok_array[] = {IF, ELSE, DO, WHILE, FOR, FN, RETURN, JUMP, REQUIRE, 
 					U8, I8, U16, I16, U32, I32, U64, I64, F32, F64, CHAR, DEFINE, ENUM,
 					REGISTER, CONSTANT, VOID, TYPESIZE, LET, DECLARE, WHEN, CASE, DEFAULT, SWITCH, BREAK, CONTINUE, 
 					STRUCT, AS, ALIAS, SIZEOF, DEFER, MUT, DEPENDENCIES, ASM, WITH, LIB, IDLE, PUB, UNION, BOOL,
-				    EXTERNAL, TRUE_CONST, FALSE_CONST, INLINE};
+				    EXTERNAL, TRUE_CONST, FALSE_CONST, INLINE, MACRO, ENDMACRO};
 
 //Direct one to one mapping
 static const char* keyword_array[] = {"if", "else", "do", "while", "for", "fn", "ret", "jump",
-						 "require", "replace", "u8", "i8", "u16",
+						 "require", "u8", "i8", "u16",
 						 "i16", "u32", "i32", "u64", "i64", "f32", "f64", 
 						  "char", "define", "enum", "register", "constant",
 						  "void", "typesize", "let", "declare", "when", "case", "default", "switch",
 						  "break", "continue", "struct", "as", "alias", "sizeof", "defer", "mut", "dependencies", "asm",
-						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false", "inline"};
+						  "with", "lib", "idle", "pub", "union", "bool", "external", "true", "false", "inline", "$macro", "$endmacro"};
 
 /* ============================================= GLOBAL VARIABLES  ============================================ */
 
@@ -192,8 +192,10 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "jump";
 		case REQUIRE:
 			return "require";
-		case REPLACE:
-			return "replace";
+		case MACRO:
+			return "$macro";
+		case ENDMACRO:
+			return "$endmacro";
 		case U8:
 			return "u8";
 		case I8:
@@ -453,10 +455,41 @@ static inline u_int8_t is_whitespace(char ch, u_int32_t* line_number){
 
 
 /**
- * Determines if an identifier is a keyword or some user-written identifier
+ * Add a token into the stream. This also handles dynamic resizing if
+ * it's needed
+ *
+ * This performs the same functionality as the token_array_add, but it is inlined here for
+ * our strict performance requirements
  */
-static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int32_t line_number){
+static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t lexitem){
+	//Dynamic resize for the token stream
+	if(stream->token_stream.current_index == stream->token_stream.current_max_size){
+		//Double it
+		stream->token_stream.current_max_size *= 2;
+
+		//Reallocate the entire array
+		stream->token_stream.internal_array = realloc(stream->token_stream.internal_array, sizeof(lexitem_t) * stream->token_stream.current_max_size);
+	}
+
+	//Add it into the stream
+	stream->token_stream.internal_array[stream->token_stream.current_index] = lexitem;
+
+	//Update the index for next time
+	(stream->token_stream.current_index)++;
+}
+
+
+/**
+ * Determines if an identifier is a keyword or some user-written identifier
+ *
+ * This function will also add said value into the stream itself
+ */
+static inline void add_identifier_or_keyword_to_stream(ollie_token_stream_t* stream, dynamic_string_t lexeme, u_int32_t line_number){
+	//Stack allocate
 	lexitem_t lex_item;
+
+	//By default we don't want to ignore
+	lex_item.ignore = FALSE;
 
 	//Assign our line number;
 	lex_item.line_num = line_number;
@@ -464,7 +497,7 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int32_t line_n
 	lex_item.constant_values.signed_long_value = 0;
 
 	//Let's see if we have a keyword here
-	for(u_int8_t i = 0; i < KEYWORD_COUNT; i++){
+	for(u_int32_t i = 0; i < KEYWORD_COUNT; i++){
 		if(strcmp(keyword_array[i], lexeme.string) == 0){
 			//For true/false, we can convert them into the kind of constant we want off the bat
 			switch(tok_array[i]){
@@ -473,40 +506,48 @@ static lexitem_t identifier_or_keyword(dynamic_string_t lexeme, u_int32_t line_n
 					//Set the byte value
 					lex_item.constant_values.unsigned_byte_value = 1;
 
-					return lex_item;
+					//Add it into the stream
+					add_lexitem_to_stream(stream, lex_item);
+
+					//And leave
+					return;
 				
 				case FALSE_CONST:
 					lex_item.tok = BYTE_CONST_FORCE_U;
 					//Set the byte value
 					lex_item.constant_values.unsigned_byte_value = 0;
 
-					return lex_item;
+					//Add it into the stream
+					add_lexitem_to_stream(stream, lex_item);
+
+					//And leave
+					return;
 
 				default:
 					//We can get out of here
 					lex_item.tok = tok_array[i];
 					//Store the lexeme in here
 					lex_item.lexeme = lexeme;
-					return lex_item;
+
+					//Add it into the stream
+					add_lexitem_to_stream(stream, lex_item);
+
+					//And leave
+					return;
 			}
 		}
 	}
 	
 	//Set the type here
 	lex_item.tok = IDENT;
-
-	//Fail out if too long
-	if(lexeme.current_length >= MAX_IDENT_LENGTH){
-		printf("[LINE %d | LEXER ERROR]: Identifiers may be at most %d characters long\n", line_number, MAX_IDENT_LENGTH);
-		lex_item.tok = ERROR;
-		return lex_item;
-	}
-
 	//Store the lexeme in here
 	lex_item.lexeme = lexeme;
 
-	//Give back the lexer item
-	return lex_item;
+	//Add it into the stream
+	add_lexitem_to_stream(stream, lex_item);
+
+	//And leave
+	return;
 }
 
 
@@ -560,31 +601,6 @@ void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number
 
 
 /**
- * Add a token into the stream. This also handles dynamic resizing if
- * it's needed
- *
- * This performs the same functionality as the token_array_add, but it is inlined here for
- * our strict performance requirements
- */
-static inline void add_lexitem_to_stream(ollie_token_stream_t* stream, lexitem_t lexitem){
-	//Dynamic resize for the token stream
-	if(stream->token_stream.current_index == stream->token_stream.current_max_size){
-		//Double it
-		stream->token_stream.current_max_size *= 2;
-
-		//Reallocate the entire array
-		stream->token_stream.internal_array = realloc(stream->token_stream.internal_array, sizeof(lexitem_t) * stream->token_stream.current_max_size);
-	}
-
-	//Add it into the stream
-	stream->token_stream.internal_array[stream->token_stream.current_index] = lexitem;
-
-	//Update the index for next time
-	(stream->token_stream.current_index)++;
-}
-
-
-/**
  * Generate all of the ollie tokens and store them in the stream. When
  * this function returns, we will either have a good stream with everything
  * needed in it or a stream in an error state
@@ -605,6 +621,8 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 	lexitem_t lex_item;
 	lex_item.constant_values.signed_long_value = 0;
 	lex_item.tok = ERROR;
+	//By default we do not ignore
+	lex_item.ignore = FALSE;
 	lex_item.line_num = 0;
 	INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
 
@@ -702,7 +720,6 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 						break;
 
-					//Pound for label identifiers
 					case '#':
 						lex_item.tok = POUND;
 						lex_item.line_num = line_number;
@@ -1225,7 +1242,10 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 						break;
 
 					default:
-						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '$' || ch == '#' || ch == '_'){
+						if((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') 
+							|| ch == '$'
+							|| ch == '%' 
+							|| ch == '_'){
 							lexeme = dynamic_string_alloc();
 							dynamic_string_add_char_to_back(&lexeme, ch);
 							current_state = IN_IDENT;
@@ -1249,15 +1269,17 @@ static u_int8_t generate_all_tokens(FILE* fl, ollie_token_stream_t* stream){
 
 			case IN_IDENT:
 				//Is it a number, letter, or _ or $?. If so, we can have it in our ident
-				if(ch == '_' || ch == '$' || (ch >= 'a' && ch <= 'z') 
-				   || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')){
+				if(ch == '_' 
+					|| ch == '$' 
+					|| (ch >= 'a' && ch <= 'z') 
+				   	|| (ch >= 'A' && ch <= 'Z') 
+					|| (ch >= '0' && ch <= '9')){
 					dynamic_string_add_char_to_back(&lexeme, ch);
 
 				} else {
 					PUT_BACK_CHAR(fl);
-					//Invoke the helper, then add it in
-					lex_item = identifier_or_keyword(lexeme, line_number);
-					add_lexitem_to_stream(stream, lex_item);
+					//Let the helper do the work and add to the stream
+					add_identifier_or_keyword_to_stream(stream, lexeme, line_number);
 
 					//IMPORTANT - reset the state here
 					current_state = IN_START;

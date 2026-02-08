@@ -5,6 +5,7 @@
 //Link to the parser
 #include "../parser/parser.h"
 #include "../utils/constants.h"
+#include "../preprocessor/preprocessor.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -86,13 +87,23 @@ int main(int argc, char** argv){
 
 	//If this fails, we need to leave
 	if(token_stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(PARSE_ERROR, "Tokenizing Failed", 0);
+		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
 		//0 for test runs
 		exit(0);
 	}
 
 	//Store it and invoke the parser
 	options->token_stream = &token_stream;
+
+	//We now need to preprocess
+	preprocessor_results_t results = preprocess(options->file_name, options->token_stream);
+
+	//If we failed then bail out
+	if(results.status == PREPROCESSOR_FAILURE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Preprocessing Failed", 0);
+		//0 for test runs
+		exit(0);
+	}
 	
 	//Parse the file
 	parse(options);
