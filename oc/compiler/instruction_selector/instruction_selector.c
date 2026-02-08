@@ -3572,17 +3572,20 @@ static instruction_t* emit_move_instruction(three_addr_var_t* destination, three
  * Emit a PXOR instruction that's already been instruction selected. This is intended to
  * be used by the instruction selector when we need to insert pxor functions for clearing
  * SSE registers
+ *
+ * This is different from an actual PXOR. We are saying that this instruction exists exclusively
+ * to do register clearing, and nothing more. This will warrant special treatment
+ * in the register allocator because we are not counting any sources here
  */
-static inline instruction_t* emit_direct_pxor_instruction(three_addr_var_t* target){
+static inline instruction_t* emit_sse_register_clear_instruction(three_addr_var_t* target){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
 	//Set the type
-	instruction->instruction_type = PXOR;
+	instruction->instruction_type = PXOR_CLEAR;
 
-	//The source and destination are the exact same
+	//We just have something that we're clearing here
 	instruction->destination_register = target;
-	instruction->source_register = target;
 
 	//Now give it back
 	return instruction;
@@ -3686,7 +3689,7 @@ static void handle_register_movement_instruction(instruction_t* instruction){
 	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
 		//We need to completely zero out the destination register here, so we will emit a pxor to do
 		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(instruction->assignee);
 
 		//Get this in right before the given
 		insert_instruction_before_given(pxor_instruction, instruction);
@@ -3833,7 +3836,7 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 	if(is_integer_to_sse_conversion_instruction(move_instruction->instruction_type) == TRUE){
 		//We need to completely zero out the destination register here, so we will emit a pxor to do
 		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(destination_variable);
+		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(destination_variable);
 
 		//Get this in right before the move instruction
 		insert_instruction_before_given(pxor_instruction, move_instruction);
@@ -6299,7 +6302,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 		three_addr_var_t* comparing_against = emit_temp_var(logical_not->op1->type);
 
 		//First emit a PXOR instruction to zero out a variable. This is the variable that we will compare against
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(comparing_against);
+		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(comparing_against);
 
 		//Insert this before the given instruciton
 		insert_instruction_before_given(pxor_instruction, logical_not);
@@ -6942,7 +6945,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							type_adjusted_source = emit_temp_var(destination_type);
 
 							//Since this is a floating point destination, we need to 0 it out first
-							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+							pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
 
 							//Put it in after the converting move
 							insert_instruction_after_given(pxor_instruction, converting_move);
@@ -6976,7 +6979,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							type_adjusted_source = emit_temp_var(destination_type);
 
 							//Since this is a floating point destination, we need to 0 it out first
-							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+							pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
 
 							//Put it in after the converting move
 							insert_instruction_after_given(pxor_instruction, converting_move);
@@ -7022,7 +7025,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					if(is_integer_to_sse_conversion_instruction(converting_move->instruction_type) == TRUE){
 						//We need to completely zero out the destination register here, so we will emit a pxor to do
 						//just that
-						pxor_instruction = emit_direct_pxor_instruction(new_source);
+						pxor_instruction = emit_sse_register_clear_instruction(new_source);
 
 						//Get this in right before the given
 						insert_instruction_before_given(pxor_instruction, converting_move);
@@ -7104,7 +7107,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							type_adjusted_source = emit_temp_var(destination_type);
 
 							//Since this is a floating point destination, we need to 0 it out first
-							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+							pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
 
 							//Put it in after the converting move
 							insert_instruction_after_given(pxor_instruction, converting_move);
@@ -7138,7 +7141,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 							type_adjusted_source = emit_temp_var(destination_type);
 
 							//Since this is a floating point destination, we need to 0 it out first
-							pxor_instruction = emit_direct_pxor_instruction(type_adjusted_source);
+							pxor_instruction = emit_sse_register_clear_instruction(type_adjusted_source);
 
 							//Put it in after the converting move
 							insert_instruction_after_given(pxor_instruction, converting_move);
@@ -7184,7 +7187,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					if(is_integer_to_sse_conversion_instruction(converting_move->instruction_type) == TRUE){
 						//We need to completely zero out the destination register here, so we will emit a pxor to do
 						//just that
-						pxor_instruction = emit_direct_pxor_instruction(new_source);
+						pxor_instruction = emit_sse_register_clear_instruction(new_source);
 
 						//Get this in right before the given
 						insert_instruction_before_given(pxor_instruction, converting_move);
@@ -7315,7 +7318,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
-				pxor_instruction = emit_direct_pxor_instruction(destination_register);
+				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
 
 				//Get this in right before the given
 				insert_instruction_after_given(pxor_instruction, load_instruction);
@@ -7347,7 +7350,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 				load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 
 				//Since we know that this is a floating point conversion, we will emit the PXOR here
-				pxor_instruction = emit_direct_pxor_instruction(destination_register);
+				pxor_instruction = emit_sse_register_clear_instruction(destination_register);
 
 				//Get this in right before the given
 				insert_instruction_after_given(pxor_instruction, load_instruction);
@@ -7392,7 +7395,7 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 		if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
 			//We need to completely zero out the destination register here, so we will emit a pxor to do
 			//just that
-			pxor_instruction = emit_direct_pxor_instruction(load_instruction->assignee);
+			pxor_instruction = emit_sse_register_clear_instruction(load_instruction->assignee);
 
 			//Get this in right before the given
 			insert_instruction_before_given(pxor_instruction, load_instruction);
@@ -8281,7 +8284,7 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		three_addr_var_t* zeroed_out = emit_temp_var(fp_type);
 
 		//Emit the PXOR instruction to wipe it out
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(zeroed_out);
+		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(zeroed_out);
 
 		//Add this in before our statement
 		insert_instruction_before_given(pxor_instruction, instruction);

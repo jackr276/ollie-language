@@ -4569,11 +4569,21 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 		
-		//PXOR is largely used as a zeroer/dependency breaker in FP operations
-		//to fully 0 out the entire register. A property of any xor is the x ^ x = 0
+		//Generic PXOR
 		case PXOR:
 			fprintf(fl, "pxor ");
 			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+		
+		//PXOR instruction that is used for the express purpose of wiping out a register,
+		//and nothing more
+		case PXOR_CLEAR:
+			fprintf(fl, "pxor ");
+			print_variable(fl, instruction->destination_register, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->destination_register, mode);
 			fprintf(fl, "\n");
