@@ -6883,19 +6883,17 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
 				 * zero pad when 32 bit moves happen
 				 */
-				if(is_type_unsigned_64_bit(destination_type) == TRUE){
-					//We only case if the source is a 32 bit int
-					if(is_type_32_bit_int(source_type) == TRUE){
-						//First we duplicate it
-						three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op1);
+				if(is_type_unsigned_64_bit(destination_type) == TRUE 
+					&& is_type_32_bit_int(source_type) == TRUE){
+					//First we duplicate it
+					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op1);
 
-						//Then we give it the type that we want
-						duplicate_64_bit->type = store_instruction->assignee->type;
-						duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
+					//Then we give it the type that we want
+					duplicate_64_bit->type = store_instruction->assignee->type;
+					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
-						//And this will be our source
-						store_instruction->source_register = duplicate_64_bit;
-					}
+					//And this will be our source
+					store_instruction->source_register = duplicate_64_bit;
 
 				/**
 				 * If we have a case where we are trying to move an 8/16 bit
@@ -6907,6 +6905,9 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				} else if(is_type_floating_point(destination_type) == TRUE 
 					&& source_type->type_size <= 16){
 
+					printf("HERE\n\n");
+
+					//Go based on the source type token
 					switch(source_type->basic_type_token){
 						//Signed values, we will use an i32
 						case CHAR:
@@ -7803,6 +7804,8 @@ static void handle_store_instruction(instruction_t* instruction){
  * This will always be an OFFSET_ONLY calculation type
  */
 static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
+	printf("HERE\n");
+
 	//Invoke the helper for our source assignment
 	handle_store_instruction_sources_and_instruction_type(instruction);
 
