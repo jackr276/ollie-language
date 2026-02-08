@@ -7163,15 +7163,30 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
  * Unlike stores, load instructions are capable of doing converting moves. This will impact how
  * we handle our byte/short to float/double logic. This function will return a destination
  * register that the rest of the load process will have to use
+ *
+ * This function will return the last instruction that it touched. The caller is expected to rebuild
+ * the instruction window around this instruction
  */
-static void handle_load_instruction_type_and_destination(instruction_t* load_instruction){
+static instruction_t* handle_load_instruction_type_and_destination(instruction_t* load_instruction){
+	//What is the very last instruction that we've touched. By default it's just what was passed
+	instruction_t* last_instruction = load_instruction;
+
+	//Local variables for our eventual move selection
+	variable_size_t destination_size;
+	variable_size_t source_size;
+	u_int8_t is_destination_signed;
+
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
 
 	//This is always the memory region type
 	generic_type_t* memory_region_type = load_instruction->memory_read_write_type;
 
-	//Let's look for the special case here
+	/**
+	 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+	 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+	 * zero pad when 32 bit moves happen
+	 */
 	if(is_type_32_bit_int(memory_region_type) == TRUE
 		&& is_type_unsigned_64_bit(destination_register->type) == TRUE){
 
@@ -7188,13 +7203,26 @@ static void handle_load_instruction_type_and_destination(instruction_t* load_ins
 		//And we need to adjust this to be a MOVL type
 		load_instruction->instruction_type = MOVL;
 
-	} else if(){
+	/**
+	 * If we have a case where we are trying to move an 8/16 bit
+	 * value into an f32/f64 value, unfortunately no x86-64 instructions
+	 * exist to do that conversion. Instead, we'll need to first convert
+	 * this value into a 32 bit integer, and then convert that into
+	 * a floating point value
+	 */
+	} else if(is_type_floating_point(destination_register->type)
+				&& memory_region_type->type_size <= 2){
 
 	
 	//Otherwise, we just assign the destination to be the destination
 	//register
 	} else {
 		load_instruction->destination_register = destination_register;
+
+		//Populate all of these variables
+		destination_size = get_type_size(destination_register->type);
+		source_size = get_type_size(memory_region_type);
+		is_destination_signed = is_type_signed(destination_register->type);
 	}
 
 	//Load is from memory always
@@ -7202,6 +7230,9 @@ static void handle_load_instruction_type_and_destination(instruction_t* load_ins
 
 	//Let the helper select for us. We are passing clean as true, since we are coming from memory
 	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
+
+	//Give back whether or not the window needs to be rebuilt
+	return load_instruction;
 }
 
 
