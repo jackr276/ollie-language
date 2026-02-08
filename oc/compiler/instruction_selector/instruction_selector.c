@@ -7163,10 +7163,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
  * we handle our byte/short to float/double logic. This function will return a destination
  * register that the rest of the load process will have to use
  *
- * This function will return the last instruction that it touched. The caller is expected to rebuild
- * the instruction window around this instruction
+ * NOTE: We assume that the load instruction is the very first instruction
  */
-static instruction_t* handle_load_instruction_type_and_destination(instruction_t* load_instruction){
+static void handle_load_instruction_type_and_destination(instruction_window_t* window){
+	//As noted above this is the assumption
+	instruction_t* load_instruction = window->instruction1;
+
 	//What is the very last instruction that we've touched. By default it's just what was passed
 	instruction_t* last_instruction = load_instruction;
 
@@ -7247,6 +7249,9 @@ static instruction_t* handle_load_instruction_type_and_destination(instruction_t
 				//This now is the last instruction
 				last_instruction = converting_copy_instruction;
 
+				//Rebuild the window around it
+				reconstruct_window(window, last_instruction);
+
 				break;
 
 			//Unsigned types will use a U32 as the stopgap
@@ -7272,6 +7277,9 @@ static instruction_t* handle_load_instruction_type_and_destination(instruction_t
 
 				//This now is the last instruction
 				last_instruction = converting_copy_instruction;
+
+				//Rebuild the window around it
+				reconstruct_window(window, last_instruction);
 
 				break;
 
@@ -7300,84 +7308,87 @@ static instruction_t* handle_load_instruction_type_and_destination(instruction_t
 
 	//Load is from memory always
 	load_instruction->memory_access_type = READ_FROM_MEMORY;
-
-
-	//Give back whether or not the window needs to be rebuilt
-	return last_instruction;
 }
 
 
 /**
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
+ *
+ * NOTE: We assume that the very fist instruction in this window is what we're after
  */
-static void handle_load_instruction(instruction_t* instruction){
+static void handle_load_instruction(instruction_window_t* window){
+	//The load instruction itself
+	instruction_t* load_instruction = window->instruction1;
+
 	//Invoke the helper to handle the assignee and any edge cases
-	handle_load_instruction_type_and_destination(instruction);
+	handle_load_instruction_type_and_destination(window);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
 	 * a special "pxor" statement beforehand to completely wipe out said register
+	 *
+	 * TODO CHECK THIS
 	 */
-	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+	if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
 		//We need to completely zero out the destination register here, so we will emit a pxor to do
 		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_instruction->assignee);
 
 		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, instruction);
+		insert_instruction_before_given(pxor_instruction, load_instruction);
 	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
-	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//If this is *not* a global variable
-		if(instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = instruction->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->base_address;
 
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
 				//Let's get the offset from this memory address
-				three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->op1->linked_var->stack_region->base_address, u64);
+				three_addr_const_t* offset = emit_direct_integer_or_char_constant(load_instruction->op1->linked_var->stack_region->base_address, u64);
 
 				//We now will have something like <offset>(%rsp)
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 				//This will be the stack pointer
-				instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
 
 				//Store the offset too
-				instruction->offset = offset;
+				load_instruction->offset = offset;
 
 			//Otherwise there's no stack offset, so we're just dereferencing the
 			//stack pointer
 			} else {
 				//Change the mode
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
 				
 				//Source is now just the stack pointer
-				instruction->source_register = stack_pointer_variable;
+				load_instruction->source_register = stack_pointer_variable;
 			}
 
 		//Otherwise, we are loading a global variable
 		} else {
 			//This is going to be a global variable movement
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
 
 			//The address calc reg1 is the instruction pointer
-			instruction->address_calc_reg1 = instruction_pointer_variable;
+			load_instruction->address_calc_reg1 = instruction_pointer_variable;
 
 			//The offset field holds the global var's name
-			instruction->rip_offset_variable = instruction->op1;
+			load_instruction->rip_offset_variable = load_instruction->op1;
 		}
 
 	} else {
 		//This will always be a SOURCE_ONLY
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+		load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
 
 		//And the op1 is our source
-		instruction->source_register = instruction->op1;
+		load_instruction->source_register = load_instruction->op1;
 	}
 }
 
@@ -7388,75 +7399,82 @@ static void handle_load_instruction(instruction_t* instruction){
  * load t5 <- MEM<t23>[8] --> movx 16(%rsp), t5
  *
  * This will usually generate an address calculation mode of OFFSET_ONLY
+ *
+ * NOTE: we assume that the first instruction in the window is the load instruction
  */
-static void handle_load_with_constant_offset_instruction(instruction_t* instruction){
+static void handle_load_with_constant_offset_instruction(instruction_window_t* window){
+	//This is the load that we're after
+	instruction_t* load_instruction = window->instruction1;
+
 	//Handle destination assignment based on op1
-	handle_load_instruction_type_and_destination(instruction);
+	handle_load_instruction_type_and_destination(window);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
 	 * a special "pxor" statement beforehand to completely wipe out said register
+	 *
+	 * TODO CHECK
 	 */
-	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+	if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
 		//We need to completely zero out the destination register here, so we will emit a pxor to do
 		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_instruction->assignee);
 
 		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, instruction);
+		insert_instruction_before_given(pxor_instruction, load_instruction);
 	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
-	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//If this is *not* a global variable
-		if(instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = instruction->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->base_address;
 
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
 				//We need to sum the existing offset with the stack offset to get an accurate picture
-				sum_constant_with_raw_int64_value(instruction->offset, i64, stack_offset);
+				sum_constant_with_raw_int64_value(load_instruction->offset, i64, stack_offset);
 
 				//We now will have something like <offset>(%rsp)
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 				//This will be the stack pointer
-				instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
 
 			//Otherwise there's no stack offset, so we're just dereferencing the
 			//stack pointer with the pre-existing offset
 			} else {
 				//Change the mode
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 				
 				//Address calc just needs the stack pointer
-				instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
 			}
 
 		//Otherwise, we are loading a global variable with a subsequent offset. We can use a special
 		//rip-relative addressing mode to make this happen in one instruction
 		} else {
 			//The first address calc register is the instruction pointer
-			instruction->address_calc_reg1 = instruction_pointer_variable;
+			load_instruction->address_calc_reg1 = instruction_pointer_variable;
 
 			//The global var comes from op1
-			instruction->rip_offset_variable = instruction->op1;
+			load_instruction->rip_offset_variable = load_instruction->op1;
 
 			//The offset is already where it needs to be
 			//Now we just need to change the mode to make this work
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 		}
 
 	//Otherwise we aren't on the stack, it's just an offset. In that case, we'll keep the
 	//offset here and just
 	} else {
 		//This will always be a SOURCE_ONLY
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+		load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
 		//Op1 is the only address calc needed
-		instruction->address_calc_reg1 = instruction->op1;
+		load_instruction->address_calc_reg1 = load_instruction->op1;
 	}
 }
 
@@ -7467,67 +7485,75 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
  * load t5 <- MEM<t23>[t24] --> movx 4(%rsp, t24), t5
  *
  * This usually generates addressing mode expressions with registers and offsets
+ *
+ * NOTE: We assume that the load instruction is always the first in the window
  */
-static void handle_load_with_variable_offset_instruction(instruction_t* instruction){
+static void handle_load_with_variable_offset_instruction(instruction_window_t* window){
+	//As noted above, this is the assumption
+	instruction_t* load_instruction = window->instruction1;
+
+
 	//Handle the destination assignment
-	handle_load_instruction_type_and_destination(instruction);
+	handle_load_instruction_type_and_destination(window);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
 	 * a special "pxor" statement beforehand to completely wipe out said register
+	 *
+	 * TODO CHECK
 	 */
-	if(is_integer_to_sse_conversion_instruction(instruction->instruction_type) == TRUE){
+	if(is_integer_to_sse_conversion_instruction(load_instruction->instruction_type) == TRUE){
 		//We need to completely zero out the destination register here, so we will emit a pxor to do
 		//just that
-		instruction_t* pxor_instruction = emit_direct_pxor_instruction(instruction->assignee);
+		instruction_t* pxor_instruction = emit_direct_pxor_instruction(load_instruction->assignee);
 
 		//Get this in right before the given
-		insert_instruction_before_given(pxor_instruction, instruction);
+		insert_instruction_before_given(pxor_instruction, load_instruction);
 	}
 
 	//If we have a memory address variable(super common), we'll need to
 	//handle this now
-	if(instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
 		//If this is *not* a global variable
-		if(instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = instruction->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->base_address;
 
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
 				//We'll have something like <offset>(%rsp, t4)
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
 
 				//Emit the offset
-				instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+				load_instruction->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
 
 				//This will be the stack pointer
-				instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
 
 				//And this is whatever was there before
-				instruction->address_calc_reg2 = instruction->op2;
+				load_instruction->address_calc_reg2 = load_instruction->op2;
 
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-					instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+					load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 				}
 
 			//Otherwise there's no stack offset, so we'll keep the op2 and only have registers
 			} else {
 				//Change the mode
-				instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 				
 				//Copy both over
-				instruction->address_calc_reg1 = stack_pointer_variable;
-				instruction->address_calc_reg2 = instruction->op2;
+				load_instruction->address_calc_reg1 = stack_pointer_variable;
+				load_instruction->address_calc_reg2 = load_instruction->op2;
 
 				//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 				//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 				//must adhere to this one's type
-				if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-					instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+				if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+					load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 				}
 			}
 
@@ -7536,43 +7562,43 @@ static void handle_load_with_variable_offset_instruction(instruction_t* instruct
 		//are not able to combine the 2 in such a way
 		} else {
 			//Let the helper do the work
-			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(instruction->op1, instruction_pointer_variable, u64);
+			instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_instruction->op1, instruction_pointer_variable, u64);
 
 			//Now insert this before the given instruction
-			insert_instruction_before_given(global_variable_address, instruction);
+			insert_instruction_before_given(global_variable_address, load_instruction);
 
 			//These are registers only
-			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
 			//The destination of the global variable address will be our new address calc reg 1. 
 			//We already have the offset loaded in, so that remains unchanged
-			instruction->address_calc_reg1 = global_variable_address->destination_register;
+			load_instruction->address_calc_reg1 = global_variable_address->destination_register;
 
 			//The second address calc register is whatever is in op2
-			instruction->address_calc_reg2 = instruction->op2;
+			load_instruction->address_calc_reg2 = load_instruction->op2;
 
 			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 			//must adhere to this one's type
-			if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-				instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+				load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 			}
 		}
 
 	//Otherwise we aren't on the stack, so we can just keep both registers
 	} else {
 		//Just have registers here
-		instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
+		load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_ONLY;
 
 		//Assign over like such
-		instruction->address_calc_reg1 = instruction->op1;
-		instruction->address_calc_reg2 = instruction->op2;
+		load_instruction->address_calc_reg1 = load_instruction->op1;
+		load_instruction->address_calc_reg2 = load_instruction->op2;
 
 		//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
 		//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
 		//must adhere to this one's type
-		if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
-			instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+		if(is_converting_move_required(load_instruction->address_calc_reg1->type, load_instruction->address_calc_reg2->type) == TRUE){
+			load_instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(load_instruction, load_instruction->address_calc_reg2, load_instruction->address_calc_reg1->type);
 		}
 	}
 }
@@ -7639,12 +7665,6 @@ static void handle_load_statement_base_address(instruction_t* load_statement){
  * of the given lea statement at the end
  */
 static void combine_lea_with_variable_offset_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* variable_offset_load){
-	//Cache all of these now before we do any manipulations
-	variable_size_t destination_size = get_type_size(variable_offset_load->assignee->type);
-	u_int8_t is_destination_signed = is_type_signed(variable_offset_load->assignee->type);
-	//For a load, the source size is stored in the destination itself
-	variable_size_t source_size = get_type_size(variable_offset_load->memory_read_write_type);
-
 	/**
 	 * Go through all valid cases here. Note that anything where we have 2 registers in the lea
 	 * will not work because we then wouldn't have enough room for the base address/rsp register
@@ -8718,13 +8738,13 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
 			//Let the helper do it
-			handle_load_instruction(instruction);
+			handle_load_instruction(window);
 			break;
 		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
-			handle_load_with_constant_offset_instruction(instruction);
+			handle_load_with_constant_offset_instruction(window);
 			break;
 		case THREE_ADDR_CODE_LOAD_WITH_VARIABLE_OFFSET:
-			handle_load_with_variable_offset_instruction(instruction);
+			handle_load_with_variable_offset_instruction(window);
 			break;
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			handle_store_instruction(instruction);
