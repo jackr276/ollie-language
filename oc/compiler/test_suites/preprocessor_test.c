@@ -11,11 +11,10 @@
 #include <sys/types.h>
 #include <time.h>
 
-//Link to the parser
-#include "../parser/parser.h"
 //Link to the preprocessor
 #include "../preprocessor/preprocessor.h"
 #include "../utils/constants.h"
+#include "../utils/utility_structs.h"
 
 
 u_int32_t num_warnings;
@@ -96,7 +95,7 @@ int main(int argc, char** argv){
 	num_errors = 0;
 	num_warnings = 0;
 
-	printf("==================================== FRONT END TEST ======================================\n");
+	printf("==================================== PREPROCESSOR TEST ======================================\n");
 
 	//Grab all the options using the helper
 	compiler_options_t* options = parse_and_store_options(argc, argv);
@@ -113,61 +112,32 @@ int main(int argc, char** argv){
 	//Invoke the tokenizer
 	ollie_token_stream_t stream = tokenize(options->file_name);
 
-	//If this fails, we need to leave
+	//Tokenizing failed, error out
 	if(stream.status == STREAM_STATUS_FAILURE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
-		//0 for test runs
-		exit(0);
+		printf("TOKENIZING FAILED\n");
+		printf("==================================== END  ================================================\n");
 	}
-	
+
 	//Store it inside of the token stream
 	options->token_stream = &stream;
 
+	//Print out the pre-preprocssing token stream
+	printf("============================= BEFORE PREPROCESSOR =====================================\n");
+
+	for(u_int32_t i = 0; i < stream.token_stream.current_index; i++){
+		printf("%d: %s\n", i, lexitem_to_string(token_array_get_pointer_at(&(stream.token_stream), i)));
+	}
+
+	printf("============================= BEFORE PREPROCESSOR =====================================\n");
+
 	//We now need to preprocess
 	preprocessor_results_t results = preprocess(options->file_name, options->token_stream);
-
-	//If we failed then bail out
+	
+	//This did not work, get out
 	if(results.success == FALSE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Tokenizing Failed", 0);
-		//0 for test runs
-		exit(0);
+		printf("PREPROCESSOR FAILED\n");
+		printf("==================================== END  ================================================\n");
 	}
-
-	//Now that we can actually open the file, we'll parse
-	front_end_results_package_t* parse_results = parse(options);
-
-	//Let's see what kind of results we got
-	if(parse_results->root->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		//Timer end
-		clock_t end = clock();
-
-		//Calculate the final time
-		time_spent = (double)(end - begin)/CLOCKS_PER_SEC;
-
-		char info[2000];
-		if(time_execution == TRUE){
-			sprintf(info, "Parsing failed with %d errors and %d warnings in %.8f seconds", parse_results->num_errors, parse_results->num_warnings, time_spent);
-		} else {
-			sprintf(info, "Parsing failed with %d errors and %d warnings", parse_results->num_errors, parse_results->num_warnings);
-		}
-
-		printf("\n===================== Ollie Compiler Summary ==========================\n");
-		printf("Lexer processed %d lines\n", parse_results->lines_processed);
-		printf("%s\n", info);
-		printf("=======================================================================\n\n");
-		//Jump to the end, we're done here
-		goto final_printout;
-	}
-
-	//The number of warnings and errors
-	num_warnings += parse_results->num_warnings;
-	num_errors += parse_results->num_errors;
-
-	//Deallocate everything at the end
-	ast_dealloc();
-	function_symtab_dealloc(parse_results->function_symtab);
-	type_symtab_dealloc(parse_results->type_symtab);
-	variable_symtab_dealloc(parse_results->variable_symtab);
 
 	//Now stop the clock - we want to test the deallocation overhead too
 	//Timer end
@@ -178,14 +148,10 @@ int main(int argc, char** argv){
 
 	//Print out the summary now that we're done
 	printf("\n===================== PREPROCESSOR TEST SUMMARY ==========================\n");
-	printf("Lexer processed %d lines\n", parse_results->lines_processed);
-	printf("Parsing succeeded ");
 	if(time_execution == TRUE){
 		printf("in %.8f seconds ", time_spent);
 	}
 	printf("with %d warnings\n", num_warnings);
 	printf("=======================================================================\n\n");
-
-final_printout:
 	printf("==================================== END  ================================================\n");
 }
