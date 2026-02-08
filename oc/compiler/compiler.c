@@ -254,7 +254,7 @@ static u_int8_t compile(compiler_options_t* options){
 	num_warnings += preprocessor_results.warning_count;
 
 	//If we failed here then we are done 
-	if(preprocessor_results.success == FALSE){
+	if(preprocessor_results.status == PREPROCESSOR_FAILURE){
 		//Timer end
 		end = clock();
 
