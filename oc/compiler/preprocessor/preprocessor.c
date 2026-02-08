@@ -130,6 +130,9 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		//Bump the number of tokens in this macro
 		macro_record->total_token_count++;
 
+		//Flag that this needs to be ignored
+		lookahead->ignore = TRUE;
+
 		//Based on our token here we'll do a few things
 		switch(lookahead->tok){
 			//This is bad - there is no such thing as a nested macro and we are already
@@ -141,9 +144,6 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 
 			//This could be good or bad depending on what we're after
 			case ENDMACRO:
-				//IMPORTANT - flag that this token needs to be ignored by the replacer
-				lookahead->ignore = TRUE;
-
 				//This is invalid, we cannot have a completely 
 				//empty macro
 				if(macro_token_array->current_index == 0){
@@ -169,12 +169,8 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 			//In theory anything else that we see in here is valid, so we'll
 			//just do our bookkeeping and move along
 			default:
-				//IMPORTANT - flag that this token needs to be ignored by the replacer
-				lookahead->ignore = TRUE;
-
 				//Add this into the token array
 				token_array_add(macro_token_array, lookahead);
-				
 				break;
 		}
 	}
@@ -234,7 +230,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 			//If we see this, that means we have a floating endmacro in there
 			case ENDMACRO:
-				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Floating #endmacro directive declared. Are you missing a $macro directive?", token->line_num);
+				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Floating $endmacro directive declared. Are you missing a $macro directive?", token->line_num);
 				preprocessor_error_count++;
 				return FAILURE;
 
@@ -300,15 +296,15 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 		//Extract a pointer to the current token
 		current_token_pointer = token_array_get_pointer_at(old_token_array, old_token_array_index);
 
+		//Bump the index up
+		old_token_array++;
+
 		//Go based on what kind of token this is. If we have an identifier, then
 		//that could possibly be a macro for us
 		switch(current_token_pointer->tok){
 			//If we have an identifier, then there is a chance but not a guarantee
 			//that we are performing a macro substitution
 			case IDENT:
-				//Advance this no matter what
-				old_token_array_index++;
-
 				//Let's see if we have anything here
 				found_macro = lookup_macro(macro_symtab, current_token_pointer->lexeme.string);
 
@@ -329,6 +325,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 				//Use the new array and the macro we found to do our substitution
 				u_int8_t substitution_result = perform_macro_substitution(&new_token_array, found_macro);
 
+				//Get out if we have a failure here
 				if(substitution_result == FAILURE){
 					return FAILURE;
 				}
@@ -340,11 +337,10 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 				//If we are not told to ignore it, add it into
 				//the new array
 				if(current_token_pointer->ignore == FALSE){
+					printf("ADDING TOKEN %s\n", lexitem_to_string(current_token_pointer));
+					
 					token_array_add(&new_token_array, current_token_pointer);
 				}
-
-				//Either way bump the index
-				old_token_array_index++;
 
 				break;
 		}
@@ -417,9 +413,14 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	 * will remove all of the macros/macro calls from the token stream. The replacement pass will under the covers
 	 * create a secondary token stream object that will replace the original one, which will be deallocated
 	 */
+	u_int8_t replacement_pass_result = macro_replacement_pass(stream, macro_symtab);
 
-	//Otherwise, we did see at least one macro. This is the point where we need to do a replacement pass
-	//TODO replacmenet pass
+	//This is very rare but if it does happen we will note it
+	if(replacement_pass_result == FAILURE){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable/invalid macros detected. Please rememdy the errors and recompile", current_line_number);
+		//Note a failure
+		results.success = FALSE;
+	}
 	
 
 finalizer:
