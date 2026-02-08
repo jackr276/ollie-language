@@ -993,8 +993,7 @@ static inline void construct_pxor_clear_live_range(dynamic_array_t* general_purp
 	//Extract this LR
 	live_range_t* live_range = instruction->destination_register->associated_live_range;
 
-	//Counts as a use and an assignment
-	add_assigned_live_range(live_range, basic_block);
+	//Counts as a use as well, the prior function call already handled the assignment
 	add_used_live_range(live_range, basic_block);
 }
 
