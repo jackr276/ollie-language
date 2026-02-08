@@ -7772,6 +7772,9 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			//The lea is now useless so get rid of it
 			delete_statement(lea_statement);
 
+			//Rebuild around the load
+			reconstruct_window(window, variable_offset_load);
+
 			//Handle the destination assignment
 			handle_load_instruction_type_and_destination(window);
 
@@ -7781,6 +7784,11 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		//it quits. This ensures uniform behavior and correctness
 		default:
 			handle_lea_statement(lea_statement);
+
+			//Rebuild around the load
+			reconstruct_window(window, variable_offset_load);
+
+			//Now deal with this
 			handle_load_with_variable_offset_instruction(window);
 
 			break;
