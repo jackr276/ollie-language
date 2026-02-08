@@ -6905,8 +6905,6 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				} else if(is_type_floating_point(destination_type) == TRUE 
 					&& source_type->type_size <= 16){
 
-					printf("HERE\n\n");
-
 					//Go based on the source type token
 					switch(source_type->basic_type_token){
 						//Signed values, we will use an i32
@@ -7018,13 +7016,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				source_type = store_instruction->op2->type;
 
 				/**
-				 * This is a special edgecase where we are moving from 32 bit to 64 bit
-				 * In the event that we do this, we need to emit a simple copy of the source
-				 * variable and give it the 64 bit type so that we have a quad word register
+				 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+				 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+				 * zero pad when 32 bit moves happen
 				 */
-				if(is_type_unsigned_64_bit(destination_type) == TRUE
-					&& is_type_32_bit_int(store_instruction->op2->type) == TRUE){
-
+				if(is_type_unsigned_64_bit(destination_type) == TRUE 
+					&& is_type_32_bit_int(source_type) == TRUE){
 					//First we duplicate it
 					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op2);
 
@@ -7034,6 +7031,80 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 
 					//And this will be our source
 					store_instruction->source_register = duplicate_64_bit;
+
+				/**
+				 * If we have a case where we are trying to move an 8/16 bit
+				 * value into an f32/f64 value, unfortunately no x86-64 instructions
+				 * exist to do that conversion. Instead, we'll need to first convert
+				 * this value into a 32 bit integer, and then convert that into
+				 * a floating point value
+				 */
+				} else if(is_type_floating_point(destination_type) == TRUE 
+					&& source_type->type_size <= 16){
+
+					//Go based on the source type token
+					switch(source_type->basic_type_token){
+						//Signed values, we will use an i32
+						case CHAR:
+						case I8:
+						case I16:
+							//Move the old value into an i32 slot
+							type_adjusted_source = emit_temp_var(i32);
+							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->op2);
+
+							//This goes before our given instruction
+							insert_instruction_before_given(converting_move, store_instruction);
+
+							//Final type adjustment here, we don't have any store
+							//converting moves so we'll need to do this now
+							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Emit the second convervsion between to go from an i32 to a float
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+
+							//Get this into the block
+							insert_instruction_before_given(second_conversion, store_instruction);
+
+							//Finally, the store's source will be this final source varialbe
+							store_instruction->source_register = second_conversion->destination_register;
+
+							//Once we're here the source type really is now the destination type
+							source_type = destination_type;
+
+							break;
+
+						//Unsigned values, we'll use a u32
+						case U8:
+						case U16:
+							//Move the old value into a u32 slot
+							type_adjusted_source = emit_temp_var(u32);
+							converting_move = emit_move_instruction(type_adjusted_source, store_instruction->op2);
+
+							//This goes before our given instruction
+							insert_instruction_before_given(converting_move, store_instruction);
+
+							//Final type adjustment here, we don't have any store
+							//converting moves so we'll need to do this now
+							type_adjusted_source = emit_temp_var(destination_type);
+
+							//Emit the second convervsion between to go from an i32 to a float
+							second_conversion = emit_move_instruction(type_adjusted_source, converting_move->destination_register);
+
+							//Get this into the block
+							insert_instruction_before_given(second_conversion, store_instruction);
+
+							//Finally, the store's source will be this final source varialbe
+							store_instruction->source_register = second_conversion->destination_register;
+
+							//Once we're here the source type really is now the destination type
+							source_type = destination_type;
+
+							break;
+
+						//Everything else do nothing
+						default:
+							break;
+					}
 
 				/**
 				 * In the event that a converting move is required, we need to insert the converting
@@ -7804,8 +7875,6 @@ static void handle_store_instruction(instruction_t* instruction){
  * This will always be an OFFSET_ONLY calculation type
  */
 static void handle_store_with_constant_offset_instruction(instruction_t* instruction){
-	printf("HERE\n");
-
 	//Invoke the helper for our source assignment
 	handle_store_instruction_sources_and_instruction_type(instruction);
 
