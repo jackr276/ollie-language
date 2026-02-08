@@ -7159,8 +7159,12 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
  * This helper function will handle the source and destination assignment
  * of a load instruction. This will also handle the edge case where we are
  * loading from a 32 bit memory region into an unsigned 64 bit region
+ *
+ * Unlike stores, load instructions are capable of doing converting moves. This will impact how
+ * we handle our byte/short to float/double logic. This function will return a destination
+ * register that the rest of the load process will have to use
  */
-static inline void handle_load_instruction_destination_assignment(instruction_t* load_instruction){
+static void handle_load_instruction_type_and_destination(instruction_t* load_instruction){
 	//By default, assume it's the assignee
 	three_addr_var_t* destination_register = load_instruction->assignee;
 
@@ -7183,12 +7187,21 @@ static inline void handle_load_instruction_destination_assignment(instruction_t*
 
 		//And we need to adjust this to be a MOVL type
 		load_instruction->instruction_type = MOVL;
+
+	} else if(){
+
 	
 	//Otherwise, we just assign the destination to be the destination
 	//register
 	} else {
 		load_instruction->destination_register = destination_register;
 	}
+
+	//Load is from memory always
+	load_instruction->memory_access_type = READ_FROM_MEMORY;
+
+	//Let the helper select for us. We are passing clean as true, since we are coming from memory
+	load_instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
 }
 
 
@@ -7197,21 +7210,8 @@ static inline void handle_load_instruction_destination_assignment(instruction_t*
  * a garden variety dereferencing move
  */
 static void handle_load_instruction(instruction_t* instruction){
-	//We need the destination and source sizes to determine our movement instruction
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	//Is the destination signed? This is also required inof
-	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-	//For a load, the source size is stored in the instruction itself
-	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
-
-	//Let the helper select for us. We are passing clean as true, since we are coming from memory
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-
-	//Load is from memory
-	instruction->memory_access_type = READ_FROM_MEMORY;
-
 	//Invoke the helper to handle the assignee and any edge cases
-	handle_load_instruction_destination_assignment(instruction);
+	handle_load_instruction_type_and_destination(instruction);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
@@ -7288,21 +7288,8 @@ static void handle_load_instruction(instruction_t* instruction){
  * This will usually generate an address calculation mode of OFFSET_ONLY
  */
 static void handle_load_with_constant_offset_instruction(instruction_t* instruction){
-	//We need the destination and source sizes to determine our movement instruction
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	//Is the destination signed? This is also required inof
-	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-	//For a load, the source size is stored in the destination itself
-	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
-
-	//Let the helper decide for us. We are selecting clean as true, since we are coming from memory
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-
-	//Load is from memory
-	instruction->memory_access_type = READ_FROM_MEMORY;
-
 	//Handle destination assignment based on op1
-	handle_load_instruction_destination_assignment(instruction);
+	handle_load_instruction_type_and_destination(instruction);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
@@ -7380,21 +7367,8 @@ static void handle_load_with_constant_offset_instruction(instruction_t* instruct
  * This usually generates addressing mode expressions with registers and offsets
  */
 static void handle_load_with_variable_offset_instruction(instruction_t* instruction){
-	//We need the destination and source sizes to determine our movement instruction
-	variable_size_t destination_size = get_type_size(instruction->assignee->type);
-	//Is the destination signed? This is also required inof
-	u_int8_t is_destination_signed = is_type_signed(instruction->assignee->type);
-	//For a load, the source size is stored in the destination itself
-	variable_size_t source_size = get_type_size(instruction->memory_read_write_type);
-
-	//Let the helper decide for us. We are selecting the source register as clean, since we're moving from memory
-	instruction->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-
-	//This is a read from memory type
-	instruction->memory_access_type = READ_FROM_MEMORY;
-
 	//Handle the destination assignment
-	handle_load_instruction_destination_assignment(instruction);
+	handle_load_instruction_type_and_destination(instruction);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
@@ -7704,13 +7678,8 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 			return;
 	}
 	
-	//NOTE: These are down here so that the default clause in the above switch can take effect and avoid doing duplicate work
-	//Let the helper decide for us. We are choosing the source as clean, since it is coming from memory
-	variable_offset_load->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-	//This is a read from memory type
-	variable_offset_load->memory_access_type = READ_FROM_MEMORY;
 	//Handle the destination assignment
-	handle_load_instruction_destination_assignment(variable_offset_load);
+	handle_load_instruction_type_and_destination(variable_offset_load);
 
 	/**
 	 * If we have a conversion instruction that has an SSE destination, we need to emit
@@ -7735,29 +7704,14 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
  * rip relative constant addressing, but we may extend it in the future
  */
 static void combine_lea_with_regular_load_instruction(instruction_window_t* window, instruction_t* lea_statement, instruction_t* load_statement){
-	//Local variable declarations
-	variable_size_t destination_size;
-	variable_size_t source_size;
-	u_int8_t is_destination_signed;
-	
 	//Go based on what kind of lea we have
 	switch(lea_statement->lea_statement_type){
 		/**
 		 * This is our main target with this rule
 		 */
 		case OIR_LEA_TYPE_RIP_RELATIVE:
-			//We need the destination and source sizes to determine our movement instruction
-			destination_size = get_type_size(load_statement->assignee->type);
-			//Is the destination signed? This is also required inof
-			is_destination_signed = is_type_signed(load_statement->assignee->type);
-			//For a load, the source size is stored in the instruction itself
-			source_size = get_type_size(load_statement->memory_read_write_type);
-
-			//Let the helper select for us. The source is guaranteed to be clean since it's coming from memory
-			load_statement->instruction_type = select_move_instruction(destination_size, source_size, is_destination_signed, TRUE);
-
 			//Let the helper deal with the load instruction's destination
-			handle_load_instruction_destination_assignment(load_statement);
+			handle_load_instruction_type_and_destination(load_statement);
 
 			/**
 			 * If we have a conversion instruction that has an SSE destination, we need to emit
