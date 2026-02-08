@@ -2,6 +2,7 @@
 [![Lexer Test](https://github.com/jackr276/ollie-language/actions/workflows/lexer_CI.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/lexer_CI.yml)
 [![Symbol table test](https://github.com/jackr276/ollie-language/actions/workflows/symtab_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/symtab_test.yml)
 [![Parser test](https://github.com/jackr276/ollie-language/actions/workflows/parser_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/parser_test.yml)
+[![Preprocessor test](https://github.com/jackr276/ollie-language/actions/workflows/preprocessor_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/preprocessor_test.yml)
 [![Global compiler test](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/compiler_test.yml)
 [![Dynamic array test](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_array_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_array_test.yml)
 [![Dynamic string test](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_string_test.yml/badge.svg)](https://github.com/jackr276/ollie-language/actions/workflows/dynamic_string_test.yml)

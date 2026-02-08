@@ -669,7 +669,7 @@ oc-CI: compiler-CI.o parser-CI.o lexer-CI.o symtab-CI.o heapstack-CI.o type_syst
 stest-CI: symtab_test-CI
 	$(OUT_CI)/symtab_test
 
-preproc_test-CI: preprocessor_test 
+preproc_test-CI: preprocessor_test-CI
 	find $(TEST_FILE_DIR) -type f | sort | xargs -n 1 $(OUT_CI)/preprocessor_test -i -d -f
 
 priority_queue_test-CI: priority_queue_test-CI.o max_priority_queue-CI.o min_priority_queue-CI.o
