@@ -78,10 +78,10 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
 
 	//This really shouldn't happen because
-	//we've already seen the #macro to get here,
+	//we've already seen the $macro to get here,
 	//but we'll catch it just in case
 	if(lookahead->tok != MACRO){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "#macro keyword expected before macro declaration", lookahead->line_num);
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "$macro keyword expected before macro declaration", lookahead->line_num);
 		preprocessor_error_count++;
 		return FAILURE;
 	}
@@ -89,13 +89,13 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//IMPORTANT - flag that this token needs to be ignored by the replacer
 	lookahead->ignore = TRUE;
 
-	//Now that we've seen the #macro keyword, we need to see the name
+	//Now that we've seen the $macro keyword, we need to see the name
 	//of the macro via an identifier
 	lookahead = get_token_pointer_and_increment(token_array, index);
 
 	//If we did not see an identifier then we are in bad shape here
 	if(lookahead->tok != IDENT){
-		sprintf(info_message, "Expected identifier after #macro keyword but got %s", lexitem_to_string(lookahead));
+		sprintf(info_message, "Expected identifier after $macro keyword but got %s", lexitem_to_string(lookahead));
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
 		preprocessor_error_count++;
 		return FAILURE;
@@ -135,7 +135,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 			//This is bad - there is no such thing as a nested macro and we are already
 			//in one
 			case MACRO:
-				print_preprocessor_message(MESSAGE_TYPE_ERROR, "#macro keyword found inside of a macro definition", lookahead->line_num);
+				print_preprocessor_message(MESSAGE_TYPE_ERROR, "$macro keyword found inside of a macro definition", lookahead->line_num);
 				preprocessor_error_count++;
 				return FAILURE;
 
@@ -147,7 +147,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 				//This is invalid, we cannot have a completely 
 				//empty macro
 				if(macro_token_array->current_index == 0){
-					sprintf(info_message, "Ollie macro \"%s\" is empty and is therefore invalid", macro_record->name.string);
+					sprintf(info_message, "Ollie macro \"%s\" is empty and is therefore invalid. Macros must have at least one token in them", macro_record->name.string);
 					print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, macro_record->line_number);
 					preprocessor_error_count++;
 					return FAILURE;
@@ -234,7 +234,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 			//If we see this, that means we have a floating endmacro in there
 			case ENDMACRO:
-				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Floating #endmacro directive declared. Are you missing a #macro directive?", token->line_num);
+				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Floating #endmacro directive declared. Are you missing a $macro directive?", token->line_num);
 				preprocessor_error_count++;
 				return FAILURE;
 
@@ -253,8 +253,6 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 /**
  * Perform the macro substitution itself. This involves splicing in the
  * token stream that our given macro expands to
- *
- * TODO - currently this is just raw replacement. Eventually we will need to do macros with parameters
  */
 static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, symtab_macro_record_t* macro){
 	//Run through all of the tokens in this macro, and splice them over into
