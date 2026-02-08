@@ -6903,7 +6903,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				 * a floating point value
 				 */
 				} else if(is_type_floating_point(destination_type) == TRUE 
-					&& source_type->type_size <= 16){
+					&& source_type->type_size <= 2){
 
 					//Go based on the source type token
 					switch(source_type->basic_type_token){
@@ -6984,8 +6984,8 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
 
-					//Now, our source type is the new source's type
-					source_type = new_source->type;
+					//Now, our source type is the destination's type
+					source_type = destination_type;
 
 					//And the source register is the new source, not the old one
 					store_instruction->source_register = new_source;
@@ -7040,7 +7040,7 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				 * a floating point value
 				 */
 				} else if(is_type_floating_point(destination_type) == TRUE 
-					&& source_type->type_size <= 16){
+					&& source_type->type_size <= 2){
 
 					//Go based on the source type token
 					switch(source_type->basic_type_token){
@@ -7121,8 +7121,8 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 					//Insert this *right before* the store
 					insert_instruction_before_given(converting_move, store_instruction);
 
-					//Now, our source type is the new source's type
-					source_type = new_source->type;
+					//Now, our source type is the new destination's type
+					source_type = destination_type;
 
 					//And the source register is the new source, not the old one
 					store_instruction->source_register = new_source;
