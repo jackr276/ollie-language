@@ -6850,7 +6850,8 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
  *
  * This function will account for all edge cases(op1 vs op2 vs op1_const), as well
  * as the unique case where our source is a 32 bit integer *but* we are saving to an
- * unsigned 64 bit memory region
+ * unsigned 64 bit memory region, as well as the unique case where we need to handle floating
+ * point areas coming from bytes/shorts
  */
 static void handle_store_instruction_sources_and_instruction_type(instruction_t* store_instruction){
 	//The destination type is always stored in the instruction itself
@@ -6869,22 +6870,68 @@ static void handle_store_instruction_sources_and_instruction_type(instruction_t*
 				source_type = store_instruction->op1->type;
 
 				/**
-				 * This is a special edgecase where we are moving from 32 bit to 64 bit
-				 * In the event that we do this, we need to emit a simple copy of the source
-				 * variable and give it the 64 bit type so that we have a quad word register
+				 * Is the desired type a 64 bit integer *and* the source type a U32 or I32? If this is the case, then 
+				 * movzx functions are actually invalid because x86 processors operating in 64 bit mode automatically
+				 * zero pad when 32 bit moves happen
 				 */
-				if(is_type_unsigned_64_bit(destination_type) == TRUE
-					&& is_type_32_bit_int(store_instruction->op1->type) == TRUE){
+				if(is_type_unsigned_64_bit(destination_type) == TRUE){
+					//We only case if the source is a 32 bit int
+					if(is_type_32_bit_int(source_type) == TRUE){
+						//First we duplicate it
+						three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op1);
 
-					//First we duplicate it
-					three_addr_var_t* duplicate_64_bit = emit_var_copy(store_instruction->op1);
+						//Then we give it the type that we want
+						duplicate_64_bit->type = store_instruction->assignee->type;
+						duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
 
-					//Then we give it the type that we want
-					duplicate_64_bit->type = store_instruction->assignee->type;
-					duplicate_64_bit->variable_size = get_type_size(duplicate_64_bit->type);
+						//And this will be our source
+						store_instruction->source_register = duplicate_64_bit;
+					}
 
-					//And this will be our source
-					store_instruction->source_register = duplicate_64_bit;
+				/**
+				 * If we have a case where we are trying to move an 8/16 bit
+				 * value into an f32/f64 value, unfortunately no x86-64 instructions
+				 * exist to do that conversion. Instead, we'll need to first convert
+				 * this value into a 32 bit integer, and then convert that into
+				 * a floating point value
+				 */
+				} else if(is_type_floating_point(destination_type) == TRUE){
+					switch(source_type->basic_type_token){
+						//Signed values, we will use an i32
+						case CHAR:
+						case I8:
+						case I16:
+							//Move the old value into an i32 slot
+							type_adjusted_op1 = emit_temp_var(i32);
+							converting_move = emit_move_instruction(type_adjusted_op1, op1);
+
+							//This goes before our given instruction
+							insert_instruction_before_given(converting_move, instruction);
+
+							//Our real op1 is now where this one came from
+							op1 = converting_move->destination_register;
+
+							break;
+
+						//Unsigned values, we'll use a u32
+						case U8:
+						case U16:
+							//Move the old value into a u32 slot
+							type_adjusted_op1 = emit_temp_var(u32);
+							converting_move = emit_move_instruction(type_adjusted_op1, op1);
+
+							//This goes before our given instruction
+							insert_instruction_before_given(converting_move, instruction);
+
+							//Our real op1 is now where this one came from
+							op1 = converting_move->destination_register;
+
+							break;
+
+						//Everything else do nothing
+						default:
+							break;
+					}
 
 				/**
 				 * In the event that a converting move is required, we need to insert the converting
