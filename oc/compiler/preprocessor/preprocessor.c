@@ -329,8 +329,6 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 				//Use the new array and the macro we found to do our substitution
 				u_int8_t substitution_result = perform_macro_substitution(&new_token_array, found_macro);
 
-				printf("HERE\n");
-
 				//Get out if we have a failure here
 				if(substitution_result == FAILURE){
 					return FAILURE;

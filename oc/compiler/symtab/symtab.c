@@ -1100,6 +1100,9 @@ symtab_macro_record_t* lookup_macro(macro_symtab_t* symtab, char* name){
 		if(strncmp(cursor->name.string, name, cursor->name.current_length) == 0){
 			return cursor;
 		}
+
+		//Bump it up
+		cursor = cursor->next;
 	}
 
 	//If we make it all of the way down here, then we have no match, so return NULL
