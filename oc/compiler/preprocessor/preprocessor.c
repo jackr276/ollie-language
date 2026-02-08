@@ -297,7 +297,15 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 		current_token_pointer = token_array_get_pointer_at(old_token_array, old_token_array_index);
 
 		//Bump the index up
-		old_token_array++;
+		old_token_array_index++;
+
+		/**
+		 * Important - if we've been instructed to specifically ignore
+		 * this token, then we need to skip over it
+		 */
+		if(current_token_pointer->ignore == TRUE){
+			continue;
+		}
 
 		//Go based on what kind of token this is. If we have an identifier, then
 		//that could possibly be a macro for us
@@ -312,11 +320,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 				//treat this like a regular token. We expect that this is the
 				//most common case
 				if(found_macro == NULL){
-					//Add it into the new array if we aren't being
-					//told to ignore it
-					if(current_token_pointer->ignore == FALSE){
-						token_array_add(&new_token_array, current_token_pointer);
-					}
+					token_array_add(&new_token_array, current_token_pointer);
 
 					//Get out of the case
 					break;
@@ -324,6 +328,8 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 
 				//Use the new array and the macro we found to do our substitution
 				u_int8_t substitution_result = perform_macro_substitution(&new_token_array, found_macro);
+
+				printf("HERE\n");
 
 				//Get out if we have a failure here
 				if(substitution_result == FAILURE){
@@ -334,13 +340,9 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 
 			//Not an identifier
 			default:
-				//If we are not told to ignore it, add it into
-				//the new array
-				if(current_token_pointer->ignore == FALSE){
-					printf("ADDING TOKEN %s\n", lexitem_to_string(current_token_pointer));
-					
-					token_array_add(&new_token_array, current_token_pointer);
-				}
+				//We know that we aren't ignoring, so just add this to
+				//the array
+				token_array_add(&new_token_array, current_token_pointer);
 
 				break;
 		}
