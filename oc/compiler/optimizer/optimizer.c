@@ -1980,7 +1980,7 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 		 * t2 <- test if not zero t1
 		 */
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
-			//If we have something where the varialbe isn't
+			//If we have something where the variable isn't
 			//temporary, then it's not going to be safe to do
 			//this so we'll just leave now
 			if(conditional->op1->variable_type != VARIABLE_TYPE_TEMP){
@@ -1991,6 +1991,25 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 			while(instruction_cursor != NULL){
 				//If we have equal variables here, we can see what to do
 				if(variables_equal(conditional->op1, instruction_cursor->assignee, FALSE) == TRUE){
+					//The only way to "safely" do this is if we have a constant here. If we have that,
+					//we would be looking for a three_addr_code_assn_const statement. If we don't have
+					//that we'll also leave
+					if(instruction_cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+						break;
+					}
+
+					//Since this is a test if not zero instruction, we will now look and see what
+					//the constant value is. If it's zero, then this is always false. If it's nonzero,
+					//then this is always true
+					if(is_constant_value_zero(instruction_cursor->op1_const) == FALSE){
+						status = CONDITIONAL_ALWAYS_TRUE;
+						printf("IS ALWAYS TRUE: ");
+						print_three_addr_code_stmt(stdout, conditional);
+					} else {
+						status = CONDITIONAL_ALWAYS_FALSE;
+						printf("IS ALWAYS FALSE: ");
+						print_three_addr_code_stmt(stdout, conditional);
+					}
 
 					break;
 				}
@@ -2084,9 +2103,6 @@ static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
 
 		//Let the helper determine what kind of conditional we have here
 		conditional_status_t conditional_status = determine_conditional_status(statement_cursor);
-
-		printf("HERE with:");
-		print_three_addr_code_stmt(stdout, statement_cursor);
 
 		//Based on our status, there are a few actions we can take
 		switch(conditional_status){
