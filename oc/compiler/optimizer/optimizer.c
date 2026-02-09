@@ -159,7 +159,7 @@ void remove_statement(instruction_t* stmt){
  * NOTE: this rule does *no* successor management or branch insertion
  *
  */
-static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
+static inline void bisect_block(basic_block_t* new, instruction_t* bisect_start){
 	//Grab a cursor to the start statement
 	instruction_t* cursor = bisect_start;
 
@@ -1947,11 +1947,21 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
  *
  * Algorithm:
  * 	for each block in the cfg:
- * 		if block does not end in branch then continue
- *
+ * 		if block ends in branch:
+ * 			determine what the branch relies on
+ * 			if what it relies on is always true:
+ * 				rewrite the branch to always jump to the if case
+ * 			else if what it relies on is always false:
+ * 				rewrite the branch to always jumpt to the else case
  * 	
  */
 static void optimize_always_true_false_paths(cfg_t* cfg){
+	//Branch statement type
+	branch_type_t current_branch_type;
+
+	//What does the branch rely on?
+	three_addr_var_t* branch_relies_on;
+
 	//Run through every single block in the CFG
 	for(u_int32_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Extract the given block
@@ -1966,6 +1976,30 @@ static void optimize_always_true_false_paths(cfg_t* cfg){
 
 		//Otherwise we do have a branch statement here. Let's do some more investigation
 		//and see what we can uncover
+		instruction_t* statement_cursor = current_block->exit_statement;
+
+		//Extract the branch type
+		current_branch_type = statement_cursor->branch_type;
+
+		//Get what the branch relies on. Remember that this is store in op1
+		branch_relies_on = statement_cursor->op1;
+
+		//If we have that it relies on nothing(shouldn't happen but there could be special cases)
+		//then we'll leave here because we can't be sure of this optimization
+		if(branch_relies_on == NULL){
+			continue;
+		}
+
+		//Let's now trace back until we can find what it relies on
+		while(statement_cursor != NULL){
+			//If they're equal we can leave
+			if(variables_equal(branch_relies_on, statement_cursor->assignee, FALSE) == TRUE){
+				break;
+			}
+
+			//Back it up by one 
+			statement_cursor = statement_cursor->previous_statement;
+		}
 
 	}
 }
