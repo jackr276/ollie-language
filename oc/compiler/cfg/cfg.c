@@ -1235,7 +1235,6 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 	}
 
 	//Otherwise we didn't find it, so there is no immediate dominator
-	printf("GIVING NULL FOR %d\n", B->block_id);
 	return NULL;
 }
 
@@ -1346,8 +1345,6 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 		//A cursor for traversing our predecessors
 		basic_block_t* cursor;
 
-		printf("BLOCK .L%d\n", block->block_id);
-
 		//Now we run through every predecessor of the block
 		for(u_int32_t i = 0; i < block->predecessors.current_index; i++){
 			//Grab it out
@@ -1355,10 +1352,6 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != immediate_dominator(block)){
-				//printf("CURSOR .L%d\n", cursor->block_id);
-
-				//printf("HERE\n");
-
 				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);
 				
@@ -9184,15 +9177,11 @@ void calculate_all_reverse_traversals(cfg_t* cfg){
 		//Compute the reverse post order traversal
 		block->reverse_post_order = compute_reverse_post_order_traversal(block);
 
-		printf("DOING RPO\n");
-
 		//Reset once more
 		reset_visited_status(cfg, FALSE);
 
 		//Now use the reverse CFG(successors are predecessors, and vice versa)
 		block->reverse_post_order_reverse_cfg = compute_reverse_post_order_traversal_reverse_cfg(block);
-
-		printf("DOING RPO REVERSE CFG\n");
 	}
 }
 
@@ -9212,34 +9201,22 @@ void calculate_all_control_relations(cfg_t* cfg){
 	//Calculate all reverse traversals
 	calculate_all_reverse_traversals(cfg);
 	
-	printf("POST REVERSE TRAVERSAL\n");
-
 	//We first need to calculate the dominator sets of every single node
 	calculate_dominator_sets(cfg);
 
-	printf("POST DOMINATOR TRAVERSAL\n");
-	
 	//Now we'll build the dominator tree up
 	build_dominator_trees(cfg);
-
-	printf("POST DOMINATOR TREE TRAVERSAL\n");
 
 	//We need to calculate the dominance frontier of every single block before
 	//we go any further
 	calculate_dominance_frontiers(cfg);
 
-	printf("POST DF TRAVERSAL\n");
-
 	//Calculate the postdominator sets for later analysis in the optimizer
 	calculate_postdominator_sets(cfg);
-
-	printf("POST POSTDOMINATOR TRAVERSAL\n");
 
 	//We'll also now calculate the reverse dominance frontier that will be used
 	//in later analysis by the optimizer
 	calculate_reverse_dominance_frontiers(cfg);
-
-	printf("POST REVERSE POSTDOMINATOR TRAVERSAL\n");
 }
 
 
