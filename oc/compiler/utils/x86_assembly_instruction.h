@@ -230,6 +230,7 @@ typedef enum{
 	CMOVP,
 	//End conditional moves
 	PXOR, //Packed logical exclusive or
+	PXOR_CLEAR, //Packed logical exclusive or just for clearing
 	PAND, //Packed logical and
 	PANDN, //Packed logical and not
 	POR, //Packed logical or

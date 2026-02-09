@@ -1070,7 +1070,7 @@ instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_
  * be used by the instruction selector when we need to insert pxor functions for clearing
  * SSE registers
  */
-instruction_t* emit_direct_pxor_instruction(three_addr_var_t* target){
+instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_var_t* source){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -1078,8 +1078,8 @@ instruction_t* emit_direct_pxor_instruction(three_addr_var_t* target){
 	instruction->instruction_type = PXOR;
 
 	//The source and destination are the exact same
-	instruction->destination_register = target;
-	instruction->source_register = target;
+	instruction->destination_register = destination;
+	instruction->source_register = source;
 
 	//Now give it back
 	return instruction;
@@ -4569,11 +4569,21 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			break;
 		
-		//PXOR is largely used as a zeroer/dependency breaker in FP operations
-		//to fully 0 out the entire register. A property of any xor is the x ^ x = 0
+		//Generic PXOR
 		case PXOR:
 			fprintf(fl, "pxor ");
 			print_variable(fl, instruction->source_register, mode);
+			fprintf(fl, ", ");
+			print_variable(fl, instruction->destination_register, mode);
+			fprintf(fl, "\n");
+
+			break;
+		
+		//PXOR instruction that is used for the express purpose of wiping out a register,
+		//and nothing more
+		case PXOR_CLEAR:
+			fprintf(fl, "pxor ");
+			print_variable(fl, instruction->destination_register, mode);
 			fprintf(fl, ", ");
 			print_variable(fl, instruction->destination_register, mode);
 			fprintf(fl, "\n");

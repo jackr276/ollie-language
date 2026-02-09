@@ -984,6 +984,21 @@ static inline void construct_phi_function_live_range(dynamic_array_t* general_pu
 
 
 /**
+ * Construct the live ranges for the specialized PXOR_CLEAR instruction
+ */
+static inline void construct_pxor_clear_live_range(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges, basic_block_t* basic_block, instruction_t* instruction){
+	//Handle the destination variable
+	assign_live_range_to_destination_variable(general_purpose_live_ranges, sse_live_ranges, basic_block, instruction);
+
+	//Extract this LR
+	live_range_t* live_range = instruction->destination_register->associated_live_range;
+
+	//Counts as a use as well, the prior function call already handled the assignment
+	add_used_live_range(live_range, basic_block);
+}
+
+
+/**
  * An increment/decrement/neg live range is a special case because the invisible "source" needs to be part of the
  * same live range as the destination. We ensure that that happens within this rule
  */
@@ -1108,6 +1123,14 @@ static void construct_live_ranges_in_block(basic_block_t* basic_block, dynamic_a
 				construct_inc_dec_neg_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
 			
 				//And we're done - no need to go further
+				current = current->next_statement;
+				continue;
+
+			//Specialized instruction, let the helper do it
+			case PXOR_CLEAR:
+				construct_pxor_clear_live_range(general_purpose_live_ranges, sse_live_ranges, basic_block, current);
+				
+				//Bump it up and move along
 				current = current->next_statement;
 				continue;
 
@@ -2248,6 +2271,7 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 			case DECW:
 			case DECL:
 			case DECQ:
+			case PXOR_CLEAR:
 				//This counts as both an assignment and a use
 				add_assigned_live_range(cursor->destination_register->associated_live_range, block);
 				add_used_live_range(cursor->destination_register->associated_live_range, block);
