@@ -1940,6 +1940,14 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 
 
 /**
+ *
+ */
+static void optimize_always_true_false_paths(cfg_t* cfg){
+
+}
+
+
+/**
  * The clean algorithm will remove all useless control flow structures, ideally
  * resulting in a simplified CFG. This should be done after we use mark and sweep to get rid of useless code,
  * because that may lead to empty blocks that we can clean up here
@@ -2074,24 +2082,41 @@ static void delete_unreachable_blocks(cfg_t* cfg){
  * runs for in it's current iteration
 */
 cfg_t* optimize(cfg_t* cfg){
-	//First thing we'll do is reset the visited status of the CFG. This just ensures
-	//that we won't have any issues with the CFG in terms of traversal
+	/**
+	 * First thing we'll do is reset the visited status of the CFG. This just ensures
+	 * that we won't have any issues with the CFG in terms of traversal
+	 */
 	reset_visited_status(cfg, FALSE);
 
-	//PASS 1: Mark algorithm
-	//The mark algorithm marks all useful operations. It will perform one full pass of the program
+	/**
+	 * PASS 1: Mark algorithm
+	 * The mark algorithm marks all useful operations. It will perform one full pass of the program
+	 */
 	mark(cfg);
 
-	//PASS 2: Sweep algorithm
-	//Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
-	//comes across branch ending statements that are unmarked, it will replace them with a jump to the
-	//nearest marked postdominator
+	/**
+	 * PASS 2: Sweep algorithm
+	 * Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
+	 * comes across branch ending statements that are unmarked, it will replace them with a jump to the
+	 * nearest marked postdominator
+	 */
 	sweep(cfg);
 
-	//PASS 3: compound logic optimization
-	//Now that we've sweeped everything, we know that what branches are left must be useful. This means
-	//that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
+	/**
+	 * PASS 3: compound logic optimization
+	 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
+	 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
+	 */
 	optimize_short_circuit_logic(cfg);
+
+	/**
+	 * PASS 4: always true/false optimization
+	 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
+	 * branches that we can eliminate due to their conditions being always true/false. An example
+	 * of this would be while(true) always being true, so there being no need for a comparison
+	 * on each step
+	 */
+	optimize_always_true_false_paths(cfg);
 
 	//PASS 4: Clean algorithm
 	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
