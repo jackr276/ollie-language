@@ -237,8 +237,6 @@ struct three_addr_const_t{
  * A generic struct that encapsulates most of our instructions
  */
 struct instruction_t{
-	//Store inlined assembly in a string
-	dynamic_string_t inlined_assembly;
 	//For linked list properties -- the next statement
 	instruction_t* next_statement;
 	//For doubly linked list properties -- the previous statement
@@ -267,6 +265,8 @@ struct instruction_t{
 	//The address calculation registers
 	three_addr_var_t* address_calc_reg1;
 	three_addr_var_t* address_calc_reg2;
+	//Store inlined assembly in a string
+	dynamic_string_t inlined_assembly;
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;
 	//What block holds this?

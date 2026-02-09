@@ -7,6 +7,7 @@
 #include "optimizer.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <stdio.h>
 #include <sys/select.h>
 #include <sys/types.h>
 
@@ -1961,10 +1962,44 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 	//By default assume that we don't know enough to determine this
 	conditional_status_t status = CONDITIONAL_UNKNOWN;
 
+	//Storage for what the conditional relies on
+	three_addr_var_t* conditional_relies_on;
+
+	//Instruction cursor
+	instruction_t* instruction_cursor = conditional;
+
 	//There are several conditional types that we are going
 	//to be able to look through here
 	switch (conditional->statement_type) {
+		/**
+		 * For a test if not zero statement, we'll usually
+		 * have something like this
+		 *
+		 * t1 <- 4
+		 * ....
+		 * t2 <- test if not zero t1
+		 */
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+			//If we have something where the varialbe isn't
+			//temporary, then it's not going to be safe to do
+			//this so we'll just leave now
+			if(conditional->op1->variable_type != VARIABLE_TYPE_TEMP){
+				break;
+			}
+
+			//Go back so long as we aren't NULL
+			while(instruction_cursor != NULL){
+				//If we have equal variables here, we can see what to do
+				if(variables_equal(conditional->op1, instruction_cursor->assignee, FALSE) == TRUE){
+
+					break;
+				}
+
+				//Back it up by one
+				instruction_cursor = instruction_cursor->previous_statement;
+			}
+
+			//Trace back up the block
 			break;
 
 	
@@ -1992,10 +2027,16 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
  * 			if what it relies on is always true:
  * 				rewrite the branch to always jump to the if case
  * 			else if what it relies on is always false:
- * 				rewrite the branch to always jumpt to the else case
+ * 				rewrite the branch to always jump to the else case
  * 	
+ *
+ * This will return true if we did find anything to optimize, and false if
+ * we did not
  */
-static void optimize_always_true_false_paths(cfg_t* cfg){
+static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
+	//By default assume that we found nothing to optimize
+	u_int8_t found_branches_to_optimize = FALSE;
+
 	//Branch statement type
 	branch_type_t current_branch_type;
 
@@ -2050,9 +2091,14 @@ static void optimize_always_true_false_paths(cfg_t* cfg){
 		//Based on our status, there are a few actions we can take
 		switch(conditional_status){
 			case CONDITIONAL_ALWAYS_FALSE:
+
+				//TODO flag the optimize
+
 				break;
 
 			case CONDITIONAL_ALWAYS_TRUE:
+
+				//TODO flag the optimize
 				break;
 
 			//Do nothing, we can't be sure about what the conditional
@@ -2062,6 +2108,9 @@ static void optimize_always_true_false_paths(cfg_t* cfg){
 				break;
 		}
 	}
+
+	//Give this back
+	return found_branches_to_optimize;
 }
 
 
