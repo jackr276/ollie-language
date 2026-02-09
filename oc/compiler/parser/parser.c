@@ -7512,10 +7512,6 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 
 		//Add this in as a child node to the statement
 		add_child_node(jump_node, label_ident);
-	
-		//Rig this jump here to really be a "jump when" that just always evaluates to true
-		add_child_node(jump_node, emit_direct_constant(1));
-		
 	}
 
 	//If we don't see a semicolon we bail

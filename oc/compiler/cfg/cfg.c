@@ -2800,7 +2800,7 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
  *
  * We'll leave out all of the successor logic here as well, until we reach the end
  */
-static void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable_record_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_decider, branch_type_t branch_type){
+static inline void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable_record_t* if_destination, basic_block_t* else_destination, three_addr_var_t* conditional_decider, branch_type_t branch_type){
 	//Emit the branch, purposefully leaving the if area NULL
 	instruction_t* branch = emit_branch_statement(NULL, else_destination, conditional_decider, branch_type);
 
@@ -2815,6 +2815,24 @@ static void emit_user_defined_branch(basic_block_t* basic_block, symtab_variable
 
 	//Add this into the first block
 	add_statement(basic_block, branch);
+}
+
+
+/**
+ * Emit a user defined jump statement that points to a label, not to a block
+ */
+static inline void emit_user_defined_jump(basic_block_t* basic_block, symtab_variable_record_t* jump_target){
+	//Allocate it
+	instruction_t* jump_statement = emit_jmp_instruction(NULL);
+
+	//Jumps to the jump target
+	jump_statement->var_record = jump_target;
+
+	//Add this to the array of user defined jumps
+	dynamic_array_add(&current_function_user_defined_jump_statements, jump_statement);
+
+	//Add this into the first block
+	add_statement(basic_block, jump_statement);
 }
 
 
@@ -7494,6 +7512,23 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				current_block = labeled_block;
 
 				break;
+
+			//A straight unconditional jump statement
+			case AST_NODE_TYPE_JUMP_STMT:
+				//This really shouldn't happen, but it can't hurt
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc_and_estimate();
+					current_block = starting_block;
+				}
+
+				//The labeled block is inside of the variable area
+				emit_user_defined_jump(current_block, ast_cursor->variable);
+
+				//The new current block will be the block that comes after this one. It will
+				//be completely disconnected(at least on paper)
+				current_block = basic_block_alloc_and_estimate();
+
+				break;
 		
 			//A conditional user-defined jump works somewhat like a break
 			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
@@ -7992,6 +8027,23 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				break;
 
+			//A straight unconditional jump statement
+			case AST_NODE_TYPE_JUMP_STMT:
+				//This really shouldn't happen, but it can't hurt
+				if(starting_block == NULL){
+					starting_block = basic_block_alloc_and_estimate();
+					current_block = starting_block;
+				}
+
+				//The labeled block is inside of the variable area
+				emit_user_defined_jump(current_block, ast_cursor->variable);
+
+				//The new current block will be the block that comes after this one. It will
+				//be completely disconnected(at least on paper)
+				current_block = basic_block_alloc_and_estimate();
+
+				break;
+
 			//A conditional user-defined jump works somewhat like a break
 			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
 				//This really shouldn't happen, but it can't hurt
@@ -8255,7 +8307,7 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
 	//Run through every jump statement
 	while(dynamic_array_is_empty(user_defined_jumps) == FALSE){
 		//Delete from the back
-		instruction_t* branch_instruction = dynamic_array_delete_from_back(user_defined_jumps);
+		instruction_t* instruction = dynamic_array_delete_from_back(user_defined_jumps);
 
 		//We'll now need to scan through the labeled blocks to find who this should point to
 		for(u_int16_t i = 0; i < labeled_blocks->current_index; i++){
@@ -8263,16 +8315,20 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
 			basic_block_t* labeled_block = dynamic_array_get_at(labeled_blocks, i);
 
 			//If this labeled block doesn't have the same variable, we're out
-			if(labeled_block->label != branch_instruction->var_record){
+			if(labeled_block->label != instruction->var_record){
 				continue;
 			}
 
 			//Otherwise if we get here we know that we found the correct label
-			branch_instruction->if_block = labeled_block;
+			instruction->if_block = labeled_block;
 
 			//Add both of the successors so that we can maintain a nice order
-			add_successor(branch_instruction->block_contained_in, labeled_block);
-			add_successor(branch_instruction->block_contained_in, branch_instruction->else_block);
+			add_successor(instruction->block_contained_in, labeled_block);
+
+			//Take care of this as well if it is a branch statement
+			if(instruction->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+				add_successor(instruction->block_contained_in, instruction->else_block);
+			}
 			
 			//Break out of the for loop
 			break;
