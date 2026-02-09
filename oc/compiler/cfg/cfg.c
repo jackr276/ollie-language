@@ -1332,7 +1332,7 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 	//node by node and ensure that we've gotten everything
 	
 	//Run through every block
-	for(u_int16_t i = 0; i < cfg->created_blocks.current_index; i++){
+	for(u_int32_t i = 0; i < cfg->created_blocks.current_index; i++){
 		//Grab this from the array
 		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), i);
 
@@ -1346,17 +1346,18 @@ static void calculate_dominance_frontiers(cfg_t* cfg){
 		//A cursor for traversing our predecessors
 		basic_block_t* cursor;
 
+		printf("BLOCK .L%d\n", block->block_id);
+
 		//Now we run through every predecessor of the block
-		for(u_int8_t i = 0; i < block->predecessors.current_index; i++){
+		for(u_int32_t i = 0; i < block->predecessors.current_index; i++){
 			//Grab it out
 			cursor = block->predecessors.internal_array[i];
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != immediate_dominator(block)){
+				//printf("CURSOR .L%d\n", cursor->block_id);
 
 				//printf("HERE\n");
-
-
 
 				//Add block to cursor's dominance frontier set
 				add_block_to_dominance_frontier(cursor, block);

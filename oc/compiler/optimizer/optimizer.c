@@ -2134,17 +2134,36 @@ static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
 			 * else case. We will rewrite the branch to be an unconditional jump to the else block
 			 */
 			case CONDITIONAL_ALWAYS_FALSE:
-				//We will emit an unconditional jump to the else block
-				unconditional_jump = emit_jmp_instruction(else_block);
+				//Is it an inverse branch or not? This will impact how we handle
+				//things
+				if(branch_instruction->inverse_branch == FALSE){
+					//We will emit an unconditional jump to the else block
+					unconditional_jump = emit_jmp_instruction(else_block);
 
-				//Add this in as the very last statement
-				add_statement(current_block, unconditional_jump);
+					//Add this in as the very last statement
+					add_statement(current_block, unconditional_jump);
 
-				//With that out of the way, we can remove the if block as a successor
-				delete_successor(current_block, if_block);
+					//With that out of the way, we can remove the if block as a successor
+					delete_successor(current_block, if_block);
 
-				//The branch instruction is now useless, delete it
-				delete_statement(branch_instruction);
+					//The branch instruction is now useless, delete it
+					delete_statement(branch_instruction);
+
+				//If it is an inverse branch, then the condition always being
+				//false will go to the if block
+				} else {
+					//We will emit an unconditional jump to the if block
+					unconditional_jump = emit_jmp_instruction(if_block);
+
+					//Add this in as the very last statement
+					add_statement(current_block, unconditional_jump);
+
+					//With that out of the way, we can remove the else block as a successor
+					delete_successor(current_block, else_block);
+
+					//The branch instruction is now useless, delete it
+					delete_statement(branch_instruction);
+				}
 
 				//Flag that we did find at least one branch to optimize
 				found_branches_to_optimize = TRUE;
@@ -2157,17 +2176,36 @@ static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
 			 * block
 			 */
 			case CONDITIONAL_ALWAYS_TRUE:
-				//We will emit an unconditional jump to the if block
-				unconditional_jump = emit_jmp_instruction(if_block);
+				//Is it an inverse branch or not? This will impact how we handle
+				//things
+				if(branch_instruction->inverse_branch == FALSE){
+					//We will emit an unconditional jump to the if block
+					unconditional_jump = emit_jmp_instruction(if_block);
 
-				//Add this in as the very last statement
-				add_statement(current_block, unconditional_jump);
+					//Add this in as the very last statement
+					add_statement(current_block, unconditional_jump);
 
-				//With that out of the way, we can remove the else block as a successor
-				delete_successor(current_block, else_block);
+					//With that out of the way, we can remove the else block as a successor
+					delete_successor(current_block, else_block);
 
-				//The branch instruction is now useless, delete it
-				delete_statement(branch_instruction);
+					//The branch instruction is now useless, delete it
+					delete_statement(branch_instruction);
+
+				//If it is an inverse branch, then the condition being
+				//true will send us to the else block
+				} else {
+					//We will emit an unconditional jump to the else block
+					unconditional_jump = emit_jmp_instruction(else_block);
+
+					//Add this in as the very last statement
+					add_statement(current_block, unconditional_jump);
+
+					//With that out of the way, we can remove the if block as a successor
+					delete_successor(current_block, if_block);
+
+					//The branch instruction is now useless, delete it
+					delete_statement(branch_instruction);
+				}
 
 				//Flag that we did find at least one branch to optimize
 				found_branches_to_optimize = TRUE;
@@ -2374,16 +2412,12 @@ cfg_t* optimize(cfg_t* cfg){
 	 */
 	delete_unreachable_blocks(cfg);
 
-	printf("GOT HERE\n");
-
 	/**
 	 * PASS 6: Recalculate everything
 	 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 	 * etc. So, to remedy this, we will recalculate everything in the CFG
 	 */
 	recompute_all_dominance_relations(cfg);
-
-	printf("HIT END\n");
 
 	//Give back the CFG
 	return cfg;
