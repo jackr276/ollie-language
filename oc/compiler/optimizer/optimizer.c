@@ -23,6 +23,23 @@ typedef enum{
 
 
 /**
+ * Run through an entire array of function blocks and reset the status for
+ * every single one. We assume that the caller knows what they are doing, and
+ * that the blocks inside of the array are really the correct blocks
+ */
+static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+	}
+}
+
+
+/**
  * Combine two blocks into one
  */
 static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
@@ -2134,7 +2151,23 @@ static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
 
 				break;
 
+			/**
+			 * If the condition is always true, then we will forever branch to the if
+			 * case. We will rewrite the branch to be an unconditional jump to the if
+			 * block
+			 */
 			case CONDITIONAL_ALWAYS_TRUE:
+				//We will emit an unconditional jump to the if block
+				unconditional_jump = emit_jmp_instruction(if_block);
+
+				//Add this in as the very last statement
+				add_statement(current_block, unconditional_jump);
+
+				//With that out of the way, we can remove the else block as a successor
+				delete_successor(current_block, else_block);
+
+				//The branch instruction is now useless, delete it
+				delete_statement(branch_instruction);
 
 				//Flag that we did find at least one branch to optimize
 				found_branches_to_optimize = TRUE;
@@ -2215,10 +2248,10 @@ static void clean(cfg_t* cfg){
  * of the dominance relations that are now useless. As such, we'll need to completely recompute all
  * of these key values
  */
-static void recompute_all_dominance_relations(cfg_t* cfg){
+static inline void recompute_all_dominance_relations(cfg_t* cfg){
 	//First, we'll go through and completely blow away anything related to
 	//a dominator in the entirety of the cfg
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(u_int32_t _ = 0; _ < cfg->created_blocks.current_index; _++){
 		//Grab the given block out
 		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
 
@@ -2273,7 +2306,8 @@ static void delete_unreachable_blocks(cfg_t* cfg){
 		}
 
 		//This is our deletion case - this block is unreachable
-		if(current->predecessors.internal_array == NULL || current->predecessors.current_index == 0){
+		if(current->predecessors.internal_array == NULL 
+			|| current->predecessors.current_index == 0){
 			//Scrap it from here
 			dynamic_array_delete(&(cfg->created_blocks), current);
 		}
@@ -2325,22 +2359,31 @@ cfg_t* optimize(cfg_t* cfg){
 	 */
 	optimize_always_true_false_paths(cfg);
 
-	//PASS 4: Clean algorithm
-	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
-	//entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
-	//that has been made useless by sweep()
+	/**
+	 * PASS 4: Clean algorithm
+	 * Clean follows after sweep because during the sweep process, we will likely delete the contents of
+	 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
+	 * that has been made useless by sweep()
+	 */
 	clean(cfg);
 	
-	//PASS 5: Delete all unreachable blocks
-	//There is a chance that we have some blocks who are now unreachable. We will
-	//remove them now
+	/**
+	 * PASS 5: Delete all unreachable blocks
+	 * There is a chance that we have some blocks who are now unreachable. We will
+	 * remove them now
+	 */
 	delete_unreachable_blocks(cfg);
 
-	//PASS 6: Recalculate everything
-	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
-	//etc. So, to remedy this, we will recalculate everything in the CFG
-	//cleanup_all_control_relations(cfg);
+	printf("GOT HERE\n");
+
+	/**
+	 * PASS 6: Recalculate everything
+	 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
+	 * etc. So, to remedy this, we will recalculate everything in the CFG
+	 */
 	recompute_all_dominance_relations(cfg);
+
+	printf("HIT END\n");
 
 	//Give back the CFG
 	return cfg;
