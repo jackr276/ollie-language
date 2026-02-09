@@ -1940,10 +1940,34 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 
 
 /**
+ * This algorithm will look for branches that are always true/false,
+ * and see where we can optimize them. This will be done after we
+ * do all of our short circuit logic, so we can be sure that everything in here
+ * is as atomic as possible before we go through and do it
  *
+ * Algorithm:
+ * 	for each block in the cfg:
+ * 		if block does not end in branch then continue
+ *
+ * 	
  */
 static void optimize_always_true_false_paths(cfg_t* cfg){
+	//Run through every single block in the CFG
+	for(u_int32_t i = 0; i < cfg->created_blocks.current_index; i++){
+		//Extract the given block
+		basic_block_t* current_block = dynamic_array_get_at(&(cfg->created_blocks), i);
 
+		//If this exit statement isn't there, or it's not a 
+		//branch, we are not interested so move along
+		if(current_block->exit_statement == NULL
+			|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+			continue;
+		}
+
+		//Otherwise we do have a branch statement here. Let's do some more investigation
+		//and see what we can uncover
+
+	}
 }
 
 
