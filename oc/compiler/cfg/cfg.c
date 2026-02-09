@@ -1234,8 +1234,6 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		}
 	}
 
-	printf("NULL IDOM FOR .L%d\n", B->block_id);
-
 	//Otherwise we didn't find it, so there is no immediate dominator
 	return NULL;
 }
@@ -9279,6 +9277,72 @@ void calculate_all_control_relations(cfg_t* cfg){
 
 
 /**
+ * For any blocks that are completely impossible to reach, we will scrap them all now
+ * to avoid any confusion later in the process
+ *
+ *
+ * TODO LOOK AT
+ */
+static inline void delete_all_unreachable_blocks(cfg_t* cfg){
+	//Array of all blocks that are to be deleted
+	dynamic_array_t to_be_deleted = dynamic_array_alloc();
+	dynamic_array_t to_be_deleted_successors = dynamic_array_alloc();
+
+	//First bulid the array of things that need to go. A block is considered
+	//unreachable if it has no predecessors and it is *not* an entry block
+	for(u_int32_t i = 0; i < cfg->created_blocks.current_index; i++){
+		basic_block_t* current_block = dynamic_array_get_at(&(cfg->created_blocks), i);
+
+		//Doesn't count
+		if(current_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			continue;
+		}
+
+		//This is our case for something that has to go
+		if(current_block->predecessors.current_index == 0){
+			dynamic_array_add(&to_be_deleted, current_block);
+		}
+	}
+
+	//Run through all of the blocks that need to be deleted
+	while(dynamic_array_is_empty(&to_be_deleted) == FALSE){
+		//O(1) removal
+		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
+
+		//Every successor needs to be uncoupled
+		for(u_int32_t i = 0; i < target->successors.current_index; i++){
+			//Extract it
+			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
+
+			//Add this link in
+			dynamic_array_add(&to_be_deleted_successors, successor);
+
+		}
+
+		while(dynamic_array_is_empty(&to_be_deleted_successors) == FALSE){
+			basic_block_t* successor = dynamic_array_delete_from_back(&(to_be_deleted_successors));
+
+			//Undo the link
+			delete_successor(target, successor);
+
+			//What if the successor now has now predecessors? That means it needs to go too
+			if(successor->predecessors.current_index == 0){
+				dynamic_array_add(&to_be_deleted, successor);
+			}
+
+		}
+
+		//Actually delete the block
+		dynamic_array_delete(&(cfg->created_blocks), target);
+	}
+
+	//Deallocate this once we're done
+	dynamic_array_dealloc(&to_be_deleted);
+	dynamic_array_dealloc(&to_be_deleted_successors);
+}
+
+
+/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -9347,6 +9411,9 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 		print_parse_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
+
+	//Delete any/all blocks that are completely impossible to reach in the CFG
+	delete_all_unreachable_blocks(cfg);
 
 	//Let the helper deal with this
 	calculate_all_control_relations(cfg);

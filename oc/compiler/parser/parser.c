@@ -7523,7 +7523,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	jump_node->line_number = parser_line_num;
 
 	//Add this jump statement into the queue for processing
-	enqueue(&current_function_jump_statements, jump_statement);
+	enqueue(&current_function_jump_statements, jump_node);
 
 	//Finally we'll give back the root reference
 	return jump_node;

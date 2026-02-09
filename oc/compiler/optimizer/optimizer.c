@@ -2409,6 +2409,9 @@ cfg_t* optimize(cfg_t* cfg){
 	 * PASS 5: Delete all unreachable blocks
 	 * There is a chance that we have some blocks who are now unreachable. We will
 	 * remove them now
+	 *
+	 *
+	 * TODO REDO THIS
 	 */
 	delete_unreachable_blocks(cfg);
 

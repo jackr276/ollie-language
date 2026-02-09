@@ -10,7 +10,9 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 	//So long as x is more than 0
 	while(x < 32){
 		--x;
-		jump end_label;
+		if(x == 2){
+			jump end_label;
+		}
 		y--;
 	}
 
