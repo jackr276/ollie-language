@@ -1939,6 +1939,17 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 }
 
 
+static inline void is_conditional_always_false(){
+
+}
+
+
+
+static inline void is_conditional_always_true(){
+
+}
+
+
 /**
  * This algorithm will look for branches that are always true/false,
  * and see where we can optimize them. This will be done after we
@@ -2000,6 +2011,9 @@ static void optimize_always_true_false_paths(cfg_t* cfg){
 			//Back it up by one 
 			statement_cursor = statement_cursor->previous_statement;
 		}
+
+		printf("HERE with:");
+		print_three_addr_code_stmt(stdout, statement_cursor);
 
 	}
 }
