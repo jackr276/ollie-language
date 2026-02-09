@@ -7447,16 +7447,19 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Invalid label given to jump statement", parser_line_num);
 	}
 
-	//Allocate the jump statement
-	generic_ast_node_t* jump_statement = ast_node_alloc(AST_NODE_TYPE_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
+	//Holder for the jump statement type
+	generic_ast_node_t* jump_node;
 
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//We could optionally see a conditional jump statement here with the "when" keyword
 	if(lookahead.tok == WHEN){
+		//We know that this will be a conditional jump, so allocate as such
+		jump_node = ast_node_alloc(AST_NODE_TYPE_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
+
 		//Add this in as a child node to the statement
-		add_child_node(jump_statement, label_ident);
+		add_child_node(jump_node, label_ident);
 
 		//We now need to see an L_PAREN 
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -7484,7 +7487,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 		}
 
 		//Otherwise we're all good here, so we'll add this in as a child
-		add_child_node(jump_statement, conditional);
+		add_child_node(jump_node, conditional);
 
 		//We'll need to see the final closing paren here
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -7504,11 +7507,14 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 
 	//Otherwise it's not a conditional, just a direct jump
 	} else {
+		//This is a direct jump so allocate accordingly
+		jump_node = ast_node_alloc(AST_NODE_TYPE_JUMP_STMT, SIDE_TYPE_LEFT);
+
 		//Add this in as a child node to the statement
-		add_child_node(jump_statement, label_ident);
+		add_child_node(jump_node, label_ident);
 	
 		//Rig this jump here to really be a "jump when" that just always evaluates to true
-		add_child_node(jump_statement, emit_direct_constant(1));
+		add_child_node(jump_node, emit_direct_constant(1));
 		
 	}
 
@@ -7518,13 +7524,13 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	}
 	
 	//Store the line number
-	jump_statement->line_number = parser_line_num;
+	jump_node->line_number = parser_line_num;
 
 	//Add this jump statement into the queue for processing
 	enqueue(&current_function_jump_statements, jump_statement);
 
 	//Finally we'll give back the root reference
-	return jump_statement;
+	return jump_node;
 }
 
 

@@ -2395,7 +2395,7 @@ cfg_t* optimize(cfg_t* cfg){
 	 * of this would be while(true) always being true, so there being no need for a comparison
 	 * on each step
 	 */
-	optimize_always_true_false_paths(cfg);
+	//optimize_always_true_false_paths(cfg);
 
 	/**
 	 * PASS 4: Clean algorithm

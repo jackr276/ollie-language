@@ -1234,6 +1234,8 @@ static basic_block_t* immediate_dominator(basic_block_t* B){
 		}
 	}
 
+	printf("NULL IDOM FOR .L%d\n", B->block_id);
+
 	//Otherwise we didn't find it, so there is no immediate dominator
 	return NULL;
 }
