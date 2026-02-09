@@ -2056,11 +2056,15 @@ static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
 	//By default assume that we found nothing to optimize
 	u_int8_t found_branches_to_optimize = FALSE;
 
-	//Branch statement type
-	branch_type_t current_branch_type;
-
 	//What does the branch rely on?
 	three_addr_var_t* branch_relies_on;
+
+	//The if and else blocks from the branch
+	basic_block_t* if_block;
+	basic_block_t* else_block;
+
+	//The unconditional jump that we may end up emitting
+	instruction_t* unconditional_jump;
 
 	//Run through every single block in the CFG
 	for(u_int32_t i = 0; i < cfg->created_blocks.current_index; i++){
@@ -2076,10 +2080,12 @@ static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
 
 		//Otherwise we do have a branch statement here. Let's do some more investigation
 		//and see what we can uncover
+		instruction_t* branch_instruction = current_block->exit_statement;
 		instruction_t* statement_cursor = current_block->exit_statement;
 
-		//Extract the branch type
-		current_branch_type = statement_cursor->branch_type;
+		//Store these blocks for later processing
+		if_block = statement_cursor->if_block;
+		else_block = statement_cursor->else_block;
 
 		//Get what the branch relies on. Remember that this is store in op1
 		branch_relies_on = statement_cursor->op1;
@@ -2106,15 +2112,33 @@ static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
 
 		//Based on our status, there are a few actions we can take
 		switch(conditional_status){
+			/**
+			 * If the conditional is always false, then we will forever branch to the
+			 * else case. We will rewrite the branch to be an unconditional jump to the else block
+			 */
 			case CONDITIONAL_ALWAYS_FALSE:
+				//We will emit an unconditional jump to the else block
+				unconditional_jump = emit_jmp_instruction(else_block);
 
-				//TODO flag the optimize
+				//Add this in as the very last statement
+				add_statement(current_block, unconditional_jump);
+
+				//With that out of the way, we can remove the if block as a successor
+				delete_successor(current_block, if_block);
+
+				//The branch instruction is now useless, delete it
+				delete_statement(branch_instruction);
+
+				//Flag that we did find at least one branch to optimize
+				found_branches_to_optimize = TRUE;
 
 				break;
 
 			case CONDITIONAL_ALWAYS_TRUE:
 
-				//TODO flag the optimize
+				//Flag that we did find at least one branch to optimize
+				found_branches_to_optimize = TRUE;
+
 				break;
 
 			//Do nothing, we can't be sure about what the conditional
