@@ -10,6 +10,17 @@
 #include <sys/select.h>
 #include <sys/types.h>
 
+
+/**
+ * Is a conditional always true, always false, or unknown?
+ */
+typedef enum{
+	CONDITIONAL_UNKNOWN,
+	CONDITIONAL_ALWAYS_FALSE,
+	CONDITIONAL_ALWAYS_TRUE,
+} conditional_status_t;
+
+
 /**
  * Combine two blocks into one
  */
@@ -1939,14 +1950,32 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 }
 
 
-static inline void is_conditional_always_false(){
 
-}
+/**
+ * Is a given conditional always true or always false? We will need
+ * to trace up the block to find out. If we are unable to
+ * find out, that is ok, we just return false and assume
+ * that it can't be done
+ */
+static inline conditional_status_t determine_conditional_status(instruction_t* conditional){
+	//By default assume that we don't know enough to determine this
+	conditional_status_t status = CONDITIONAL_UNKNOWN;
+
+	//There are several conditional types that we are going
+	//to be able to look through here
+	switch (conditional->statement_type) {
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+			break;
+
+	
+		//If we have an unknown type then let's just leave
+		default:
+			break;
+	}
 
 
-
-static inline void is_conditional_always_true(){
-
+	//Give back the status
+	return status;
 }
 
 
@@ -2012,9 +2041,26 @@ static void optimize_always_true_false_paths(cfg_t* cfg){
 			statement_cursor = statement_cursor->previous_statement;
 		}
 
+		//Let the helper determine what kind of conditional we have here
+		conditional_status_t conditional_status = determine_conditional_status(statement_cursor);
+
 		printf("HERE with:");
 		print_three_addr_code_stmt(stdout, statement_cursor);
 
+		//Based on our status, there are a few actions we can take
+		switch(conditional_status){
+			case CONDITIONAL_ALWAYS_FALSE:
+				break;
+
+			case CONDITIONAL_ALWAYS_TRUE:
+				break;
+
+			//Do nothing, we can't be sure about what the conditional
+			//is which is perfectly fine. In fact, we expect this to
+			//be the majority case
+			case CONDITIONAL_UNKNOWN:
+				break;
+		}
 	}
 }
 
