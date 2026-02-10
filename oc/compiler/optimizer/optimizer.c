@@ -12,6 +12,10 @@
 #include <sys/types.h>
 
 
+//Storage for the stack/instruction pointers
+three_addr_var_t* stack_pointer_variable;
+three_addr_var_t* instruction_pointer_variable;
+
 /**
  * Is a conditional always true, always false, or unknown?
  */
@@ -215,7 +219,7 @@ static inline void bisect_block(basic_block_t* new, instruction_t* bisect_start)
  * us weed out useless blocks. Note that the variable passed in may be null. If it is,
  * we just leave immediately
  */
-static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_definition(dynamic_array_t* current_function_blocks, three_addr_var_t* variable, dynamic_array_t* worklist){
 	//If the variable is NULL, we leave
 	if(variable == NULL){
 		return;
@@ -223,8 +227,8 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 	//There is no point in trying to mark a variable like this, we will
 	//never find the definition since they exist by default
-	if(variable == cfg->stack_pointer 
-		|| variable == cfg->instruction_pointer
+	if(variable == stack_pointer_variable
+		|| variable == instruction_pointer_variable
 		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT
 		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS){
 		return;
@@ -238,14 +242,9 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 	}
 
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(u_int16_t _ = 0; _ < current_function_blocks->current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
-
-		//If it's not in the current function and it's temporary, get rid of it
-		if(block->function_defined_in != current_function){
-			continue;
-		}
+		basic_block_t* block = dynamic_array_get_at(current_function_blocks, _);
 
 		//This is always where we start
 		instruction_t* stmt = block->exit_statement;
@@ -339,14 +338,14 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
  * 				mark j
  * 				add j to worklist
  */
-static void mark(cfg_t* cfg){
+static void mark(dynamic_array_t* function_blocks){
 	//First we'll need a worklist
 	dynamic_array_t worklist = dynamic_array_alloc();
 
 	//Now we'll go through every single operation in every single block
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(u_int16_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block we'll work on
-		basic_block_t* current = dynamic_array_get_at(&(cfg->created_blocks), _);
+		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
 
 		//Grab a cursor to the current statement
 		instruction_t* current_stmt = current->leader_statement;
@@ -478,7 +477,7 @@ static void mark(cfg_t* cfg){
 					three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
 
 					//Add the definitions in
-					mark_and_add_definition(cfg, phi_func_param, stmt->function, &worklist);
+					mark_and_add_definition(function_blocks, phi_func_param, &worklist);
 				}
 
 				break;
@@ -491,7 +490,7 @@ static void mark(cfg_t* cfg){
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
 				}
 
 				break;
@@ -503,14 +502,14 @@ static void mark(cfg_t* cfg){
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition(cfg, stmt->op1, stmt->function, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
 
 				//Grab the parameters out
 				params = stmt->parameters;
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
 				}
 
 				break;
@@ -523,18 +522,18 @@ static void mark(cfg_t* cfg){
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				//Add the assignee as if it was a variable itself
-				mark_and_add_definition(cfg, stmt->assignee, stmt->function, &worklist);
+				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
 
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(cfg, stmt->op1, stmt->function, &worklist);
-				mark_and_add_definition(cfg, stmt->op2, stmt->function, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
 				break;
 
 			//In all other cases, we'll just mark and add the two operands 
 			default:
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(cfg, stmt->op1, stmt->function, &worklist);
-				mark_and_add_definition(cfg, stmt->op2, stmt->function, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
 
 				break;
 		}
@@ -888,7 +887,7 @@ static void sweep(cfg_t* cfg){
  *
  * NOTE: This should only be called after we have identified this block as a candidate for block folding
  */
-static void delete_all_branching_statements(basic_block_t* block){
+static inline void delete_all_branching_statements(basic_block_t* block){
 	//We'll always start from the end and work our way up
 	instruction_t* current = block->exit_statement;
 	//To hold while we delete
@@ -2361,6 +2360,10 @@ static void delete_unreachable_blocks(cfg_t* cfg){
  * runs for in it's current iteration
 */
 cfg_t* optimize(cfg_t* cfg){
+	//Prepopulate these global variables so that we don't need to pass them around
+	stack_pointer_variable = cfg->stack_pointer;
+	instruction_pointer_variable = cfg->instruction_pointer;
+
 	/**
 	 * We will optimize on a function by function basis. This is because functions are independent units 
 	 * that do not have interlocking dependencies. Us doing this allows for more efficient operation because
@@ -2393,16 +2396,23 @@ cfg_t* optimize(cfg_t* cfg){
 			dynamic_array_add(&current_function_blocks, current);
 		}
 
+		/**
+		 * Once we get here, we have an array that is full of all of the blocks belonging
+		 * to the function that we wish to optimize. Now we will go through all of the 
+		 * optimization steps for this function
+		 */
+
+		/**
+		 * First thing we'll do is reset the visited status of the CFG. This just ensures
+		 * that we won't have any issues with the CFG in terms of traversal
+		 */
+		reset_visit_status_for_function(&current_function_blocks);
 
 
+		//Once we are done, wipe the dynamic array so that we can reuse it for the next
+		//go-around
+		clear_dynamic_array(&current_function_blocks);
 	}
-
-
-	/**
-	 * First thing we'll do is reset the visited status of the CFG. This just ensures
-	 * that we won't have any issues with the CFG in terms of traversal
-	 */
-	reset_visited_status(cfg, FALSE);
 
 	/**
 	 * PASS 1: Mark algorithm
