@@ -400,7 +400,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 	/**
 	 * For each block in postorder
 	 */
-	for(u_int16_t _ = 0; _ < postorder->current_index; _++){
+	for(u_int32_t _ = 0; _ < postorder->current_index; _++){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 

@@ -2525,18 +2525,16 @@ cfg_t* optimize(cfg_t* cfg){
 		clear_dynamic_array(&current_function_blocks);
 	}
 	
+	//We are done with this temp array now
+	dynamic_array_dealloc(&current_function_blocks);
 
 	/**
 	 * PASS 6: Recalculate everything
 	 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
-	 * etc. So, to remedy this, we will recalculate everything in the CFG
-	 *
-	 * TODO make per-function
+	 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
+	 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
 	 */
 	recompute_all_dominance_relations(cfg);
-
-	//We are done with this temp array now
-	dynamic_array_dealloc(&current_function_blocks);
 
 	//Give back the CFG
 	return cfg;
