@@ -445,13 +445,27 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 			instruction_t* exit_statement = current->exit_statement;
 			instruction_t* second_to_last_statement = exit_statement->previous_statement;
 
+			/**
+			 * If i ends in a conditional branch
+			 * 	 if both targets are identical then
+			 * 	   replace branch with a jump to said block
+			 */
 			if(second_to_last_statement != NULL
-				&& is_)
-		
+				&& is_jump_instruction(second_to_last_statement) == TRUE
+				&& second_to_last_statement->if_block == exit_statement->if_block){
 
+				//We can completely delete the conditional jump
+				delete_statement(second_to_last_statement);
+
+				//This does count as a change
+				changed = TRUE;
+
+				//We shouldn't need to do anything else, this should take care of itself
+				//now because we already have successors set up
+			}
 
 			//Extract the block(j) that we're going to
-			basic_block_t* jumping_to_block = current->exit_statement->if_block;
+			basic_block_t* jumping_to_block = exit_statement->if_block;
 
 			/**
 			 * If i is empty(of important instuctions) then
@@ -487,7 +501,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 				//Check to see if it does or does not contain more than one jump
 				&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 				//Delete the jump statement because it's now useless
-				delete_statement(current->exit_statement);
+				delete_statement(exit_statement);
 
 				//Decouple these as predecessors/successors
 				delete_successor(current, jumping_to_block);
