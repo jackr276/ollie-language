@@ -343,7 +343,7 @@ static void mark(dynamic_array_t* function_blocks){
 	dynamic_array_t worklist = dynamic_array_alloc();
 
 	//Now we'll go through every single operation in every single block
-	for(u_int16_t _ = 0; _ < function_blocks->current_index; _++){
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block we'll work on
 		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
 
@@ -777,11 +777,11 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
  * 			  delete i
  *
  */
-static void sweep(cfg_t* cfg){
+static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
 	//For each and every operation in every basic block
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
+		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
 		//Holder for the postdom
 		basic_block_t* nearest_marked_postdom;
@@ -860,24 +860,19 @@ static void sweep(cfg_t* cfg){
 			}
 		}
 	}
+	
+	/**
+	 * Once we've done all of the actual sweeping inside of the blocks, we will now also clean up
+	 * the stack from any unmarked regions. If a region is unmarked, it is entirely useless and as such
+	 * we'll just get rid of it
+	 */
 
-	//Once we've done all of the actual sweeping inside of the blocks, we will now also clean up
-	//the stack from any unmarked regions. If a region is unmarked, it is entirely useless and as such
-	//we'll just get rid of it
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the block
-		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+	//Invoke the stack sweeper. This function will go through an remove any stack regions
+	//that have been flagged as unimportant
+	sweep_stack_data_area(&(function_entry_block->function_defined_in->data_area));
 
-		//We really want this one's stack
-		stack_data_area_t* stack =  &(function_entry->function_defined_in->data_area);
-
-		//Invoke the stack sweeper. This function will go through an remove any stack regions
-		//that have been flagged as unimportant
-		sweep_stack_data_area(stack);
-
-		//Now we will sweep the local constants out of here
-		sweep_local_constants(function_entry->function_defined_in);
-	}
+	//Now we will sweep the local constants out of here
+	sweep_local_constants(function_entry_block->function_defined_in);
 }
 
 
@@ -2408,25 +2403,26 @@ cfg_t* optimize(cfg_t* cfg){
 		 */
 		reset_visit_status_for_function(&current_function_blocks);
 
+		/**
+		 * PASS 1: Mark algorithm
+		 * The mark algorithm marks all useful operations. It will perform one full pass of the program
+		 */
+		mark(&current_function_blocks);
+
+		/**
+		 * PASS 2: Sweep algorithm
+		 * Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
+		 * comes across branch ending statements that are unmarked, it will replace them with a jump to the
+		 * nearest marked postdominator
+		 */
+		sweep(&current_function_blocks, function_entry);
 
 		//Once we are done, wipe the dynamic array so that we can reuse it for the next
 		//go-around
 		clear_dynamic_array(&current_function_blocks);
 	}
 
-	/**
-	 * PASS 1: Mark algorithm
-	 * The mark algorithm marks all useful operations. It will perform one full pass of the program
-	 */
-	mark(cfg);
 
-	/**
-	 * PASS 2: Sweep algorithm
-	 * Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
-	 * comes across branch ending statements that are unmarked, it will replace them with a jump to the
-	 * nearest marked postdominator
-	 */
-	sweep(cfg);
 
 	/**
 	 * PASS 3: compound logic optimization
