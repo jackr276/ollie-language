@@ -929,7 +929,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 	/**
 	 * For each block in postorder
 	 */
-	for(u_int16_t _ = 0; _ < postorder->current_index; _++){
+	for(u_int32_t _ = 0; _ < postorder->current_index; _++){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 
@@ -2246,32 +2246,26 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
  * 		if j is empty and ends in a conditional branch then
  * 			overwrite i's jump with a copy of j's branch
  */
-static void clean(cfg_t* cfg){
-	//For each function in the CFG
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
-		//Have we seen change(modification) at all?
-		u_int8_t changed;
+static inline void clean(cfg_t* cfg, basic_block_t* function_entry_block){
+	//Have we seen a change?
+	u_int8_t changed;
 
-		//Grab the function block out
-		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), _);
+	//The postorder traversal array
+	dynamic_array_t postorder;
 
-		//The postorder traversal array
-		dynamic_array_t postorder;
+	//Now we'll do the actual clean algorithm
+	do {
+		//Compute the new postorder
+		postorder = compute_post_order_traversal(function_entry_block);
 
-		//Now we'll do the actual clean algorithm
-		do {
-			//Compute the new postorder
-			postorder = compute_post_order_traversal(function_entry);
+		//Call onepass() for the reduction
+		changed = branch_reduce(cfg, &postorder);
 
-			//Call onepass() for the reduction
-			changed = branch_reduce(cfg, &postorder);
-
-			//We can free up the old postorder now
-			dynamic_array_dealloc(&postorder);
-			
-		//We keep going so long as branch_reduce changes something 
-		} while(changed == TRUE);
-	}
+		//We can free up the old postorder now
+		dynamic_array_dealloc(&postorder);
+		
+	//We keep going so long as branch_reduce changes something 
+	} while(changed == TRUE);
 }
 
 
@@ -2371,10 +2365,10 @@ cfg_t* optimize(cfg_t* cfg){
 	//Run through all of the functions
 	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the function entry block
-		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//What function are we in?
-		symtab_function_record_t* current_function = function_entry->function_defined_in;
+		symtab_function_record_t* current_function = function_entry_block->function_defined_in;
 
 		//Now run through every single created block and find the ones that match the function
 		//we've extracted here
@@ -2415,7 +2409,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * comes across branch ending statements that are unmarked, it will replace them with a jump to the
 		 * nearest marked postdominator
 		 */
-		sweep(&current_function_blocks, function_entry);
+		sweep(&current_function_blocks, function_entry_block);
 
 		/**
 		 * PASS 3: compound logic optimization
@@ -2434,23 +2428,20 @@ cfg_t* optimize(cfg_t* cfg){
 		optimize_always_true_false_paths(&current_function_blocks);
 
 		//TODO ADDITIONAL MARK/SWEEP NEEDED
-
+		
+		/**
+		 * PASS 4: Clean algorithm
+		 * Clean follows after sweep because during the sweep process, we will likely delete the contents of
+		 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
+		 * that has been made useless by sweep()
+		 */
+		clean(cfg, function_entry_block);
 
 		//Once we are done, wipe the dynamic array so that we can reuse it for the next
 		//go-around
 		clear_dynamic_array(&current_function_blocks);
 	}
 
-
-
-
-	/**
-	 * PASS 4: Clean algorithm
-	 * Clean follows after sweep because during the sweep process, we will likely delete the contents of
-	 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
-	 * that has been made useless by sweep()
-	 */
-	clean(cfg);
 	
 	/**
 	 * PASS 5: Delete all unreachable blocks
