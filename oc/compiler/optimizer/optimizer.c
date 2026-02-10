@@ -43,6 +43,32 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
+ * Run through and reset all of the marks on every instruction in a given
+ * function. This is done in anticipation of us using the mark/sweep algorithm
+ * again after branch optimizations
+ */
+static inline void reset_all_marks(dynamic_array_t* function_blocks){
+	//Run through every block
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Block to work on
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Grab a cursor
+		instruction_t* cursor = current->leader_statement;
+
+		//Run through every statement
+		while(cursor != NULL){
+			//Reset the mark here
+			cursor->mark = FALSE;
+
+			//Bump it up
+			cursor = cursor->next_statement;
+		}
+	}
+}
+
+
+/**
  * Combine two blocks into one
  */
 static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
@@ -2460,9 +2486,24 @@ cfg_t* optimize(cfg_t* cfg){
 		 * of this would be while(true) always being true, so there being no need for a comparison
 		 * on each step
 		 */
-		optimize_always_true_false_paths(&current_function_blocks);
+		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(&current_function_blocks);
 
-		//TODO ADDITIONAL MARK/SWEEP NEEDED
+		/**
+		 * PASS 4.5: if we did find branches to optimize, we now potentially have a lot
+		 * of orphaned code that is no longer useful. This would not have been picked up by
+		 * the original mark and sweep, but it will be now. So, we will rerun mark/sweep
+		 * *if* we've found branches that were optimzied. Otherwise, this would just be a waste
+		 */
+		if(found_branches_to_optimize == TRUE){
+			//Reset all of the marks in the function
+			reset_all_marks(&current_function_blocks);
+
+			//Invoke the marker
+			mark(&current_function_blocks);
+
+			//Invoke the sweeper
+			sweep(&current_function_blocks, function_entry_block);
+		}
 		
 		/**
 		 * PASS 4: Clean algorithm
