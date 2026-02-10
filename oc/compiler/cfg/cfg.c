@@ -9279,6 +9279,10 @@ void calculate_all_control_relations(cfg_t* cfg){
 /**
  * For any blocks that are completely impossible to reach, we will scrap them all now
  * to avoid any confusion later in the process
+ *
+ * We consider any block with no predecessors that *is not* a function entry block
+ * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
+ * be creating even more unreachable blocks, so we need to take care of those too 
  */
 static inline void delete_all_unreachable_blocks(cfg_t* cfg){
 	//Array of all blocks that are to be deleted
@@ -9313,7 +9317,6 @@ static inline void delete_all_unreachable_blocks(cfg_t* cfg){
 
 			//Add this link in
 			dynamic_array_add(&to_be_deleted_successors, successor);
-
 		}
 
 		//Now run through all of the successors that we need to delete. This is done to avoid
@@ -9329,7 +9332,6 @@ static inline void delete_all_unreachable_blocks(cfg_t* cfg){
 			if(successor->predecessors.current_index == 0){
 				dynamic_array_add(&to_be_deleted, successor);
 			}
-
 		}
 
 		//Actually delete the block

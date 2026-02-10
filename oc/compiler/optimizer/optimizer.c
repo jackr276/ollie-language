@@ -2365,8 +2365,37 @@ cfg_t* optimize(cfg_t* cfg){
 	 * We will optimize on a function by function basis. This is because functions are independent units 
 	 * that do not have interlocking dependencies. Us doing this allows for more efficient operation because
 	 * there may be instances where we need to use our "while changed" type processing, causing us to iterate
-	 * over entire sets of blocks repeatedly
+	 * over entire sets of blocks repeatedly. We will use a temporary array to achieve that in the optimizer. This
+	 * array will be populated by us upon every iteration
 	 */
+	dynamic_array_t current_function_blocks = dynamic_array_alloc();
+
+	//Run through all of the functions
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Extract the function entry block
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+
+		//What function are we in?
+		symtab_function_record_t* current_function = function_entry->function_defined_in;
+
+		//Now run through every single created block and find the ones that match the function
+		//we've extracted here
+		for(u_int32_t j = 0; j < cfg->created_blocks.current_index; j++){
+			//Extract it
+			basic_block_t* current = dynamic_array_get_at(&(cfg->created_blocks), j);
+
+			//We don't want this
+			if(current->function_defined_in != current_function){
+				continue;
+			}
+
+			//We do want it if we get here
+			dynamic_array_add(&current_function_blocks, current);
+		}
+
+
+
+	}
 
 
 	/**
@@ -2429,6 +2458,9 @@ cfg_t* optimize(cfg_t* cfg){
 	 * etc. So, to remedy this, we will recalculate everything in the CFG
 	 */
 	recompute_all_dominance_relations(cfg);
+
+	//We are done with this temp array now
+	dynamic_array_dealloc(&current_function_blocks);
 
 	//Give back the CFG
 	return cfg;
