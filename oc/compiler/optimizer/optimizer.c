@@ -11,10 +11,9 @@
 #include <sys/select.h>
 #include <sys/types.h>
 
-
 //Storage for the stack/instruction pointers
-three_addr_var_t* stack_pointer_variable;
-three_addr_var_t* instruction_pointer_variable;
+static three_addr_var_t* stack_pointer_variable;
+static three_addr_var_t* instruction_pointer_variable;
 
 /**
  * Is a conditional always true, always false, or unknown?
@@ -2312,35 +2311,71 @@ static inline void recompute_all_dominance_relations(cfg_t* cfg){
 
 
 /**
- * After everything runs, it is possible that we'll have blocks leftover
- * with no predecessors. These blocks are useless, and just gunk up our pipeline.
- * We will remove them all now.
+ * For any blocks that are completely impossible to reach, we will scrap them all now
+ * to avoid any confusion later in the process
+ *
+ * We consider any block with no predecessors that *is not* a function entry block
+ * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
+ * be creating even more unreachable blocks, so we need to take care of those too 
  */
-static void delete_unreachable_blocks(cfg_t* cfg){
-	//Clone all blocks here - we will be messing with the original
-	//array, so we can't count on it for an accurate count
-	dynamic_array_t all_blocks = clone_dynamic_array(&(cfg->created_blocks));
+static inline void delete_all_unreachable_blocks(dynamic_array_t* function_blocks, cfg_t* cfg){
+	//Array of all blocks that are to be deleted
+	dynamic_array_t to_be_deleted = dynamic_array_alloc();
+	dynamic_array_t to_be_deleted_successors = dynamic_array_alloc();
 
-	//Run through all blocks
-	for(u_int16_t i = 0; i < all_blocks.current_index; i++){
-		//Extract this
-		basic_block_t* current = dynamic_array_get_at(&all_blocks, i);
+	//First bulid the array of things that need to go. A block is considered
+	//unreachable if it has no predecessors and it is *not* an entry block
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
 
-		//Nothing we can do about this
-		if(current->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//Doesn't count
+		if(current_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 			continue;
 		}
 
-		//This is our deletion case - this block is unreachable
-		if(current->predecessors.internal_array == NULL 
-			|| current->predecessors.current_index == 0){
-			//Scrap it from here
-			dynamic_array_delete(&(cfg->created_blocks), current);
+		//This is our case for something that has to go
+		if(current_block->predecessors.current_index == 0){
+			dynamic_array_add(&to_be_deleted, current_block);
 		}
 	}
 
-	//Once we're done, deallocate the all_blocks array
-	dynamic_array_dealloc(&all_blocks);
+	//Run through all of the blocks that need to be deleted
+	while(dynamic_array_is_empty(&to_be_deleted) == FALSE){
+		//O(1) removal
+		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
+
+		//Every successor needs to be uncoupled
+		for(u_int32_t i = 0; i < target->successors.current_index; i++){
+			//Extract it
+			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
+
+			//Add this link in
+			dynamic_array_add(&to_be_deleted_successors, successor);
+		}
+
+		//Now run through all of the successors that we need to delete. This is done to avoid
+		//any funniness with the indices
+		while(dynamic_array_is_empty(&to_be_deleted_successors) == FALSE){
+			//Extract the successor
+			basic_block_t* successor = dynamic_array_delete_from_back(&(to_be_deleted_successors));
+
+			//Undo the link
+			delete_successor(target, successor);
+
+			//What if the successor now has now predecessors? That means it needs to go too
+			if(successor->predecessors.current_index == 0){
+				dynamic_array_add(&to_be_deleted, successor);
+			}
+		}
+
+		//Actually delete the block from both sets
+		dynamic_array_delete(&(cfg->created_blocks), target);
+		dynamic_array_delete(function_blocks, target);
+	}
+
+	//Deallocate this once we're done
+	dynamic_array_dealloc(&to_be_deleted);
+	dynamic_array_dealloc(&to_be_deleted_successors);
 }
 
 
@@ -2437,26 +2472,25 @@ cfg_t* optimize(cfg_t* cfg){
 		 */
 		clean(cfg, function_entry_block);
 
+		/**
+		 * PASS 5: Delete all unreachable blocks
+		 * There is a chance that we have some blocks who are now unreachable. We will
+		 * remove them now
+		 */
+		delete_all_unreachable_blocks(&current_function_blocks, cfg);
+
 		//Once we are done, wipe the dynamic array so that we can reuse it for the next
 		//go-around
 		clear_dynamic_array(&current_function_blocks);
 	}
-
 	
-	/**
-	 * PASS 5: Delete all unreachable blocks
-	 * There is a chance that we have some blocks who are now unreachable. We will
-	 * remove them now
-	 *
-	 *
-	 * TODO REDO THIS
-	 */
-	delete_unreachable_blocks(cfg);
 
 	/**
 	 * PASS 6: Recalculate everything
 	 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 	 * etc. So, to remedy this, we will recalculate everything in the CFG
+	 *
+	 * TODO make per-function
 	 */
 	recompute_all_dominance_relations(cfg);
 

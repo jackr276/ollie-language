@@ -27,9 +27,9 @@ static generic_type_t* u16;
 static generic_type_t* u8;
 
 //A holder for the stack pointer
-three_addr_var_t* stack_pointer_variable;
+static three_addr_var_t* stack_pointer_variable;
 //A holder for the instruction pointer
-three_addr_var_t* instruction_pointer_variable;
+static three_addr_var_t* instruction_pointer_variable;
 
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
