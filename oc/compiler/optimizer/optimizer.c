@@ -2039,12 +2039,8 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 					//then this is always true
 					if(is_constant_value_zero(instruction_cursor->op1_const) == FALSE){
 						status = CONDITIONAL_ALWAYS_TRUE;
-						printf("IS ALWAYS TRUE: ");
-						print_three_addr_code_stmt(stdout, conditional);
 					} else {
 						status = CONDITIONAL_ALWAYS_FALSE;
-						printf("IS ALWAYS FALSE: ");
-						print_three_addr_code_stmt(stdout, conditional);
 					}
 
 					break;
