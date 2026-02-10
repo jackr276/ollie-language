@@ -703,12 +703,12 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
  * 	b.) marked
  * we'll have our answer
  */
-static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B){
+static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blocks, basic_block_t* B){
 	//We'll need a queue for the BFS
 	heap_queue_t queue = heap_queue_alloc();
 
 	//First, we'll reset every single block here
-	reset_visited_status(cfg, FALSE);
+	reset_visit_status_for_function(function_blocks);
 
 	//Seed the search with B
 	enqueue(&queue, B);
@@ -820,7 +820,7 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 				//it's nearest marked postdominator
 				case THREE_ADDR_CODE_BRANCH_STMT:
 					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = nearest_marked_postdominator(cfg, block);
+					nearest_marked_postdom = nearest_marked_postdominator(function_blocks, block);
 
 					//This is now useless
 					delete_statement(stmt);
@@ -1878,11 +1878,11 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
  * x_1 <- t17
  * jmp .L5	
  */
-static void optimize_short_circuit_logic(cfg_t* cfg){
+static void optimize_short_circuit_logic(dynamic_array_t* function_blocks){
 	//For every single block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(u_int16_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
+		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
 		//If it's empty then leave
 		if(block->leader_statement == NULL){
@@ -2063,7 +2063,7 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
  * This will return true if we did find anything to optimize, and false if
  * we did not
  */
-static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
+static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_blocks){
 	//By default assume that we found nothing to optimize
 	u_int8_t found_branches_to_optimize = FALSE;
 
@@ -2078,9 +2078,9 @@ static u_int8_t optimize_always_true_false_paths(cfg_t* cfg){
 	instruction_t* unconditional_jump;
 
 	//Run through every single block in the CFG
-	for(u_int32_t i = 0; i < cfg->created_blocks.current_index; i++){
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the given block
-		basic_block_t* current_block = dynamic_array_get_at(&(cfg->created_blocks), i);
+		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
 
 		//If this exit statement isn't there, or it's not a 
 		//branch, we are not interested so move along
@@ -2417,6 +2417,25 @@ cfg_t* optimize(cfg_t* cfg){
 		 */
 		sweep(&current_function_blocks, function_entry);
 
+		/**
+		 * PASS 3: compound logic optimization
+		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
+		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
+		 */
+		optimize_short_circuit_logic(&current_function_blocks);
+
+		/**
+		 * PASS 4: always true/false optimization
+		 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
+		 * branches that we can eliminate due to their conditions being always true/false. An example
+		 * of this would be while(true) always being true, so there being no need for a comparison
+		 * on each step
+		 */
+		optimize_always_true_false_paths(&current_function_blocks);
+
+		//TODO ADDITIONAL MARK/SWEEP NEEDED
+
+
 		//Once we are done, wipe the dynamic array so that we can reuse it for the next
 		//go-around
 		clear_dynamic_array(&current_function_blocks);
@@ -2424,21 +2443,6 @@ cfg_t* optimize(cfg_t* cfg){
 
 
 
-	/**
-	 * PASS 3: compound logic optimization
-	 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
-	 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
-	 */
-	optimize_short_circuit_logic(cfg);
-
-	/**
-	 * PASS 4: always true/false optimization
-	 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
-	 * branches that we can eliminate due to their conditions being always true/false. An example
-	 * of this would be while(true) always being true, so there being no need for a comparison
-	 * on each step
-	 */
-	optimize_always_true_false_paths(cfg);
 
 	/**
 	 * PASS 4: Clean algorithm
