@@ -669,6 +669,7 @@ void logical_not_constant_value(generic_ast_node_t* constant_node){
 			constant_node->constant_value.signed_byte_value = !(constant_node->constant_value.signed_byte_value);
 			break;
 		case BYTE_CONST_FORCE_U:
+			constant_node->constant_value.signed_byte_value = !(constant_node->constant_value.signed_byte_value);
 			break;
 		case SHORT_CONST:
 			constant_node->constant_value.signed_byte_value = !(constant_node->constant_value.signed_byte_value);

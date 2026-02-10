@@ -1987,7 +1987,6 @@ static void optimize_short_circuit_logic(dynamic_array_t* function_blocks){
 }
 
 
-
 /**
  * Is a given conditional always true or always false? We will need
  * to trace up the block to find out. If we are unable to
@@ -1997,9 +1996,6 @@ static void optimize_short_circuit_logic(dynamic_array_t* function_blocks){
 static inline conditional_status_t determine_conditional_status(instruction_t* conditional){
 	//By default assume that we don't know enough to determine this
 	conditional_status_t status = CONDITIONAL_UNKNOWN;
-
-	//Storage for what the conditional relies on
-	three_addr_var_t* conditional_relies_on;
 
 	//Instruction cursor
 	instruction_t* instruction_cursor = conditional;
