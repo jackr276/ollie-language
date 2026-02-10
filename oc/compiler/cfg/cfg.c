@@ -9279,9 +9279,6 @@ void calculate_all_control_relations(cfg_t* cfg){
 /**
  * For any blocks that are completely impossible to reach, we will scrap them all now
  * to avoid any confusion later in the process
- *
- *
- * TODO LOOK AT
  */
 static inline void delete_all_unreachable_blocks(cfg_t* cfg){
 	//Array of all blocks that are to be deleted
@@ -9319,7 +9316,10 @@ static inline void delete_all_unreachable_blocks(cfg_t* cfg){
 
 		}
 
+		//Now run through all of the successors that we need to delete. This is done to avoid
+		//any funniness with the indices
 		while(dynamic_array_is_empty(&to_be_deleted_successors) == FALSE){
+			//Extract the successor
 			basic_block_t* successor = dynamic_array_delete_from_back(&(to_be_deleted_successors));
 
 			//Undo the link

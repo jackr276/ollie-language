@@ -2362,6 +2362,14 @@ static void delete_unreachable_blocks(cfg_t* cfg){
 */
 cfg_t* optimize(cfg_t* cfg){
 	/**
+	 * We will optimize on a function by function basis. This is because functions are independent units 
+	 * that do not have interlocking dependencies. Us doing this allows for more efficient operation because
+	 * there may be instances where we need to use our "while changed" type processing, causing us to iterate
+	 * over entire sets of blocks repeatedly
+	 */
+
+
+	/**
 	 * First thing we'll do is reset the visited status of the CFG. This just ensures
 	 * that we won't have any issues with the CFG in terms of traversal
 	 */
