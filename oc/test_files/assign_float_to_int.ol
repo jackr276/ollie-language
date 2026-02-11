@@ -18,7 +18,7 @@ pub fn int_param(x:i32) -> i32 {
 
 pub fn main() -> i32 {
 	//This should work, float to int is assignable
-	declare y:i32;
+	declare y:mut i32;
 	let x:i32 = 1.78;
 
 	//Should force to int

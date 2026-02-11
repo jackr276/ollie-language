@@ -4,7 +4,7 @@
 
 declare fn never_defined(mut i32) -> u32;
 
-declare j:u8;
+declare j:mut u8;
 
 alias u8[100] as int_arr;
 
