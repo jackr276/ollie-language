@@ -1,10 +1,10 @@
 /**
 * Author: Jack Robbins
-* Test the always true optimizations when a CMP instruction is involved
+* Test the always false optimizations when a CMP instruction is involved
 */
 
 
-pub fn cmp_always_true(x:i32, y:i32) -> i32 {
+pub fn cmp_always_false(x:i32, y:i32) -> i32 {
 	//Always false 
 	if(1 > 5) {
 		ret y;

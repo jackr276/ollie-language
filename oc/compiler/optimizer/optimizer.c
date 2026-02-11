@@ -2490,6 +2490,45 @@ cfg_t* optimize(cfg_t* cfg){
 			//Reset all of the marks in the function
 			reset_all_marks(&current_function_blocks);
 
+			/**
+			 *
+			 *
+			 *
+			 * TODO - this is not good enough. Doing all of this rearranging
+			 * and then trying to run mark & sweep will not work. We are going
+			 * to need to delete all unreachable blocks *at this stage* and
+			 * then we are going to have to recompute all of the dominance relations. Mark
+			 * specifically relies on the "RDF"(reverse dominance frontier). This will need
+			 * to be done per-function. Sweep relies on postdominators. This will also need
+			 * to be done post-function
+			 *
+			 *
+			 *
+			 *
+			 *
+			 *
+			 */
+
+			/**
+			 * PASS 5: Delete all unreachable blocks
+			 * There is a chance that we have some blocks who are now unreachable. We will
+			 * remove them now
+			 *
+			 * TODO FIXME
+			 */
+			delete_all_unreachable_blocks(&current_function_blocks, cfg);
+
+			/**
+			 * PASS 6: Recalculate everything
+			 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
+			 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
+			 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
+			 *
+			 * TODO FIXME
+			 */
+
+			recompute_all_dominance_relations(cfg);
+
 			//Invoke the marker
 			mark(&current_function_blocks);
 
@@ -2505,12 +2544,20 @@ cfg_t* optimize(cfg_t* cfg){
 		 */
 		clean(cfg, function_entry_block);
 
+
 		/**
 		 * PASS 5: Delete all unreachable blocks
 		 * There is a chance that we have some blocks who are now unreachable. We will
 		 * remove them now
+		 *
+		 *
+		 * TODO do we need?
 		 */
 		delete_all_unreachable_blocks(&current_function_blocks, cfg);
+
+		//TODO if we're going to do per-function dominance relations anyway, we may as well only
+		//do them if here if we have the chance
+
 
 		//Once we are done, wipe the dynamic array so that we can reuse it for the next
 		//go-around
