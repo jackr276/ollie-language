@@ -8500,6 +8500,12 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	//Remove it now that we're done
 	pop_nesting_level(&nesting_stack);
 
+	/**
+	 * TODO - we need to do all of our postprocessing as "per-function" over here. I think
+	 * we will leave SSA out of this part, but we need to do useless block deletion
+	 * and calculate our control relations
+	 */
+
 	//We always return the start block
 	return function_starting_block;
 }

@@ -145,6 +145,15 @@ struct local_constant_t{
  * single source of truth for everything relating to a given function
  */
 struct symtab_function_record_t{
+	//The hash that we have
+	u_int64_t hash;
+	//In case of collisions, we can chain these records
+	symtab_function_record_t* next;
+
+
+	//TODO - hold all the blocks for this function
+	
+
 	//The parameters for the function
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
 	//The name of the function
@@ -157,10 +166,6 @@ struct symtab_function_record_t{
 	dynamic_set_t local_xmm_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
-	//The hash that we have
-	u_int64_t hash;
-	//In case of collisions, we can chain these records
-	symtab_function_record_t* next;
 	//The type of the function
 	generic_type_t* signature;
 	//The list of all functions that this function calls out to
@@ -195,18 +200,18 @@ struct symtab_function_record_t{
  * lexical level, line_number, parent function, etc.
  */
 struct symtab_variable_record_t{
+	//The hash of it
+	u_int64_t hash;
+	//The next hashtable record
+	symtab_variable_record_t* next;
 	//The variable name
 	dynamic_string_t var_name;
 	//For SSA renaming
 	lightstack_t counter_stack;
-	//The hash of it
-	u_int64_t hash;
 	//What function was it declared in?
 	symtab_function_record_t* function_declared_in;
 	//What type is it?
 	generic_type_t* type_defined_as;
-	//The next hashtable record
-	symtab_variable_record_t* next;
 	//We are able to alias variables as other variables. This is
 	//typically only used for function parameters in the presaving step
 	symtab_variable_record_t* alias;
@@ -267,12 +272,12 @@ struct symtab_type_record_t{
  * how we will keep references to macros as they're defined by the user
  */
 struct symtab_macro_record_t{
+	//The hash of it
+	u_int64_t hash;
 	//For linked list functionality
 	symtab_macro_record_t* next;
 	//The name as a dynamic string
 	dynamic_string_t name;
-	//The hash of it
-	u_int64_t hash;
 	//The array of all tokens in the macro
 	ollie_token_array_t tokens;
 	//The total token lenght, including the begin/end tokens
