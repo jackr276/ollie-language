@@ -32,9 +32,9 @@ fn test(argc:i32, argv:char**) -> i32{
 	//do{
 	//while(d >= 32) {
 	for(let i:mut u32 = 0; i < 323; i++) {
-		declare a:u32;
-		declare b:u32;
-		declare c:u32;
+		declare a:mut u32;
+		declare b:mut u32;
+		declare c:mut u32;
 
 		a = 32;
 		b = 27;
