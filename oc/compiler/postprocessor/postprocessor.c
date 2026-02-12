@@ -88,6 +88,33 @@ static instruction_t* combine_blocks(cfg_t* cfg, basic_block_t* a, basic_block_t
 
 
 /**
+ * A helper function to determine if something is or is not
+ * a jump
+ */
+static inline u_int8_t is_jump_instruction(instruction_t* instruction){
+	switch(instruction->instruction_type){
+		case JMP:
+		case JNE:
+		case JE:
+		case JNZ:
+		case JZ:
+		case JGE:
+		case JG:
+		case JLE:
+		case JL:
+		case JA:
+		case JP:
+		case JAE:
+		case JB:
+		case JBE:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Post register allocation, it is possible that the register allocator
  * could've given us something like: movq %rax, %rax. This is entirely
  * useless, and as such we will eliminate instructions like these
@@ -384,6 +411,10 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
  *
  * Procedure branch_reduce_postprocess():
  * 	for each block in postorder
+ * 		if i ends in a conditional branch
+ * 			if both targets are identical then
+ * 				replace branch with a jump to said block
+ *
  * 		if i ends in a jump to j then
  * 			if i is empty then
  * 				replace transfers to i with transfers to j
@@ -400,7 +431,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 	/**
 	 * For each block in postorder
 	 */
-	for(u_int16_t _ = 0; _ < postorder->current_index; _++){
+	for(u_int32_t _ = 0; _ < postorder->current_index; _++){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 
@@ -409,8 +440,32 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 		 */
 		if(current->exit_statement != NULL
 			&& current->exit_statement->instruction_type == JMP){
+			
+			//Holders for the exit statement and prior instruction
+			instruction_t* exit_statement = current->exit_statement;
+			instruction_t* second_to_last_statement = exit_statement->previous_statement;
+
+			/**
+			 * If i ends in a conditional branch
+			 * 	 if both targets are identical then
+			 * 	   replace branch with a jump to said block
+			 */
+			if(second_to_last_statement != NULL
+				&& is_jump_instruction(second_to_last_statement) == TRUE
+				&& second_to_last_statement->if_block == exit_statement->if_block){
+
+				//We can completely delete the conditional jump
+				delete_statement(second_to_last_statement);
+
+				//This does count as a change
+				changed = TRUE;
+
+				//We shouldn't need to do anything else, this should take care of itself
+				//now because we already have successors set up
+			}
+
 			//Extract the block(j) that we're going to
-			basic_block_t* jumping_to_block = current->exit_statement->if_block;
+			basic_block_t* jumping_to_block = exit_statement->if_block;
 
 			/**
 			 * If i is empty(of important instuctions) then
@@ -446,7 +501,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 				//Check to see if it does or does not contain more than one jump
 				&& does_block_contain_more_than_one_jump_to_target(current, jumping_to_block) == FALSE){
 				//Delete the jump statement because it's now useless
-				delete_statement(current->exit_statement);
+				delete_statement(exit_statement);
 
 				//Decouple these as predecessors/successors
 				delete_successor(current, jumping_to_block);

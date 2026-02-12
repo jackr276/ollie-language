@@ -7,8 +7,109 @@
 #include "optimizer.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/constants.h"
+#include <stdio.h>
 #include <sys/select.h>
 #include <sys/types.h>
+
+//Storage for the stack/instruction pointers
+static three_addr_var_t* stack_pointer_variable;
+static three_addr_var_t* instruction_pointer_variable;
+
+//A pointer to the cfg
+static cfg_t* cfg_reference;
+
+/**
+ * Is a conditional always true, always false, or unknown?
+ */
+typedef enum{
+	CONDITIONAL_UNKNOWN,
+	CONDITIONAL_ALWAYS_FALSE,
+	CONDITIONAL_ALWAYS_TRUE,
+} conditional_status_t;
+
+
+/**
+ * Run through an entire array of function blocks and reset the status for
+ * every single one. We assume that the caller knows what they are doing, and
+ * that the blocks inside of the array are really the correct blocks
+ */
+static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+	}
+}
+
+
+/**
+ * A helper function that makes a new block id. This ensures we have an atomically
+ * increasing block ID
+ */
+static inline int32_t increment_and_get(){
+	(cfg_reference->block_id)++;
+	return cfg_reference->block_id;
+}
+
+
+/**
+ * Create a basic block and add it into the set of all function blocks
+ */
+static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency, symtab_function_record_t* function){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//What is the estimated execution cost of this block?
+	created->estimated_execution_frequency = estimated_execution_frequency;
+
+	//Let's add in what function this block came from
+	created->function_defined_in = function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(&(cfg_reference->created_blocks), created);
+
+	//Add it into the function's block array
+	dynamic_array_add(&(function->function_blocks), created);
+
+	//Give it back
+	return created;
+}
+
+
+/**
+ * Run through and reset all of the marks on every instruction in a given
+ * function. This is done in anticipation of us using the mark/sweep algorithm
+ * again after branch optimizations
+ */
+static inline void reset_all_marks(dynamic_array_t* function_blocks){
+	//Run through every block
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Block to work on
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Grab a cursor
+		instruction_t* cursor = current->leader_statement;
+
+		//Run through every statement
+		while(cursor != NULL){
+			//Reset the mark here
+			cursor->mark = FALSE;
+
+			//Bump it up
+			cursor = cursor->next_statement;
+		}
+	}
+}
+
 
 /**
  * Combine two blocks into one
@@ -159,7 +260,7 @@ void remove_statement(instruction_t* stmt){
  * NOTE: this rule does *no* successor management or branch insertion
  *
  */
-static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
+static inline void bisect_block(basic_block_t* new, instruction_t* bisect_start){
 	//Grab a cursor to the start statement
 	instruction_t* cursor = bisect_start;
 
@@ -186,7 +287,7 @@ static void bisect_block(basic_block_t* new, instruction_t* bisect_start){
  * us weed out useless blocks. Note that the variable passed in may be null. If it is,
  * we just leave immediately
  */
-static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symtab_function_record_t* current_function, dynamic_array_t* worklist){
+static void mark_and_add_definition(dynamic_array_t* current_function_blocks, three_addr_var_t* variable, dynamic_array_t* worklist){
 	//If the variable is NULL, we leave
 	if(variable == NULL){
 		return;
@@ -194,8 +295,8 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 
 	//There is no point in trying to mark a variable like this, we will
 	//never find the definition since they exist by default
-	if(variable == cfg->stack_pointer 
-		|| variable == cfg->instruction_pointer
+	if(variable == stack_pointer_variable
+		|| variable == instruction_pointer_variable
 		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT
 		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS){
 		return;
@@ -209,14 +310,9 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
 	}
 
 	//Run through everything here
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(u_int16_t _ = 0; _ < current_function_blocks->current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
-
-		//If it's not in the current function and it's temporary, get rid of it
-		if(block->function_defined_in != current_function){
-			continue;
-		}
+		basic_block_t* block = dynamic_array_get_at(current_function_blocks, _);
 
 		//This is always where we start
 		instruction_t* stmt = block->exit_statement;
@@ -310,14 +406,14 @@ static void mark_and_add_definition(cfg_t* cfg, three_addr_var_t* variable, symt
  * 				mark j
  * 				add j to worklist
  */
-static void mark(cfg_t* cfg){
+static void mark(dynamic_array_t* function_blocks){
 	//First we'll need a worklist
 	dynamic_array_t worklist = dynamic_array_alloc();
 
 	//Now we'll go through every single operation in every single block
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block we'll work on
-		basic_block_t* current = dynamic_array_get_at(&(cfg->created_blocks), _);
+		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
 
 		//Grab a cursor to the current statement
 		instruction_t* current_stmt = current->leader_statement;
@@ -449,7 +545,7 @@ static void mark(cfg_t* cfg){
 					three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
 
 					//Add the definitions in
-					mark_and_add_definition(cfg, phi_func_param, stmt->function, &worklist);
+					mark_and_add_definition(function_blocks, phi_func_param, &worklist);
 				}
 
 				break;
@@ -462,7 +558,7 @@ static void mark(cfg_t* cfg){
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
 				}
 
 				break;
@@ -474,14 +570,14 @@ static void mark(cfg_t* cfg){
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition(cfg, stmt->op1, stmt->function, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
 
 				//Grab the parameters out
 				params = stmt->parameters;
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(cfg, dynamic_array_get_at(&params, i), stmt->function, &worklist);
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
 				}
 
 				break;
@@ -494,18 +590,18 @@ static void mark(cfg_t* cfg){
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				//Add the assignee as if it was a variable itself
-				mark_and_add_definition(cfg, stmt->assignee, stmt->function, &worklist);
+				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
 
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(cfg, stmt->op1, stmt->function, &worklist);
-				mark_and_add_definition(cfg, stmt->op2, stmt->function, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
 				break;
 
 			//In all other cases, we'll just mark and add the two operands 
 			default:
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(cfg, stmt->op1, stmt->function, &worklist);
-				mark_and_add_definition(cfg, stmt->op2, stmt->function, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
 
 				break;
 		}
@@ -675,12 +771,12 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
  * 	b.) marked
  * we'll have our answer
  */
-static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B){
+static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blocks, basic_block_t* B){
 	//We'll need a queue for the BFS
 	heap_queue_t queue = heap_queue_alloc();
 
 	//First, we'll reset every single block here
-	reset_visited_status(cfg, FALSE);
+	reset_visit_status_for_function(function_blocks);
 
 	//Seed the search with B
 	enqueue(&queue, B);
@@ -749,11 +845,11 @@ static basic_block_t* nearest_marked_postdominator(cfg_t* cfg, basic_block_t* B)
  * 			  delete i
  *
  */
-static void sweep(cfg_t* cfg){
+static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
 	//For each and every operation in every basic block
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
+		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
 		//Holder for the postdom
 		basic_block_t* nearest_marked_postdom;
@@ -792,7 +888,7 @@ static void sweep(cfg_t* cfg){
 				//it's nearest marked postdominator
 				case THREE_ADDR_CODE_BRANCH_STMT:
 					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = nearest_marked_postdominator(cfg, block);
+					nearest_marked_postdom = nearest_marked_postdominator(function_blocks, block);
 
 					//This is now useless
 					delete_statement(stmt);
@@ -832,24 +928,19 @@ static void sweep(cfg_t* cfg){
 			}
 		}
 	}
+	
+	/**
+	 * Once we've done all of the actual sweeping inside of the blocks, we will now also clean up
+	 * the stack from any unmarked regions. If a region is unmarked, it is entirely useless and as such
+	 * we'll just get rid of it
+	 */
 
-	//Once we've done all of the actual sweeping inside of the blocks, we will now also clean up
-	//the stack from any unmarked regions. If a region is unmarked, it is entirely useless and as such
-	//we'll just get rid of it
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the block
-		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+	//Invoke the stack sweeper. This function will go through an remove any stack regions
+	//that have been flagged as unimportant
+	sweep_stack_data_area(&(function_entry_block->function_defined_in->data_area));
 
-		//We really want this one's stack
-		stack_data_area_t* stack =  &(function_entry->function_defined_in->data_area);
-
-		//Invoke the stack sweeper. This function will go through an remove any stack regions
-		//that have been flagged as unimportant
-		sweep_stack_data_area(stack);
-
-		//Now we will sweep the local constants out of here
-		sweep_local_constants(function_entry->function_defined_in);
-	}
+	//Now we will sweep the local constants out of here
+	sweep_local_constants(function_entry_block->function_defined_in);
 }
 
 
@@ -859,7 +950,7 @@ static void sweep(cfg_t* cfg){
  *
  * NOTE: This should only be called after we have identified this block as a candidate for block folding
  */
-static void delete_all_branching_statements(basic_block_t* block){
+static inline void delete_all_branching_statements(basic_block_t* block){
 	//We'll always start from the end and work our way up
 	instruction_t* current = block->exit_statement;
 	//To hold while we delete
@@ -906,7 +997,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 	/**
 	 * For each block in postorder
 	 */
-	for(u_int16_t _ = 0; _ < postorder->current_index; _++){
+	for(u_int32_t _ = 0; _ < postorder->current_index; _++){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 
@@ -1093,11 +1184,11 @@ static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* de
  * t10 <- t9 < t8
  * cbranch_ge .L9 else .L13 <-- If this also fails, we've satisfied the initial condition
  */
-static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
@@ -1203,7 +1294,6 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	//	goto second_half_block
 	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
 
-
 	/**
 	 * HANDLING THE SECOND BLOCK
 	 *
@@ -1277,11 +1367,11 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
  * t7 <- t7 != t8 <------- If this is true, jump to if
  * cbranch_ne .L12 else .L13
  */
-static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_or_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
@@ -1460,11 +1550,11 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
  * t7 <- t7 != t8 <------- Remember we're looking for a failure, so if this fails to go *if*, otherwise *else*
  * cbranch_e .L12 else .L13
  */
-static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
@@ -1642,11 +1732,11 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
  * t7 <- t7 != t8 <------- If this is true, jump to if
  * cbranch_ne .L12 else .L13
  */
-static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_and_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
@@ -1855,11 +1945,11 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
  * x_1 <- t17
  * jmp .L5	
  */
-static void optimize_short_circuit_logic(cfg_t* cfg){
-	//For every single block in the CFG
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+static void optimize_short_circuit_logic(symtab_function_record_t* function, dynamic_array_t* function_blocks){
+	//For every single block in the function
+	for(u_int16_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
+		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
 		//If it's empty then leave
 		if(block->leader_statement == NULL){
@@ -1917,18 +2007,18 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 			if(short_circuit_statement->op == DOUBLE_AND){
 				//Most common case
 				if(inverse_branch == FALSE){
-					optimize_logical_and_branch_logic(short_circuit_statement, if_target, else_target);
+					optimize_logical_and_branch_logic(function, short_circuit_statement, if_target, else_target);
 				} else {
-					optimize_logical_and_inverse_branch_logic(short_circuit_statement, if_target, else_target);
+					optimize_logical_and_inverse_branch_logic(function, short_circuit_statement, if_target, else_target);
 				}
 
 			//Otherwise we have the double or
 			} else {
 				//Most common case
 				if(inverse_branch == FALSE){
-					optimize_logical_or_branch_logic(short_circuit_statement, if_target, else_target);
+					optimize_logical_or_branch_logic(function, short_circuit_statement, if_target, else_target);
 				} else {
-					optimize_logical_or_inverse_branch_logic(short_circuit_statement, if_target, else_target);
+					optimize_logical_or_inverse_branch_logic(function, short_circuit_statement, if_target, else_target);
 				}
 			}
 		}
@@ -1936,6 +2026,255 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
 		//Deallocate the array
 		dynamic_array_dealloc(&eligible_statements);
 	}
+}
+
+
+/**
+ * Is a given conditional always true or always false? We will need
+ * to trace up the block to find out. If we are unable to
+ * find out, that is ok, we just return false and assume
+ * that it can't be done
+ */
+static inline conditional_status_t determine_conditional_status(instruction_t* conditional){
+	//By default assume that we don't know enough to determine this
+	conditional_status_t status = CONDITIONAL_UNKNOWN;
+
+	//Instruction cursor
+	instruction_t* instruction_cursor = conditional;
+
+	//There are several conditional types that we are going
+	//to be able to look through here
+	switch (conditional->statement_type) {
+		/**
+		 * For a test if not zero statement, we'll usually
+		 * have something like this
+		 *
+		 * t1 <- 4
+		 * ....
+		 * t2 <- test if not zero t1
+		 */
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+			//If we have something where the variable isn't
+			//temporary, then it's not going to be safe to do
+			//this so we'll just leave now
+			if(conditional->op1->variable_type != VARIABLE_TYPE_TEMP){
+				break;
+			}
+
+			//Go back so long as we aren't NULL
+			while(instruction_cursor != NULL){
+				//If we have equal variables here, we can see what to do
+				if(variables_equal(conditional->op1, instruction_cursor->assignee, FALSE) == TRUE){
+					//The only way to "safely" do this is if we have a constant here. If we have that,
+					//we would be looking for a three_addr_code_assn_const statement. If we don't have
+					//that we'll also leave
+					if(instruction_cursor->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
+						break;
+					}
+
+					//Since this is a test if not zero instruction, we will now look and see what
+					//the constant value is. If it's zero, then this is always false. If it's nonzero,
+					//then this is always true
+					if(is_constant_value_zero(instruction_cursor->op1_const) == FALSE){
+						status = CONDITIONAL_ALWAYS_TRUE;
+					} else {
+						status = CONDITIONAL_ALWAYS_FALSE;
+					}
+
+					break;
+				}
+
+				//Back it up by one
+				instruction_cursor = instruction_cursor->previous_statement;
+			}
+
+			//Trace back up the block
+			break;
+
+	
+		//If we have an unknown type then let's just leave
+		default:
+			break;
+	}
+
+
+	//Give back the status
+	return status;
+}
+
+
+/**
+ * This algorithm will look for branches that are always true/false,
+ * and see where we can optimize them. This will be done after we
+ * do all of our short circuit logic, so we can be sure that everything in here
+ * is as atomic as possible before we go through and do it
+ *
+ * Algorithm:
+ * 	for each block in the cfg:
+ * 		if block ends in branch:
+ * 			determine what the branch relies on
+ * 			if what it relies on is always true:
+ * 				rewrite the branch to always jump to the if case
+ * 			else if what it relies on is always false:
+ * 				rewrite the branch to always jump to the else case
+ * 	
+ *
+ * This will return true if we did find anything to optimize, and false if
+ * we did not
+ */
+static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_blocks){
+	//By default assume that we found nothing to optimize
+	u_int8_t found_branches_to_optimize = FALSE;
+
+	//What does the branch rely on?
+	three_addr_var_t* branch_relies_on;
+
+	//The if and else blocks from the branch
+	basic_block_t* if_block;
+	basic_block_t* else_block;
+
+	//The unconditional jump that we may end up emitting
+	instruction_t* unconditional_jump;
+
+	//Run through every single block in the CFG
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the given block
+		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
+
+		//If this exit statement isn't there, or it's not a 
+		//branch, we are not interested so move along
+		if(current_block->exit_statement == NULL
+			|| current_block->exit_statement->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+			continue;
+		}
+
+		//Otherwise we do have a branch statement here. Let's do some more investigation
+		//and see what we can uncover
+		instruction_t* branch_instruction = current_block->exit_statement;
+		instruction_t* statement_cursor = current_block->exit_statement;
+
+		//Store these blocks for later processing
+		if_block = statement_cursor->if_block;
+		else_block = statement_cursor->else_block;
+
+		//Get what the branch relies on. Remember that this is store in op1
+		branch_relies_on = statement_cursor->op1;
+
+		//If we have that it relies on nothing(shouldn't happen but there could be special cases)
+		//then we'll leave here because we can't be sure of this optimization
+		if(branch_relies_on == NULL){
+			continue;
+		}
+
+		//Let's now trace back until we can find what it relies on
+		while(statement_cursor != NULL){
+			//If they're equal we can leave
+			if(variables_equal(branch_relies_on, statement_cursor->assignee, FALSE) == TRUE){
+				break;
+			}
+
+			//Back it up by one 
+			statement_cursor = statement_cursor->previous_statement;
+		}
+
+		//Let the helper determine what kind of conditional we have here
+		conditional_status_t conditional_status = determine_conditional_status(statement_cursor);
+
+		//Based on our status, there are a few actions we can take
+		switch(conditional_status){
+			/**
+			 * If the conditional is always false, then we will forever branch to the
+			 * else case. We will rewrite the branch to be an unconditional jump to the else block
+			 */
+			case CONDITIONAL_ALWAYS_FALSE:
+				//Is it an inverse branch or not? This will impact how we handle
+				//things
+				if(branch_instruction->inverse_branch == FALSE){
+					//We will emit an unconditional jump to the else block
+					unconditional_jump = emit_jmp_instruction(else_block);
+
+					//Add this in as the very last statement
+					add_statement(current_block, unconditional_jump);
+
+					//With that out of the way, we can remove the if block as a successor
+					delete_successor(current_block, if_block);
+
+					//The branch instruction is now useless, delete it
+					delete_statement(branch_instruction);
+
+				//If it is an inverse branch, then the condition always being
+				//false will go to the if block
+				} else {
+					//We will emit an unconditional jump to the if block
+					unconditional_jump = emit_jmp_instruction(if_block);
+
+					//Add this in as the very last statement
+					add_statement(current_block, unconditional_jump);
+
+					//With that out of the way, we can remove the else block as a successor
+					delete_successor(current_block, else_block);
+
+					//The branch instruction is now useless, delete it
+					delete_statement(branch_instruction);
+				}
+
+				//Flag that we did find at least one branch to optimize
+				found_branches_to_optimize = TRUE;
+
+				break;
+
+			/**
+			 * If the condition is always true, then we will forever branch to the if
+			 * case. We will rewrite the branch to be an unconditional jump to the if
+			 * block
+			 */
+			case CONDITIONAL_ALWAYS_TRUE:
+				//Is it an inverse branch or not? This will impact how we handle
+				//things
+				if(branch_instruction->inverse_branch == FALSE){
+					//We will emit an unconditional jump to the if block
+					unconditional_jump = emit_jmp_instruction(if_block);
+
+					//Add this in as the very last statement
+					add_statement(current_block, unconditional_jump);
+
+					//With that out of the way, we can remove the else block as a successor
+					delete_successor(current_block, else_block);
+
+					//The branch instruction is now useless, delete it
+					delete_statement(branch_instruction);
+
+				//If it is an inverse branch, then the condition being
+				//true will send us to the else block
+				} else {
+					//We will emit an unconditional jump to the else block
+					unconditional_jump = emit_jmp_instruction(else_block);
+
+					//Add this in as the very last statement
+					add_statement(current_block, unconditional_jump);
+
+					//With that out of the way, we can remove the if block as a successor
+					delete_successor(current_block, if_block);
+
+					//The branch instruction is now useless, delete it
+					delete_statement(branch_instruction);
+				}
+
+				//Flag that we did find at least one branch to optimize
+				found_branches_to_optimize = TRUE;
+
+				break;
+
+			//Do nothing, we can't be sure about what the conditional
+			//is which is perfectly fine. In fact, we expect this to
+			//be the majority case
+			case CONDITIONAL_UNKNOWN:
+				break;
+		}
+	}
+
+	//Give this back
+	return found_branches_to_optimize;
 }
 
 
@@ -1966,32 +2305,26 @@ static void optimize_short_circuit_logic(cfg_t* cfg){
  * 		if j is empty and ends in a conditional branch then
  * 			overwrite i's jump with a copy of j's branch
  */
-static void clean(cfg_t* cfg){
-	//For each function in the CFG
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
-		//Have we seen change(modification) at all?
-		u_int8_t changed;
+static inline void clean(cfg_t* cfg, basic_block_t* function_entry_block){
+	//Have we seen a change?
+	u_int8_t changed;
 
-		//Grab the function block out
-		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), _);
+	//The postorder traversal array
+	dynamic_array_t postorder;
 
-		//The postorder traversal array
-		dynamic_array_t postorder;
+	//Now we'll do the actual clean algorithm
+	do {
+		//Compute the new postorder
+		postorder = compute_post_order_traversal(function_entry_block);
 
-		//Now we'll do the actual clean algorithm
-		do {
-			//Compute the new postorder
-			postorder = compute_post_order_traversal(function_entry);
+		//Call onepass() for the reduction
+		changed = branch_reduce(cfg, &postorder);
 
-			//Call onepass() for the reduction
-			changed = branch_reduce(cfg, &postorder);
-
-			//We can free up the old postorder now
-			dynamic_array_dealloc(&postorder);
-			
-		//We keep going so long as branch_reduce changes something 
-		} while(changed == TRUE);
-	}
+		//We can free up the old postorder now
+		dynamic_array_dealloc(&postorder);
+		
+	//We keep going so long as branch_reduce changes something 
+	} while(changed == TRUE);
 }
 
 
@@ -2000,12 +2333,12 @@ static void clean(cfg_t* cfg){
  * of the dominance relations that are now useless. As such, we'll need to completely recompute all
  * of these key values
  */
-static void recompute_all_dominance_relations(cfg_t* cfg){
+static inline void recompute_all_dominance_relations(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
 	//First, we'll go through and completely blow away anything related to
-	//a dominator in the entirety of the cfg
-	for(u_int16_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	//a dominator in the entirety of the function 
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the given block out
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
+		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
 		//Now we're going to reset everything about this block
 		block->immediate_dominator = NULL;
@@ -2033,39 +2366,76 @@ static void recompute_all_dominance_relations(cfg_t* cfg){
 	}
 
 	//Now that that's finished, we can go back and calculate all of the control relations again
-	calculate_all_control_relations(cfg);
+	calculate_all_control_relations(function_entry_block, function_blocks);
 }
 
 
 /**
- * After everything runs, it is possible that we'll have blocks leftover
- * with no predecessors. These blocks are useless, and just gunk up our pipeline.
- * We will remove them all now.
+ * For any blocks that are completely impossible to reach, we will scrap them all now
+ * to avoid any confusion later in the process
+ *
+ * We consider any block with no predecessors that *is not* a function entry block
+ * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
+ * be creating even more unreachable blocks, so we need to take care of those too 
  */
-static void delete_unreachable_blocks(cfg_t* cfg){
-	//Clone all blocks here - we will be messing with the original
-	//array, so we can't count on it for an accurate count
-	dynamic_array_t all_blocks = clone_dynamic_array(&(cfg->created_blocks));
+static inline void delete_all_unreachable_blocks(dynamic_array_t* function_blocks, cfg_t* cfg){
+	//Array of all blocks that are to be deleted
+	dynamic_array_t to_be_deleted = dynamic_array_alloc();
+	dynamic_array_t to_be_deleted_successors = dynamic_array_alloc();
 
-	//Run through all blocks
-	for(u_int16_t i = 0; i < all_blocks.current_index; i++){
-		//Extract this
-		basic_block_t* current = dynamic_array_get_at(&all_blocks, i);
+	//First bulid the array of things that need to go. A block is considered
+	//unreachable if it has no predecessors and it is *not* an entry block
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
 
-		//Nothing we can do about this
-		if(current->block_type == BLOCK_TYPE_FUNC_ENTRY){
+		//Doesn't count
+		if(current_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
 			continue;
 		}
 
-		//This is our deletion case - this block is unreachable
-		if(current->predecessors.internal_array == NULL || current->predecessors.current_index == 0){
-			//Scrap it from here
-			dynamic_array_delete(&(cfg->created_blocks), current);
+		//This is our case for something that has to go
+		if(current_block->predecessors.current_index == 0){
+			dynamic_array_add(&to_be_deleted, current_block);
 		}
 	}
 
-	//Once we're done, deallocate the all_blocks array
-	dynamic_array_dealloc(&all_blocks);
+	//Run through all of the blocks that need to be deleted
+	while(dynamic_array_is_empty(&to_be_deleted) == FALSE){
+		//O(1) removal
+		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
+
+		//Every successor needs to be uncoupled
+		for(u_int32_t i = 0; i < target->successors.current_index; i++){
+			//Extract it
+			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
+
+			//Add this link in
+			dynamic_array_add(&to_be_deleted_successors, successor);
+		}
+
+		//Now run through all of the successors that we need to delete. This is done to avoid
+		//any funniness with the indices
+		while(dynamic_array_is_empty(&to_be_deleted_successors) == FALSE){
+			//Extract the successor
+			basic_block_t* successor = dynamic_array_delete_from_back(&(to_be_deleted_successors));
+
+			//Undo the link
+			delete_successor(target, successor);
+
+			//What if the successor now has now predecessors? That means it needs to go too
+			if(successor->predecessors.current_index == 0){
+				dynamic_array_add(&to_be_deleted, successor);
+			}
+		}
+
+		//Actually delete the block from both sets
+		dynamic_array_delete(&(cfg->created_blocks), target);
+		dynamic_array_delete(function_blocks, target);
+	}
+
+	//Deallocate this once we're done
+	dynamic_array_dealloc(&to_be_deleted);
+	dynamic_array_dealloc(&to_be_deleted_successors);
 }
 
 
@@ -2074,41 +2444,129 @@ static void delete_unreachable_blocks(cfg_t* cfg){
  * runs for in it's current iteration
 */
 cfg_t* optimize(cfg_t* cfg){
-	//First thing we'll do is reset the visited status of the CFG. This just ensures
-	//that we won't have any issues with the CFG in terms of traversal
-	reset_visited_status(cfg, FALSE);
+	cfg_reference = cfg;
 
-	//PASS 1: Mark algorithm
-	//The mark algorithm marks all useful operations. It will perform one full pass of the program
-	mark(cfg);
+	//Prepopulate these global variables so that we don't need to pass them around
+	stack_pointer_variable = cfg->stack_pointer;
+	instruction_pointer_variable = cfg->instruction_pointer;
 
-	//PASS 2: Sweep algorithm
-	//Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
-	//comes across branch ending statements that are unmarked, it will replace them with a jump to the
-	//nearest marked postdominator
-	sweep(cfg);
+	/**
+	 * We will optimize on a function by function basis. This is because functions are independent units 
+	 * that do not have interlocking dependencies. Us doing this allows for more efficient operation because
+	 * there may be instances where we need to use our "while changed" type processing, causing us to iterate
+	 * over entire sets of blocks repeatedly. 
+	 */
+	//Run through all of the functions
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Extract the function entry block
+		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
-	//PASS 3: compound logic optimization
-	//Now that we've sweeped everything, we know that what branches are left must be useful. This means
-	//that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
-	optimize_short_circuit_logic(cfg);
+		//What function are we in?
+		symtab_function_record_t* current_function = function_entry_block->function_defined_in;
 
-	//PASS 4: Clean algorithm
-	//Clean follows after sweep because during the sweep process, we will likely delete the contents of
-	//entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
-	//that has been made useless by sweep()
-	clean(cfg);
-	
-	//PASS 5: Delete all unreachable blocks
-	//There is a chance that we have some blocks who are now unreachable. We will
-	//remove them now
-	delete_unreachable_blocks(cfg);
+		//The current function blocks are stored in the symtab
+		dynamic_array_t* current_function_blocks = &(current_function->function_blocks);
 
-	//PASS 6: Recalculate everything
-	//Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
-	//etc. So, to remedy this, we will recalculate everything in the CFG
-	//cleanup_all_control_relations(cfg);
-	recompute_all_dominance_relations(cfg);
+		/**
+		 * Once we get here, we have an array that is full of all of the blocks belonging
+		 * to the function that we wish to optimize. Now we will go through all of the 
+		 * optimization steps for this function
+		 */
+
+		/**
+		 * First thing we'll do is reset the visited status of the CFG. This just ensures
+		 * that we won't have any issues with the CFG in terms of traversal
+		 */
+		reset_visit_status_for_function(current_function_blocks);
+
+		/**
+		 * PASS 1: Mark algorithm
+		 * The mark algorithm marks all useful operations. It will perform one full pass of the program
+		 */
+		mark(current_function_blocks);
+
+		/**
+		 * PASS 2: Sweep algorithm
+		 * Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
+		 * comes across branch ending statements that are unmarked, it will replace them with a jump to the
+		 * nearest marked postdominator
+		 */
+		sweep(current_function_blocks, function_entry_block);
+
+		/**
+		 * PASS 3: compound logic optimization
+		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
+		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
+		 */
+		optimize_short_circuit_logic(current_function, current_function_blocks);
+
+		/**
+		 * PASS 4: always true/false optimization
+		 * Now that we've broken up and logical and/or logic, we can go through and see if there are any
+		 * branches that we can eliminate due to their conditions being always true/false. An example
+		 * of this would be while(true) always being true, so there being no need for a comparison
+		 * on each step
+		 */
+		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
+
+		/**
+		 * PASS 4.5: if we did find branches to optimize, we now potentially have a lot
+		 * of orphaned code that is no longer useful. This would not have been picked up by
+		 * the original mark and sweep, but it will be now. So, we will rerun mark/sweep
+		 * *if* we've found branches that were optimzied. Otherwise, this would just be a waste
+		 */
+		if(found_branches_to_optimize == TRUE){
+			//Reset all of the marks in the function
+			reset_all_marks(current_function_blocks);
+
+			/**
+			 * Optimizing branches and and then trying to run mark & sweep will not work because
+			 * we have fundamentally changed the structure & dominance in the CFG by doing
+			 * that. 
+			 *
+			 * We are going to need to delete all unreachable blocks *at this stage* and
+			 * then we are going to have to recompute all of the dominance relations. Mark
+			 * specifically relies on the "RDF"(reverse dominance frontier).
+			 */
+
+			//Delete any orphaned blocks
+			delete_all_unreachable_blocks(current_function_blocks, cfg);
+
+			//Recalculate all dominance relations
+			recompute_all_dominance_relations(current_function_blocks, function_entry_block);
+
+			//Invoke the marker
+			mark(current_function_blocks);
+
+			//Invoke the sweeper
+			sweep(current_function_blocks, function_entry_block);
+		}
+		
+		/**
+		 * PASS 4: Clean algorithm
+		 * Clean follows after sweep because during the sweep process, we will likely delete the contents of
+		 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
+		 * that has been made useless by sweep()
+		 */
+		clean(cfg, function_entry_block);
+
+		/**
+		 * PASS 5: Delete all unreachable blocks
+		 * There is a chance that we have some blocks who are now unreachable. We will
+		 * remove them now. This step is absolutely essential. If we do not do this,
+		 * then the dominance relation computation will not work
+		 */
+		delete_all_unreachable_blocks(current_function_blocks, cfg);
+
+		/**
+		 * PASS 6: Recalculate everything
+		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
+		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
+		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
+		 */
+		recompute_all_dominance_relations(current_function_blocks, function_entry_block);
+	}
+
 
 	//Give back the CFG
 	return cfg;
