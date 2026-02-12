@@ -21,9 +21,6 @@
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/constants.h"
 
-//Our atomically incrementing integer
-//If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
-static int32_t current_block_id = 0;
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
 u_int32_t* num_warnings_ref;
@@ -278,8 +275,8 @@ static inline void delete_all_unreachable_blocks(dynamic_array_t* function_block
  * increasing block ID
  */
 static inline int32_t increment_and_get(){
-	current_block_id++;
-	return current_block_id;
+	(cfg->block_id)++;
+	return cfg->block_id;
 }
 
 
@@ -418,7 +415,7 @@ static basic_block_t* basic_block_alloc_and_estimate(){
  * execution frequency. If you are in the CFG, *you should not be
  * using this function*
  */
-basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
+static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	//Allocate the block
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 

@@ -15,6 +15,9 @@
 static three_addr_var_t* stack_pointer_variable;
 static three_addr_var_t* instruction_pointer_variable;
 
+//A pointer to the cfg
+static cfg_t* cfg_reference;
+
 /**
  * Is a conditional always true, always false, or unknown?
  */
@@ -39,6 +42,46 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 		//Flag it as false
 		current->visited = FALSE;
 	}
+}
+
+
+/**
+ * A helper function that makes a new block id. This ensures we have an atomically
+ * increasing block ID
+ */
+static inline int32_t increment_and_get(){
+	(cfg_reference->block_id)++;
+	return cfg_reference->block_id;
+}
+
+
+/**
+ * Create a basic block and add it into the set of all function blocks
+ */
+static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency, symtab_function_record_t* function){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//What is the estimated execution cost of this block?
+	created->estimated_execution_frequency = estimated_execution_frequency;
+
+	//Let's add in what function this block came from
+	created->function_defined_in = function;
+
+	//Add this into the dynamic array
+	dynamic_array_add(&(cfg_reference->created_blocks), created);
+
+	//Add it into the function's block array
+	dynamic_array_add(&(function->function_blocks), created);
+
+	//Give it back
+	return created;
 }
 
 
@@ -1141,11 +1184,11 @@ static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* de
  * t10 <- t9 < t8
  * cbranch_ge .L9 else .L13 <-- If this also fails, we've satisfied the initial condition
  */
-static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_or_inverse_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
@@ -1251,7 +1294,6 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
 	//	goto second_half_block
 	emit_branch(original_block, else_target, second_half_block, first_half_branch, first_branch_conditional_decider, BRANCH_CATEGORY_NORMAL, first_half_float);
 
-
 	/**
 	 * HANDLING THE SECOND BLOCK
 	 *
@@ -1325,11 +1367,11 @@ static void optimize_logical_or_inverse_branch_logic(instruction_t* short_circui
  * t7 <- t7 != t8 <------- If this is true, jump to if
  * cbranch_ne .L12 else .L13
  */
-static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_or_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
@@ -1508,11 +1550,11 @@ static void optimize_logical_or_branch_logic(instruction_t* short_circuit_statme
  * t7 <- t7 != t8 <------- Remember we're looking for a failure, so if this fails to go *if*, otherwise *else*
  * cbranch_e .L12 else .L13
  */
-static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_and_inverse_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
@@ -1690,11 +1732,11 @@ static void optimize_logical_and_inverse_branch_logic(instruction_t* short_circu
  * t7 <- t7 != t8 <------- If this is true, jump to if
  * cbranch_ne .L12 else .L13
  */
-static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
+static void optimize_logical_and_branch_logic(symtab_function_record_t* function, instruction_t* short_circuit_statment, basic_block_t* if_target, basic_block_t* else_target){
 	//Grab out the block that we're using
 	basic_block_t* original_block = short_circuit_statment->block_contained_in;
 	//The new block that we'll need for our second half
-	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency);
+	basic_block_t* second_half_block = basic_block_alloc(original_block->estimated_execution_frequency, function);
 	//VERY important that we copy this on over
 	second_half_block->function_defined_in = original_block->function_defined_in;
 
@@ -1904,7 +1946,7 @@ static void optimize_logical_and_branch_logic(instruction_t* short_circuit_statm
  * jmp .L5	
  */
 static void optimize_short_circuit_logic(dynamic_array_t* function_blocks){
-	//For every single block in the CFG
+	//For every single block in the function
 	for(u_int16_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
@@ -2402,6 +2444,8 @@ static inline void delete_all_unreachable_blocks(dynamic_array_t* function_block
  * runs for in it's current iteration
 */
 cfg_t* optimize(cfg_t* cfg){
+	cfg_reference = cfg;
+
 	//Prepopulate these global variables so that we don't need to pass them around
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;

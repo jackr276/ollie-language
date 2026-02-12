@@ -62,6 +62,8 @@ struct cfg_t{
 	type_symtab_t* type_symtab;
 	//All global variables
 	dynamic_array_t global_variables;
+	//Hang onto the block id
+	u_int32_t block_id;
 };
 
 
@@ -246,12 +248,6 @@ void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor);
  * Reset the visited status inside a particular function in the CFG
  */
 void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t reset_direct_successor);
-
-/**
- * Allocate a basic block using calloc. NO data assignment
- * happens in this function
-*/
-basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency);
 
 /**
  * Deallocate a block
