@@ -59,6 +59,8 @@ static heap_stack_t break_stack;
 static heap_stack_t continue_stack;
 //The overall nesting stack will tell us what level of nesting we're at(if, switch/case, loop)
 static nesting_stack_t nesting_stack;
+//Pointer to the symtab region for all current function blocks
+static dynamic_array_t* current_function_blocks;
 //Keep a list of all lable statements in the function(block jumps are internal only)
 static dynamic_array_t current_function_labeled_blocks;
 //Also keep a list of all custom jumps in the function
@@ -129,7 +131,7 @@ static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block
  * due to internal hardware constraints. This operation will find
  * if a given value is compatible
  */
-static u_int8_t is_lea_compatible_power_of_2(int64_t value){
+static inline u_int8_t is_lea_compatible_power_of_2(int64_t value){
 	switch(value){
 		case 1:
 		case 2:
@@ -139,6 +141,19 @@ static u_int8_t is_lea_compatible_power_of_2(int64_t value){
 		default:
 			return FALSE;
 	}
+}
+
+
+/**
+ * Delete a block, including all of the needed internal
+ * bookkeeping
+ */
+static inline void delete_block(basic_block_t* block){
+	//Remove it from the overall structure
+	dynamic_array_delete(&(cfg->created_blocks), block);
+
+	//And delete it from this function's blocks too
+	dynamic_array_delete(current_function_blocks, block);
 }
 
 
@@ -305,6 +320,9 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	//Add this into the dynamic array
 	dynamic_array_add(&(cfg->created_blocks), created);
 
+	//Add it into the function's block array
+	dynamic_array_add(current_function_blocks, created);
+
 	//Give it back
 	return created;
 }
@@ -334,6 +352,10 @@ basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
 	//Add this into the dynamic array
 	dynamic_array_add(&(cfg->created_blocks), created);
 
+	//Add it into the function's block array
+	dynamic_array_add(current_function_blocks, created);
+
+	//Give it back
 	return created;
 }
 
@@ -367,6 +389,10 @@ static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
 	//Add this into the dynamic array
 	dynamic_array_add(&(cfg->created_blocks), created);
 
+	//Add it into the function's block array
+	dynamic_array_add(current_function_blocks, created);
+
+	//Give it back
 	return created;
 }
 
@@ -5915,8 +5941,8 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//Update the instruction counts
 	a->number_of_instructions += b->number_of_instructions;
 
-	//We'll remove this from the list of created blocks
-	dynamic_array_delete(&(cfg->created_blocks), b);
+	//Delete block b now
+	delete_block(b);
 
 	//And finally we'll deallocate b
 	basic_block_dealloc(b);
@@ -8347,6 +8373,8 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	symtab_function_record_t* func_record = function_node->func_record;
 	//We will now store this as the current function
 	current_function = func_record;
+	//Store the pointer to this function's array of blocks too. This will be used by every basic_block_alloc() call
+	current_function_blocks = &(func_record->function_blocks);
 	//We also need to zero out the current stack offset value
 	stack_offset = 0;
 	//We also need to set the labeled block array to be empty
@@ -9340,8 +9368,8 @@ static inline void delete_all_unreachable_blocks(cfg_t* cfg){
 			}
 		}
 
-		//Actually delete the block
-		dynamic_array_delete(&(cfg->created_blocks), target);
+		//Delete the target block now
+		delete_block(target);
 	}
 
 	//Deallocate this once we're done
