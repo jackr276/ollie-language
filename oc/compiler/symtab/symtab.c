@@ -1253,107 +1253,6 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 
 
 /**
- * Create a local constant and return the pointer to it
- */
-local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_string_t* value){
-	//Dynamically allocate it
-	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
-
-	//Store the type as well
-	local_const->type = type;
-
-	//Copy the dynamic string in
-	local_const->local_constant_value.string_value = clone_dynamic_string(value);
-
-	//Now we'll add the ID
-	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
-
-	//Store what type we have
-	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_STRING;
-
-	//And finally we'll add it back in
-	return local_const;
-}
-
-
-/**
- * Create an F32 local constant
- */
-local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value){
-	//Dynamically allocate it
-	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
-
-	//Store the type as well
-	local_const->type = f32_type;
-
-	//Copy the dynamic string in. We cannot print out floats directly, so we instead
-	//use the bits that make up the float and cast them to an i32 *without rounding*
-	local_const->local_constant_value.float_bit_equivalent = *((int32_t*)(&value));
-
-	//Now we'll add the ID
-	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
-
-	//Store what type we have
-	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_F32;
-
-	//And finally we'll add it back in
-	return local_const;
-}
-
-
-/**
- * Create an F64 local constant
- */
-local_constant_t* f64_local_constant_alloc(generic_type_t* f64_type, double value){
-	//Dynamically allocate it
-	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
-
-	//Store the type as well
-	local_const->type = f64_type;
-
-	//Copy the dynamic string in. We cannot print out floats directly, so we instead
-	//use the bits that make up the float and cast them to an i32 *without rounding*
-	local_const->local_constant_value.float_bit_equivalent = *((int64_t*)(&value));
-
-	//Now we'll add the ID
-	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
-
-	//Store what type we have
-	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_F64;
-
-	//And finally we'll add it back in
-	return local_const;
-}
-
-
-/**
- * Create a 128 bit local constant
- *
- * NOTE: we will use an f64 for this, although we all know that this is truly a 128 bit type
- */
-local_constant_t* xmm128_local_constant_alloc(generic_type_t* f64_type, int64_t upper_64_bits, int64_t lower_64_bits){
-	//Dynamically allocate it
-	local_constant_t* local_const = calloc(1, sizeof(local_constant_t));
-
-	//Store the type as well
-	local_const->type = f64_type;
-	
-	//Store the lower and upper 64 bits for this local constant
-	local_const->local_constant_value.lower_64_bits = lower_64_bits;
-	local_const->upper_64_bits = upper_64_bits;
-
-	//Now we'll add the ID
-	local_const->local_constant_id = INCREMENT_AND_GET_LOCAL_CONSTANT_ID;
-
-	//Store what type we have
-	local_const->local_constant_type = LOCAL_CONSTANT_TYPE_XMM128;
-
-	//And finally we'll add it back in
-	return local_const;
-}
-
-
-/**
  * Specifically look for a pointer type to the given type in the symtab
  *
  * This function exists so that we do not need to allocate memory in the parser
@@ -2196,39 +2095,6 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			temp = record;
 			record = record->next;
 
-			//Deallocation for local constants
-			if(temp->local_string_constants.internal_array != NULL){
-				//Deallocate each local constant
-				for(u_int16_t i = 0; i < temp->local_string_constants.current_index; i++){
-					local_constant_dealloc(dynamic_set_get_at(&(temp->local_string_constants), i));
-				}
-
-				//Then destroy the whole set 
-				dynamic_set_dealloc(&(temp->local_string_constants));
-			}
-
-			//Deallocation for local float constants
-			if(temp->local_f32_constants.internal_array != NULL){
-				//Deallocate each local constant
-				for(u_int16_t i = 0; i < temp->local_f32_constants.current_index; i++){
-					local_constant_dealloc(dynamic_set_get_at(&(temp->local_f32_constants), i));
-				}
-
-				//Then destroy the whole set 
-				dynamic_set_dealloc(&(temp->local_f32_constants));
-			}
-
-			//Deallocation for local float constants
-			if(temp->local_f64_constants.internal_array != NULL){
-				//Deallocate each local constant
-				for(u_int16_t i = 0; i < temp->local_f64_constants.current_index; i++){
-					local_constant_dealloc(dynamic_set_get_at(&(temp->local_f64_constants), i));
-				}
-
-				//Then destroy the whole array
-				dynamic_set_dealloc(&(temp->local_f64_constants));
-			}
-
 			//Destroy the call graph infrastructure
 			dynamic_set_dealloc(&(temp->called_functions));
 
@@ -2256,7 +2122,7 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 /**
  * Private helper that deallocates a variable
  */
-static void variable_dealloc(symtab_variable_record_t* variable){
+static inline void variable_dealloc(symtab_variable_record_t* variable){
 	//If we have a lightstack that's linked, destroy that
 	lightstack_dealloc(&(variable->counter_stack));
 
@@ -2366,25 +2232,4 @@ void macro_symtab_dealloc(macro_symtab_t* symtab){
 
 	//At the very end free the overall control structure
 	free(symtab);
-}
-
-
-/**
- * Destroy a local constant
- */
-void local_constant_dealloc(local_constant_t* constant){
-	//Go based on the type
-	switch(constant->local_constant_type){
-		case LOCAL_CONSTANT_TYPE_STRING:
-			//First we'll deallocate the dynamic string
-			dynamic_string_dealloc(&(constant->local_constant_value.string_value));
-			break;
-
-		//If it's not a string then there's nothing to free
-		default:
-			break;
-	}
-
-	//Then we'll free the entire thing
-	free(constant);
 }
