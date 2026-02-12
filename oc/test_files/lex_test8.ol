@@ -10,7 +10,7 @@ define struct my_struct{
 
 pub fn main(argc:i32, argv:char**) -> i32 {
 	let i:u32 = 0;
-	declare j:u32;
+	declare j:mut u32;
 
 	j = i;
 

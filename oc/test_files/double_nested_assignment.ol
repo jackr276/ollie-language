@@ -5,7 +5,7 @@
 */
 
 pub fn main() -> i32 {
-	declare x:i32, declare y:i32;
+	declare x:mut i32, declare y:mut i32;
 
 	
 	ret (x = 5) + (y = 6);

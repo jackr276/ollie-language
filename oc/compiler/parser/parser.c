@@ -192,16 +192,18 @@ static inline void perform_constant_assignment_coercion(generic_ast_node_t* cons
 
 /**
  * Determine whether or not a variable is able to be assigned to
+ *
+ * A variable can only be assigned to if it is mutable. If the user
+ * does something like:
+ *
+ * declare x:i32;
+ * x = 5;
+ *
+ * This is inavlid, because you're violating the basic mutability constraint
  */
 static inline u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
 	//Extract the type - it contains the mutability information
 	generic_type_t* type = variable->type_defined_as;
-
-	//If this hasn't been initialized then yes
-	//we can assign to it
-	if(variable->initialized == FALSE){
-		return TRUE;
-	}
 
 	//Otherwise, let's see if the type allows us to be mutated 
 	//If so - then we're fine. If not, then we fail
@@ -1665,7 +1667,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 	} else {
 		//This is the case where we have a plain variable assignment
 		if(can_variable_be_assigned_to(assignee) == FALSE){
-			sprintf(info, "Variable \"%s\" is not mutable and has already been initialized. Use mut keyword if you wish to mutate. First defined here:", assignee->var_name.string);
+			sprintf(info, "Variable \"%s\" is not mutable and cannot be assigned to outisde of an initial \"let\" statement. Use the \"mut\" keyword if you wish to mutate. First defined here:", assignee->var_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			print_variable_name(assignee);
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
@@ -1673,13 +1675,11 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 
 		/**
 		 * Since we are not doing any kind of memory access here, now we can go
-		 * through and update our mutability/initialization
+		 * through and update our mutability/initialization. This counts as mutation
+		 * and initialization
 		 */
-		if(assignee->initialized == TRUE){
-			assignee->mutated = TRUE;
-		} else {
-			assignee->initialized = TRUE;
-		}
+		assignee->initialized = TRUE;
+		assignee->mutated = TRUE;
 	}
 
 	//Just give this back as a flag that we're fine
@@ -9501,6 +9501,19 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 		//Otherwise just leave
 		default:
+			/**
+			 * Special warning here - if the user is declaring a variable that is immutable
+			 * immutable, they actually never initialize this variable. We should
+			 * throw a warning up for this
+			 */
+			if(declared_var->type_defined_as->mutability == NOT_MUTABLE){
+				//Throw up the warning here
+				sprintf(info, "Type \"%s\" is immutable. If you declare variable \"%s\" with this type, you may never be able to initialize it",
+								declared_var->type_defined_as->type_name.string,
+								declared_var->var_name.string);
+				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
+			}
+
 			//If this is a global variable, then we also must ensure that a declaration exists
 			if(is_global == TRUE){
 				//Actually create the node now

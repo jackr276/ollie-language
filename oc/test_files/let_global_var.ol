@@ -6,7 +6,7 @@
 //Global var
 let x:mut i32 = 33;
 //Mix and match - we should handle this
-declare y:i32;
+declare y:mut i32;
 
 
 pub fn main() -> i32 {	
