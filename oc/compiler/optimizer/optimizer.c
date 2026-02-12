@@ -2291,12 +2291,12 @@ static inline void clean(cfg_t* cfg, basic_block_t* function_entry_block){
  * of the dominance relations that are now useless. As such, we'll need to completely recompute all
  * of these key values
  */
-static inline void recompute_all_dominance_relations(cfg_t* cfg){
+static inline void recompute_all_dominance_relations(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
 	//First, we'll go through and completely blow away anything related to
-	//a dominator in the entirety of the cfg
-	for(u_int32_t _ = 0; _ < cfg->created_blocks.current_index; _++){
+	//a dominator in the entirety of the function 
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the given block out
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
+		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
 		//Now we're going to reset everything about this block
 		block->immediate_dominator = NULL;
@@ -2324,7 +2324,7 @@ static inline void recompute_all_dominance_relations(cfg_t* cfg){
 	}
 
 	//Now that that's finished, we can go back and calculate all of the control relations again
-	calculate_all_control_relations(cfg);
+	calculate_all_control_relations(function_entry_block, function_blocks);
 }
 
 
@@ -2410,11 +2410,8 @@ cfg_t* optimize(cfg_t* cfg){
 	 * We will optimize on a function by function basis. This is because functions are independent units 
 	 * that do not have interlocking dependencies. Us doing this allows for more efficient operation because
 	 * there may be instances where we need to use our "while changed" type processing, causing us to iterate
-	 * over entire sets of blocks repeatedly. We will use a temporary array to achieve that in the optimizer. This
-	 * array will be populated by us upon every iteration
+	 * over entire sets of blocks repeatedly. 
 	 */
-	dynamic_array_t current_function_blocks = dynamic_array_alloc();
-
 	//Run through all of the functions
 	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the function entry block
@@ -2423,20 +2420,8 @@ cfg_t* optimize(cfg_t* cfg){
 		//What function are we in?
 		symtab_function_record_t* current_function = function_entry_block->function_defined_in;
 
-		//Now run through every single created block and find the ones that match the function
-		//we've extracted here
-		for(u_int32_t j = 0; j < cfg->created_blocks.current_index; j++){
-			//Extract it
-			basic_block_t* current = dynamic_array_get_at(&(cfg->created_blocks), j);
-
-			//We don't want this
-			if(current->function_defined_in != current_function){
-				continue;
-			}
-
-			//We do want it if we get here
-			dynamic_array_add(&current_function_blocks, current);
-		}
+		//The current function blocks are stored in the symtab
+		dynamic_array_t* current_function_blocks = &(current_function->function_blocks);
 
 		/**
 		 * Once we get here, we have an array that is full of all of the blocks belonging
@@ -2448,13 +2433,13 @@ cfg_t* optimize(cfg_t* cfg){
 		 * First thing we'll do is reset the visited status of the CFG. This just ensures
 		 * that we won't have any issues with the CFG in terms of traversal
 		 */
-		reset_visit_status_for_function(&current_function_blocks);
+		reset_visit_status_for_function(current_function_blocks);
 
 		/**
 		 * PASS 1: Mark algorithm
 		 * The mark algorithm marks all useful operations. It will perform one full pass of the program
 		 */
-		mark(&current_function_blocks);
+		mark(current_function_blocks);
 
 		/**
 		 * PASS 2: Sweep algorithm
@@ -2462,14 +2447,14 @@ cfg_t* optimize(cfg_t* cfg){
 		 * comes across branch ending statements that are unmarked, it will replace them with a jump to the
 		 * nearest marked postdominator
 		 */
-		sweep(&current_function_blocks, function_entry_block);
+		sweep(current_function_blocks, function_entry_block);
 
 		/**
 		 * PASS 3: compound logic optimization
 		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
 		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
 		 */
-		optimize_short_circuit_logic(&current_function_blocks);
+		optimize_short_circuit_logic(current_function_blocks);
 
 		/**
 		 * PASS 4: always true/false optimization
@@ -2478,7 +2463,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * of this would be while(true) always being true, so there being no need for a comparison
 		 * on each step
 		 */
-		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(&current_function_blocks);
+		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
 
 		/**
 		 * PASS 4.5: if we did find branches to optimize, we now potentially have a lot
@@ -2488,52 +2473,29 @@ cfg_t* optimize(cfg_t* cfg){
 		 */
 		if(found_branches_to_optimize == TRUE){
 			//Reset all of the marks in the function
-			reset_all_marks(&current_function_blocks);
+			reset_all_marks(current_function_blocks);
 
 			/**
+			 * Optimizing branches and and then trying to run mark & sweep will not work because
+			 * we have fundamentally changed the structure & dominance in the CFG by doing
+			 * that. 
 			 *
-			 *
-			 *
-			 * TODO - this is not good enough. Doing all of this rearranging
-			 * and then trying to run mark & sweep will not work. We are going
-			 * to need to delete all unreachable blocks *at this stage* and
+			 * We are going to need to delete all unreachable blocks *at this stage* and
 			 * then we are going to have to recompute all of the dominance relations. Mark
-			 * specifically relies on the "RDF"(reverse dominance frontier). This will need
-			 * to be done per-function. Sweep relies on postdominators. This will also need
-			 * to be done post-function
-			 *
-			 *
-			 *
-			 *
-			 *
-			 *
+			 * specifically relies on the "RDF"(reverse dominance frontier).
 			 */
 
-			/**
-			 * PASS 5: Delete all unreachable blocks
-			 * There is a chance that we have some blocks who are now unreachable. We will
-			 * remove them now
-			 *
-			 * TODO FIXME
-			 */
-			delete_all_unreachable_blocks(&current_function_blocks, cfg);
+			//Delete any orphaned blocks
+			delete_all_unreachable_blocks(current_function_blocks, cfg);
 
-			/**
-			 * PASS 6: Recalculate everything
-			 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
-			 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
-			 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
-			 *
-			 * TODO FIXME
-			 */
-
-			recompute_all_dominance_relations(cfg);
+			//Recalculate all dominance relations
+			recompute_all_dominance_relations(current_function_blocks, function_entry_block);
 
 			//Invoke the marker
-			mark(&current_function_blocks);
+			mark(current_function_blocks);
 
 			//Invoke the sweeper
-			sweep(&current_function_blocks, function_entry_block);
+			sweep(current_function_blocks, function_entry_block);
 		}
 		
 		/**
@@ -2553,27 +2515,22 @@ cfg_t* optimize(cfg_t* cfg){
 		 *
 		 * TODO do we need?
 		 */
-		delete_all_unreachable_blocks(&current_function_blocks, cfg);
+		delete_all_unreachable_blocks(current_function_blocks, cfg);
 
 		//TODO if we're going to do per-function dominance relations anyway, we may as well only
 		//do them if here if we have the chance
-
-
-		//Once we are done, wipe the dynamic array so that we can reuse it for the next
-		//go-around
-		clear_dynamic_array(&current_function_blocks);
+		
+		/**
+		 * PASS 6: Recalculate everything
+		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
+		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
+		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
+		 *
+		 * TODO PER_FUNCTION
+		 */
+		recompute_all_dominance_relations(current_function_blocks, function_entry_block);
 	}
-	
-	//We are done with this temp array now
-	dynamic_array_dealloc(&current_function_blocks);
 
-	/**
-	 * PASS 6: Recalculate everything
-	 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
-	 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
-	 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
-	 */
-	recompute_all_dominance_relations(cfg);
 
 	//Give back the CFG
 	return cfg;
