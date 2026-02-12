@@ -13,6 +13,7 @@
 //For symtab linking
 #include "../symtab/symtab.h"
 #include "../lexer/lexer.h"
+#include "../local_constant/local_constant.h"
 #include "../ast/ast.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/ollie_intermediary_representation.h"

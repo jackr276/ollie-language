@@ -58,6 +58,16 @@ struct cfg_t{
 	three_addr_var_t* stack_pointer;
 	//We also need to hold onto the instruction pointer
 	three_addr_var_t* instruction_pointer;
+	//=====================================
+	// All local constnats that we could possibly
+	// use are stored inside of global arrays
+	// here. This is done to make access as well
+	// as any needed cleanup easier
+	dynamic_string_t local_string_constants;
+	dynamic_string_t local_f32_constants;
+	dynamic_string_t local_f64_constants;
+	dynamic_string_t local_xmm128_constants;
+	//=====================================
 	//We'll want the type symtab too
 	type_symtab_t* type_symtab;
 	//All global variables
@@ -238,6 +248,11 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
  * via the header file
  */
 void print_all_cfg_blocks(cfg_t* cfg);
+
+/**
+ * Print the local constants(.LCx) that are inside of the cfg
+ */
+void print_local_constants(FILE* fl, cfg_t* cfg);
 
 /**
  * Reset the visited status of the CFG

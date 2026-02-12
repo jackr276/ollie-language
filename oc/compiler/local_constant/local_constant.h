@@ -15,7 +15,6 @@
 //The definition of a local constant(.LCx)
 typedef struct local_constant_t local_constant_t;
 
-
 /**
  * What kind of local constant do we have? Local constants
  * can be strings or floating point numbers, which are represented

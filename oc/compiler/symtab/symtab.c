@@ -31,10 +31,6 @@
 #define PRINT_WARNING(info, line_number) \
 	fprintf(stdout, "\n[LINE %d: COMPILER WARNING]: %s\n", line_number, info)
 
-/**
- * Atomically increment and return the local constant id
- */
-#define INCREMENT_AND_GET_LOCAL_CONSTANT_ID local_constant_id++
 
 //Define a list of salts that can be used for mutable types
 static const u_int64_t mutability_salts[] = {
@@ -56,8 +52,6 @@ static const u_int64_t mutability_salts[] = {
     0xCBB41EF6F7F651C1ULL
 };
 
-//Keep an atomically incrementing integer for the local constant ID
-static u_int32_t local_constant_id = 0;
 
 /**
  * Dynamically allocate a function symtab
@@ -1573,85 +1567,6 @@ void print_function_record(symtab_function_record_t* record){
 	printf("Name: %s,\n", record->func_name.string);
 	printf("Hash: %ld,\n", record->hash);
 	printf("}\n");
-}
-
-
-/**
- * Print the local constants(.LCx) that are inside of a function
- */
-void print_local_constants(FILE* fl, symtab_function_record_t* record){
-	//Let's first print the function's string constants
-	if(record->local_string_constants.current_index != 0){
-		//Print out what section we are in
-		fprintf(fl, "\t.section .rodata.str1.1\n");
-
-		//Run through every string constant
-		for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
-			//Grab the constant out
-			local_constant_t* constant = dynamic_set_get_at(&(record->local_string_constants), i);
-
-			//Now print out every local string constant
-			fprintf(fl, ".LC%d:\n\t.string \"%s\"\n", constant->local_constant_id, constant->local_constant_value.string_value.string);
-		}
-	}
-
-	//Now print the f32 constants
-	if(record->local_f32_constants.current_index != 0){
-		//Print out that we are in the 4 byte prog-bits section
-		fprintf(fl, "\t.section .rodata.cst4,\"aM\",@progbits,4\n");
-
-		//Run through all constants
-		for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
-			//Grab the constant out
-			local_constant_t* constant = dynamic_set_get_at(&(record->local_f32_constants), i);
-
-			//Extract the floating point equivalent using the mask
-			int32_t float_equivalent = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
-
-			//Otherwise, we'll begin to print, starting with the constant name
-			fprintf(fl, "\t.align 4\n.LC%d:\n\t.long %d\n", constant->local_constant_id, float_equivalent);
-		}
-	}
-
-	//Now print the f64 constants
-	if(record->local_f64_constants.current_index != 0){
-		//Print out that we are in the 8 byte prog-bits section
-		fprintf(fl, "\t.section .rodata.cst8,\"aM\",@progbits,8\n");
-
-		//Run through all constants
-		for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
-			//Grab the constant out
-			local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
-
-			//These are in little-endian order. Lower 32 bits comes first, then the upper 32 bits
-			int32_t lower32 = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
-			int32_t upper32 = (constant->local_constant_value.float_bit_equivalent >> 32) & 0xFFFFFFFF;
-
-			//Otherwise, we'll begin to print, starting with the constant name
-			fprintf(fl, "\t.align 8\n.LC%d:\n\t.long %d\n\t.long %d\n", constant->local_constant_id, lower32, upper32);
-		}
-	}
-
-	//Now print the 128 bit XMM constants
-	if(record->local_xmm_constants.current_index != 0){
-		//Print out that we are in the 16 byte prog-bits section
-		fprintf(fl, "\t.section .rodata.cst16,\"aM\",@progbits,16\n");
-
-		//Run through all constants
-		for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
-			//Grab the constant out
-			local_constant_t* constant = dynamic_set_get_at(&(record->local_xmm_constants), i);
-
-			//Extract all of the value in 32 bit chunks
-			int32_t first32 = constant->local_constant_value.lower_64_bits & 0xFFFFFFFF;
-			int32_t second32 = (constant->local_constant_value.lower_64_bits >> 32) & 0xFFFFFFFF;
-			int32_t third32 = constant->upper_64_bits & 0xFFFFFFFF;
-			int32_t fourth32 = (constant->upper_64_bits >> 32) & 0xFFFFFFFF;
-
-			//Otherwise, we'll begin to print, starting with the constant name
-			fprintf(fl, "\t.align 16\n.LC%d:\n\t.long %d\n\t.long %d\n\t.long %d\n\t.long %d\n", constant->local_constant_id, first32, second32, third32, fourth32);
-		}
-	}
 }
 
 

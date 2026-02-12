@@ -540,11 +540,6 @@ void print_type_record(symtab_type_record_t* record);
 void print_function_name(symtab_function_record_t* record);
 
 /**
- * Print the local constants(.LCx) that are inside of a function
- */
-void print_local_constants(FILE* fl, symtab_function_record_t* record);
-
-/**
  * Record that a given source function calls the target
  *
  * This always goes as: source calls target
