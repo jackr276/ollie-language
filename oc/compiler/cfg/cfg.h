@@ -210,14 +210,15 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor);
 void dealloc_cfg(cfg_t* cfg);
 
 /**
- * Destroy all old control relations in anticipation of new ones coming in
+ * Destroy all old control relations in anticipation of new ones coming in. This
+ * operates on a per-function level
  */
-void cleanup_all_control_relations(cfg_t* cfg);
+void cleanup_all_control_relations(dynamic_array_t* function_blocks);
 
 /**
- * Calculate(or recalculate) all control relations in the CFG
+ * Calcualte/recalculate all control relations for a given function
  */
-void calculate_all_control_relations(cfg_t* cfg);
+void calculate_all_control_relations(basic_block_t* function_entry_block, dynamic_array_t* function_blocks);
 
 /**
  * Emit a jump statement directly into a block
@@ -266,10 +267,5 @@ dynamic_array_t compute_post_order_traversal(basic_block_t* entry);
  * Get and return a reverse post order traversal for the CFG
  */
 dynamic_array_t compute_reverse_post_order_traversal(basic_block_t* entry);
-
-/**
- * Reset all reverse post order sets
- */
-void reset_reverse_post_order_sets(cfg_t* cfg);
 
 #endif /* CFG_H */
