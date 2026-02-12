@@ -2463,7 +2463,8 @@ cfg_t* optimize(cfg_t* cfg){
 		 * of this would be while(true) always being true, so there being no need for a comparison
 		 * on each step
 		 */
-		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
+		//u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
+		u_int8_t found_branches_to_optimize = FALSE;
 
 		/**
 		 * PASS 4.5: if we did find branches to optimize, we now potentially have a lot
@@ -2505,7 +2506,6 @@ cfg_t* optimize(cfg_t* cfg){
 		 * that has been made useless by sweep()
 		 */
 		clean(cfg, function_entry_block);
-
 
 		/**
 		 * PASS 5: Delete all unreachable blocks
