@@ -660,6 +660,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	//Allocate the data area internally
 	stack_data_area_alloc(&(record->data_area));
 
+	//Allocate the array for all function blocks
+	record->function_blocks = dynamic_array_alloc();
+
 	//Copy the name over
 	record->func_name = name;
 	//Hash it and store it to avoid to repeated hashing
@@ -2459,6 +2462,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 
 			//Destroy the call graph infrastructure
 			dynamic_set_dealloc(&(temp->called_functions));
+
+			//Destroy the block storage
+			dynamic_array_dealloc(&(temp->function_blocks));
 
 			//Dealloate the function type
 			type_dealloc(temp->signature);

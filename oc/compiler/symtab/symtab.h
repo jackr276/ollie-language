@@ -149,11 +149,8 @@ struct symtab_function_record_t{
 	u_int64_t hash;
 	//In case of collisions, we can chain these records
 	symtab_function_record_t* next;
-
-
-	//TODO - hold all the blocks for this function
-	
-
+	//All of the basic blocks that make up this function
+	dynamic_array_t function_blocks;
 	//The parameters for the function
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
 	//The name of the function
