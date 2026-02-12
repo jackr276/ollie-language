@@ -189,6 +189,74 @@ void reset_block_variable_tracking(basic_block_t* block){
 
 
 /**
+ * For any blocks that are completely impossible to reach, we will scrap them all now
+ * to avoid any confusion later in the process
+ *
+ * We consider any block with no predecessors that *is not* a function entry block
+ * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
+ * be creating even more unreachable blocks, so we need to take care of those too 
+ */
+static inline void delete_all_unreachable_blocks(dynamic_array_t* function_blocks){
+	//Array of all blocks that are to be deleted
+	dynamic_array_t to_be_deleted = dynamic_array_alloc();
+	dynamic_array_t to_be_deleted_successors = dynamic_array_alloc();
+
+	//First bulid the array of things that need to go. A block is considered
+	//unreachable if it has no predecessors and it is *not* an entry block
+	for(u_int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
+
+		//Doesn't count
+		if(current_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+			continue;
+		}
+
+		//This is our case for something that has to go
+		if(current_block->predecessors.current_index == 0){
+			dynamic_array_add(&to_be_deleted, current_block);
+		}
+	}
+
+	//Run through all of the blocks that need to be deleted
+	while(dynamic_array_is_empty(&to_be_deleted) == FALSE){
+		//O(1) removal
+		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
+
+		//Every successor needs to be uncoupled
+		for(u_int32_t i = 0; i < target->successors.current_index; i++){
+			//Extract it
+			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
+
+			//Add this link in
+			dynamic_array_add(&to_be_deleted_successors, successor);
+		}
+
+		//Now run through all of the successors that we need to delete. This is done to avoid
+		//any funniness with the indices
+		while(dynamic_array_is_empty(&to_be_deleted_successors) == FALSE){
+			//Extract the successor
+			basic_block_t* successor = dynamic_array_delete_from_back(&(to_be_deleted_successors));
+
+			//Undo the link
+			delete_successor(target, successor);
+
+			//What if the successor now has now predecessors? That means it needs to go too
+			if(successor->predecessors.current_index == 0){
+				dynamic_array_add(&to_be_deleted, successor);
+			}
+		}
+
+		//Delete the target block now
+		delete_block(target);
+	}
+
+	//Deallocate this once we're done
+	dynamic_array_dealloc(&to_be_deleted);
+	dynamic_array_dealloc(&to_be_deleted_successors);
+}
+
+
+/**
  * A helper function that makes a new block id. This ensures we have an atomically
  * increasing block ID
  */
@@ -8529,6 +8597,12 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	pop_nesting_level(&nesting_stack);
 
 	/**
+	 * Once we are fully complete, we will go through and search for any/all useless
+	 * statements to delete
+	 */
+	delete_all_unreachable_blocks(current_function_blocks);
+
+	/**
 	 * TODO - we need to do all of our postprocessing as "per-function" over here. I think
 	 * we will leave SSA out of this part, but we need to do useless block deletion
 	 * and calculate our control relations
@@ -9310,73 +9384,6 @@ void calculate_all_control_relations(cfg_t* cfg){
 }
 
 
-/**
- * For any blocks that are completely impossible to reach, we will scrap them all now
- * to avoid any confusion later in the process
- *
- * We consider any block with no predecessors that *is not* a function entry block
- * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
- * be creating even more unreachable blocks, so we need to take care of those too 
- */
-static inline void delete_all_unreachable_blocks(cfg_t* cfg){
-	//Array of all blocks that are to be deleted
-	dynamic_array_t to_be_deleted = dynamic_array_alloc();
-	dynamic_array_t to_be_deleted_successors = dynamic_array_alloc();
-
-	//First bulid the array of things that need to go. A block is considered
-	//unreachable if it has no predecessors and it is *not* an entry block
-	for(u_int32_t i = 0; i < cfg->created_blocks.current_index; i++){
-		basic_block_t* current_block = dynamic_array_get_at(&(cfg->created_blocks), i);
-
-		//Doesn't count
-		if(current_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			continue;
-		}
-
-		//This is our case for something that has to go
-		if(current_block->predecessors.current_index == 0){
-			dynamic_array_add(&to_be_deleted, current_block);
-		}
-	}
-
-	//Run through all of the blocks that need to be deleted
-	while(dynamic_array_is_empty(&to_be_deleted) == FALSE){
-		//O(1) removal
-		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
-
-		//Every successor needs to be uncoupled
-		for(u_int32_t i = 0; i < target->successors.current_index; i++){
-			//Extract it
-			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
-
-			//Add this link in
-			dynamic_array_add(&to_be_deleted_successors, successor);
-		}
-
-		//Now run through all of the successors that we need to delete. This is done to avoid
-		//any funniness with the indices
-		while(dynamic_array_is_empty(&to_be_deleted_successors) == FALSE){
-			//Extract the successor
-			basic_block_t* successor = dynamic_array_delete_from_back(&(to_be_deleted_successors));
-
-			//Undo the link
-			delete_successor(target, successor);
-
-			//What if the successor now has now predecessors? That means it needs to go too
-			if(successor->predecessors.current_index == 0){
-				dynamic_array_add(&to_be_deleted, successor);
-			}
-		}
-
-		//Delete the target block now
-		delete_block(target);
-	}
-
-	//Deallocate this once we're done
-	dynamic_array_dealloc(&to_be_deleted);
-	dynamic_array_dealloc(&to_be_deleted_successors);
-}
-
 
 /**
  * Build a cfg from the ground up
@@ -9447,9 +9454,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 		print_parse_message(MESSAGE_TYPE_ERROR, "CFG was unable to be constructed", 0);
 		(*num_errors_ref)++;
 	}
-
-	//Delete any/all blocks that are completely impossible to reach in the CFG
-	delete_all_unreachable_blocks(cfg);
 
 	//Let the helper deal with this
 	calculate_all_control_relations(cfg);
