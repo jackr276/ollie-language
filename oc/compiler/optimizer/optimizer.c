@@ -831,6 +831,109 @@ static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blo
 }
 
 
+//TODO
+//
+//
+//
+//
+//
+//
+
+
+/**
+ * Part of optimizer's mark and sweep - remove any local constants
+ * with a reference count of 0
+ */
+void sweep_local_constants(symtab_function_record_t* record){
+	//An array that marks given constants for deletion
+	dynamic_array_t marked_for_deletion = dynamic_array_alloc();
+
+	//Run through every string constant
+	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_string_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_set_delete(&(record->local_string_constants), to_be_deleted);
+	}
+
+	//Now do the exact same thing for f32's. We can reuse the same array
+	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_f32_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_set_delete(&(record->local_f32_constants), to_be_deleted);
+	}
+
+	//Now do the exact same thing for f64's. We can reuse the same array
+	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_set_delete(&(record->local_f64_constants), to_be_deleted);
+	}
+
+	//Now do the exact same thing for xmm128's. We can reuse the same array
+	for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
+		//Grab the constant out
+		local_constant_t* constant = dynamic_set_get_at(&(record->local_xmm_constants), i);
+
+		//If we have no references, then this is marked for deletion
+		if(constant->reference_count == 0){
+			dynamic_array_add(&marked_for_deletion, constant);
+		}
+	}
+
+	//Now run through the marked for deletion array, deleting as we go
+	while(dynamic_array_is_empty(&marked_for_deletion) == FALSE){
+		//Grab one to delete from the back
+		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
+
+		//Knock it out
+		dynamic_set_delete(&(record->local_xmm_constants), to_be_deleted);
+	}
+
+	//Scrap this now that we're done with it
+	dynamic_array_dealloc(&marked_for_deletion);
+}
+
+
+
 /**
  * The sweep algorithm will go through and remove every operation that has not been marked
  *
