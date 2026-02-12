@@ -1945,7 +1945,7 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
  * x_1 <- t17
  * jmp .L5	
  */
-static void optimize_short_circuit_logic(dynamic_array_t* function_blocks){
+static void optimize_short_circuit_logic(symtab_function_record_t* function, dynamic_array_t* function_blocks){
 	//For every single block in the function
 	for(u_int16_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
@@ -2007,18 +2007,18 @@ static void optimize_short_circuit_logic(dynamic_array_t* function_blocks){
 			if(short_circuit_statement->op == DOUBLE_AND){
 				//Most common case
 				if(inverse_branch == FALSE){
-					optimize_logical_and_branch_logic(short_circuit_statement, if_target, else_target);
+					optimize_logical_and_branch_logic(function, short_circuit_statement, if_target, else_target);
 				} else {
-					optimize_logical_and_inverse_branch_logic(short_circuit_statement, if_target, else_target);
+					optimize_logical_and_inverse_branch_logic(function, short_circuit_statement, if_target, else_target);
 				}
 
 			//Otherwise we have the double or
 			} else {
 				//Most common case
 				if(inverse_branch == FALSE){
-					optimize_logical_or_branch_logic(short_circuit_statement, if_target, else_target);
+					optimize_logical_or_branch_logic(function, short_circuit_statement, if_target, else_target);
 				} else {
-					optimize_logical_or_inverse_branch_logic(short_circuit_statement, if_target, else_target);
+					optimize_logical_or_inverse_branch_logic(function, short_circuit_statement, if_target, else_target);
 				}
 			}
 		}
@@ -2498,7 +2498,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * Now that we've sweeped everything, we know that what branches are left must be useful. This means
 		 * that we can expend the compute of optimizing the short circuit logic on them, and we will do so here
 		 */
-		optimize_short_circuit_logic(current_function_blocks);
+		optimize_short_circuit_logic(current_function, current_function_blocks);
 
 		/**
 		 * PASS 4: always true/false optimization
@@ -2507,8 +2507,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * of this would be while(true) always being true, so there being no need for a comparison
 		 * on each step
 		 */
-		//u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
-		u_int8_t found_branches_to_optimize = FALSE;
+		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
 
 		/**
 		 * PASS 4.5: if we did find branches to optimize, we now potentially have a lot
@@ -2554,23 +2553,16 @@ cfg_t* optimize(cfg_t* cfg){
 		/**
 		 * PASS 5: Delete all unreachable blocks
 		 * There is a chance that we have some blocks who are now unreachable. We will
-		 * remove them now
-		 *
-		 *
-		 * TODO do we need?
+		 * remove them now. This step is absolutely essential. If we do not do this,
+		 * then the dominance relation computation will not work
 		 */
 		delete_all_unreachable_blocks(current_function_blocks, cfg);
 
-		//TODO if we're going to do per-function dominance relations anyway, we may as well only
-		//do them if here if we have the chance
-		
 		/**
 		 * PASS 6: Recalculate everything
 		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
-		 *
-		 * TODO PER_FUNCTION
 		 */
 		recompute_all_dominance_relations(current_function_blocks, function_entry_block);
 	}

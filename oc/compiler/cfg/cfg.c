@@ -411,38 +411,6 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 
 
 /**
- * The standard basic_block_alloc function will take in the estimated
- * execution frequency. If you are in the CFG, *you should not be
- * using this function*
- */
-static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency){
-	//Allocate the block
-	basic_block_t* created = calloc(1, sizeof(basic_block_t));
-
-	//Put the block ID in
-	created->block_id = increment_and_get();
-
-	//By default we're normal here
-	created->block_type = BLOCK_TYPE_NORMAL;
-
-	//What is the estimated execution cost of this block?
-	created->estimated_execution_frequency = estimated_execution_frequency;
-
-	//Let's add in what function this block came from
-	created->function_defined_in = current_function;
-
-	//Add this into the dynamic array
-	dynamic_array_add(&(cfg->created_blocks), created);
-
-	//Add it into the function's block array
-	dynamic_array_add(current_function_blocks, created);
-
-	//Give it back
-	return created;
-}
-
-
-/**
  * Allocate a basic block that comes from a user-defined label statement
 */
 static basic_block_t* labeled_block_alloc(symtab_variable_record_t* label){
