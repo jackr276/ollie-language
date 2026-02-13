@@ -304,6 +304,54 @@ static inline u_int8_t does_block_end_in_terminal_statement(basic_block_t* basic
 
 
 /**
+ * Simple helper that will add a local constant onto the cfg in the appropriate region
+ *
+ * This helper will also initialize the appropriate array if it is found to be null. This is
+ * done so that we aren't allocating them all unnecessarily at the beginning
+ */
+static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local_constant){
+	//Go based on what type it is
+	switch(local_constant->local_constant_type){
+		case LOCAL_CONSTANT_TYPE_F32:
+			if(cfg->local_f32_constants.internal_array == NULL){
+				cfg->local_f32_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f32_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_F64:
+			if(cfg->local_f64_constants.internal_array == NULL){
+				cfg->local_f64_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f64_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_STRING:
+			if(cfg->local_string_constants.internal_array == NULL){
+				cfg->local_string_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_string_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_XMM128:
+			if(cfg->local_xmm128_constants.internal_array == NULL){
+				cfg->local_xmm128_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_xmm128_constants), local_constant);
+
+			break;
+	}
+}
+
+
+/**
  * A helper function that will directly emit either an f32 or f64
  * constant value and place said value into the appropriate location
  * for a function. This will return a variable that corresponds

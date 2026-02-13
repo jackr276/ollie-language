@@ -63,10 +63,10 @@ struct cfg_t{
 	// use are stored inside of global arrays
 	// here. This is done to make access as well
 	// as any needed cleanup easier
-	dynamic_string_t local_string_constants;
-	dynamic_string_t local_f32_constants;
-	dynamic_string_t local_f64_constants;
-	dynamic_string_t local_xmm128_constants;
+	dynamic_array_t local_string_constants;
+	dynamic_array_t local_f32_constants;
+	dynamic_array_t local_f64_constants;
+	dynamic_array_t local_xmm128_constants;
 	//=====================================
 	//We'll want the type symtab too
 	type_symtab_t* type_symtab;
