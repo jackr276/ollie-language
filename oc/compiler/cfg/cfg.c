@@ -3035,7 +3035,7 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 		//For float constants, we need to emit the local constant equivalent via the helper
 		case FLOAT_CONST:
 			//Let's first see if we can find it
-			local_constant = get_f32_local_constant(&(cfg->local_string_constants), constant_node->constant_value.float_value);
+			local_constant = get_f32_local_constant(&(cfg->local_f32_constants), constant_node->constant_value.float_value);
 
 			//Either create a new local constant or update it accordingly
 			if(local_constant == NULL){
