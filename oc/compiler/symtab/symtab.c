@@ -1470,28 +1470,6 @@ void print_function_record(symtab_function_record_t* record){
 
 
 /**
- * Get a string local constant whose value matches the given constant
- *
- * Returns NULL if no matching constant can be found
- */
-local_constant_t* get_string_local_constant(symtab_function_record_t* record, char* string_value){
-	//Run through all of the local constants
-	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
-		//Extract the candidate
-		local_constant_t* candidate = dynamic_set_get_at(&(record->local_string_constants), i);
-
-		//If we have a match then we're good here, we'll return the candidate and leave
-		if(strncmp(candidate->local_constant_value.string_value.string, string_value, candidate->local_constant_value.string_value.current_length) == 0){
-			return candidate;
-		}
-	}
-
-	//If we get here we didn't find it
-	return NULL;
-}
-
-
-/**
  * Record that a given source function calls the target
  *
  * This always goes as: source calls target
@@ -1504,76 +1482,6 @@ void add_function_call(symtab_function_record_t* source, symtab_function_record_
 
 	//This function has been called
 	target->called = TRUE;
-}
-
-
-/**
- * Get an f32 local constant whose value matches the given constant
- *
- * Returns NULL if no matching constant can be found
- */
-local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float float_value){
-	//Run through all of the local constants
-	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
-		//Extract the candidate
-		local_constant_t* candidate = dynamic_set_get_at(&(record->local_f32_constants), i);
-
-		//We will be comparing the values at a byte level. We do not compare the raw values because
-		//that would use FP comparison
-		if(candidate->local_constant_value.float_bit_equivalent == *((u_int32_t*)&float_value)){
-			return candidate;
-		}
-	}
-
-	//If we get here we didn't find it
-	return NULL;
-}
-
-
-/**
- * Get an f64 local constant whose value matches the given constant
- *
- * Returns NULL if no matching constant can be found
- */
-local_constant_t* get_f64_local_constant(symtab_function_record_t* record, double double_value){
-	//Run through all of the local constants
-	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
-		//Extract the candidate
-		local_constant_t* candidate = dynamic_set_get_at(&(record->local_f64_constants), i);
-
-		//We will be comparing the values at a byte level. We do not compare the raw values because
-		//that would use FP comparison
-		if(candidate->local_constant_value.float_bit_equivalent == *((u_int64_t*)&double_value)){
-			return candidate;
-		}
-	}
-
-	//If we get here we didn't find it
-	return NULL;
-}
-
-
-/**
- * Get a 128 bit local constant whose value matches the given constant
- *
- * Returns NULL if no matching constant can be found
- */
-local_constant_t* get_xmm128_local_constant(symtab_function_record_t* record, int64_t upper_64_bits, int64_t lower_64_bits){
-	//Run through all of the local constants
-	for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
-		//Extract the candidate
-		local_constant_t* candidate = dynamic_set_get_at(&(record->local_xmm_constants), i);
-
-		//We will be comparing at the byte level for both the lower and upper 64 bits
-		if((candidate->local_constant_value.lower_64_bits ^ lower_64_bits) == 0
-			&& (candidate->upper_64_bits ^ upper_64_bits) == 0){
-
-			return candidate;
-		}
-	}
-
-	//If we get down here it means that we found nothing
-	return NULL;
 }
 
 
@@ -1594,6 +1502,7 @@ void print_variable_record(symtab_variable_record_t* record){
 	printf("}\n");
 }
 
+
 /**
  * A record printer that is used for development/error messages
  */
@@ -1610,6 +1519,7 @@ void print_type_record(symtab_type_record_t* record){
 	printf("Lexical Level: %d,\n", record->lexical_level);
 	printf("}\n");
 }
+
 
 /**
  * Print a function name out in a stylised way
@@ -1649,6 +1559,7 @@ void print_function_name(symtab_function_record_t* record){
 		printf("{...\n");
 	}
 }
+
 
 /**
  * Print a variable name out in a stylized way
