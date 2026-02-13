@@ -3066,11 +3066,11 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 		//For double constants, we need to emit the local constant equivalent via the helper
 		case DOUBLE_CONST:
 			//Let's first see if we can find it
-			local_constant = get_f64_local_constant(current_function, constant_node->constant_value.double_value);
+			local_constant = get_f64_local_constant(&(cfg->local_f64_constants), constant_node->constant_value.double_value);
 
 			//Either create a new local constant or update it accordingly
 			if(local_constant == NULL){
-				local_constant_val = emit_f64_local_constant(current_function, constant_node);
+				local_constant_val = emit_f64_local_constant(cfg, constant_node);
 			} else {
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
@@ -3256,12 +3256,11 @@ static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, th
 	//Emit the proper constant based on the type
 	switch(incrementee->type->basic_type_token){
 		case F32:
-			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F32);
-
+			constant_value = emit_direct_floating_point_constant(basic_block, 1, F32);
 			break;
 
 		case F64:
-			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F64);
+			constant_value = emit_direct_floating_point_constant(basic_block, 1, F64);
 			break;
 		
 		default:
@@ -3326,12 +3325,11 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
 	//Emit the proper constant based on the type
 	switch(decrementee->type->basic_type_token){
 		case F32:
-			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F32);
-
+			constant_value = emit_direct_floating_point_constant(basic_block, 1, F32);
 			break;
 
 		case F64:
-			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F64);
+			constant_value = emit_direct_floating_point_constant(basic_block, 1, F64);
 			break;
 		
 		default:
