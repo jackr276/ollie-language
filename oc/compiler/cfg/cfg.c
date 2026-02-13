@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <bits/types/locale_t.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -5843,6 +5844,48 @@ void dealloc_cfg(cfg_t* cfg){
 	dynamic_array_dealloc(&(cfg->created_blocks));
 	dynamic_array_dealloc(&(cfg->function_entry_blocks));
 
+	if(cfg->local_f32_constants.internal_array != NULL){
+		//Run through all of the local constants and deallcoate them
+		for(u_int32_t i = 0; i < cfg->local_f32_constants.current_index; i++){
+			local_constant_t* target = dynamic_array_get_at((&cfg->local_f32_constants), i);
+			local_constant_dealloc(target);
+		}
+
+		//Deallocate the internal array
+		dynamic_array_dealloc(&(cfg->local_f32_constants));
+	}
+
+	if(cfg->local_f64_constants.internal_array != NULL){
+		for(u_int32_t i = 0; i < cfg->local_f64_constants.current_index; i++){
+			local_constant_t* target = dynamic_array_get_at((&cfg->local_f64_constants), i);
+			local_constant_dealloc(target);
+		}
+
+		//Deallocate the internal array
+		dynamic_array_dealloc(&(cfg->local_f64_constants));
+	}
+
+	if(cfg->local_string_constants.internal_array != NULL){
+		for(u_int32_t i = 0; i < cfg->local_string_constants.current_index; i++){
+			local_constant_t* target = dynamic_array_get_at((&cfg->local_string_constants), i);
+			local_constant_dealloc(target);
+		}
+
+		//Deallocate the internal array
+		dynamic_array_dealloc(&(cfg->local_string_constants));
+	}
+
+	if(cfg->local_xmm128_constants.internal_array != NULL){
+		for(u_int32_t i = 0; i < cfg->local_xmm128_constants.current_index; i++){
+			local_constant_t* target = dynamic_array_get_at((&cfg->local_xmm128_constants), i);
+			local_constant_dealloc(target);
+		}
+
+		//Deallocate the internal array
+		dynamic_array_dealloc(&(cfg->local_xmm128_constants));
+	}
+
+	
 	//At the very end, be sure to destroy this too
 	free(cfg);
 }
