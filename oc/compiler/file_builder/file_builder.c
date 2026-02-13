@@ -10,7 +10,7 @@
 /**
  * Print an assembly block out
 */
-static void print_assembly_block(FILE* fl, basic_block_t* block){
+static inline void print_assembly_block(FILE* fl, basic_block_t* block){
 	//If this is some kind of switch block, we first print the jump table
 	if(block->jump_table != NULL){
 		print_jump_table(fl, block->jump_table);
@@ -81,7 +81,7 @@ static void print_all_basic_blocks(FILE* fl, cfg_t* cfg){
 /**
  * Print the .text section by running through and printing all of our basic blocks in assembly
  */
-static void print_start_section(compiler_options_t* options, FILE* fl, cfg_t* cfg){
+static inline void print_start_section(compiler_options_t* options, FILE* fl, cfg_t* cfg){
 	//Declare the start of the new file to gas
 	fprintf(fl, "\t.file\t\"%s\"\n", options->file_name);
 
