@@ -831,27 +831,18 @@ static basic_block_t* nearest_marked_postdominator(dynamic_array_t* function_blo
 }
 
 
-//TODO
-//
-//
-//
-//
-//
-//
-
-
 /**
  * Part of optimizer's mark and sweep - remove any local constants
  * with a reference count of 0
  */
-void sweep_local_constants(symtab_function_record_t* record){
+void sweep_local_constants(cfg_t* cfg){
 	//An array that marks given constants for deletion
 	dynamic_array_t marked_for_deletion = dynamic_array_alloc();
 
 	//Run through every string constant
-	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
+	for(u_int16_t i = 0; i < cfg->local_string_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_set_get_at(&(record->local_string_constants), i);
+		local_constant_t* constant = dynamic_array_get_at(&(cfg->local_string_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -865,13 +856,13 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_set_delete(&(record->local_string_constants), to_be_deleted);
+		dynamic_array_delete(&(cfg->local_string_constants), to_be_deleted);
 	}
 
 	//Now do the exact same thing for f32's. We can reuse the same array
-	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
+	for(u_int16_t i = 0; i < cfg->local_f32_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_set_get_at(&(record->local_f32_constants), i);
+		local_constant_t* constant = dynamic_array_get_at(&(cfg->local_f32_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -885,13 +876,13 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_set_delete(&(record->local_f32_constants), to_be_deleted);
+		dynamic_array_delete(&(cfg->local_f32_constants), to_be_deleted);
 	}
 
 	//Now do the exact same thing for f64's. We can reuse the same array
-	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
+	for(u_int16_t i = 0; i < cfg->local_f64_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_set_get_at(&(record->local_f64_constants), i);
+		local_constant_t* constant = dynamic_array_get_at(&(cfg->local_f64_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -905,13 +896,13 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_set_delete(&(record->local_f64_constants), to_be_deleted);
+		dynamic_array_delete(&(cfg->local_f64_constants), to_be_deleted);
 	}
 
 	//Now do the exact same thing for xmm128's. We can reuse the same array
-	for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
+	for(u_int16_t i = 0; i < cfg->local_xmm128_constants.current_index; i++){
 		//Grab the constant out
-		local_constant_t* constant = dynamic_set_get_at(&(record->local_xmm_constants), i);
+		local_constant_t* constant = dynamic_array_get_at(&(cfg->local_xmm128_constants), i);
 
 		//If we have no references, then this is marked for deletion
 		if(constant->reference_count == 0){
@@ -925,7 +916,7 @@ void sweep_local_constants(symtab_function_record_t* record){
 		local_constant_t* to_be_deleted = dynamic_array_delete_from_back(&marked_for_deletion);
 
 		//Knock it out
-		dynamic_set_delete(&(record->local_xmm_constants), to_be_deleted);
+		dynamic_array_delete(&(cfg->local_xmm128_constants), to_be_deleted);
 	}
 
 	//Scrap this now that we're done with it
@@ -1041,9 +1032,6 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 	//Invoke the stack sweeper. This function will go through an remove any stack regions
 	//that have been flagged as unimportant
 	sweep_stack_data_area(&(function_entry_block->function_defined_in->data_area));
-
-	//Now we will sweep the local constants out of here
-	sweep_local_constants(function_entry_block->function_defined_in);
 }
 
 
@@ -2660,6 +2648,13 @@ cfg_t* optimize(cfg_t* cfg){
 		 * then the dominance relation computation will not work
 		 */
 		delete_all_unreachable_blocks(current_function_blocks, cfg);
+
+		/**
+		 * PASS 5.5: Now that all of our marking and sweeping is done, it is possible that we'll
+		 * have some orphaned local constants. We will go through now and sweep them all up if 
+		 * any of them end up being completely unused
+		 */
+		sweep_local_constants(cfg);
 
 		/**
 		 * PASS 6: Recalculate everything

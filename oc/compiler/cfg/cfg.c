@@ -9327,6 +9327,9 @@ void print_all_cfg_blocks(cfg_t* cfg){
 
 	//Print all global variables after the blocks
 	print_all_global_variables(stdout, &(cfg->global_variables));
+
+	//Now print all of the local constants
+	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 }
 
 
