@@ -7,6 +7,7 @@
 #include "local_constant.h"
 #include <sys/types.h>
 #include <stdlib.h>
+#include <string.h>
 
 //Keep an atomically incrementing integer for the local constant ID
 static u_int32_t local_constant_id = 0;
@@ -127,11 +128,11 @@ local_constant_t* xmm128_local_constant_alloc(generic_type_t* f64_type, int64_t 
  *
  * Returns NULL if no matching constant can be found
  */
-local_constant_t* get_string_local_constant(symtab_function_record_t* record, char* string_value){
+local_constant_t* get_string_local_constant(dynamic_array_t* records, char* string_value){
 	//Run through all of the local constants
-	for(u_int16_t i = 0; i < record->local_string_constants.current_index; i++){
+	for(u_int16_t i = 0; i < records->current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_set_get_at(&(record->local_string_constants), i);
+		local_constant_t* candidate = dynamic_array_get_at(records, i);
 
 		//If we have a match then we're good here, we'll return the candidate and leave
 		if(strncmp(candidate->local_constant_value.string_value.string, string_value, candidate->local_constant_value.string_value.current_length) == 0){
@@ -149,11 +150,11 @@ local_constant_t* get_string_local_constant(symtab_function_record_t* record, ch
  *
  * Returns NULL if no matching constant can be found
  */
-local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float float_value){
+local_constant_t* get_f32_local_constant(dynamic_array_t* records, float float_value){
 	//Run through all of the local constants
-	for(u_int16_t i = 0; i < record->local_f32_constants.current_index; i++){
+	for(u_int16_t i = 0; i < records->current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_set_get_at(&(record->local_f32_constants), i);
+		local_constant_t* candidate = dynamic_array_get_at(records, i);
 
 		//We will be comparing the values at a byte level. We do not compare the raw values because
 		//that would use FP comparison
@@ -172,11 +173,11 @@ local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float
  *
  * Returns NULL if no matching constant can be found
  */
-local_constant_t* get_f64_local_constant(symtab_function_record_t* record, double double_value){
+local_constant_t* get_f64_local_constant(dynamic_array_t* records, double double_value){
 	//Run through all of the local constants
-	for(u_int16_t i = 0; i < record->local_f64_constants.current_index; i++){
+	for(u_int16_t i = 0; i < records->current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_set_get_at(&(record->local_f64_constants), i);
+		local_constant_t* candidate = dynamic_array_get_at(records, i);
 
 		//We will be comparing the values at a byte level. We do not compare the raw values because
 		//that would use FP comparison
@@ -195,11 +196,11 @@ local_constant_t* get_f64_local_constant(symtab_function_record_t* record, doubl
  *
  * Returns NULL if no matching constant can be found
  */
-local_constant_t* get_xmm128_local_constant(symtab_function_record_t* record, int64_t upper_64_bits, int64_t lower_64_bits){
+local_constant_t* get_xmm128_local_constant(dynamic_array_t* records, int64_t upper_64_bits, int64_t lower_64_bits){
 	//Run through all of the local constants
-	for(u_int16_t i = 0; i < record->local_xmm_constants.current_index; i++){
+	for(u_int16_t i = 0; i < records->current_index; i++){
 		//Extract the candidate
-		local_constant_t* candidate = dynamic_set_get_at(&(record->local_xmm_constants), i);
+		local_constant_t* candidate = dynamic_array_get_at(records, i);
 
 		//We will be comparing at the byte level for both the lower and upper 64 bits
 		if((candidate->local_constant_value.lower_64_bits ^ lower_64_bits) == 0
