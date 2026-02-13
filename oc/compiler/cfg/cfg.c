@@ -352,6 +352,62 @@ static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local
 
 
 /**
+ * Emit a three_addr_const_t value that is a local constant(.LCx) reference
+ */
+static inline three_addr_var_t* emit_string_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f32 constant to the function as a local function reference
+ */
+static inline three_addr_var_t* emit_f32_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = f32_local_constant_alloc(const_node->inferred_type, const_node->constant_value.float_value);
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f64 constant to the function as a local function reference
+ */
+static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = f64_local_constant_alloc(const_node->inferred_type, const_node->constant_value.double_value);
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
  * A helper function that will directly emit either an f32 or f64
  * constant value and place said value into the appropriate location
  * for a function. This will return a variable that corresponds
@@ -365,14 +421,14 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 	switch(constant_type){
 		case F32:
 			//Let's first see if we're able to extract the local constant
-			local_constant = get_f32_local_constant(function, constant_value);
+			local_constant = get_f32_local_constant(&(cfg->local_f32_constants), constant_value);
 
 			//We had a miss here, so this is a never before seen value that
 			//we need to create ourselves
 			if(local_constant == NULL){
 				//Allocate and add it in
 				local_constant = f32_local_constant_alloc(f32, constant_value);
-				add_local_constant_to_function(function, local_constant);
+				add_local_constant_to_cfg(cfg, local_constant);
 			}
 
 			//Emit the temp var for this local function. Note that this temp
@@ -392,12 +448,12 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 		
 		case F64:
 			//Like above let's first try to extract it
-			local_constant = get_f64_local_constant(function, constant_value);
+			local_constant = get_f64_local_constant(&(cfg->local_f64_constants), constant_value);
 
 			//If we couldn't find it, then we must add it ourselves
 			if(local_constant == NULL){
 				local_constant = f64_local_constant_alloc(f64, constant_value);
-				add_local_constant_to_function(function, local_constant);
+				add_local_constant_to_cfg(cfg, local_constant);
 			}
 
 			//Emit the temp var for it. This temp var will also handle all of our
@@ -2973,12 +3029,12 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	switch(constant_node->constant_type){
 		case STR_CONST:
 			//Let's first see if we already have it
-			local_constant = get_string_local_constant(current_function, constant_node->string_value.string);
+			local_constant = get_string_local_constant(&(cfg->local_string_constants), constant_node->string_value.string);
 
 			//If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
 			//to get our temp var
 			if(local_constant == NULL){
-				local_constant_val = emit_string_local_constant(current_function, constant_node);
+				local_constant_val = emit_string_local_constant(cfg, constant_node);
 			} else {
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
@@ -2990,11 +3046,11 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 		//For float constants, we need to emit the local constant equivalent via the helper
 		case FLOAT_CONST:
 			//Let's first see if we can find it
-			local_constant = get_f32_local_constant(current_function, constant_node->constant_value.float_value);
+			local_constant = get_f32_local_constant(&(cfg->local_string_constants), constant_node->constant_value.float_value);
 
 			//Either create a new local constant or update it accordingly
 			if(local_constant == NULL){
-				local_constant_val = emit_f32_local_constant(current_function, constant_node);
+				local_constant_val = emit_f32_local_constant(cfg, constant_node);
 			} else {
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
