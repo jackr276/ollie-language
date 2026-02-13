@@ -109,6 +109,12 @@ local_constant_t* get_xmm128_local_constant(dynamic_array_t* records, int64_t up
 local_constant_t* get_string_local_constant(dynamic_array_t* records, char* string_value);
 
 /**
+ * Print the local constants(.LCx) that are inside of a CFG
+ */
+void print_local_constants(FILE* fl, dynamic_array_t* string_local_constants, dynamic_array_t* f32_local_constants,
+						   	dynamic_array_t* f64_local_constants, dynamic_array_t* xmm128_local_constants);
+
+/**
  * Destroy a local constant
  */
 void local_constant_dealloc(local_constant_t* constant);

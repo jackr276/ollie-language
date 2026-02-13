@@ -250,11 +250,6 @@ void emit_branch(basic_block_t* basic_block, basic_block_t* if_destination, basi
 void print_all_cfg_blocks(cfg_t* cfg);
 
 /**
- * Print the local constants(.LCx) that are inside of the cfg
- */
-void print_local_constants(FILE* fl, cfg_t* cfg);
-
-/**
  * Reset the visited status of the CFG
  */
 void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor);
