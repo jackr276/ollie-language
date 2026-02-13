@@ -6744,10 +6744,6 @@ static void handle_negation_instruction(instruction_window_t* window){
 	//Grab this pointer for convenience
 	instruction_t* negation_instruction = window->instruction1;
 
-	//Store the function that we're in. This will be relevant for the local constants
-	//in the float version
-	symtab_function_record_t* function_contained_in = negation_instruction->function;
-
 	//If this is not a floating point variable we take the if path
 	if(IS_FLOATING_POINT(negation_instruction->assignee->type) == FALSE){
 		//Find out what size we have
