@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <bits/types/locale_t.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -304,27 +305,131 @@ static inline u_int8_t does_block_end_in_terminal_statement(basic_block_t* basic
 
 
 /**
+ * Simple helper that will add a local constant onto the cfg in the appropriate region
+ *
+ * This helper will also initialize the appropriate array if it is found to be null. This is
+ * done so that we aren't allocating them all unnecessarily at the beginning
+ */
+static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local_constant){
+	//Go based on what type it is
+	switch(local_constant->local_constant_type){
+		case LOCAL_CONSTANT_TYPE_F32:
+			if(cfg->local_f32_constants.internal_array == NULL){
+				cfg->local_f32_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f32_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_F64:
+			if(cfg->local_f64_constants.internal_array == NULL){
+				cfg->local_f64_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f64_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_STRING:
+			if(cfg->local_string_constants.internal_array == NULL){
+				cfg->local_string_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_string_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_XMM128:
+			if(cfg->local_xmm128_constants.internal_array == NULL){
+				cfg->local_xmm128_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_xmm128_constants), local_constant);
+
+			break;
+	}
+}
+
+
+/**
+ * Emit a three_addr_const_t value that is a local constant(.LCx) reference
+ */
+static inline three_addr_var_t* emit_string_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f32 constant to the function as a local function reference
+ */
+static inline three_addr_var_t* emit_f32_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = f32_local_constant_alloc(const_node->inferred_type, const_node->constant_value.float_value);
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f64 constant to the function as a local function reference
+ */
+static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = f64_local_constant_alloc(const_node->inferred_type, const_node->constant_value.double_value);
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
  * A helper function that will directly emit either an f32 or f64
  * constant value and place said value into the appropriate location
  * for a function. This will return a variable that corresponds
  * to the address load for that new constant(remember we can't put
  * floats in directly)
  */
-static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_t* block, symtab_function_record_t* function, double constant_value, ollie_token_t constant_type){
+static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_t* block, double constant_value, ollie_token_t constant_type){
 	three_addr_var_t* local_constant_temp_var;
 	local_constant_t* local_constant;
 
 	switch(constant_type){
 		case F32:
 			//Let's first see if we're able to extract the local constant
-			local_constant = get_f32_local_constant(function, constant_value);
+			local_constant = get_f32_local_constant(&(cfg->local_f32_constants), constant_value);
 
 			//We had a miss here, so this is a never before seen value that
 			//we need to create ourselves
 			if(local_constant == NULL){
 				//Allocate and add it in
 				local_constant = f32_local_constant_alloc(f32, constant_value);
-				add_local_constant_to_function(function, local_constant);
+				add_local_constant_to_cfg(cfg, local_constant);
 			}
 
 			//Emit the temp var for this local function. Note that this temp
@@ -344,12 +449,12 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 		
 		case F64:
 			//Like above let's first try to extract it
-			local_constant = get_f64_local_constant(function, constant_value);
+			local_constant = get_f64_local_constant(&(cfg->local_f64_constants), constant_value);
 
 			//If we couldn't find it, then we must add it ourselves
 			if(local_constant == NULL){
 				local_constant = f64_local_constant_alloc(f64, constant_value);
-				add_local_constant_to_function(function, local_constant);
+				add_local_constant_to_cfg(cfg, local_constant);
 			}
 
 			//Emit the temp var for it. This temp var will also handle all of our
@@ -607,11 +712,11 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
 
 /**
  * Get and return the regular postorder traversal for a function-level CFG
+ *
+ * NOTE: This assumes that the caller has already wiped the function's visited
+ * status clean
  */
 dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
-	//Reset the visited status
-	reset_visited_status(cfg, FALSE);
-
 	//Create our dynamic array
 	dynamic_array_t post_order_traversal = dynamic_array_alloc();
 
@@ -715,9 +820,6 @@ static void print_block_three_addr_code(basic_block_t* block, emit_dominance_fro
 	//Different blocks have different printing rules
 	switch(block->block_type){
 		case BLOCK_TYPE_FUNC_ENTRY:
-			//Print out any/all local constants
-			print_local_constants(stdout, block->function_defined_in);
-
 			//Now the block name
 			printf("%s", block->function_defined_in->func_name.string);
 			break;
@@ -2916,12 +3018,12 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 	switch(constant_node->constant_type){
 		case STR_CONST:
 			//Let's first see if we already have it
-			local_constant = get_string_local_constant(current_function, constant_node->string_value.string);
+			local_constant = get_string_local_constant(&(cfg->local_string_constants), constant_node->string_value.string);
 
 			//If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
 			//to get our temp var
 			if(local_constant == NULL){
-				local_constant_val = emit_string_local_constant(current_function, constant_node);
+				local_constant_val = emit_string_local_constant(cfg, constant_node);
 			} else {
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
@@ -2933,11 +3035,11 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 		//For float constants, we need to emit the local constant equivalent via the helper
 		case FLOAT_CONST:
 			//Let's first see if we can find it
-			local_constant = get_f32_local_constant(current_function, constant_node->constant_value.float_value);
+			local_constant = get_f32_local_constant(&(cfg->local_f32_constants), constant_node->constant_value.float_value);
 
 			//Either create a new local constant or update it accordingly
 			if(local_constant == NULL){
-				local_constant_val = emit_f32_local_constant(current_function, constant_node);
+				local_constant_val = emit_f32_local_constant(cfg, constant_node);
 			} else {
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
@@ -2956,11 +3058,11 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 		//For double constants, we need to emit the local constant equivalent via the helper
 		case DOUBLE_CONST:
 			//Let's first see if we can find it
-			local_constant = get_f64_local_constant(current_function, constant_node->constant_value.double_value);
+			local_constant = get_f64_local_constant(&(cfg->local_f64_constants), constant_node->constant_value.double_value);
 
 			//Either create a new local constant or update it accordingly
 			if(local_constant == NULL){
-				local_constant_val = emit_f64_local_constant(current_function, constant_node);
+				local_constant_val = emit_f64_local_constant(cfg, constant_node);
 			} else {
 				local_constant_val = emit_local_constant_temp_var(local_constant);
 			}
@@ -3146,12 +3248,11 @@ static inline three_addr_var_t* emit_sse_inc_code(basic_block_t* basic_block, th
 	//Emit the proper constant based on the type
 	switch(incrementee->type->basic_type_token){
 		case F32:
-			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F32);
-
+			constant_value = emit_direct_floating_point_constant(basic_block, 1, F32);
 			break;
 
 		case F64:
-			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F64);
+			constant_value = emit_direct_floating_point_constant(basic_block, 1, F64);
 			break;
 		
 		default:
@@ -3216,12 +3317,11 @@ static inline three_addr_var_t* emit_sse_dec_code(basic_block_t* basic_block, th
 	//Emit the proper constant based on the type
 	switch(decrementee->type->basic_type_token){
 		case F32:
-			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F32);
-
+			constant_value = emit_direct_floating_point_constant(basic_block, 1, F32);
 			break;
 
 		case F64:
-			constant_value = emit_direct_floating_point_constant(basic_block, basic_block->function_defined_in, 1, F64);
+			constant_value = emit_direct_floating_point_constant(basic_block, 1, F64);
 			break;
 		
 		default:
@@ -5744,6 +5844,48 @@ void dealloc_cfg(cfg_t* cfg){
 	dynamic_array_dealloc(&(cfg->created_blocks));
 	dynamic_array_dealloc(&(cfg->function_entry_blocks));
 
+	if(cfg->local_f32_constants.internal_array != NULL){
+		//Run through all of the local constants and deallcoate them
+		for(u_int32_t i = 0; i < cfg->local_f32_constants.current_index; i++){
+			local_constant_t* target = dynamic_array_get_at((&cfg->local_f32_constants), i);
+			local_constant_dealloc(target);
+		}
+
+		//Deallocate the internal array
+		dynamic_array_dealloc(&(cfg->local_f32_constants));
+	}
+
+	if(cfg->local_f64_constants.internal_array != NULL){
+		for(u_int32_t i = 0; i < cfg->local_f64_constants.current_index; i++){
+			local_constant_t* target = dynamic_array_get_at((&cfg->local_f64_constants), i);
+			local_constant_dealloc(target);
+		}
+
+		//Deallocate the internal array
+		dynamic_array_dealloc(&(cfg->local_f64_constants));
+	}
+
+	if(cfg->local_string_constants.internal_array != NULL){
+		for(u_int32_t i = 0; i < cfg->local_string_constants.current_index; i++){
+			local_constant_t* target = dynamic_array_get_at((&cfg->local_string_constants), i);
+			local_constant_dealloc(target);
+		}
+
+		//Deallocate the internal array
+		dynamic_array_dealloc(&(cfg->local_string_constants));
+	}
+
+	if(cfg->local_xmm128_constants.internal_array != NULL){
+		for(u_int32_t i = 0; i < cfg->local_xmm128_constants.current_index; i++){
+			local_constant_t* target = dynamic_array_get_at((&cfg->local_xmm128_constants), i);
+			local_constant_dealloc(target);
+		}
+
+		//Deallocate the internal array
+		dynamic_array_dealloc(&(cfg->local_xmm128_constants));
+	}
+
+	
 	//At the very end, be sure to destroy this too
 	free(cfg);
 }
@@ -9219,6 +9361,9 @@ void print_all_cfg_blocks(cfg_t* cfg){
 
 	//Print all global variables after the blocks
 	print_all_global_variables(stdout, &(cfg->global_variables));
+
+	//Now print all of the local constants
+	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 }
 
 

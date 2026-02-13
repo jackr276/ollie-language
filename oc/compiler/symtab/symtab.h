@@ -56,8 +56,6 @@ typedef struct symtab_variable_record_t symtab_variable_record_t;
 typedef struct symtab_type_record_t symtab_type_record_t;
 //The records in a macro symtab
 typedef struct symtab_macro_record_t symtab_macro_record_t;
-//The definition of a local constant(.LCx) block
-typedef struct local_constant_t local_constant_t;
 
 //================================ Utility Macros ============================
 /**
@@ -85,18 +83,6 @@ typedef enum variable_membership_t {
 
 
 /**
- * What kind of local constant do we have? Local constants
- * can be strings or floating point numbers, which are represented
- * by ".long"
- */
-typedef enum {
-	LOCAL_CONSTANT_TYPE_STRING,
-	LOCAL_CONSTANT_TYPE_F32,
-	LOCAL_CONSTANT_TYPE_F64,
-	LOCAL_CONSTANT_TYPE_XMM128 //Special case where a full 128 bit lane of xmm is needed
-} local_constant_type_t;
-
-/**
  * Is a given function public or private? Simple enum for
  * this 
  */
@@ -104,36 +90,6 @@ typedef enum {
 	FUNCTION_VISIBILITY_PRIVATE,
 	FUNCTION_VISIBILITY_PUBLIC
 } function_visibility_t;
-
-
-/**
- * A local constant(.LCx) is a value like a string that is intended to 
- * be used by a function. We define them separately because they have many less
- * fields than an actual basic block
- */
-struct local_constant_t{
-	//What is the type of the local constant?
-	generic_type_t* type;
-	//Holds the actual value
-	union {
-		//Local constants can be strings
-		dynamic_string_t string_value;
-		//In the case where we have f32/f64, we store the *bit equivalent*
-		//i32/i64 value inside of here and print that out
-		u_int64_t float_bit_equivalent;
-		//For the 128 bit section - we need to store the 2 64 bit sections
-		//separately
-		u_int64_t lower_64_bits;
-	} local_constant_value;
-	//Unfortunately we can't hold it all in the union
-	u_int64_t upper_64_bits;
-	//And the ID of it
-	u_int16_t local_constant_id;
-	//The reference count of the local constant
-	u_int16_t reference_count;
-	//What is the type of it
-	local_constant_type_t local_constant_type;
-};
 
 
 /**
@@ -155,12 +111,6 @@ struct symtab_function_record_t{
 	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
 	//The name of the function
 	dynamic_string_t func_name;
-	//Functions have dynamic sets for string/nonstring constants
-	dynamic_set_t local_string_constants;
-	dynamic_set_t local_f32_constants;
-	dynamic_set_t local_f64_constants;
-	//Hold local 128 bit xmm constants
-	dynamic_set_t local_xmm_constants;
 	//The data area for the whole function
 	stack_data_area_t data_area;
 	//The type of the function
@@ -560,39 +510,6 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
 
 /**
- * Create a string local constant
- */
-local_constant_t* string_local_constant_alloc(generic_type_t* type, dynamic_string_t* value);
-
-/**
- * Create an f32 local constant
- */
-local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value);
-
-/**
- * Create an f64 local constant
- */
-local_constant_t* f64_local_constant_alloc(generic_type_t* f32_type, double value);
-
-/**
- * Create a 128 bit local constant
- *
- * NOTE: we will use an f64 for this, although we all know that this is truly a 128 bit type
- */
-local_constant_t* xmm128_local_constant_alloc(generic_type_t* f64_type, int64_t upper_64_bits, int64_t lower_64_bits);
-
-/**
- * Add a local constant to a function
- */
-void add_local_constant_to_function(symtab_function_record_t* function, local_constant_t* constant);
-
-/**
- * Part of optimizer's mark and sweep - remove any local constants
- * with a reference count of 0
- */
-void sweep_local_constants(symtab_function_record_t* record);
-
-/**
  * Check for and print out any unused functions
  */
 void check_for_unused_functions(function_symtab_t* symtab, u_int32_t* num_warnings);
@@ -621,39 +538,6 @@ void print_type_record(symtab_type_record_t* record);
  * A helper method for function name printing
  */
 void print_function_name(symtab_function_record_t* record);
-
-/**
- * Print the local constants(.LCx) that are inside of a function
- */
-void print_local_constants(FILE* fl, symtab_function_record_t* record);
-
-/**
- * Get an f32 local constant whose value matches the given constant
- *
- * Returns NULL if no matching constant can be found
- */
-local_constant_t* get_f32_local_constant(symtab_function_record_t* record, float constant_value);
-
-/**
- * Get an f64 local constant whose value matches the given constant
- *
- * Returns NULL if no matching constant can be found
- */
-local_constant_t* get_f64_local_constant(symtab_function_record_t* record, double constant_value);
-
-/**
- * Get a 128 bit local constant whose value matches the given constant
- *
- * Returns NULL if no matching constant can be found
- */
-local_constant_t* get_xmm128_local_constant(symtab_function_record_t* record, int64_t upper_64_bits, int64_t lower_64_bits);
-
-/**
- * Get a string local constant whose value matches the given constant
- *
- * Returns NULL if no matching constant can be found
- */
-local_constant_t* get_string_local_constant(symtab_function_record_t* record, char* string_value);
 
 /**
  * Record that a given source function calls the target
@@ -703,10 +587,5 @@ void type_symtab_dealloc(type_symtab_t* symtab);
  * Destroy a macro symtab
  */
 void macro_symtab_dealloc(macro_symtab_t* symtab);
-
-/**
- * Destroy a local constant
- */
-void local_constant_dealloc(local_constant_t* constant);
 
 #endif /* SYMTAB_H */

@@ -30,6 +30,8 @@ static generic_type_t* u8;
 static three_addr_var_t* stack_pointer_variable;
 //A holder for the instruction pointer
 static three_addr_var_t* instruction_pointer_variable;
+//A reference to our CFG
+static cfg_t* cfg_reference;
 
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
@@ -469,6 +471,9 @@ static void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
 
 	//Print all global variables after the blocks
 	print_all_global_variables(stdout, &(cfg->global_variables));
+
+	//Print all of the local constants as well
+	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 }
 
 
@@ -6671,6 +6676,54 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 
 
 /**
+ * Simple helper that will add a local constant onto the cfg in the appropriate region
+ *
+ * This helper will also initialize the appropriate array if it is found to be null. This is
+ * done so that we aren't allocating them all unnecessarily at the beginning
+ */
+static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local_constant){
+	//Go based on what type it is
+	switch(local_constant->local_constant_type){
+		case LOCAL_CONSTANT_TYPE_F32:
+			if(cfg->local_f32_constants.internal_array == NULL){
+				cfg->local_f32_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f32_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_F64:
+			if(cfg->local_f64_constants.internal_array == NULL){
+				cfg->local_f64_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f64_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_STRING:
+			if(cfg->local_string_constants.internal_array == NULL){
+				cfg->local_string_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_string_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_XMM128:
+			if(cfg->local_xmm128_constants.internal_array == NULL){
+				cfg->local_xmm128_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_xmm128_constants), local_constant);
+
+			break;
+	}
+}
+
+
+/**
  * Handle a negation instruction. It should be noted that there
  * are 2 different kinds of negation selection processes, one for
  * floating point instructions and one for GP instructions
@@ -6690,10 +6743,6 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 static void handle_negation_instruction(instruction_window_t* window){
 	//Grab this pointer for convenience
 	instruction_t* negation_instruction = window->instruction1;
-
-	//Store the function that we're in. This will be relevant for the local constants
-	//in the float version
-	symtab_function_record_t* function_contained_in = negation_instruction->function;
 
 	//If this is not a floating point variable we take the if path
 	if(IS_FLOATING_POINT(negation_instruction->assignee->type) == FALSE){
@@ -6749,7 +6798,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 		switch(size){
 			case DOUBLE_PRECISION:
 				//Let's see if we can find it
-				local_constant = get_xmm128_local_constant(function_contained_in, 0, 0x8000000000000000);
+				local_constant = get_xmm128_local_constant(&(cfg_reference->local_xmm128_constants), 0, 0x8000000000000000);
 
 				//If we can't we need to create it
 				if(local_constant == NULL){
@@ -6757,7 +6806,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 					local_constant = xmm128_local_constant_alloc(f64, 0, 0x8000000000000000);
 
 					//Add this into the function
-					add_local_constant_to_function(function_contained_in, local_constant);
+					add_local_constant_to_cfg(cfg_reference, local_constant);
 				}
 
 				//Emit the load instruction with the aligned load set to true
@@ -6770,7 +6819,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 
 			case SINGLE_PRECISION:
 				//Let's see if we can find it
-				local_constant = get_xmm128_local_constant(function_contained_in, 0, 0x80000000);
+				local_constant = get_xmm128_local_constant(&(cfg_reference->local_xmm128_constants), 0, 0x80000000);
 
 				//If we can't we need to create it
 				if(local_constant == NULL){
@@ -6778,7 +6827,7 @@ static void handle_negation_instruction(instruction_window_t* window){
 					local_constant = xmm128_local_constant_alloc(f64, 0, 0x80000000);
 
 					//Add this into the function
-					add_local_constant_to_function(function_contained_in, local_constant);
+					add_local_constant_to_cfg(cfg_reference, local_constant);
 				}
 
 				//Emit the load instruction with the aligned load set to true
@@ -8855,6 +8904,9 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Stash the stack pointer & instruction pointer
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;
+
+	//Store a reference to the CFG as well
+	cfg_reference = cfg;
 
 	//Our very first step in the instruction selector is to order all of the blocks in one 
 	//straight line. This step is also able to recognize and exploit some early optimizations,

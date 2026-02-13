@@ -13,6 +13,7 @@
 //For symtab linking
 #include "../symtab/symtab.h"
 #include "../lexer/lexer.h"
+#include "../local_constant/local_constant.h"
 #include "../ast/ast.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 #include "../utils/ollie_intermediary_representation.h"
@@ -495,24 +496,6 @@ three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node
  * Create and return a constant three address var
  */
 three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
-
-/**
- * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
- * will also help us add the string constant to the function as a local function reference
- */
-three_addr_var_t* emit_string_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
-
-/**
- * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
- * will also help us add the f32 constant to the function as a local function reference
- */
-three_addr_var_t* emit_f32_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
-
-/**
- * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
- * will also help us add the f64 constant to the function as a local function reference
- */
-three_addr_var_t* emit_f64_local_constant(symtab_function_record_t* function, generic_ast_node_t* const_node);
 
 /**
  * Emit a constant directly based on whatever the type given is

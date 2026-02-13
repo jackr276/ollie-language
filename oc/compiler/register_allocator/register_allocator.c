@@ -281,9 +281,6 @@ static void print_block_with_live_ranges(basic_block_t* block){
 	switch(block->block_type){
 		//Function entry blocks need extra printing
 		case BLOCK_TYPE_FUNC_ENTRY:
-			//First print out the function's local constants
-			print_local_constants(stdout, block->function_defined_in);
-
 			//Then the name
 			printf("%s:\n", block->function_defined_in->func_name.string);
 			print_stack_data_area(&(block->function_defined_in->data_area));
@@ -439,9 +436,6 @@ static void print_block_with_registers(basic_block_t* block){
 	switch(block->block_type){
 		//Function entry blocks need extra printing
 		case BLOCK_TYPE_FUNC_ENTRY:
-			//First print out the function's local constants
-			print_local_constants(stdout, block->function_defined_in);
-
 			//Then the name
 			printf("%s:\n", block->function_defined_in->func_name.string);
 			print_stack_data_area(&(block->function_defined_in->data_area));
@@ -494,6 +488,9 @@ static void print_blocks_with_registers(cfg_t* cfg){
 
 	//Now we'll print all global variables
 	print_all_global_variables(stdout, &(cfg->global_variables));
+
+	//Print all of the local constants too
+	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 }
 
 
