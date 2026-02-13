@@ -711,20 +711,11 @@ void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block
 
 /**
  * Get and return the regular postorder traversal for a function-level CFG
+ *
+ * NOTE: This assumes that the caller has already wiped the function's visited
+ * status clean
  */
 dynamic_array_t compute_post_order_traversal(basic_block_t* entry){
-	//Reset the visited status
-	//
-	//
-	//
-	//
-	////TODO ---
-	///
-	///
-	///
-	///
-	reset_visited_status(cfg, FALSE);
-
 	//Create our dynamic array
 	dynamic_array_t post_order_traversal = dynamic_array_alloc();
 

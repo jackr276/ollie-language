@@ -2396,7 +2396,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
  * 		if j is empty and ends in a conditional branch then
  * 			overwrite i's jump with a copy of j's branch
  */
-static inline void clean(cfg_t* cfg, basic_block_t* function_entry_block){
+static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, basic_block_t* function_entry_block){
 	//Have we seen a change?
 	u_int8_t changed;
 
@@ -2405,6 +2405,9 @@ static inline void clean(cfg_t* cfg, basic_block_t* function_entry_block){
 
 	//Now we'll do the actual clean algorithm
 	do {
+		//Reset the function's visited status
+		reset_visit_status_for_function(current_function_blocks);
+
 		//Compute the new postorder
 		postorder = compute_post_order_traversal(function_entry_block);
 
@@ -2639,7 +2642,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
 		 * that has been made useless by sweep()
 		 */
-		clean(cfg, function_entry_block);
+		clean(cfg, current_function_blocks, function_entry_block);
 
 		/**
 		 * PASS 5: Delete all unreachable blocks
