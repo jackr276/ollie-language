@@ -1793,6 +1793,15 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 
 
 /**
+ * Print out a global variable string constant
+ */
+static inline void print_global_variable_string_constant(FILE* fl, three_addr_const_t* string_constant){
+
+	//TODO
+}
+
+
+/**
  * Print all given global variables who's use count is not 0
  */
 void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
@@ -1848,6 +1857,11 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 				print_global_variable_constant(fl, variable->initializer_value.constant_value);
 				break;
 
+			//Handle a global var string constant
+			case GLOBAL_VAR_INITIALIZER_STRING:
+				print_global_variable_string_constant(fl, variable->initializer_value.constant_value);
+				break;
+
 			//For an array, we loop through and print them all as constants in order
 			case GLOBAL_VAR_INITIALIZER_ARRAY:
 				//Extract this
@@ -1860,6 +1874,8 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 
 					//Emit the constant value here
 					print_global_variable_constant(fl, constant_value);
+
+					//TODO STR CONST
 				}
 
 				break;
@@ -4706,12 +4722,6 @@ three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node
 		case FLOAT_CONST:
 			constant->constant_value.float_constant = const_node->constant_value.float_value;
 			break;
-		//These need to be support at some point - but they are currently not supported
-		case STR_CONST:
-		case FUNC_CONST:
-			printf("Fatal internal compiler error: string and function pointer constants are not yet supported in a global context\n");
-			//Exit 0 for now so that test runs don't complain
-			exit(0);
 		//Some very weird error here
 		default:
 			printf("Fatal internal compiler error: unrecognizable constant type found in constant\n");

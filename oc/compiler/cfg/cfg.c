@@ -8708,6 +8708,18 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 }
 
 
+
+/**
+ * Emit a global variable string initializer. This will handle cases where we need
+ * to just emit the string or cases where we need to emit the array and then a pointer
+ * to said array(char* for instance)
+ */
+static three_addr_const_t* emit_global_string_initializer(generic_ast_node_t* string_initializer, generic_type_t* type_initialized_as){
+
+}
+
+
+
 /**
  * Emit a global variable array initializer. Unlike a normal array initializer - we do not put values in blocks. Instead, we store
  * the constant values in a result array that is then passed along back to the caller for later use
@@ -8727,8 +8739,11 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 				emit_global_array_initializer(cursor, initializer_values);
 				break;
 
-			//TODO STRING
-
+			//Another base case of sorts
+			case GLOBAL_VAR_INITIALIZER_STRING:
+				//Emit it and add it into the array
+				dynamic_array_add(initializer_values, emit_global_string_initializer(cursor, array_initializer->inferred_type));
+				break;
 
 			//This is really our base case
 			case AST_NODE_TYPE_CONSTANT:
@@ -8744,16 +8759,6 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 		//Advance to the next one
 		cursor = cursor->next_sibling;
 	}
-}
-
-
-/**
- * Emit a global variable string initializer. This will handle cases where we need
- * to just emit the string or cases where we need to emit the array and then a pointer
- * to said array(char* for instance)
- */
-static void emit_global_string_initializer(generic_ast_node_t* string_initializer, generic_type_t* type_initialized_as){
-
 }
 
 
@@ -8802,12 +8807,13 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 			break;
 
+		//Let the helper take over with this one as well
 		case AST_NODE_TYPE_STRING_INITIALIZER:
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
 
-			//global_variable->initializer_value.
+			global_variable->initializer_value.constant_value = emit_global_string_initializer(initializer, global_variable->variable_type);
 
-			printf("HERE\n\n\n");
+			break;
 
 		//This shouldn't be reachable
 		default:
