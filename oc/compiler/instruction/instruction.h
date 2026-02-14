@@ -44,7 +44,8 @@ typedef struct global_variable_t global_variable_t;
 typedef enum {
 	GLOBAL_VAR_INITIALIZER_NONE = 0, //Most common case, we have nothing
 	GLOBAL_VAR_INITIALIZER_CONSTANT, //Just a singular constant
-	GLOBAL_VAR_INITIALIZER_ARRAY //An array of constants
+	GLOBAL_VAR_INITIALIZER_ARRAY, //An array of constants
+	GLOBAL_VAR_INITIALIZER_STRING //A string constant
 } global_variable_initializer_type_t;
 
 

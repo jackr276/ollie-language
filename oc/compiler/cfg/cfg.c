@@ -8727,6 +8727,9 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 				emit_global_array_initializer(cursor, initializer_values);
 				break;
 
+			//TODO STRING
+
+
 			//This is really our base case
 			case AST_NODE_TYPE_CONSTANT:
 				//Emit the constant and get it into the array
@@ -8800,6 +8803,10 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			break;
 
 		case AST_NODE_TYPE_STRING_INITIALIZER:
+			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
+
+			//global_variable->initializer_value.
+
 			printf("HERE\n\n\n");
 
 		//This shouldn't be reachable
