@@ -1796,8 +1796,7 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
  * Print out a global variable string constant
  */
 static inline void print_global_variable_string_constant(FILE* fl, three_addr_const_t* string_constant){
-
-	//TODO
+	fprintf(fl, "\t.string %s\n", string_constant->constant_value.string_constant);
 }
 
 
@@ -4667,6 +4666,28 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 
 	//And give it back
 	return inc_stmt;
+}
+
+
+/**
+ * Specifically emit a global variable string constant. This is only valid for strings in the global
+ * variable context. No other context for this will work
+ */
+three_addr_const_t* emit_global_variable_string_constant(generic_ast_node_t* string_initializer){
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_consts, constant);
+
+	//Now we'll assign the appropriate values
+	constant->const_type = STR_CONST;
+	constant->type = string_initializer->inferred_type;
+
+	//Extract what we need out of it
+	constant->constant_value.string_constant = string_initializer->string_value.string;
+
+	return constant;
 }
 
 

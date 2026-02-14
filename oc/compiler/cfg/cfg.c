@@ -8715,7 +8715,17 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
  * to said array(char* for instance)
  */
 static three_addr_const_t* emit_global_string_initializer(generic_ast_node_t* string_initializer, generic_type_t* type_initialized_as){
+	//If this is initialized as an array, we will emit the global variable
+	//as a string with the name of that array
+	if(type_initialized_as->type_class == TYPE_CLASS_ARRAY){
+		return emit_global_variable_string_constant(string_initializer);
 
+	//Otherwise it is a pointer. Doing this is a special case because we'll need to emit
+	//the value as a local constant, and then get a pointer to it for the actual global
+	//variable
+	} else {
+		return NULL;
+	}
 }
 
 

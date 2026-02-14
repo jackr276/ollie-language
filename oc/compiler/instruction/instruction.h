@@ -228,6 +228,12 @@ struct three_addr_const_t{
 		 */
 		double double_constant;
 		float float_constant;
+		/**
+		 * There are special cases in the global context where we can
+		 * use a string constant. This is exclusively for the global context
+		 * in that case however, and will not be used anywhere else
+		 */
+		char* string_constant;
 	} constant_value;
 
 	//What kind of constant is it
@@ -485,6 +491,12 @@ three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generi
  * Emit a variable copied from another variable
  */
 three_addr_var_t* emit_var_copy(three_addr_var_t* var);
+
+/**
+ * Specifically emit a global variable string constant. This is only valid for strings in the global
+ * variable context. No other context for this will work
+ */
+three_addr_const_t* emit_global_variable_string_constant(generic_ast_node_t* string_initializer);
 
 /**
  * Emit a constant for the express purpose of being used in a global variable. Such
