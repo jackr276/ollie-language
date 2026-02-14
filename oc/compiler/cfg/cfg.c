@@ -8745,6 +8745,16 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 
 
 /**
+ * Emit a global variable string initializer. This will handle cases where we need
+ * to just emit the string or cases where we need to emit the array and then a pointer
+ * to said array(char* for instance)
+ */
+static void emit_global_string_initializer(generic_ast_node_t* string_initializer, generic_type_t* type_initialized_as){
+
+}
+
+
+/**
  * Visit a global let statement and handle the initializer appropriately.
  * Do note that we have already checked that the entire initialization
  * only contains constants, so we can assume we're only processing constants
@@ -8789,6 +8799,9 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 			break;
 
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			printf("HERE\n\n\n");
+
 		//This shouldn't be reachable
 		default:
 			printf("Fatal internal compiler error: Unrecognized/unimplemented global initializer node type encountered\n");
@@ -8802,7 +8815,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
  *
  * NOTE: declared global variables will always be initialized to be 0
  */
-static void visit_global_declare_statement(generic_ast_node_t* node){
+static inline void visit_global_declare_statement(generic_ast_node_t* node){
 	//We'll store it inside of the global variable struct. Leave it as NULL
 	//here so that it's automatically initialized to 0
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);
