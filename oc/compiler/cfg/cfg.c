@@ -8713,8 +8713,11 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
  * Emit a global variable string initializer. This will handle cases where we need
  * to just emit the string or cases where we need to emit the array and then a pointer
  * to said array(char* for instance)
+ *
+ * For a global char*, we will need to first emit a local constant that represents the string value. Following 
+ * that, we will emit the actual global variable which will be initialized with a pointer to that constant
  */
-static three_addr_const_t* emit_global_string_initializer(generic_ast_node_t* string_initializer, generic_type_t* type_initialized_as){
+static inline three_addr_const_t* emit_global_string_initializer(generic_ast_node_t* string_initializer, generic_type_t* type_initialized_as){
 	//If this is initialized as an array, we will emit the global variable
 	//as a string with the name of that array
 	if(type_initialized_as->type_class == TYPE_CLASS_ARRAY){
@@ -8724,6 +8727,12 @@ static three_addr_const_t* emit_global_string_initializer(generic_ast_node_t* st
 	//the value as a local constant, and then get a pointer to it for the actual global
 	//variable
 	} else {
+		//Let's first emit the string local constant
+		three_addr_var_t* string_local_constant = emit_string_local_constant(cfg, string_initializer);
+
+		//Once we have the string local constant, we need to emit a quad word constant that is initialized
+		//to be this local string constant's value
+
 		return NULL;
 	}
 }
@@ -8819,8 +8828,10 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 		//Let the helper take over with this one as well
 		case AST_NODE_TYPE_STRING_INITIALIZER:
+			//This is a special kind of constant
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
 
+			//This will handle a variety of cases for us
 			global_variable->initializer_value.constant_value = emit_global_string_initializer(initializer, global_variable->variable_type);
 
 			break;

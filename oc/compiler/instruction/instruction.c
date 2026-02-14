@@ -1793,7 +1793,8 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 
 
 /**
- * Print out a global variable string constant
+ * Print out a global variable string constant. All that this does is point to the internal
+ * constant and print it
  */
 static inline void print_global_variable_string_constant(FILE* fl, three_addr_const_t* string_constant){
 	fprintf(fl, "\t.string %s\n", string_constant->constant_value.string_constant);
