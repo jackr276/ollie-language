@@ -234,6 +234,12 @@ struct three_addr_const_t{
 		 * in that case however, and will not be used anywhere else
 		 */
 		char* string_constant;
+		/**
+		 * There are other special cases where we can hold a relative pointer to
+		 * a local constant. This is done exlcusively for declaring char* values
+		 * These pointers are always 8 bytes
+		 */
+		three_addr_var_t* local_constant_address;
 	} constant_value;
 
 	//What kind of constant is it
