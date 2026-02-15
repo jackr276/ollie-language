@@ -2561,7 +2561,7 @@ static void rename_block(basic_block_t* entry){
 /**
  * Rename all of the variables in the CFG
  */
-static void rename_all_variables(cfg_t* cfg){
+static inline void rename_all_variables(cfg_t* cfg){
 	//Before we do this - let's reset the entire CFG
 	reset_visited_status(cfg, FALSE);
 
@@ -8709,6 +8709,105 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 
 /**
+ * Specifically emit a global variable string constant. This is only valid for strings in the global
+ * variable context. No other context for this will work
+ */
+static inline three_addr_const_t* emit_global_variable_string_constant(generic_ast_node_t* string_initializer){
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Now we'll assign the appropriate values
+	constant->const_type = STR_CONST;
+	constant->type = string_initializer->inferred_type;
+
+	//Extract what we need out of it
+	constant->constant_value.string_constant = string_initializer->string_value.string;
+
+	return constant;
+}
+
+
+/**
+ * Emit a constant for the express purpose of being used in a global variable. Such
+ * a constant does not need to abide by the same rules that non-global constants
+ * need to because it is already in the ELF text and not trapped in the assembly
+ */
+static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node){
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//A holder for later if need be
+	three_addr_var_t* string_local_constant;
+
+	//Now we'll assign the appropriate values
+	constant->const_type = const_node->constant_type; 
+	constant->type = const_node->inferred_type;
+
+	//Based on the type we'll make assignments. It'll be said again here - this is the only
+	//time that double/float constants can be emitted directly without the use of the .LC system
+	switch(constant->const_type){
+		case CHAR_CONST:
+			constant->constant_value.char_constant = const_node->constant_value.char_value;
+			break;
+		case BYTE_CONST:
+			constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;
+			break;
+		case BYTE_CONST_FORCE_U:
+			constant->constant_value.unsigned_byte_constant = const_node->constant_value.unsigned_byte_value;
+			break;
+		case INT_CONST:
+			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
+			break;
+		case INT_CONST_FORCE_U:
+			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
+			break;
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
+			break;
+		case LONG_CONST:
+			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
+			break;
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
+			break;
+		case DOUBLE_CONST:
+			constant->constant_value.double_constant = const_node->constant_value.double_value;
+			break;
+		case FLOAT_CONST:
+			constant->constant_value.float_constant = const_node->constant_value.float_value;
+			break;
+		/**
+		 * If we made it here, that specifically means that we are dealing with a char* constant. This is
+		 * an important distinction, because it will require that we emit a .LC local constant value and
+		 * then a pointer to it
+		 */
+		case STR_CONST:
+			//Let's first emit the string local constant
+			string_local_constant = emit_string_local_constant(cfg, const_node);
+
+			//Now we'll assign the appropriate values
+			constant->const_type = REL_ADDRESS_CONST;
+
+			//Extract what we need out of it
+			constant->constant_value.local_constant_address = string_local_constant;
+
+			break;
+			
+		//Some very weird error here
+		default:
+			printf("Fatal internal compiler error: unrecognizable constant type found in constant\n");
+			exit(1);
+	}
+	
+	//Once all that is done, we can leave
+	return constant;
+}
+
+
+/**
  * Emit a global variable array initializer. Unlike a normal array initializer - we do not put values in blocks. Instead, we store
  * the constant values in a result array that is then passed along back to the caller for later use
  *
@@ -8727,6 +8826,12 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 				emit_global_array_initializer(cursor, initializer_values);
 				break;
 
+			//Another base case of sorts - this is for char[] variables
+			case AST_NODE_TYPE_STRING_INITIALIZER:
+				//Emit it and add it into the array
+				dynamic_array_add(initializer_values, emit_global_variable_string_constant(cursor));
+				break;
+
 			//This is really our base case
 			case AST_NODE_TYPE_CONSTANT:
 				//Emit the constant and get it into the array
@@ -8734,12 +8839,40 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 				break;
 
 			default:
+				printf("%d\n\n\n", cursor->ast_node_type);
 				printf("Fatal internal compiler: Invalid or unimplemented global initializer node encountered\n");
 				exit(1);
 		}
 
 		//Advance to the next one
 		cursor = cursor->next_sibling;
+	}
+}
+
+
+/**
+ * This helper function is used to determine if we need to place a global variable
+ * in the ".rel.local" section. This is only done for char* variables *or* anything
+ * that decays into a char*
+ */
+static u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+			return does_type_decay_to_char_pointer(type->internal_types.member_type);
+
+		case TYPE_CLASS_POINTER:
+			//This is what we're after
+			if(type->internal_types.points_to == char_type){
+				return TRUE;
+			}
+			
+			return does_type_decay_to_char_pointer(type->internal_types.points_to);
+
+		case TYPE_CLASS_BASIC:
+			return FALSE;
+
+		default:
+			return FALSE;
 	}
 }
 
@@ -8757,6 +8890,9 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 	//This has been initialized already
 	global_variable->variable->initialized = TRUE;
+
+	//Figure out what this decays into
+	global_variable->is_relative = does_type_decay_to_char_pointer(node->variable->type_defined_as);
 
 	//And add it into the CFG
 	dynamic_array_add(&(cfg->global_variables), global_variable);
@@ -8789,6 +8925,16 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 			break;
 
+		//Let the helper take over with this one as well
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			//This is a special kind of constant
+			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
+
+			//This will handle a variety of cases for us
+			global_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
+
+			break;
+
 		//This shouldn't be reachable
 		default:
 			printf("Fatal internal compiler error: Unrecognized/unimplemented global initializer node type encountered\n");
@@ -8802,7 +8948,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
  *
  * NOTE: declared global variables will always be initialized to be 0
  */
-static void visit_global_declare_statement(generic_ast_node_t* node){
+static inline void visit_global_declare_statement(generic_ast_node_t* node){
 	//We'll store it inside of the global variable struct. Leave it as NULL
 	//here so that it's automatically initialized to 0
 	global_variable_t* global_variable = create_global_variable(node->variable, NULL);

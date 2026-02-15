@@ -1734,6 +1734,15 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 
 
 /**
+ * Print out a global variable string constant. All that this does is point to the internal
+ * constant and print it
+ */
+static inline void print_global_variable_string_constant(FILE* fl, three_addr_const_t* string_constant){
+	fprintf(fl, "\t.string \"%s\"\n", string_constant->constant_value.string_constant);
+}
+
+
+/**
  * Specialized printing based on what kind of constant is printed out
  * in a global variable context
  */
@@ -1784,6 +1793,15 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 			upper_32_bits = (*((int64_t*)(&(global_variable_constant->constant_value.double_constant))) >> 32) & 0xFFFFFFFF;
 			fprintf(fl,  "\t.long %d\n\t.long %d\n", lower_32_bits, upper_32_bits);
 			break;
+		case STR_CONST:
+			print_global_variable_string_constant(fl, global_variable_constant);
+			break;
+		/**
+		 * For a relative address constants, we print a quad word pointer to the local constant
+		 */
+		case REL_ADDRESS_CONST:
+			fprintf(fl, "\t.quad .LC%d\n", global_variable_constant->constant_value.local_constant_address->associated_memory_region.local_constant->local_constant_id); 
+			break;
 		//Catch-all should anything go wrong
 		default:
 			printf("Fatal internal compiler error: unrecognized global variable type encountered\n");
@@ -1819,6 +1837,9 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 		//goes to .data
 		if(variable->initializer_type == GLOBAL_VAR_INITIALIZER_NONE){
 			fprintf(fl, "\t.bss\n");
+		//Tell the linker that this is relative writeable data
+		} else if(variable->is_relative == TRUE) {
+			fprintf(fl, "\t.section .data.rel.local,\"aw\"\n");
 		} else {
 			fprintf(fl, "\t.data\n");
 		}
@@ -1846,6 +1867,11 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 			case GLOBAL_VAR_INITIALIZER_CONSTANT:
 				//We'll add some special handling here - some constants take special treatment
 				print_global_variable_constant(fl, variable->initializer_value.constant_value);
+				break;
+
+			//Handle a global var string constant
+			case GLOBAL_VAR_INITIALIZER_STRING:
+				print_global_variable_string_constant(fl, variable->initializer_value.constant_value);
 				break;
 
 			//For an array, we loop through and print them all as constants in order
@@ -4651,75 +4677,6 @@ instruction_t* emit_inc_instruction(three_addr_var_t* incrementee){
 
 	//And give it back
 	return inc_stmt;
-}
-
-
-/**
- * Emit a constant for the express purpose of being used in a global variable. Such
- * a constant does not need to abide by the same rules that non-global constants
- * need to because it is already in the ELF text and not trapped in the assembly
- */
-three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node){
-	//First we'll dynamically allocate the constant
-	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_consts, constant);
-
-	//Now we'll assign the appropriate values
-	constant->const_type = const_node->constant_type; 
-	constant->type = const_node->inferred_type;
-
-	//Based on the type we'll make assignments. It'll be said again here - this is the only
-	//time that double/float constants can be emitted directly without the use of the .LC system
-	switch(constant->const_type){
-		case CHAR_CONST:
-			constant->constant_value.char_constant = const_node->constant_value.char_value;
-			break;
-		case BYTE_CONST:
-			constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;
-			break;
-		case BYTE_CONST_FORCE_U:
-			constant->constant_value.unsigned_byte_constant = const_node->constant_value.unsigned_byte_value;
-			break;
-		case INT_CONST:
-			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
-			break;
-		case INT_CONST_FORCE_U:
-			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
-			break;
-		case SHORT_CONST:
-			constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
-			break;
-		case SHORT_CONST_FORCE_U:
-			constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
-			break;
-		case LONG_CONST:
-			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
-			break;
-		case LONG_CONST_FORCE_U:
-			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
-			break;
-		case DOUBLE_CONST:
-			constant->constant_value.double_constant = const_node->constant_value.double_value;
-			break;
-		case FLOAT_CONST:
-			constant->constant_value.float_constant = const_node->constant_value.float_value;
-			break;
-		//These need to be support at some point - but they are currently not supported
-		case STR_CONST:
-		case FUNC_CONST:
-			printf("Fatal internal compiler error: string and function pointer constants are not yet supported in a global context\n");
-			//Exit 0 for now so that test runs don't complain
-			exit(0);
-		//Some very weird error here
-		default:
-			printf("Fatal internal compiler error: unrecognizable constant type found in constant\n");
-			exit(1);
-	}
-	
-	//Once all that is done, we can leave
-	return constant;
 }
 
 

@@ -83,10 +83,18 @@ u_int32_t get_data_section_alignment(generic_type_t* type){
 	//For any non-basic type, we will need to use 
 	//the nearest power of 2 as the alignment
 	if(type->type_class != TYPE_CLASS_BASIC){
+		if(type->type_size < 4){
+			return 2;
+		}
+
+		if(type->type_size < 8){
+			return 4;
+		}
+
 		//If the type size is 16 or less(small arrays/structs), then
 		//we just use that
-		if(type->type_size <= 16){
-			return type->type_size;
+		if(type->type_size < 16){
+			return 8;
 		}
 
 		//Anything less than 32 align by 16

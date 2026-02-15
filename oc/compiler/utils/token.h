@@ -100,6 +100,7 @@ typedef enum {
 	FLOAT_CONST,
 	DOUBLE_CONST,
 	STR_CONST,
+	REL_ADDRESS_CONST, // For when we store things like .LC pointers(think global char*)
 	CHAR_CONST,
 	L_PAREN,
 	R_PAREN,

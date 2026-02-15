@@ -44,7 +44,8 @@ typedef struct global_variable_t global_variable_t;
 typedef enum {
 	GLOBAL_VAR_INITIALIZER_NONE = 0, //Most common case, we have nothing
 	GLOBAL_VAR_INITIALIZER_CONSTANT, //Just a singular constant
-	GLOBAL_VAR_INITIALIZER_ARRAY //An array of constants
+	GLOBAL_VAR_INITIALIZER_ARRAY, //An array of constants
+	GLOBAL_VAR_INITIALIZER_STRING //A string constant
 } global_variable_initializer_type_t;
 
 
@@ -93,6 +94,8 @@ struct global_variable_t{
 	generic_type_t* variable_type;
 	//What is this variable's reference count?
 	u_int16_t reference_count;
+	//Is this a relative global variable(used for char*)
+	u_int8_t is_relative;
 	//Store the initializer type
 	global_variable_initializer_type_t initializer_type;
 };
@@ -227,6 +230,18 @@ struct three_addr_const_t{
 		 */
 		double double_constant;
 		float float_constant;
+		/**
+		 * There are special cases in the global context where we can
+		 * use a string constant. This is exclusively for the global context
+		 * in that case however, and will not be used anywhere else
+		 */
+		char* string_constant;
+		/**
+		 * There are other special cases where we can hold a relative pointer to
+		 * a local constant. This is done exlcusively for declaring char* values
+		 * These pointers are always 8 bytes
+		 */
+		three_addr_var_t* local_constant_address;
 	} constant_value;
 
 	//What kind of constant is it
@@ -484,13 +499,6 @@ three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generi
  * Emit a variable copied from another variable
  */
 three_addr_var_t* emit_var_copy(three_addr_var_t* var);
-
-/**
- * Emit a constant for the express purpose of being used in a global variable. Such
- * a constant does not need to abide by the same rules that non-global constants
- * need to because it is already in the ELF text and not trapped in the assembly
- */
-three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node);
 
 /**
  * Create and return a constant three address var

@@ -200,7 +200,6 @@ generic_type_t* get_base_alignment_type(generic_type_t* type);
  */
 u_int32_t get_data_section_alignment(generic_type_t* type);
 
-
 /**
  * Get the referenced type regardless of how many indirection levels there are
  */
