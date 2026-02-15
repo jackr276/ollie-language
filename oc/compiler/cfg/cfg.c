@@ -8788,17 +8788,12 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 			//Let's first emit the string local constant
 			string_local_constant = emit_string_local_constant(cfg, const_node);
 
-
 			//Now we'll assign the appropriate values
 			constant->const_type = REL_ADDRESS_CONST;
-			constant->type = type;
+			constant->type = const_node->inferred_type;
 
 			//Extract what we need out of it
-			constant->constant_value.local_constant_address = lcx_reference_var;
-
-		//Once we have the string local constant, we need to emit a quad word constant that is initialized
-		//to be this local string constant's value
-		return emit_global_variable_lcX_reference_constant(string_local_constant, type_initialized_as);
+			constant->constant_value.local_constant_address = string_local_constant;
 
 			break;
 			
@@ -8908,7 +8903,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
 
 			//This will handle a variety of cases for us
-			global_variable->initializer_value.constant_value = emit_global_string_initializer(initializer, global_variable->variable_type);
+			global_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
 
 			break;
 
