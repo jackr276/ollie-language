@@ -1765,6 +1765,19 @@ generic_type_t* create_pointer_type(generic_type_t* points_to, u_int32_t line_nu
 	//A pointer is always 8 bytes(Ollie lang is for x86-64 only)
 	type->type_size = 8;
 
+	/**
+	 * What does this type look like in memory? If a pointer type points
+	 * to a non-pointer type, it's considered "contiguous". This means that
+	 * the memory is laid out flat, all next to eachother. If a pointer
+	 * points to another pointer, then this is a non-contiguous memory
+	 * region
+	 */
+	if(points_to->type_class != TYPE_CLASS_POINTER){
+		type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+	} else {
+		type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
+	}
+
 	return type;
 }
 
@@ -1806,6 +1819,18 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 	//This type is considered complete *unless* it's size is 0
 	if(type->type_size != 0){
 		type->type_complete = TRUE;
+	}
+
+	/**
+	 * What does this type look like in memory? If an array type contains
+	 * all non-pointer types, it's considered "contiguous". This means that
+	 * the memory is laid out flat, all next to eachother. If an array holds 
+	 * pointers, then this is a non-contiguous memory region
+	 */
+	if(points_to->type_class != TYPE_CLASS_POINTER){
+		type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+	} else {
+		type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
 	}
 
 	return type;

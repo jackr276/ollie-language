@@ -2312,7 +2312,6 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
  * We expect that the caller has given back the [ token for this rule
  *
  * BNF Rule: <array-accessor> ::= [ <ternary-expression> ]
- *
  */
 static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, generic_type_t* type, side_type_t side){
 	//The lookahead token
