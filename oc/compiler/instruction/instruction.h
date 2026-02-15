@@ -94,6 +94,8 @@ struct global_variable_t{
 	generic_type_t* variable_type;
 	//What is this variable's reference count?
 	u_int16_t reference_count;
+	//Is this a relative global variable(used for char*)
+	u_int8_t is_relative;
 	//Store the initializer type
 	global_variable_initializer_type_t initializer_type;
 };
