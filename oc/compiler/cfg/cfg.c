@@ -3473,8 +3473,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
 /**
  * Emit the code needed to perform an array access
  *
- * This rule returns *the offset* of the value that we want. It has no idea what the array's
- * base address even is
+ * This rule handles the dynamic decision to derference mid-processing using the "came_from_non_contiguous_region" parameter
  */
 static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_type_t* memory_region_type, generic_ast_node_t* array_accessor, three_addr_var_t** base_address,
 														  three_addr_var_t** current_offset, u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
@@ -3488,9 +3487,6 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	 * current offest, etc
 	 */
 	if(*came_from_non_contiguous_region == TRUE){
-		printf("\n\nMEMORY REGION TYPE %s\n", memory_region_type->type_name.string);
-		printf("Prior result came from a non-contiguous region. Deref is needed\n");
-
 		//Now we need to emit the load by doing our offset calculation to get out of the pointer
 		//space and into memory
 		instruction_t* load_instruction;
