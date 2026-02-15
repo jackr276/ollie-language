@@ -3474,6 +3474,30 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
  * Emit the code needed to perform an array access
  *
  * This rule handles the dynamic decision to derference mid-processing using the "came_from_non_contiguous_region" parameter
+ *
+ * Pointers are non-contiguous in memory, because they point to other memory regions(obviously). In Ollie, when the user defines
+ * something like "define x:mut char*[3]", that's an array of 3 char*, each one pointing somewhere different in memory. When the user
+ * does something like "let y:char* = x[2]", this is defined as "contiguous memory access" because we're just going in that one chunk
+ * of memory(x) and grabbing out the 3rd value at index 2. However, when we do something like "let y:char = x[0][1]", then we are in
+ * reality making two hops. The first hop will get us to the address of the char* that we want. However, we aren't sitting at the base address
+ * of the actual array of chars in memory, we're sitting at the address of that address. It is for this reason that we set the "came_from_non_contiguous_region"
+ * flag as true here. This flag is always set to true whenever we access a non-contiguous memory region, *but it is not acted on unless we need to go further in*.
+ * So in this example, when this function is called for a second time, that flag will be set to TRUE. We will see that and emit a load so that our base address
+ * is no longer the memory address in the original array, but instead is the memory address of the first byte that the original char* in that array
+ * pointed to. This becomes our new base address and we go from there. This process can be repeated as many times as need be for this to work
+ *
+ * For example:
+ * pub fn triple_pointer(x:char***) -> i32 {
+ * 		ret x[1][2][3];
+ * }
+ *
+ * This is going to set that flag twice. Once for the first load [1], and then again for the second load [2], so that by the time
+ * we hit the third load, we've already done two dereferences to truly get down to the base char* that we're after
+ *
+ * movq 8(%rdi), %rax <- base address of the underlying char** array
+ * movq 16(%rax), %rax <- base address of the underlying char*
+ * movsbl 3(%rax), %eax <- indexing 3 off of that base address for the actual value
+ *
  */
 static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_type_t* memory_region_type, generic_ast_node_t* array_accessor, three_addr_var_t** base_address,
 														  three_addr_var_t** current_offset, u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
