@@ -3476,7 +3476,7 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
  * This rule returns *the offset* of the value that we want. It has no idea what the array's
  * base address even is
  */
-static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_ast_node_t* array_accessor, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_type_t* memory_region_type, generic_ast_node_t* array_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
@@ -3491,6 +3491,10 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 	//The current type will always be what was inferred here
 	generic_type_t* member_type = array_accessor->inferred_type;
+
+	if(memory_region_type->type_class == TYPE_CLASS_POINTER){
+		printf("POINTER TYPE\n\n");
+	}
 
 	/**
 	 * If this is not null, we'll be adding on top of it
@@ -3727,6 +3731,16 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 /**
  * The helper will process the postfix expression for us in a recursive way. We will pass along the "base_address" variable which
  * will eventually be populated by the root level expression
+ *
+ * Special cases to be aware of:
+ *
+ * Something like: x:char*[5];
+ *
+ * If we do x[2][3], we are after the third byte in the 2nd pointer. This should generate code like
+ *
+ *  load t2 <- MEM<x>[2] <----- Gets the pointer
+ *  load t3 <_ t2[3] <---------- The pointer becomes our new base address
+ *
  */
 static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
 	//A tracker for what the current block actually is(this can change)
@@ -3772,7 +3786,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	switch(right_child->ast_node_type){
 		//Handle an array accessor
 		case AST_NODE_TYPE_ARRAY_ACCESSOR:
-			postfix_results = emit_array_offset_calculation(current, right_child, current_offset, is_branch_ending);
+			postfix_results = emit_array_offset_calculation(current, memory_region_type, right_child, base_address, current_offset, is_branch_ending);
 			break;
 
 		//Handle a regular struct accessor(: access)
