@@ -8827,7 +8827,7 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 				break;
 
 			//Another base case of sorts - this is for char[] variables
-			case GLOBAL_VAR_INITIALIZER_STRING:
+			case AST_NODE_TYPE_STRING_INITIALIZER:
 				//Emit it and add it into the array
 				dynamic_array_add(initializer_values, emit_global_variable_string_constant(cursor));
 				break;
@@ -8839,6 +8839,7 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 				break;
 
 			default:
+				printf("%d\n\n\n", cursor->ast_node_type);
 				printf("Fatal internal compiler: Invalid or unimplemented global initializer node encountered\n");
 				exit(1);
 		}

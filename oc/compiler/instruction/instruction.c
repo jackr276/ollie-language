@@ -1734,6 +1734,15 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 
 
 /**
+ * Print out a global variable string constant. All that this does is point to the internal
+ * constant and print it
+ */
+static inline void print_global_variable_string_constant(FILE* fl, three_addr_const_t* string_constant){
+	fprintf(fl, "\t.string \"%s\"\n", string_constant->constant_value.string_constant);
+}
+
+
+/**
  * Specialized printing based on what kind of constant is printed out
  * in a global variable context
  */
@@ -1784,6 +1793,9 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 			upper_32_bits = (*((int64_t*)(&(global_variable_constant->constant_value.double_constant))) >> 32) & 0xFFFFFFFF;
 			fprintf(fl,  "\t.long %d\n\t.long %d\n", lower_32_bits, upper_32_bits);
 			break;
+		case STR_CONST:
+			print_global_variable_string_constant(fl, global_variable_constant);
+			break;
 		/**
 		 * For a relative address constants, we print a quad word pointer to the local constant
 		 */
@@ -1795,15 +1807,6 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 			printf("Fatal internal compiler error: unrecognized global variable type encountered\n");
 			exit(1);
 	}
-}
-
-
-/**
- * Print out a global variable string constant. All that this does is point to the internal
- * constant and print it
- */
-static inline void print_global_variable_string_constant(FILE* fl, three_addr_const_t* string_constant){
-	fprintf(fl, "\t.string %s\n", string_constant->constant_value.string_constant);
 }
 
 
@@ -1883,8 +1886,6 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 
 					//Emit the constant value here
 					print_global_variable_constant(fl, constant_value);
-
-					//TODO STR CONST
 				}
 
 				break;
