@@ -3728,22 +3728,15 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
  * The helper will process the postfix expression for us in a recursive way. We will pass along the "base_address" variable which
  * will eventually be populated by the root level expression
  *
- * Special cases to be aware of:
+ * Special cases to be aware of - non-contiguous memory regions:
  *
- * Something like: x:char*[5];
+ * Something like: x:char*[3];
  *
- * If we do x[2][3], we are after the third byte in the 2nd pointer. This should generate code like
+ *  In memory x is : |char* | char* | char *|
  *
- *				<postfix>
- *			  / 	   \
- *			  			 3
- * 		<postfix>
- *      /    	\
- * 	  x          2
- *
- *  load t2 <- MEM<x>[2] <----- Gets the pointer
- *  load t3 <_ t2[3] <---------- The pointer becomes our new base address
- *
+ *  So if we do something like x[2][1], we need to account for the fact that x is "non-contiguous". This is actually already accounted
+ *  for by the type system so it's not something that we need to be aware of here. Non-contiguous memory regions require intermediary loads
+ *  in order to work properly
  */
 static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
 	//A tracker for what the current block actually is(this can change)
