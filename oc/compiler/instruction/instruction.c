@@ -4693,6 +4693,29 @@ three_addr_const_t* emit_global_variable_string_constant(generic_ast_node_t* str
 
 
 /**
+ * Emit a global variable constant that specifically references a given .LCx
+ * value. We expect that this value has already been given to us
+ */
+three_addr_const_t* emit_global_variable_lcX_reference_constant(three_addr_var_t* lcx_reference_var, generic_type_t* type){
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_consts, constant);
+
+	//Now we'll assign the appropriate values
+	constant->const_type = REL_ADDRESS_CONST;
+	constant->type = type;
+
+	//Extract what we need out of it
+	constant->constant_value.local_constant_address = lcx_reference_var;
+
+	//And give it back
+	return constant;
+}
+
+
+/**
  * Emit a constant for the express purpose of being used in a global variable. Such
  * a constant does not need to abide by the same rules that non-global constants
  * need to because it is already in the ELF text and not trapped in the assembly

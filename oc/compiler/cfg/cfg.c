@@ -2561,7 +2561,7 @@ static void rename_block(basic_block_t* entry){
 /**
  * Rename all of the variables in the CFG
  */
-static void rename_all_variables(cfg_t* cfg){
+static inline void rename_all_variables(cfg_t* cfg){
 	//Before we do this - let's reset the entire CFG
 	reset_visited_status(cfg, FALSE);
 
