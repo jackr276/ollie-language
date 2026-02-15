@@ -8851,6 +8851,33 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 
 
 /**
+ * This helper function is used to determine if we need to place a global variable
+ * in the ".rel.local" section. This is only done for char* variables *or* anything
+ * that decays into a char*
+ */
+static u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+			return does_type_decay_to_char_pointer(type->internal_types.member_type);
+
+		case TYPE_CLASS_POINTER:
+			//This is what we're after
+			if(type->internal_types.points_to == char_type){
+				return TRUE;
+			}
+			
+			return does_type_decay_to_char_pointer(type->internal_types.points_to);
+
+		case TYPE_CLASS_BASIC:
+			return FALSE;
+
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Visit a global let statement and handle the initializer appropriately.
  * Do note that we have already checked that the entire initialization
  * only contains constants, so we can assume we're only processing constants
@@ -8863,6 +8890,9 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 	//This has been initialized already
 	global_variable->variable->initialized = TRUE;
+
+	//Figure out what this decays into
+	global_variable->is_relative = does_type_decay_to_char_pointer(node->variable->type_defined_as);
 
 	//And add it into the CFG
 	dynamic_array_add(&(cfg->global_variables), global_variable);

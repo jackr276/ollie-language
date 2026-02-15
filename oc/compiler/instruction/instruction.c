@@ -1839,7 +1839,7 @@ void print_all_global_variables(FILE* fl, dynamic_array_t* global_variables){
 			fprintf(fl, "\t.bss\n");
 		//Tell the linker that this is relative writeable data
 		} else if(variable->is_relative == TRUE) {
-			fprintf(fl, "\t.section .data.rel.local,\"aw\"");
+			fprintf(fl, "\t.section .data.rel.local,\"aw\"\n");
 		} else {
 			fprintf(fl, "\t.data\n");
 		}
