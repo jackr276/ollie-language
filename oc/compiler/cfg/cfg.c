@@ -3492,8 +3492,21 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	//The current type will always be what was inferred here
 	generic_type_t* member_type = array_accessor->inferred_type;
 
-	if(memory_region_type->type_class == TYPE_CLASS_POINTER){
-		printf("POINTER TYPE\n\n");
+	switch(memory_region_type->type_class){
+		case TYPE_CLASS_ARRAY:
+			if(memory_region_type->internal_types.references->type_class == TYPE_CLASS_POINTER){
+				printf("DECAYS TO POINTER\n");
+			}
+			break;
+
+		case TYPE_CLASS_POINTER:
+			if(memory_region_type->internal_types.points_to->type_class == TYPE_CLASS_POINTER){
+				printf("DECAYS TO POINTER\n");
+			}
+			break;
+
+		default:
+			break;
 	}
 
 	/**
@@ -3738,6 +3751,13 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
  *
  * If we do x[2][3], we are after the third byte in the 2nd pointer. This should generate code like
  *
+ *				<postfix>
+ *			  / 	   \
+ *			  			 3
+ * 		<postfix>
+ *      /    	\
+ * 	  x          2
+ *
  *  load t2 <- MEM<x>[2] <----- Gets the pointer
  *  load t3 <_ t2[3] <---------- The pointer becomes our new base address
  *
@@ -3764,6 +3784,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	//Once we make it down here, we know that we don't have a primary expression so we need to do postfix processing
 	//The left child *always* decays into another postfix expression
 	generic_ast_node_t* left_child = root->first_child;
+
 	//And this will *always* be our postoperation code
 	generic_ast_node_t* right_child = left_child->next_sibling;
 	
