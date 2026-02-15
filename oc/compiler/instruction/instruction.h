@@ -499,25 +499,6 @@ three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generi
 three_addr_var_t* emit_var_copy(three_addr_var_t* var);
 
 /**
- * Specifically emit a global variable string constant. This is only valid for strings in the global
- * variable context. No other context for this will work
- */
-three_addr_const_t* emit_global_variable_string_constant(generic_ast_node_t* string_initializer);
-
-/**
- * Emit a global variable constant that specifically references a given .LCx
- * value. We expect that this value has already been given to us
- */
-three_addr_const_t* emit_global_variable_lcX_reference_constant(three_addr_var_t* lcx_reference_var, generic_type_t* type);
-
-/**
- * Emit a constant for the express purpose of being used in a global variable. Such
- * a constant does not need to abide by the same rules that non-global constants
- * need to because it is already in the ELF text and not trapped in the assembly
- */
-three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node);
-
-/**
  * Create and return a constant three address var
  */
 three_addr_const_t* emit_constant(generic_ast_node_t* const_node);

@@ -8708,35 +8708,109 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 }
 
 
+/**
+ * Specifically emit a global variable string constant. This is only valid for strings in the global
+ * variable context. No other context for this will work
+ */
+static inline three_addr_const_t* emit_global_variable_string_constant(generic_ast_node_t* string_initializer){
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Now we'll assign the appropriate values
+	constant->const_type = STR_CONST;
+	constant->type = string_initializer->inferred_type;
+
+	//Extract what we need out of it
+	constant->constant_value.string_constant = string_initializer->string_value.string;
+
+	return constant;
+}
+
 
 /**
- * Emit a global variable string initializer. This will handle cases where we need
- * to just emit the string or cases where we need to emit the array and then a pointer
- * to said array(char* for instance)
- *
- * For a global char*, we will need to first emit a local constant that represents the string value. Following 
- * that, we will emit the actual global variable which will be initialized with a pointer to that constant
+ * Emit a constant for the express purpose of being used in a global variable. Such
+ * a constant does not need to abide by the same rules that non-global constants
+ * need to because it is already in the ELF text and not trapped in the assembly
  */
-static inline three_addr_const_t* emit_global_string_initializer(generic_ast_node_t* string_initializer, generic_type_t* type_initialized_as){
-	//If this is initialized as an array, we will emit the global variable
-	//as a string with the name of that array
-	if(type_initialized_as->type_class == TYPE_CLASS_ARRAY){
-		return emit_global_variable_string_constant(string_initializer);
+static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node){
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
-	//Otherwise it is a pointer. Doing this is a special case because we'll need to emit
-	//the value as a local constant, and then get a pointer to it for the actual global
-	//variable
-	} else {
-		//Let's first emit the string local constant
-		three_addr_var_t* string_local_constant = emit_string_local_constant(cfg, string_initializer);
+	//A holder for later if need be
+	three_addr_var_t* string_local_constant;
+
+	//Now we'll assign the appropriate values
+	constant->const_type = const_node->constant_type; 
+	constant->type = const_node->inferred_type;
+
+	//Based on the type we'll make assignments. It'll be said again here - this is the only
+	//time that double/float constants can be emitted directly without the use of the .LC system
+	switch(constant->const_type){
+		case CHAR_CONST:
+			constant->constant_value.char_constant = const_node->constant_value.char_value;
+			break;
+		case BYTE_CONST:
+			constant->constant_value.signed_byte_constant = const_node->constant_value.signed_byte_value;
+			break;
+		case BYTE_CONST_FORCE_U:
+			constant->constant_value.unsigned_byte_constant = const_node->constant_value.unsigned_byte_value;
+			break;
+		case INT_CONST:
+			constant->constant_value.signed_integer_constant = const_node->constant_value.signed_int_value;
+			break;
+		case INT_CONST_FORCE_U:
+			constant->constant_value.unsigned_integer_constant = const_node->constant_value.unsigned_int_value;
+			break;
+		case SHORT_CONST:
+			constant->constant_value.signed_short_constant = const_node->constant_value.signed_short_value;
+			break;
+		case SHORT_CONST_FORCE_U:
+			constant->constant_value.unsigned_short_constant = const_node->constant_value.unsigned_short_value;
+			break;
+		case LONG_CONST:
+			constant->constant_value.signed_long_constant = const_node->constant_value.signed_long_value;
+			break;
+		case LONG_CONST_FORCE_U:
+			constant->constant_value.unsigned_long_constant = const_node->constant_value.unsigned_long_value;
+			break;
+		case DOUBLE_CONST:
+			constant->constant_value.double_constant = const_node->constant_value.double_value;
+			break;
+		case FLOAT_CONST:
+			constant->constant_value.float_constant = const_node->constant_value.float_value;
+			break;
+		/**
+		 * If we made it here, that specifically means that we are dealing with a char* constant. This is
+		 * an important distinction, because it will require that we emit a .LC local constant value and
+		 * then a pointer to it
+		 */
+		case STR_CONST:
+			//Let's first emit the string local constant
+			string_local_constant = emit_string_local_constant(cfg, const_node);
+
+
+			//Now we'll assign the appropriate values
+			constant->const_type = REL_ADDRESS_CONST;
+			constant->type = type;
+
+			//Extract what we need out of it
+			constant->constant_value.local_constant_address = lcx_reference_var;
 
 		//Once we have the string local constant, we need to emit a quad word constant that is initialized
 		//to be this local string constant's value
+		return emit_global_variable_lcX_reference_constant(string_local_constant, type_initialized_as);
 
-		return NULL;
+			break;
+			
+		//Some very weird error here
+		default:
+			printf("Fatal internal compiler error: unrecognizable constant type found in constant\n");
+			exit(1);
 	}
+	
+	//Once all that is done, we can leave
+	return constant;
 }
-
 
 
 /**
@@ -8758,10 +8832,10 @@ static void emit_global_array_initializer(generic_ast_node_t* array_initializer,
 				emit_global_array_initializer(cursor, initializer_values);
 				break;
 
-			//Another base case of sorts
+			//Another base case of sorts - this is for char[] variables
 			case GLOBAL_VAR_INITIALIZER_STRING:
 				//Emit it and add it into the array
-				dynamic_array_add(initializer_values, emit_global_string_initializer(cursor, array_initializer->inferred_type));
+				dynamic_array_add(initializer_values, emit_global_variable_string_constant(cursor));
 				break;
 
 			//This is really our base case
@@ -8822,7 +8896,9 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
 
 			//All we need to do here
-			global_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
+			global_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
+
+
 
 			break;
 
