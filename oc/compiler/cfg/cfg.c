@@ -3744,7 +3744,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		//The current offset is not null, we need to emit some calculation here
 		if(*current_offset != NULL){
 			//Emit the load
-			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
+			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, raw_struct_type);
 			load_instruction->is_branch_ending = is_branch_ending;
 
 			//This counts as a use for both
@@ -3763,7 +3763,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		//If we get here, we have an empty offset so we just need a regular load
 		} else {
 			//Regular load here
-			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
+			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, raw_struct_type);
 			load_instruction->is_branch_ending = is_branch_ending;
 
 			//This counts as a use
@@ -3806,9 +3806,54 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, three_addr_var_t* base_address){
+static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, generic_type_t* memory_region_type, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+														   u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
+	/**
+	 * If this came from a non-contiguous region, then we're going to need to deal with it accordingly
+	 */
+	if(*came_from_non_contiguous_region == TRUE){
+		//Now we need to emit the load by doing our offset calculation to get out of the pointer
+		//space and into memory
+		instruction_t* load_instruction;
+
+		//The current offset is not null, we need to emit some calculation here
+		if(*current_offset != NULL){
+			//Emit the load
+			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
+
+			//This counts as a use for both
+			add_used_variable(block, *base_address);
+			add_used_variable(block, *current_offset);
+
+			//Add it into the block
+			add_statement(block, load_instruction);
+
+			//The new base address now is the load instruction's assignee
+			*base_address = load_instruction->assignee;
+
+			//And the offset is now nothing
+			*current_offset = NULL;
+
+		//If we get here, we have an empty offset so we just need a regular load
+		} else {
+			//Regular load here
+			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
+
+			//This counts as a use
+			add_used_variable(block, *base_address);
+			
+			//Get it into the block
+			add_statement(block, load_instruction);
+
+			//Again this now is the base address
+			*base_address = load_instruction->assignee;
+		}
+	}
+
 	//Very simple rule, we just have this for consistency
-	cfg_result_package_t accessor = {block, block, base_address, BLANK};
+	cfg_result_package_t accessor = {block, block, *base_address, BLANK};
 
 	//Give it back
 	return accessor;
@@ -3820,54 +3865,59 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_type_t* union_pointer_type, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_type_t* union_pointer_type, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+																	u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
 	//Get the current type
 	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
 
-	//Store the current block
-	basic_block_t* current_block = block;
+	/**
+	 * If this came from a non-contiguous region, then we're going to need to deal with it accordingly
+	 */
+	if(*came_from_non_contiguous_region == TRUE){
+		//Now we need to emit the load by doing our offset calculation to get out of the pointer
+		//space and into memory
+		instruction_t* load_instruction;
 
-	//We need to emit a load instruction here to load the union into a variable
-	//The current offset could be NULL
-	if(*current_offset != NULL){
-		//Emit our load statement here
-		instruction_t* load_statement = emit_load_with_variable_offset_ir_code(emit_temp_var(raw_union_type), *base_address, *current_offset, (*base_address)->type);
-		load_statement->is_branch_ending = is_branch_ending;
+		//The current offset is not null, we need to emit some calculation here
+		if(*current_offset != NULL){
+			//Emit the load
+			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, raw_union_type);
+			load_instruction->is_branch_ending = is_branch_ending;
 
-		//These count as uses
-		add_used_variable(block, *base_address);
-		add_used_variable(block, *current_offset);
+			//This counts as a use for both
+			add_used_variable(block, *base_address);
+			add_used_variable(block, *current_offset);
 
-		//Now add this statement to the block
-		add_statement(block, load_statement);
+			//Add it into the block
+			add_statement(block, load_instruction);
 
-		//The current offset is now NULL because we've used what we stored up so far
-		*current_offset = NULL;
+			//The new base address now is the load instruction's assignee
+			*base_address = load_instruction->assignee;
 
-		//And the base address is now what we have here
-		*base_address = load_statement->assignee;
+			//And the offset is now nothing
+			*current_offset = NULL;
 
-	//Otherwise the current offset is already NULL, so we just have a regular load statement
-	//here
-	} else {
-		//Emit our load statement here
-		instruction_t* load_statement = emit_load_ir_code(emit_temp_var(raw_union_type), *base_address, (*base_address)->type);
-		load_statement->is_branch_ending = is_branch_ending;
+		//If we get here, we have an empty offset so we just need a regular load
+		} else {
+			//Regular load here
+			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, raw_union_type);
+			load_instruction->is_branch_ending = is_branch_ending;
 
-		//These count as uses
-		add_used_variable(block, *base_address);
+			//This counts as a use
+			add_used_variable(block, *base_address);
+			
+			//Get it into the block
+			add_statement(block, load_instruction);
 
-		//Now add this statement to the block
-		add_statement(block, load_statement);
-
-		//And the base address is now what we have here
-		*base_address = load_statement->assignee;
+			//Again this now is the base address
+			*base_address = load_instruction->assignee;
+		}
 	}
 
 	//By the time we get out here, we have performed a dereference and loaded whatever our offset
 	//math was before into the new base address variable. The current offset will be NULL again
 	//because we need to start over if we have any more offsets
-	cfg_result_package_t return_package = {current_block, current_block, *base_address, BLANK};
+	cfg_result_package_t return_package = {block, block, *base_address, BLANK};
 	return return_package;
 }
 
@@ -3946,12 +3996,12 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 
 		//Handle a regular union access(. access)
 		case AST_NODE_TYPE_UNION_ACCESSOR:
-			postfix_results = emit_union_accessor_expression(current, *base_address);
+			postfix_results = emit_union_accessor_expression(current, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
 			break;
 
 		//Handle a union pointer access (-> access)
 		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-			postfix_results = emit_union_pointer_accessor_expression(current, memory_region_type, base_address, current_offset, is_branch_ending);
+			postfix_results = emit_union_pointer_accessor_expression(current, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
 			break;
 			
 		//We should never actually hit this, it's just so the compiler is happy
