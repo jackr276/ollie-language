@@ -3481,6 +3481,56 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
+	/**
+	 * If we came from a non-contiguous memory region and we're now trying to use the [] access again,
+	 * we need to emit an intermediary load here in order to keep everything in order. This has the
+	 * effect of wiping the deck clean with what we had prior and starting fresh with a new base address,
+	 * current offest, etc
+	 */
+	if(*came_from_non_contiguous_region == TRUE){
+		printf("\n\nMEMORY REGION TYPE %s\n", memory_region_type->type_name.string);
+		printf("Prior result came from a non-contiguous region. Deref is needed\n");
+
+		//Now we need to emit the load by doing our offset calculation to get out of the pointer
+		//space and into memory
+		instruction_t* load_instruction;
+
+		//The current offset is not null, we need to emit some calculation here
+		if(*current_offset != NULL){
+			//Emit the load
+			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
+
+			//This counts as a use for both
+			add_used_variable(current_block, *base_address);
+			add_used_variable(current_block, *current_offset);
+
+			//Add it into the block
+			add_statement(current_block, load_instruction);
+
+			//The new base address now is the load instruction's assignee
+			*base_address = load_instruction->assignee;
+
+			//And the offset is now nothing
+			*current_offset = NULL;
+
+		//If we get here, we have an empty offset so we just need a regular load
+		} else {
+			//Regular load here
+			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
+
+			//This counts as a use
+			add_used_variable(current_block, *base_address);
+			
+			//Get it into the block
+			add_statement(current_block, load_instruction);
+
+			//Again this now is the base address
+			*base_address = load_instruction->assignee;
+		}
+	}
+
 	//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
 	cfg_result_package_t expression_package = emit_expression(current_block, array_accessor->first_child, is_branch_ending, FALSE);
 
@@ -3492,11 +3542,6 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 	//The current type will always be what was inferred here
 	generic_type_t* member_type = array_accessor->inferred_type;
-
-	if(*came_from_non_contiguous_region == TRUE){
-		printf("\n\nMEMORY REGION TYPE %s\n", memory_region_type->type_name.string);
-		printf("Prior result came from a non-contiguous region. Deref is needed\n");
-	}
 
 	/**
 	 * If this is not null, we'll be adding on top of it
@@ -3528,6 +3573,13 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, emit_direct_integer_or_char_constant(member_type->type_size, u64), is_branch_ending);
 	}
 
+	/**
+	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
+	 * region, then we need make a note of that just in case there are more [] accessors coming
+	 * down the line here. If the next guy sees that this prior address is non-contiguous, it knows
+	 * that the memory structure is not flat and it is going to need to perform a derefence to make
+	 * this work poperly
+	 */
 	if(memory_region_type->memory_layout_type == MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS){
 		*came_from_non_contiguous_region = TRUE;
 	} else {
