@@ -3476,7 +3476,8 @@ static cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, g
  * This rule returns *the offset* of the value that we want. It has no idea what the array's
  * base address even is
  */
-static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_type_t* memory_region_type, generic_ast_node_t* array_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_type_t* memory_region_type, generic_ast_node_t* array_accessor, three_addr_var_t** base_address,
+														  three_addr_var_t** current_offset, u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
@@ -3491,6 +3492,11 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 	//The current type will always be what was inferred here
 	generic_type_t* member_type = array_accessor->inferred_type;
+
+	if(*came_from_non_contiguous_region == TRUE){
+		printf("\n\nMEMORY REGION TYPE %s\n", memory_region_type->type_name.string);
+		printf("Prior result came from a non-contiguous region. Deref is needed\n");
+	}
 
 	/**
 	 * If this is not null, we'll be adding on top of it
@@ -3520,6 +3526,12 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 		//Emit the binary operation directly with this. The current offset remains unchanged
 		emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, emit_direct_integer_or_char_constant(member_type->type_size, u64), is_branch_ending);
+	}
+
+	if(memory_region_type->memory_layout_type == MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS){
+		*came_from_non_contiguous_region = TRUE;
+	} else {
+		*came_from_non_contiguous_region = FALSE;
 	}
 
 	//And the final block is this as well
@@ -3738,7 +3750,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
  *  for by the type system so it's not something that we need to be aware of here. Non-contiguous memory regions require intermediary loads
  *  in order to work properly
  */
-static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
 	//A tracker for what the current block actually is(this can change)
 	basic_block_t* current = basic_block;
 
@@ -3769,7 +3781,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	generic_type_t* memory_region_type = left_child->inferred_type;
 
 	//We need to first recursively emit the left child's postfix expression
-	cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, is_branch_ending);
+	cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
 
 	//Update whatever the last block may be
 	current = left_child_results.final_block;
@@ -3783,7 +3795,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 	switch(right_child->ast_node_type){
 		//Handle an array accessor
 		case AST_NODE_TYPE_ARRAY_ACCESSOR:
-			postfix_results = emit_array_offset_calculation(current, memory_region_type, right_child, base_address, current_offset, is_branch_ending);
+			postfix_results = emit_array_offset_calculation(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
 			break;
 
 		//Handle a regular struct accessor(: access)
@@ -3831,6 +3843,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		return emit_primary_expr_code(basic_block, root, is_branch_ending);
 	}
 
+	//Did the current result come from a non-contiguous computation
+	u_int8_t came_from_non_continguous_region = FALSE;
+
 	//Hold onto what our current block is, it may change
 	basic_block_t* current_block = basic_block;
 
@@ -3841,7 +3856,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	three_addr_var_t* current_offset = NULL;
 	
 	//Let the recursive rule do all the work
-	cfg_result_package_t postfix_results = emit_postfix_expression_rec(basic_block, root, &base_address, &current_offset, is_branch_ending);
+	cfg_result_package_t postfix_results = emit_postfix_expression_rec(basic_block, root, &base_address, &current_offset, &came_from_non_continguous_region, is_branch_ending);
 
 	//Grab htese out for later
 	generic_ast_node_t* left_child = root->first_child;

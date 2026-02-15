@@ -2379,10 +2379,6 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//Add the line number
 	accessor_node->line_number = current_line;
 
-	if(type->memory_layout_type == MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS){
-		printf("GOING FROM A NON-CONTIGUOUS TYPE %s\n", type->type_name.string);
-	}
-
 	//The conditional expression is a child of this node
 	add_child_node(accessor_node, expr);
 
