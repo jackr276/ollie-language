@@ -2386,8 +2386,26 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//The values type is what we point to/have as a member type
 	if(type->type_class == TYPE_CLASS_POINTER){
 		accessor_node->inferred_type = type->internal_types.points_to;
+
+		switch(accessor_node->inferred_type->type_class){
+			case TYPE_CLASS_POINTER:
+			case TYPE_CLASS_ARRAY:
+				printf("DECAYS TO COMPLEX REGION\n");
+				break;
+			default:
+				break;
+		}
+
 	} else {
 		accessor_node->inferred_type = type->internal_types.member_type;
+
+		switch(accessor_node->inferred_type->type_class){
+			case TYPE_CLASS_POINTER:
+				printf("DECAYS TO COMPLEX REGION\n");
+				break;
+			default:
+				break;
+		}
 	}
 
 	//This is assignable
