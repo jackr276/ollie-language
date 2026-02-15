@@ -6,5 +6,5 @@
 let x:char[] = "Hello world";
 
 pub fn main() -> i32 {
-	ret 0;
+	ret x[2];
 }
