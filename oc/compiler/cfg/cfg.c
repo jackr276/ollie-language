@@ -8790,7 +8790,6 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 
 			//Now we'll assign the appropriate values
 			constant->const_type = REL_ADDRESS_CONST;
-			constant->type = const_node->inferred_type;
 
 			//Extract what we need out of it
 			constant->constant_value.local_constant_address = string_local_constant;
@@ -8891,9 +8890,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
 
 			//All we need to do here
-			global_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
-
-
+			global_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
 
 			break;
 

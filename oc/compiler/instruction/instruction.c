@@ -1784,6 +1784,12 @@ static void print_global_variable_constant(FILE* fl, three_addr_const_t* global_
 			upper_32_bits = (*((int64_t*)(&(global_variable_constant->constant_value.double_constant))) >> 32) & 0xFFFFFFFF;
 			fprintf(fl,  "\t.long %d\n\t.long %d\n", lower_32_bits, upper_32_bits);
 			break;
+		/**
+		 * For a relative address constants, we print a quad word pointer to the local constant
+		 */
+		case REL_ADDRESS_CONST:
+			fprintf(fl, "\t.quad .LC%d\n", global_variable_constant->constant_value.local_constant_address->associated_memory_region.local_constant->local_constant_id); 
+			break;
 		//Catch-all should anything go wrong
 		default:
 			printf("Fatal internal compiler error: unrecognized global variable type encountered\n");
