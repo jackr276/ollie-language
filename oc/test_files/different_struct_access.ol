@@ -5,7 +5,7 @@
 
 define struct my_struct {
 	c:mut char;
-	x:i32[6];
+	x:mut i32[6];
 	y:i64;
 } as custom_struct;
 
@@ -13,11 +13,15 @@ define struct my_struct {
 pub fn get_to_struct1(structs:custom_struct*) -> i32 {
 	structs[2]:c = 'a';
 
+	structs[2]:x[2] = 15;
+
 	ret structs[1]:c;
 }
 
 pub fn get_to_struct2(structs:custom_struct**) -> i32 {
 	structs[2]=>c = 'a';
+
+	structs[2]=>x[2] = 15;
 
 	ret structs[1]=>c;
 }
