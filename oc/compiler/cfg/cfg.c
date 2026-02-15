@@ -3818,7 +3818,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, generic_type_t* memory_region_type, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset,
 														   u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
 	/**
 	 * If this came from a non-contiguous region, then we're going to need to deal with it accordingly
@@ -3863,15 +3863,19 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 			*base_address = load_instruction->assignee;
 		}
 	}
-	
+
 	/**
 	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
 	 * region, then we need make a note of that just in case there are more [] accessors coming
 	 * down the line here. If the next guy sees that this prior address is non-contiguous, it knows
 	 * that the memory structure is not flat and it is going to need to perform a derefence to make
-	 * this work poperly. This value is not a pointer, so it is contiguous
+	 * this work poperly
 	 */
-	*came_from_non_contiguous_region = FALSE;
+	if(union_accessor->variable->type_defined_as->type_class == TYPE_CLASS_POINTER){
+		*came_from_non_contiguous_region = TRUE;
+	} else {
+		*came_from_non_contiguous_region = FALSE;
+	}
 
 	//Very simple rule, we just have this for consistency
 	cfg_result_package_t accessor = {block, block, *base_address, BLANK};
@@ -3886,7 +3890,7 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_type_t* union_pointer_type, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, generic_type_t* union_pointer_type, three_addr_var_t** base_address, three_addr_var_t** current_offset,
 																	u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
 	//Get the current type
 	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
@@ -3941,10 +3945,12 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	 * down the line here. If the next guy sees that this prior address is non-contiguous, it knows
 	 * that the memory structure is not flat and it is going to need to perform a derefence to make
 	 * this work poperly
-	 *
-	 * This is a pointer, so it by default is not contiguous at all
 	 */
-	*came_from_non_contiguous_region = TRUE;
+	if(union_accessor->variable->type_defined_as->type_class == TYPE_CLASS_POINTER){
+		*came_from_non_contiguous_region = TRUE;
+	} else {
+		*came_from_non_contiguous_region = FALSE;
+	}
 
 	//By the time we get out here, we have performed a dereference and loaded whatever our offset
 	//math was before into the new base address variable. The current offset will be NULL again
@@ -4028,12 +4034,12 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 
 		//Handle a regular union access(. access)
 		case AST_NODE_TYPE_UNION_ACCESSOR:
-			postfix_results = emit_union_accessor_expression(current, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
+			postfix_results = emit_union_accessor_expression(current, right_child, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
 			break;
 
 		//Handle a union pointer access (-> access)
 		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-			postfix_results = emit_union_pointer_accessor_expression(current, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
+			postfix_results = emit_union_pointer_accessor_expression(current, right_child, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
 			break;
 			
 		//We should never actually hit this, it's just so the compiler is happy
