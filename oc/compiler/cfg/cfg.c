@@ -3492,22 +3492,74 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	//The current type will always be what was inferred here
 	generic_type_t* member_type = array_accessor->inferred_type;
 
+	//Do we need to perform an intermediate load to get out what is needed here?
+	u_int8_t intermediate_load_required = FALSE;
+
+	//If we are decaying into a pointer, we are going to need to do some derefencing
 	switch(memory_region_type->type_class){
 		case TYPE_CLASS_ARRAY:
-			if(memory_region_type->internal_types.references->type_class == TYPE_CLASS_POINTER){
+			if(memory_region_type->internal_types.member_type->type_class == TYPE_CLASS_POINTER){
 				printf("DECAYS TO POINTER\n");
+
+				//intermediate_load_required = TRUE;
 			}
 			break;
 
 		case TYPE_CLASS_POINTER:
 			if(memory_region_type->internal_types.points_to->type_class == TYPE_CLASS_POINTER){
 				printf("DECAYS TO POINTER\n");
+
+				//intermediate_load_required = TRUE;
 			}
+
 			break;
 
 		default:
 			break;
 	}
+
+	//Do we need to do an intermediate load before continuing? If so, we will do that here
+	if(intermediate_load_required == TRUE){
+		//Now we need to emit the load by doing our offset calculation to get out of the pointer
+		//space and into memory
+		instruction_t* load_instruction;
+
+		//The current offset is not null, we need to emit some calculation here
+		if(*current_offset != NULL){
+			//Emit the load
+			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
+
+			//This counts as a use for both
+			add_used_variable(block, *base_address);
+			add_used_variable(block, *current_offset);
+
+			//Add it into the block
+			add_statement(block, load_instruction);
+
+			//The new base address now is the load instruction's assignee
+			*base_address = load_instruction->assignee;
+
+			//And the offset is now nothing
+			*current_offset = NULL;
+
+		//If we get here, we have an empty offset so we just need a regular load
+		} else {
+			//Regular load here
+			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
+
+			//This counts as a use
+			add_used_variable(block, *base_address);
+			
+			//Get it into the block
+			add_statement(block, load_instruction);
+
+			//Again this now is the base address
+			*base_address = load_instruction->assignee;
+		}
+	}
+
 
 	/**
 	 * If this is not null, we'll be adding on top of it
