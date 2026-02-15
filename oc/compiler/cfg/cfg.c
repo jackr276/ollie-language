@@ -3706,14 +3706,13 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	 * region, then we need make a note of that just in case there are more [] accessors coming
 	 * down the line here. If the next guy sees that this prior address is non-contiguous, it knows
 	 * that the memory structure is not flat and it is going to need to perform a derefence to make
-	 * this work poperly
-	if(memory_region_type->memory_layout_type == MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS){
+	 * this work poperly. This value is not a pointer, so it is contiguous
+	 */
+	if(struct_accessor->variable->type_defined_as->type_class == TYPE_CLASS_POINTER){
 		*came_from_non_contiguous_region = TRUE;
 	} else {
 		*came_from_non_contiguous_region = FALSE;
 	}
-	 */
-
 
 	//Package & return the results
 	cfg_result_package_t results = {block, block, *current_offset, BLANK};
@@ -3795,6 +3794,19 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	//The current offset now is this
 	*current_offset = final_assignment->assignee;
 
+	/**
+	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
+	 * region, then we need make a note of that just in case there are more [] accessors coming
+	 * down the line here. If the next guy sees that this prior address is non-contiguous, it knows
+	 * that the memory structure is not flat and it is going to need to perform a derefence to make
+	 * this work poperly
+	 */
+	if(struct_accessor->variable->type_defined_as->type_class == TYPE_CLASS_POINTER){
+		*came_from_non_contiguous_region = TRUE;
+	} else {
+		*came_from_non_contiguous_region = FALSE;
+	}
+
 	//And we're done here, we can package and return what we have
 	cfg_result_package_t results = {block, block, *base_address, BLANK};
 	return results;
@@ -3851,6 +3863,15 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 			*base_address = load_instruction->assignee;
 		}
 	}
+	
+	/**
+	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
+	 * region, then we need make a note of that just in case there are more [] accessors coming
+	 * down the line here. If the next guy sees that this prior address is non-contiguous, it knows
+	 * that the memory structure is not flat and it is going to need to perform a derefence to make
+	 * this work poperly. This value is not a pointer, so it is contiguous
+	 */
+	*came_from_non_contiguous_region = FALSE;
 
 	//Very simple rule, we just have this for consistency
 	cfg_result_package_t accessor = {block, block, *base_address, BLANK};
@@ -3913,6 +3934,17 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 			*base_address = load_instruction->assignee;
 		}
 	}
+
+	/**
+	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
+	 * region, then we need make a note of that just in case there are more [] accessors coming
+	 * down the line here. If the next guy sees that this prior address is non-contiguous, it knows
+	 * that the memory structure is not flat and it is going to need to perform a derefence to make
+	 * this work poperly
+	 *
+	 * This is a pointer, so it by default is not contiguous at all
+	 */
+	*came_from_non_contiguous_region = TRUE;
 
 	//By the time we get out here, we have performed a dereference and loaded whatever our offset
 	//math was before into the new base address variable. The current offset will be NULL again
