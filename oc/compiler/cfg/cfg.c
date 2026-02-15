@@ -3620,7 +3620,53 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
  * This rule returns *the offset* of the address that we're after. It has no idea
  * what the base address even is
  */
-static cfg_result_package_t emit_struct_offset_calculation(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+															u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
+	/**
+	 * If our current address is from a non-contiguous region, we are going to need to
+	 * load in the value at that address to set up properly here
+	 */
+	if(*came_from_non_contiguous_region == TRUE){
+		//Now we need to emit the load by doing our offset calculation to get out of the pointer
+		//space and into memory
+		instruction_t* load_instruction;
+
+		//The current offset is not null, we need to emit some calculation here
+		if(*current_offset != NULL){
+			//Emit the load
+			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
+
+			//This counts as a use for both
+			add_used_variable(block, *base_address);
+			add_used_variable(block, *current_offset);
+
+			//Add it into the block
+			add_statement(block, load_instruction);
+
+			//The new base address now is the load instruction's assignee
+			*base_address = load_instruction->assignee;
+
+			//And the offset is now nothing
+			*current_offset = NULL;
+
+		//If we get here, we have an empty offset so we just need a regular load
+		} else {
+			//Regular load here
+			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
+
+			//This counts as a use
+			add_used_variable(block, *base_address);
+			
+			//Get it into the block
+			add_statement(block, load_instruction);
+
+			//Again this now is the base address
+			*base_address = load_instruction->assignee;
+		}
+	}
+
 	//Grab the variable that we need
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
 
@@ -3655,6 +3701,20 @@ static cfg_result_package_t emit_struct_offset_calculation(basic_block_t* block,
 		add_statement(block, assignment_instruction);
 	}
 
+	/**
+	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
+	 * region, then we need make a note of that just in case there are more [] accessors coming
+	 * down the line here. If the next guy sees that this prior address is non-contiguous, it knows
+	 * that the memory structure is not flat and it is going to need to perform a derefence to make
+	 * this work poperly
+	if(memory_region_type->memory_layout_type == MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS){
+		*came_from_non_contiguous_region = TRUE;
+	} else {
+		*came_from_non_contiguous_region = FALSE;
+	}
+	 */
+
+
 	//Package & return the results
 	cfg_result_package_t results = {block, block, *current_offset, BLANK};
 	return results;
@@ -3667,51 +3727,55 @@ static cfg_result_package_t emit_struct_offset_calculation(basic_block_t* block,
  * This rule returns *the offset* of the value that we want. It has
  * no idea what the base address of the memory region it's in is
  */
-static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t is_branch_ending){
+static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+																	u_int8_t* came_from_non_contiguous_region, u_int8_t is_branch_ending){
 	//Get what the raw struct type is
 	generic_type_t* raw_struct_type = struct_pointer_type->internal_types.points_to;
 
-	//Now we need to emit the load by doing our offset calculation to get out of the pointer
-	//space and into memory
-	instruction_t* load_instruction;
+	/**
+	 * If our current address is from a non-contiguous region, we are going to need to
+	 * load in the value at that address to set up properly here
+	 */
+	if(*came_from_non_contiguous_region == TRUE){
+		//Now we need to emit the load by doing our offset calculation to get out of the pointer
+		//space and into memory
+		instruction_t* load_instruction;
 
-	//The current offset is not null, we need to emit some calculation here
-	if(*current_offset != NULL){
-		//Emit the load
-		load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
-		load_instruction->is_branch_ending = is_branch_ending;
+		//The current offset is not null, we need to emit some calculation here
+		if(*current_offset != NULL){
+			//Emit the load
+			load_instruction = emit_load_with_variable_offset_ir_code(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
 
-		//This counts as a use for both
-		add_used_variable(block, *base_address);
-		add_used_variable(block, *current_offset);
+			//This counts as a use for both
+			add_used_variable(block, *base_address);
+			add_used_variable(block, *current_offset);
 
-		//Add it into the block
-		add_statement(block, load_instruction);
+			//Add it into the block
+			add_statement(block, load_instruction);
 
-		//The new base address now is the load instruction's assignee
-		*base_address = load_instruction->assignee;
+			//The new base address now is the load instruction's assignee
+			*base_address = load_instruction->assignee;
 
-		//And the offset is now nothing
-		*current_offset = NULL;
+			//And the offset is now nothing
+			*current_offset = NULL;
 
-	//If we get here, we have an empty offset so we just need a regular load
-	} else {
-		//Regular load here
-		load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
-		load_instruction->is_branch_ending = is_branch_ending;
+		//If we get here, we have an empty offset so we just need a regular load
+		} else {
+			//Regular load here
+			load_instruction = emit_load_ir_code(emit_temp_var(u64), *base_address, (*base_address)->type);
+			load_instruction->is_branch_ending = is_branch_ending;
 
-		//This counts as a use
-		add_used_variable(block, *base_address);
-		
-		//Get it into the block
-		add_statement(block, load_instruction);
+			//This counts as a use
+			add_used_variable(block, *base_address);
+			
+			//Get it into the block
+			add_statement(block, load_instruction);
 
-		//Again this now is the base address
-		*base_address = load_instruction->assignee;
+			//Again this now is the base address
+			*base_address = load_instruction->assignee;
+		}
 	}
-
-	//Once we get down here, we've emitted everything that we would like to regarding
-	//the pointer. Now we need to handle the struct part
 
 	//Extract the var first
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
@@ -3872,12 +3936,12 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 
 		//Handle a regular struct accessor(: access)
 		case AST_NODE_TYPE_STRUCT_ACCESSOR:
-			postfix_results = emit_struct_offset_calculation(current, memory_region_type, right_child, current_offset, is_branch_ending);
+			postfix_results = emit_struct_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
 			break;
 
 		//Handle a struct pointer access
 		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
-			postfix_results = emit_struct_pointer_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, is_branch_ending);
+			postfix_results = emit_struct_pointer_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, is_branch_ending);
 			break;
 
 		//Handle a regular union access(. access)
