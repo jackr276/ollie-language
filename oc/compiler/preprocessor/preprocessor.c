@@ -112,9 +112,15 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
 			print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
 			preprocessor_error_count++;
 			return FAILURE;
-			
 	}
 
+	//If we make it here then we know that we got a valid ident token as a parameter, but we don't know if it's a duplicate
+	//or not. We will check now
+	for(u_int32_t i = 0; i < macro->parameters.current_index; i++){
+		//Extract the macro token
+		lexitem_t* token = token_array_get_pointer_at(&(macro->parameters), i);
+
+	}
 
 
 	//If we made it here then this all worked
@@ -183,6 +189,9 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	
 	//If we see an L_PAREN, we will begin processing parameters
 	if(lookahead->tok == L_PAREN){
+		//We have parameters so allocate the space for them
+		macro_record->parameters = token_array_alloc();
+
 		//We keep looping so long as we are seeing commas
 		while(TRUE){
 			//Let the helper process the parameter

@@ -2136,6 +2136,12 @@ void macro_symtab_dealloc(macro_symtab_t* symtab){
 			//Advance it up
 			cursor = cursor->next;
 
+			//Deallocate both of the internal arrays if appropriate
+			token_array_dealloc(&(temp->tokens));
+			if(temp->parameters.internal_array != NULL){
+				token_array_dealloc(&(temp->parameters));
+			}
+
 			//Dealloc
 			free(temp);
 		}

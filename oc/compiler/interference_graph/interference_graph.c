@@ -17,7 +17,7 @@
  * Allocate an interference graph. The graph itself should be stack allocated,
  * this will only serve to allocate the internal nodes
 */
-static interference_graph_t* interference_graph_alloc(u_int16_t live_range_count){
+static inline interference_graph_t* interference_graph_alloc(u_int16_t live_range_count){
 	//Allocate it
 	interference_graph_t* graph = calloc(1, sizeof(interference_graph_t));
 
