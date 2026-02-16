@@ -444,6 +444,34 @@ static ollie_token_array_t* get_macro_parameter_token_array(ollie_token_array_t*
  * This rule also handles all of the parameter processing for any given macro. This can get complex as ollie allows
  * users to recursively call macros inside of macro parameters themselves
  *
+ * For every single parameter, we are going to maintain a token array that represents what that parameter is going to expand to
+ *
+ * Let's work through an example:
+ *
+ * $macro EXAMPLE(x, y, z)
+ *  y - x + sizeof(z) + x
+ * $endmacro
+ *
+ * pub fn sample(arg1:i32, arg2:i16) -> i32 {
+ * 	  let x:i32 = 3333;
+ * 	  let y:i32 = 2222;
+ *
+ * 	  let final_result:i32 = EXAMPLE((arg1 + x), (arg2 - y), arg2);
+ * }
+ *
+ * Let's analyze how example will be handled. We will first note that example is a macro and we need to subsitute.
+ * Once we enter into the parameter processing step, we will first hit x
+ *
+ * Macro paraemeter "x" -> "(arg1 + x)"
+ * Macro parameter "y" -> "(arg2 - y)"
+ * Macro parameter "z" -> "arg2"
+ *
+ * So our version of this macro is going to expand to: "(arg2 - y) - (arg1 + x) + sizeof(arg2) + (arg1 + x)"
+ * 															y		     x                z           x
+ *
+ * This expanded version will be created and stored in a token array, then that array will be copy-pasted in place of 
+ * the macro call site above
+ *
  * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
  */
 static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
