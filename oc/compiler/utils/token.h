@@ -143,6 +143,7 @@ typedef enum {
 	TRUE_CONST,
 	FALSE_CONST,
 	INLINE,
+	MACRO_PARAM, //The special macro param token is used to show that we are a parameter
 } ollie_token_t;
 
 

@@ -64,6 +64,24 @@ static inline lexitem_t* get_token_pointer_and_increment(ollie_token_array_t* ar
 
 
 /**
+ * "Push back" a token by decrementing the index, and return the prior token
+ */
+static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_int32_t* index){
+	//Decrement it
+	(*index)--;
+
+	//Get the prior token
+	lexitem_t* token_pointer = token_array_get_pointer_at(array, *index);
+
+	//Update our line number
+	current_line_number = token_pointer->line_num;
+
+	//And give back the prior token
+	return token_pointer;
+}
+
+
+/**
  * Process a macro starting at the begin index
  *
  * NOTE: this function will update the index that is in use here. If this function
@@ -118,6 +136,18 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 
 	//Now that we have a valid identifier, we have all that we need to create the symtab record for this macro
 	symtab_macro_record_t* macro_record = create_macro_record(lookahead->lexeme, lookahead->line_num);
+
+	//Refresh the lookahead to see if we have any parameters
+	lookahead = get_token_pointer_and_increment(token_array, index);
+	
+	//If we see an L_PAREN, we will begin processing parameters
+	if(lookahead->tok == L_PAREN){
+
+
+	//Otherwise we found nothing so just push this back and move along
+	} else {
+		lookahead = push_back_token_pointer(token_array, index);
+	}
 
 	//Grab a pointer to this macro's token array
 	ollie_token_array_t* macro_token_array = &(macro_record->tokens);
