@@ -424,13 +424,29 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * the caller receives this result, they are going to splice this entire token array onto the end of the final array verbatim. It
  * is for this reason that we can leave no stone unturned here
  */
-static ollie_token_array_t* get_macro_parameter_token_array(ollie_token_array_t* old_array, u_int32_t* old_token_array_index){
+static ollie_token_array_t* generate_parameter_substitution_array(ollie_token_array_t* old_array, u_int32_t* old_token_array_index){
 	//Get a heap allocated array
 	ollie_token_array_t* result_array = token_array_heap_alloc();
 
 	//Advance the lookahead here
 	lexitem_t* lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
 
+	//TODO INTEGRATE INTO HERE
+
+	//We now need to see a closing RPAREN
+	old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+	if(old_array_lookahead->tok != R_PAREN){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Let's also clean up the grouping stack
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
 
 	//This is what we give back in the end
 	return result_array;
@@ -511,20 +527,8 @@ static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ol
 	//So long as we have more parameters to sub in
 	u_int32_t current_parameter_number = 0;
 
-	//We now need to see a closing RPAREN
-	old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
-	if(old_array_lookahead->tok != R_PAREN){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected", old_array_lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
-	}
+	//TODO macro param sub
 
-	//Let's also clean up the grouping stack
-	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", old_array_lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
-	}
 
 	//Once we get all of the way down here, we will take the entire macro result and 
 
