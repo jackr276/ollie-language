@@ -36,6 +36,9 @@ static u_int32_t current_line_number;
 //Grouping stack for parameter checking
 static lex_stack_t* grouping_stack;
 
+//Predeclaration in case it's needed in non-linear order
+static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro);
+
 /**
  * A simple wrapper for readability. We need this because we want to be able to check
  * if the user has left extra parenthesis inside of the macro that we haven't yet accounted
@@ -526,8 +529,6 @@ static u_int8_t generate_parameter_substitution_array(ollie_token_array_t* old_a
 		}
 	}
 
-	//TODO INTEGRATE INTO HERE
-
 	//If we made it here then it worked
 	return SUCCESS;
 }
@@ -639,8 +640,7 @@ parameter_list_end:
 		return FAILURE;
 	}
 
-	//We now need to see a closing RPAREN
-	old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+	//Double check that this is working too
 	if(old_array_lookahead->tok != R_PAREN){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected", old_array_lookahead->line_num);
 		preprocessor_error_count++;
