@@ -99,6 +99,29 @@ ollie_token_array_t token_array_alloc(){
 
 
 /**
+ * Heap allocate a token array. This allows us
+ * to use something like an array of parameters, for
+ * instance
+ */
+ollie_token_array_t* token_array_heap_alloc(){
+	//Allocate on the heap
+	ollie_token_array_t* array = calloc(1, sizeof(ollie_token_array_t));
+
+	//The default token array size
+	array->current_max_size = TOKEN_ARRAY_DEFAULT_SIZE;
+
+	//Store the current index as well
+	array->current_index = 0;
+
+	//And now reserve the internal space that we need
+	array->internal_array = calloc(array->current_max_size, sizeof(lexitem_t));
+
+	//Give back a copy of the control structure
+	return array;
+}
+
+
+/**
  * Initialize a token array with an initial
  * size. This is useful if we already know
  * the size we need
@@ -360,4 +383,21 @@ void token_array_dealloc(ollie_token_array_t* array){
 	//Set everything to 0
 	array->current_index = 0;
 	array->current_max_size = 0;
+}
+
+
+/**
+ * Deallocate a token array on the heap
+ */
+void token_array_heap_dealloc(ollie_token_array_t* array){
+	//No point in going on here
+	if(array->internal_array == NULL){
+		return;
+	}
+
+	//Free the internal array
+	free(array->internal_array);
+
+	//Now deallocate the entire control structure
+	free(array);
 }

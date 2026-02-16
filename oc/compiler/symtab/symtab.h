@@ -227,6 +227,9 @@ struct symtab_macro_record_t{
 	dynamic_string_t name;
 	//The array of all tokens in the macro
 	ollie_token_array_t tokens;
+	//All of the parameters in the macro itself are their own individual(yet small) token
+	//arrays
+	dynamic_array_t parameters;
 	//The total token lenght, including the begin/end tokens
 	u_int32_t total_token_count;
 	//Line number of declaration

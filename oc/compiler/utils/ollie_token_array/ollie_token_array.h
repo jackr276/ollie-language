@@ -31,6 +31,13 @@ struct ollie_token_array_t{
 
 
 /**
+ * Heap allocate a token array. This allows us
+ * to use something like an array of parameters, for
+ * instance
+ */
+ollie_token_array_t* token_array_heap_alloc();
+
+/**
  * Initialize a token array. The resulting
  * control structure will be stack allocated
  */
@@ -108,5 +115,10 @@ void token_array_delete(ollie_token_array_t* array, lexitem_t* lexitem);
  * Deallocate an entire token array. 
  */
 void token_array_dealloc(ollie_token_array_t* array);
+
+/**
+ * Deallocate a token array on the heap
+ */
+void token_array_heap_dealloc(ollie_token_array_t* array);
 
 #endif /* OLLIE_TOKEN_ARRAY_H */
