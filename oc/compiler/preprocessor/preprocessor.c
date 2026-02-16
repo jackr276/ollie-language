@@ -114,6 +114,9 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
 			return FAILURE;
 	}
 
+	//Flag that we're ignoring
+	lookahead->ignore = TRUE;
+
 	//If we make it here then we know that we got a valid ident token as a parameter, but we don't know if it's a duplicate
 	//or not. We will check now
 	for(u_int32_t i = 0; i < macro->parameters.current_index; i++){
@@ -127,11 +130,10 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
 			preprocessor_error_count++;
 			return FAILURE;
 		}
-
-		//Otherwise we're set so add this into the macro array
-		token_array_add(&(macro->parameters), token);
 	}
 
+	//Otherwise we're set so add this into the macro array
+	token_array_add(&(macro->parameters), lookahead);
 
 	//If we made it here then this all worked
 	return SUCCESS;
@@ -194,11 +196,17 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//Now that we have a valid identifier, we have all that we need to create the symtab record for this macro
 	symtab_macro_record_t* macro_record = create_macro_record(lookahead->lexeme, lookahead->line_num);
 
+	//Grab a pointer to this macro's token array
+	ollie_token_array_t* macro_token_array = &(macro_record->tokens);
+
 	//Refresh the lookahead to see if we have any parameters
 	lookahead = get_token_pointer_and_increment(token_array, index);
-	
+
 	//If we see an L_PAREN, we will begin processing parameters
 	if(lookahead->tok == L_PAREN){
+		//Flag that we're ignoring
+		lookahead->ignore = TRUE;
+
 		//We have parameters so allocate the space for them
 		macro_record->parameters = token_array_alloc();
 
@@ -215,14 +223,19 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 			//Refresh the token
 			lookahead = get_token_pointer_and_increment(token_array, index);
 
+			//Flag that we're ignoring this too
+			lookahead->ignore = TRUE;
+
 			//There are only two valid options here so we'll process accordingly
 			switch(lookahead->tok){
 				//If it's a comma go right around
 				case COMMA:
 					continue;
+
 				//This means that we're done
 				case R_PAREN:
-					break;
+					goto end_parameter_processing;
+
 				//Anything else here does not work
 				default:
 					sprintf(info_message, "Comma expected between parameters but saw %s instead", lexitem_to_string(lookahead));
@@ -237,9 +250,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		lookahead = push_back_token_pointer(token_array, index);
 	}
 
-	//Grab a pointer to this macro's token array
-	ollie_token_array_t* macro_token_array = &(macro_record->tokens);
-
+end_parameter_processing:
 	//Unbounded loop through the entire macro
 	while(TRUE){
 		//Refresh the lookahead token
