@@ -27,6 +27,17 @@ typedef enum{
 } side_type_t;
 
 /**
+ * What kind of memory layout do we have? For values
+ * like true multidimensional arrays, we have a contiguous
+ * memory layout. For values that are arrays of pointers,
+ * the memory layout is in fact not contiguous at all
+ */
+typedef enum {
+	MEMORY_LAYOUT_TYPE_CONTIGUOUS,
+	MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS,
+} memory_layout_type_t;
+
+/**
  * Is a type mutable or not
  */
 typedef enum {
@@ -147,6 +158,11 @@ struct generic_type_t{
 	 * as separate records
 	 */
 	mutability_type_t mutability;
+	/**
+	 * What is the memory profile of this type? Is it contiguous or is it non-contiguous? This
+	 * is only going to be applicable for pointers/arrays
+	 */
+	memory_layout_type_t memory_layout_type;
 	//Basic types don't need anything crazy - just a token that stores what they are
 	ollie_token_t basic_type_token;
 	//What class of type is it
