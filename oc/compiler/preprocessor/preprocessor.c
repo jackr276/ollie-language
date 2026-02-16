@@ -438,31 +438,13 @@ static ollie_token_array_t* generate_parameter_substitution_array(ollie_token_ar
 
 	//TODO INTEGRATE INTO HERE
 
-	//We now need to see a closing RPAREN
-	old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
-	if(old_array_lookahead->tok != R_PAREN){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected", old_array_lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
-	}
-
-	//Let's also clean up the grouping stack
-	if(pop_token(grouping_stack).tok != L_PAREN){
-		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", old_array_lookahead->line_num);
-		preprocessor_error_count++;
-		return FAILURE;
-	}
-
 	//This is what we give back in the end
 	return result_array;
 }
 
 
 /**
- * Perform the macro substitution itself. This involves splicing in the
- * token stream that our given macro expands to
- *
- * This rule also handles all of the parameter processing for any given macro. This can get complex as ollie allows
+ * This rule handles all of the parameter processing for any given macro. This can get complex as ollie allows
  * users to recursively call macros inside of macro parameters themselves
  *
  * For every single parameter, we are going to maintain a token array that represents what that parameter is going to expand to
@@ -492,30 +474,10 @@ static ollie_token_array_t* generate_parameter_substitution_array(ollie_token_ar
  *
  * This expanded version will be created and stored in a token array, then that array will be copy-pasted in place of 
  * the macro call site above
- *
- * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
  */
-static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
-
-
+static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
 	//Store how many parameters this macro has
 	u_int32_t parameter_count = macro->parameters.current_index;
-
-	//Does this macro have parameters? If it does not, we are going to perform a regular pass
-	if(parameter_count == 0){
-		//Run through all of the tokens in this macro, and splice them over into
-		//the target macro
-		for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
-			//Get a a pointer to this token
-			lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
-
-			//Add it in here - this does do a complete copy
-			token_array_add(target_array, token_pointer);
-		}
-
-		//This worked so
-		return SUCCESS;
-	}
 
 	//Otherwise, this macro does have parameters, so we need to process accordingly
 	lexitem_t* old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
@@ -531,7 +493,7 @@ static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ol
 	//Push this onto the grouping stack
 	push_token(grouping_stack, *old_array_lookahead);
 
-	//So long as we have more parameters to sub in
+	//Keep track of the current param number. This is how we index into the array
 	u_int32_t current_parameter_number = 0;
 
 	/**
@@ -542,18 +504,72 @@ static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ol
 
 	//Run through all of the parameters here
 	while(current_parameter_number < parameter_count){
+		parameter_subsitutions[current_parameter_number] = per
 
 		//Bump it up
 		current_parameter_number++;
 	}
 
-	//TODO macro param sub
+	//We now need to see a closing RPAREN
+	old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+	if(old_array_lookahead->tok != R_PAREN){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
 
+	//Let's also clean up the grouping stack
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
 
-	//Once we get all of the way down here, we will take the entire macro result and 
+	//TODO - the actual substitution part
+
 
 	//If we got all the way here then this worked
 	return SUCCESS;
+
+}
+
+
+/**
+ * Perform a simple macro substitution where we are guaranteed to have no parameters. This function will only be invoked
+ * when we know that there are no parameters
+ */
+static inline u_int8_t perform_non_parameterized_substitution(ollie_token_array_t* target_array, symtab_macro_record_t* macro){
+	//Run through all of the tokens in this macro, and splice them over into
+	//the target macro
+	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
+		//Get a a pointer to this token
+		lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
+
+		//Add it in here - this does do a complete copy
+		token_array_add(target_array, token_pointer);
+	}
+
+	//This worked so
+	return SUCCESS;
+}
+
+
+/**
+ * Perform the macro substitution itself. This involves splicing in the
+ * token stream that our given macro expands to
+ *
+ * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
+ */
+static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+	//Store how many parameters this macro has
+	u_int32_t parameter_count = macro->parameters.current_index;
+
+	//Does this macro have parameters? If it does not, we are going to perform a regular pass
+	if(macro->parameters.current_index == 0){
+		return perform_non_parameterized_substitution(target_array, macro);
+	} else {
+		return perform_parameterized_substitution(target_array, old_array, old_token_array_index, macro);
+	}
 }
 
 
