@@ -465,6 +465,7 @@ static u_int8_t generate_parameter_substitution_array(ollie_token_array_t* old_a
 						return FAILURE;
 					}
 
+					//Will be reprocessed by the caller
 					push_back_token_pointer(old_array, old_token_array_index);
 					return SUCCESS;
 				}
@@ -486,6 +487,7 @@ static u_int8_t generate_parameter_substitution_array(ollie_token_array_t* old_a
 						return FAILURE;
 					}
 
+					//Will be reprocessed by the caller
 					push_back_token_pointer(old_array, old_token_array_index);
 					return SUCCESS;
 				}
@@ -500,10 +502,22 @@ static u_int8_t generate_parameter_substitution_array(ollie_token_array_t* old_a
 
 				break;
 
+			//If we have an L_PAREN then we need to record that in the grouping stack
+			case L_PAREN:
+				//Push it up
+				push_token(grouping_stack, *lookahead);
+
+				//Add it in and go about our business
+				token_array_add(target_array, lookahead);
+
+				break;
+
 			//If we get this it means we've run off of the end of file. This is a big error
 			//and an immediate fail case
 			case DONE:
-				
+				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parser ran off of the file. Do you have an unterminated parenthesis?", lookahead->line_num);
+				preprocessor_error_count++;
+				return FAILURE;
 
 			//By default this just goes into the array
 			default:
@@ -590,10 +604,29 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 			return FAILURE;
 		}
 
+		//Refresh the token
+		old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+
+		switch(old_array_lookahead->tok){
+			//This is fine
+			case COMMA:
+				break;
+
+			//If we see an R_PAREN that means we are done
+			case R_PAREN:
+				goto parameter_list_end;
+
+			//This should be impossible but have the catch-all
+			default:
+				printf("Fatal internal preprocessor error. Expected R_PAREN or COMMA but got %s", lexitem_to_string(old_array_lookahead));
+				exit(1);
+		}
+
 		//Bump it up
 		current_parameter_number++;
 	}
 
+parameter_list_end:
 	/**
 	 * If we get here and the nesting level is not 1, it means
 	 * that the user has entered some kind of unparseable parameter list
@@ -621,8 +654,7 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 		return FAILURE;
 	}
 
-	//TODO - the actual substitution part
-
+	//TODO check for param counts
 
 	//If we got all the way here then this worked
 	return SUCCESS;
