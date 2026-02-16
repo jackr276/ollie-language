@@ -260,6 +260,9 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		lookahead = push_back_token_pointer(token_array, index);
 	}
 
+	//Store how many parameters that we have
+	u_int32_t macro_parameter_count = macro_record->parameters.current_index;
+
 end_parameter_processing:
 	//Unbounded loop through the entire macro
 	while(TRUE){
@@ -304,6 +307,31 @@ end_parameter_processing:
 				print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, macro_record->line_number);
 				preprocessor_error_count++;
 				return FAILURE;
+
+			/**
+			 * If we have an identifier, there is a chance that this is a macro parameter. If it is, then we're going to
+			 * want to flag this here to make future searching easier
+			 */
+			case IDENT:
+				//Run through all of our parameters and see if we have a match
+				for(u_int32_t i = 0; i < macro_parameter_count; i++){
+					//Extract it
+					lexitem_t* parameter = token_array_get_pointer_at(&(macro_record->parameters), i);
+
+					//If these are the same, then we've found a parameter
+					if(dynamic_strings_equal(&(parameter->lexeme), &(lookahead->lexeme)) == TRUE){
+						//Flag for later processing that this is in fact a macro parameter
+						lookahead->tok = MACRO_PARAM;
+
+						//Already found a match so leave
+						break;
+					}
+				}
+
+				//Whatever happened, we need to add the lookahead into the array
+				token_array_add(macro_token_array, lookahead);
+
+				break;
 
 			//In theory anything else that we see in here is valid, so we'll
 			//just do our bookkeeping and move along
@@ -390,8 +418,11 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * token stream that our given macro expands to
  */
 static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+	//Store how many parameters this macro has
+	u_int32_t parameter_count = macro->parameters.current_index;
+
 	//Does this macro have parameters? If it does not, we are going to perform a regular pass
-	if(macro->parameters.current_index == 0){
+	if(parameter_count == 0){
 		//Run through all of the tokens in this macro, and splice them over into
 		//the target macro
 		for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
@@ -411,9 +442,21 @@ static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ol
 
 	//We need to see this here
 	if(old_array_lookahead->tok != L_PAREN){
-		sprintf(info_message, "Macro \"%s\" takes %d parameters. Opening parenthesis is expected", macro->name.string, macro->parameters.current_index);
+		sprintf(info_message, "Macro \"%s\" takes %d parameters. Opening parenthesis is expected", macro->name.string, parameter_count);
 		preprocessor_error_count++;
 		return FAILURE;
+	}
+
+	//Push this onto the grouping stack
+	push_token(grouping_stack, *old_array_lookahead);
+
+	//So long as we have more parameters to sub in
+	u_int32_t current_parameter_number = 0;
+	while(current_parameter_number < parameter_count){
+
+	
+		//Bump it
+		current_parameter_number++;
 	}
 
 	//If we got all the way here then this worked

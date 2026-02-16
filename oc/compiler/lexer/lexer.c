@@ -348,6 +348,9 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "~";
 		case L_NOT:
 			return "!";
+		case MACRO_PARAM:
+			sprintf(info, "%s", lexitem->lexeme.string);
+			return info;
 		default:
 			return "UNKNOWN";
 	}
