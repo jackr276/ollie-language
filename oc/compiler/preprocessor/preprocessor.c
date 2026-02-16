@@ -605,6 +605,9 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 			return FAILURE;
 		}
 
+		printf("MACRO PARAM EXPANDS TO:\n");
+		print_token_array(&(parameter_subsitutions[current_parameter_number]));
+
 		//Refresh the token
 		old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
 
