@@ -120,6 +120,16 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
 		//Extract the macro token
 		lexitem_t* token = token_array_get_pointer_at(&(macro->parameters), i);
 
+		//If these two are equal, then we'll need to fail out because the user cannot duplicate parameters
+		if(dynamic_strings_equal(&(token->lexeme), &(lookahead->lexeme)) == TRUE){
+			sprintf(info_message, "Macro \"%s\" already has a parameter \"%s\"", macro->name.string, lookahead->lexeme.string);
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+		}
+
+		//Otherwise we're set so add this into the macro array
+		token_array_add(&(macro->parameters), token);
 	}
 
 
