@@ -324,6 +324,11 @@ end_parameter_processing:
 						//Flag for later processing that this is in fact a macro parameter
 						lookahead->tok = MACRO_PARAM;
 
+						/**
+						 * Store the parameter number so that we have easy access later on down the road
+						 */
+						lookahead->constant_values.parameter_number = i;
+
 						//Already found a match so leave
 						break;
 					}
@@ -491,6 +496,8 @@ static ollie_token_array_t* generate_parameter_substitution_array(ollie_token_ar
  * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
  */
 static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+
+
 	//Store how many parameters this macro has
 	u_int32_t parameter_count = macro->parameters.current_index;
 
@@ -526,6 +533,19 @@ static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ol
 
 	//So long as we have more parameters to sub in
 	u_int32_t current_parameter_number = 0;
+
+	/**
+	 * Maintain a 1-to-1 array mapping for the parameter itself to the
+	 * token array that we've generated for it
+	 */
+	ollie_token_array_t* parameter_subsitutions[parameter_count];
+
+	//Run through all of the parameters here
+	while(current_parameter_number < parameter_count){
+
+		//Bump it up
+		current_parameter_number++;
+	}
 
 	//TODO macro param sub
 

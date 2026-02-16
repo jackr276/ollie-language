@@ -161,6 +161,11 @@ struct lexitem_t {
 		float float_value;
 		u_int64_t unsigned_long_value;
 		int64_t signed_long_value;
+		/**
+		 * Special storage for the parameter number in the event that
+		 * we have a macro. This is and will only ever be used for macros
+		 */
+		u_int32_t parameter_number;
 		u_int32_t unsigned_int_value;
 		int32_t signed_int_value;
 		u_int16_t unsigned_short_value;
