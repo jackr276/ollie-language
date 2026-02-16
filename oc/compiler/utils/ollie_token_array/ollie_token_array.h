@@ -38,6 +38,11 @@ struct ollie_token_array_t{
 ollie_token_array_t* token_array_heap_alloc();
 
 /**
+ * Initialize a token array to be all blank
+ */
+ollie_token_array_t initialize_blank_token_array();
+
+/**
  * Initialize a token array. The resulting
  * control structure will be stack allocated
  */

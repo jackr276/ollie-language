@@ -122,6 +122,20 @@ ollie_token_array_t* token_array_heap_alloc(){
 
 
 /**
+ * Initialize a token array to be all blank
+ */
+ollie_token_array_t initialize_blank_token_array(){
+	ollie_token_array_t array;
+
+	array.internal_array = NULL;
+	array.current_index = 0;
+	array.current_max_size = 0;
+
+	return array;
+}
+
+
+/**
  * Initialize a token array with an initial
  * size. This is useful if we already know
  * the size we need

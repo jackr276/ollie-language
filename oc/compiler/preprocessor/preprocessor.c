@@ -162,6 +162,9 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
  * token
  */
 static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* index) {
+	//The macro parameter count(set to 0 at first)
+	u_int32_t macro_parameter_count = 0;
+
 	//Hang onto this here for convenience
 	ollie_token_array_t* token_array = &(stream->token_stream);
 
@@ -274,10 +277,10 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		lookahead = push_back_token_pointer(token_array, index);
 	}
 
-	//Store how many parameters that we have
-	u_int32_t macro_parameter_count = macro_record->parameters.current_index;
-
 end_parameter_processing:
+	//Store how many parameters that we got in the end
+	macro_parameter_count = macro_record->parameters.current_index;
+
 	//Unbounded loop through the entire macro
 	while(TRUE){
 		//Refresh the lookahead token
