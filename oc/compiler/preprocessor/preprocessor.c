@@ -17,7 +17,6 @@
 #include "../symtab/symtab.h"
 #include "../utils/stack/lexstack.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <strings.h>
 #include <sys/types.h>
 
@@ -448,8 +447,70 @@ static u_int8_t generate_parameter_substitution_array(ollie_token_array_t* old_a
 	//Allocate the target array
 	*target_array = token_array_alloc();
 
-	//Advance the lookahead here
-	lexitem_t* lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+	//Unterminating loop here
+	while(TRUE){
+		//Advance the lookahead here
+		lexitem_t* lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+	
+		//Handle any/all cases we have here
+		switch(lookahead->tok){
+			case COMMA:
+				//This means we're in theory at the end. We are going to push this token
+				//back and get out
+				if(get_grouping_stack_nesting_level(grouping_stack) == 1){
+					//Fail case: we cannot have an empty parameter
+					if(target_array->current_index == 0){
+						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parameters may not be left empty", lookahead->line_num);
+						preprocessor_error_count++;
+						return FAILURE;
+					}
+
+					push_back_token_pointer(old_array, old_token_array_index);
+					return SUCCESS;
+				}
+
+				//Otherwise we're inside of something so add this into the array
+				token_array_add(target_array, lookahead);
+				
+				break;
+
+			//This could be a terminating case as well if we're on the last parameter
+			case R_PAREN:
+				//This means we're in theory at the end. We are going to push this token
+				//back and get out
+				if(get_grouping_stack_nesting_level(grouping_stack) == 1){
+					//Fail case: we cannot have an empty parameter
+					if(target_array->current_index == 0){
+						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parameters may not be left empty", lookahead->line_num);
+						preprocessor_error_count++;
+						return FAILURE;
+					}
+
+					push_back_token_pointer(old_array, old_token_array_index);
+					return SUCCESS;
+				}
+
+				//Otherwise pop the grouping stack and check for matched parens
+				if(pop_token(grouping_stack).tok != L_PAREN){
+					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", lookahead->line_num);
+				}
+
+				//Add it into the array
+				token_array_add(target_array, lookahead);
+
+				break;
+
+			//If we get this it means we've run off of the end of file. This is a big error
+			//and an immediate fail case
+			case DONE:
+				
+
+			//By default this just goes into the array
+			default:
+				token_array_add(target_array, lookahead);
+				break;
+		}
+	}
 
 	//TODO INTEGRATE INTO HERE
 
