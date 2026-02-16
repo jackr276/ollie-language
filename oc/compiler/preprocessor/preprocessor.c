@@ -225,7 +225,8 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 					break;
 				//Anything else here does not work
 				default:
-					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Comma required between macro parameters", lookahead->line_num);
+					sprintf(info_message, "Comma expected between parameters but saw %s instead", lexitem_to_string(lookahead));
+					print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
 					preprocessor_error_count++;
 					return FAILURE;
 			}
