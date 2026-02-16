@@ -17,6 +17,7 @@
 #include "../symtab/symtab.h"
 #include "../utils/stack/lexstack.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <strings.h>
 #include <sys/types.h>
 
@@ -35,6 +36,16 @@ static u_int32_t current_line_number;
 
 //Grouping stack for parameter checking
 static lex_stack_t* grouping_stack;
+
+/**
+ * A simple wrapper for readability. We need this because we want to be able to check
+ * if the user has left extra parenthesis inside of the macro that we haven't yet accounted
+ * for
+ */
+static inline u_int32_t get_grouping_stack_nesting_level(lex_stack_t* grouping_stack){
+	return grouping_stack->num_tokens;
+}
+
 
 /**
  * A generic printer for any preprocessor errors that we may encounter
@@ -325,7 +336,8 @@ end_parameter_processing:
 						lookahead->tok = MACRO_PARAM;
 
 						/**
-						 * Store the parameter number so that we have easy access later on down the road
+						 * Store the parameter number so that we have easy access later on down the road. This allows
+						 * us constant time access instead of having to search through an entire array
 						 */
 						lookahead->constant_values.parameter_number = i;
 
@@ -428,18 +440,21 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * This function returns an array of tokens that represents the complete subsitution for this given macro parameter. When
  * the caller receives this result, they are going to splice this entire token array onto the end of the final array verbatim. It
  * is for this reason that we can leave no stone unturned here
+ *
+ * NOTE: by the time we are in here, the grouping stack will be at nesting level 1 because we've already seen the open paren. To avoid
+ * improperly exiting, we will not exit if we see a comma/closing paren unless we are at nesting level 1
  */
-static ollie_token_array_t* generate_parameter_substitution_array(ollie_token_array_t* old_array, u_int32_t* old_token_array_index){
-	//Get a heap allocated array
-	ollie_token_array_t* result_array = token_array_heap_alloc();
+static u_int8_t generate_parameter_substitution_array(ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array){
+	//Allocate the target array
+	*target_array = token_array_alloc();
 
 	//Advance the lookahead here
 	lexitem_t* lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
 
 	//TODO INTEGRATE INTO HERE
 
-	//This is what we give back in the end
-	return result_array;
+	//If we made it here then it worked
+	return SUCCESS;
 }
 
 
@@ -500,14 +515,34 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 	 * Maintain a 1-to-1 array mapping for the parameter itself to the
 	 * token array that we've generated for it
 	 */
-	ollie_token_array_t* parameter_subsitutions[parameter_count];
+	ollie_token_array_t parameter_subsitutions[parameter_count];
 
 	//Run through all of the parameters here
 	while(current_parameter_number < parameter_count){
-		parameter_subsitutions[current_parameter_number] = per
+		//Let the helper populate the array that we give. This will also allocate said array
+		u_int8_t result = generate_parameter_substitution_array(old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]));
+
+		//If this didn't work then we're done
+		if(result == FAILURE){
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable parameter macro detected", old_array_lookahead->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+		}
 
 		//Bump it up
 		current_parameter_number++;
+	}
+
+	/**
+	 * If we get here and the nesting level is not 1, it means
+	 * that the user has entered some kind of unparseable parameter list
+	 * that we don't know how to deal with. Throw an error and leave in this
+	 * case
+	 */
+	if(get_grouping_stack_nesting_level(grouping_stack) != 1){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable macro parameter list detected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
 	}
 
 	//We now need to see a closing RPAREN
