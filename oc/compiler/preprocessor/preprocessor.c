@@ -84,6 +84,7 @@ static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_i
 	return token_pointer;
 }
 
+// ======================================================== Consumption Pass ========================================================================================
 
 /**
  * Process a macro parameter and add it into the current macro's list of parameters
@@ -412,14 +413,27 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 	return SUCCESS;
 }
 
+// ======================================================== Consumption Pass ========================================================================================
+
+// ======================================================== Replacement Pass ========================================================================================
 
 /**
- * The value of a macro parameter may be one or more tokens, and may include
- * a recursive macro subsitution inside of it
+ * The value of a macro parameter may be one or more tokens, and may include a recursive macro subsitution inside of it
  *
+ * This function returns an array of tokens that represents the complete subsitution for this given macro parameter. When
+ * the caller receives this result, they are going to splice this entire token array onto the end of the final array verbatim. It
+ * is for this reason that we can leave no stone unturned here
  */
-static ollie_token_array_t* get_macro_parameter_value(ollie_token_array_t* old_array, u_int32_t* old_token_array_index){
+static ollie_token_array_t* get_macro_parameter_token_array(ollie_token_array_t* old_array, u_int32_t* old_token_array_index){
+	//Get a heap allocated array
+	ollie_token_array_t* result_array = token_array_heap_alloc();
 
+	//Advance the lookahead here
+	lexitem_t* lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+
+
+	//This is what we give back in the end
+	return result_array;
 }
 
 
@@ -468,12 +482,6 @@ static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ol
 
 	//So long as we have more parameters to sub in
 	u_int32_t current_parameter_number = 0;
-	while(current_parameter_number < parameter_count){
-
-	
-		//Bump it
-		current_parameter_number++;
-	}
 
 	//We now need to see a closing RPAREN
 	old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
@@ -489,6 +497,8 @@ static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ol
 		preprocessor_error_count++;
 		return FAILURE;
 	}
+
+	//Once we get all of the way down here, we will take the entire macro result and 
 
 	//If we got all the way here then this worked
 	return SUCCESS;
@@ -582,6 +592,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 	return SUCCESS;
 }
 
+// ======================================================== Replacement Pass ========================================================================================
 
 /**
  * Entry point to the entire preprocessor is here. The preprocessor
