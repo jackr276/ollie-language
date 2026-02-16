@@ -207,6 +207,9 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		//Flag that we're ignoring
 		lookahead->ignore = TRUE;
 
+		//Push this onto the grouping stack
+		push_token(grouping_stack, *lookahead);
+
 		//We have parameters so allocate the space for them
 		macro_record->parameters = token_array_alloc();
 
@@ -234,6 +237,13 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 
 				//This means that we're done
 				case R_PAREN:
+					//Just a quick check here
+					if(pop_token(grouping_stack).tok != L_PAREN){
+						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Mismatched parenthesis detected", lookahead->line_num);
+						preprocessor_error_count++;
+						return FAILURE;
+					}
+
 					goto end_parameter_processing;
 
 				//Anything else here does not work
@@ -379,18 +389,34 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * Perform the macro substitution itself. This involves splicing in the
  * token stream that our given macro expands to
  */
-static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, symtab_macro_record_t* macro){
-	//Run through all of the tokens in this macro, and splice them over into
-	//the target macro
-	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
-		//Get a a pointer to this token
-		lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
+static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+	//Does this macro have parameters? If it does not, we are going to perform a regular pass
+	if(macro->parameters.current_index == 0){
+		//Run through all of the tokens in this macro, and splice them over into
+		//the target macro
+		for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
+			//Get a a pointer to this token
+			lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
 
-		//Add it in here - this does do a complete copy
-		token_array_add(target_array, token_pointer);
+			//Add it in here - this does do a complete copy
+			token_array_add(target_array, token_pointer);
+		}
+
+		//This worked so
+		return SUCCESS;
 	}
 
-	//This worked so
+	//Otherwise, this macro does have parameters, so we need to process accordingly
+	lexitem_t* old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+
+	//We need to see this here
+	if(old_array_lookahead->tok != L_PAREN){
+		sprintf(info_message, "Macro \"%s\" takes %d parameters. Opening parenthesis is expected", macro->name.string, macro->parameters.current_index);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//If we got all the way here then this worked
 	return SUCCESS;
 }
 
@@ -456,7 +482,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 				}
 
 				//Use the new array and the macro we found to do our substitution
-				u_int8_t substitution_result = perform_macro_substitution(&new_token_array, found_macro);
+				u_int8_t substitution_result = perform_macro_substitution(&new_token_array, old_token_array, &old_token_array_index, found_macro);
 
 				//Get out if we have a failure here
 				if(substitution_result == FAILURE){
