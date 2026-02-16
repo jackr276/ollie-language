@@ -15,6 +15,7 @@
 #include "../utils/constants.h"
 #include "../utils/ollie_token_array/ollie_token_array.h"
 #include "../symtab/symtab.h"
+#include "../utils/stack/lexstack.h"
 #include <stdio.h>
 #include <strings.h>
 #include <sys/types.h>
@@ -31,6 +32,9 @@ static char info_message[2000];
 
 //The current line number that we're after
 static u_int32_t current_line_number;
+
+//Grouping stack for parameter checking
+static lex_stack_t* grouping_stack;
 
 /**
  * A generic printer for any preprocessor errors that we may encounter
@@ -78,6 +82,22 @@ static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_i
 
 	//And give back the prior token
 	return token_pointer;
+}
+
+
+/**
+ * Process a macro parameter and add it into the current macro's list of parameters
+ *
+ * NOTE: By the time we get here, we have already seen the opening L_PAREN
+ */
+static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, ollie_token_array_t* token_array, u_int32_t* index){
+	//Get the next token
+	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
+
+
+
+	//If we made it here then this all worked
+	return SUCCESS;
 }
 
 
@@ -142,7 +162,21 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	
 	//If we see an L_PAREN, we will begin processing parameters
 	if(lookahead->tok == L_PAREN){
+		//We keep looping so long as we are seeing commas
+		while(TRUE){
+			//Let the helper process the parameter
+			u_int8_t status = process_macro_parameter(macro_record, token_array, index);
 
+			//If this failed then we need to get out
+			if(status == FAILURE){
+				return FAILURE;
+			}
+
+			//Refresh the token
+
+			if(lookahead->tok == )
+
+		}
 
 	//Otherwise we found nothing so just push this back and move along
 	} else {
@@ -403,6 +437,12 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	//Store the file name up top globally
 	current_file_name = file_name;
 
+	//Allocate the global lex stack for use in both the consumption and replacement passes
+	lex_stack_t stack = lex_stack_alloc();
+
+	//This just holds a pointer to it
+	grouping_stack = &stack;
+
 	//Keep trace of how many macros we've seen
 	u_int32_t num_macros = 0;
 
@@ -464,6 +504,9 @@ finalizer:
 	 * on them to figure out
 	*/
 	macro_symtab_dealloc(macro_symtab);
+
+	//Let's also deallocate the grouping stack
+	lex_stack_dealloc(grouping_stack);
 
 	//Give the results back
 	return results;
