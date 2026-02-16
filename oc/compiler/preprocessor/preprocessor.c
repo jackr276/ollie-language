@@ -414,8 +414,23 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 
 
 /**
+ * The value of a macro parameter may be one or more tokens, and may include
+ * a recursive macro subsitution inside of it
+ *
+ */
+static ollie_token_array_t* get_macro_parameter_value(ollie_token_array_t* old_array, u_int32_t* old_token_array_index){
+
+}
+
+
+/**
  * Perform the macro substitution itself. This involves splicing in the
  * token stream that our given macro expands to
+ *
+ * This rule also handles all of the parameter processing for any given macro. This can get complex as ollie allows
+ * users to recursively call macros inside of macro parameters themselves
+ *
+ * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
  */
 static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
 	//Store how many parameters this macro has
@@ -443,6 +458,7 @@ static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ol
 	//We need to see this here
 	if(old_array_lookahead->tok != L_PAREN){
 		sprintf(info_message, "Macro \"%s\" takes %d parameters. Opening parenthesis is expected", macro->name.string, parameter_count);
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, old_array_lookahead->line_num);
 		preprocessor_error_count++;
 		return FAILURE;
 	}
@@ -457,6 +473,21 @@ static u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ol
 	
 		//Bump it
 		current_parameter_number++;
+	}
+
+	//We now need to see a closing RPAREN
+	old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+	if(old_array_lookahead->tok != R_PAREN){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Let's also clean up the grouping stack
+	if(pop_token(grouping_stack).tok != L_PAREN){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
 	}
 
 	//If we got all the way here then this worked
