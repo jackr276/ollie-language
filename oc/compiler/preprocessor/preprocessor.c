@@ -94,6 +94,27 @@ static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, oll
 	//Get the next token
 	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
 
+	//There's only one correct option to see here
+	switch(lookahead->tok){
+		//We can't see this - it would mean it's empty
+		case R_PAREN:
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Macro parameter lists may not be empty. Remove the paranthesis for an unparameterized macro", lookahead->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+
+		//This is the one and only valid thing to see
+		case IDENT:
+			break;
+
+		//Anything else here is some weird error - we will throw and then get out
+		default:
+			sprintf(info_message, "Expected identifier in macro parameter list but got %s", lexitem_to_string(lookahead));
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+			
+	}
+
 
 
 	//If we made it here then this all worked
@@ -173,9 +194,22 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 			}
 
 			//Refresh the token
+			lookahead = get_token_pointer_and_increment(token_array, index);
 
-			if(lookahead->tok == )
-
+			//There are only two valid options here so we'll process accordingly
+			switch(lookahead->tok){
+				//If it's a comma go right around
+				case COMMA:
+					continue;
+				//This means that we're done
+				case R_PAREN:
+					break;
+				//Anything else here does not work
+				default:
+					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Comma required between macro parameters", lookahead->line_num);
+					preprocessor_error_count++;
+					return FAILURE;
+			}
 		}
 
 	//Otherwise we found nothing so just push this back and move along
