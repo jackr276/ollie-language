@@ -597,7 +597,13 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 	ollie_token_array_t parameter_subsitutions[parameter_count];
 
 	//Run through all of the parameters here
-	while(current_parameter_number < parameter_count){
+	while(TRUE){
+		//Bail out if this happens, the error message will be printed
+		//below
+		if(current_parameter_number >= parameter_count){
+			break;
+		}
+
 		//Let the helper populate the array that we give. This will also allocate said array
 		u_int8_t result = generate_parameter_substitution_array(old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]));
 
@@ -617,6 +623,7 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 		//Refresh the token
 		old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
 
+		//Based on the token here we could have an exit
 		switch(old_array_lookahead->tok){
 			//This is fine
 			case COMMA:
@@ -631,7 +638,6 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 				printf("Fatal internal preprocessor error. Expected R_PAREN or COMMA but got %s", lexitem_to_string(old_array_lookahead));
 				exit(1);
 		}
-
 	}
 
 parameter_list_end:
