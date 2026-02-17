@@ -611,6 +611,9 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 		printf("MACRO PARAM EXPANDS TO:\n");
 		print_token_array(&(parameter_subsitutions[current_parameter_number]));
 
+		//Bump it up
+		current_parameter_number++;
+
 		//Refresh the token
 		old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
 
@@ -629,11 +632,20 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 				exit(1);
 		}
 
-		//Bump it up
-		current_parameter_number++;
 	}
 
 parameter_list_end:
+	/**
+	 * Let's first check the parameter counts. If we have a mismatched number, then
+	 * we fail out before doing any other checking
+	 */
+	if(current_parameter_number != parameter_count){
+		sprintf(info_message, "Macro \"%s\" expects %d parameters but was given %d instead", macro->name.string, parameter_count, current_parameter_number);
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
 	/**
 	 * If we get here and the nesting level is not 1, it means
 	 * that the user has entered some kind of unparseable parameter list
