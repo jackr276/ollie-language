@@ -537,9 +537,21 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 					break;
 				}
 
-				//Otherwise if we get here, then this is a recursive macro
-				printf("FOUND RECURSIVE MACRO\n");
+				/**
+				 * If we made it here, then we've found a recursive macro. We need to now
+				 * be recursive ourselves and call the macro processing rule all over again, 
+				 * except this time we'll be inserting into the target array itself. Once
+				 * we return back to this function, we should have everything that we need in
+				 * one place
+				 */
+				u_int8_t recursive_macro_success = perform_macro_substitution(macro_symtab, target_array, old_array, old_token_array_index, recursive_macro);
 
+				//If it failed then fail out
+				if(recursive_macro_success == FAILURE){
+					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Invalid recursive macro parameter given", lookahead->line_num);
+					preprocessor_error_count++;
+					return FAILURE;
+				}
 
 				break;
 				
