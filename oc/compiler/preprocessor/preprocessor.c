@@ -524,12 +524,9 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 				}
 
 				//Otherwise pop the grouping stack and check for matched parens
-				if(pop_token(paren_grouping_stack).tok != L_PAREN){
+				if(pop_token_and_update_nesting_level(paren_grouping_stack, nesting_level) != L_PAREN){
 					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", lookahead->line_num);
 				}
-
-				//Decrement the nesting level
-				(*nesting_level)--;
 
 				//Add it into the array
 				token_array_add(target_array, lookahead);
@@ -538,11 +535,8 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 
 			//If we have an L_PAREN then we need to record that in the grouping stack
 			case L_PAREN:
-				//Push it up
-				push_token(paren_grouping_stack, *lookahead);
-
-				//Update the nesting level
-				(*nesting_level)++;
+				//Let the helper push it and update our level
+				push_token_and_update_nesting_level(paren_grouping_stack, lookahead, nesting_level);
 
 				//Add it in and go about our business
 				token_array_add(target_array, lookahead);
@@ -642,7 +636,7 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 	//What is the grouping stack level for this individual substitution? This needs to be separate in
 	//case we have recursive macro subsitution. This is what we will use to keep track of the parenthesization
 	//level that we're in
-	u_int32_t substitution_grouping_level = 0;
+	u_int32_t paren_grouping_level = 0;
 
 	//Otherwise, this macro does have parameters, so we need to process accordingly
 	lexitem_t* old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
@@ -655,10 +649,8 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 		return FAILURE;
 	}
 
-	//Push this onto the grouping stack
-	push_token(paren_grouping_stack, *old_array_lookahead);
-	//Update the grouping level
-	substitution_grouping_level++;
+	//Let the helper push this and maintain our grouping level counter
+	push_token_and_update_nesting_level(paren_grouping_stack, old_array_lookahead, &paren_grouping_level);
 
 	//Keep track of the current param number. This is how we index into the array
 	u_int32_t current_parameter_number = 0;
@@ -678,7 +670,7 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 		}
 
 		//Let the helper populate the array that we give. This will also allocate said array
-		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]), &substitution_grouping_level);
+		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]), &paren_grouping_level);
 
 		//If this didn't work then we're done
 		if(result == FAILURE){
@@ -687,6 +679,7 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 			return FAILURE;
 		}
 
+		//TODO DEBUG LOG
 		printf("MACRO PARAM EXPANDS TO:\n");
 		print_token_array(&(parameter_subsitutions[current_parameter_number]));
 
@@ -731,7 +724,7 @@ parameter_list_end:
 	 * that we don't know how to deal with. Throw an error and leave in this
 	 * case
 	 */
-	if(substitution_grouping_level != 1){
+	if(paren_grouping_level != 1){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable macro parameter list detected", old_array_lookahead->line_num);
 		preprocessor_error_count++;
 		return FAILURE;
@@ -745,14 +738,11 @@ parameter_list_end:
 	}
 
 	//Let's also clean up the grouping stack
-	if(pop_token(paren_grouping_stack).tok != L_PAREN){
+	if(pop_token_and_update_nesting_level(paren_grouping_stack, &paren_grouping_level) != L_PAREN){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", old_array_lookahead->line_num);
 		preprocessor_error_count++;
 		return FAILURE;
 	}
-
-	//Decrement the nesting level here
-	substitution_grouping_level--;
 
 	/**
 	 * Now that we've gone through and handled all of the macro parameters, we are able to actually do the substitution for
