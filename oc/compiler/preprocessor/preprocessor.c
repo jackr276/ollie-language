@@ -633,9 +633,15 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 	//Store how many parameters this macro has
 	u_int32_t parameter_count = macro->parameters.current_index;
 
-	//What is the grouping stack level for this individual substitution? This needs to be separate in
-	//case we have recursive macro subsitution. This is what we will use to keep track of the parenthesization
-	//level that we're in
+	/**
+	 * IMPORTANT NOTE: this grouping level needs to be maintained for every parameterized substitution
+	 * separately within this function's stack frame so that we are able to track this per-param
+	 * subsitution. This is vital because if we were to just use the nesting level inside of the
+	 * grouping stack, it would get muddied if we have a recurisve substitution like: MACRO1(MACRO2((x + 1))). 
+	 * This solution allows us to get around that entirely. We will use two special functions to maintain this
+	 * whenever we push or pop to the grouping stack within these parameter substitutions. This is done for
+	 * code cohesion
+	 */
 	u_int32_t paren_grouping_level = 0;
 
 	//Otherwise, this macro does have parameters, so we need to process accordingly
