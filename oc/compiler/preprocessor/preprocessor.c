@@ -37,7 +37,7 @@ static u_int32_t current_line_number;
 static lex_stack_t* grouping_stack;
 
 //Predeclaration in case it's needed in non-linear order
-static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro);
+static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro);
 
 /**
  * A simple wrapper for readability. We need this because we want to be able to check
@@ -449,9 +449,12 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * NOTE: by the time we are in here, the grouping stack will be at nesting level 1 because we've already seen the open paren. To avoid
  * improperly exiting, we will not exit if we see a comma/closing paren unless we are at nesting level 1
  */
-static u_int8_t generate_parameter_substitution_array(ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array){
+static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array){
 	//Allocate the target array
 	*target_array = token_array_alloc();
+
+	//In case we see any recursive macros, declare a holder here
+	symtab_macro_record_t* recursive_macro;
 
 	//Unterminating loop here
 	while(TRUE){
@@ -518,6 +521,29 @@ static u_int8_t generate_parameter_substitution_array(ollie_token_array_t* old_a
 
 				break;
 
+			/**
+			 * Ollie supports recursive macro parameter calling. So, if we see an ident here, there's a chance that
+			 * that could be another macro. If so, we need to identify that here and get the appropriate subsitution
+			 * into the parameter array that we're building
+			 */
+			case IDENT:
+				//Let's see if it's a macro. Most of the time this is just going to be null
+				recursive_macro = lookup_macro(macro_symtab, lookahead->lexeme.string);
+
+				//Most common case - which is fine. We just add it into the array and go
+				//to the next iteration
+				if(recursive_macro == NULL){
+					token_array_add(target_array, lookahead);
+					break;
+				}
+
+				//Otherwise if we get here, then this is a recursive macro
+				printf("FOUND RECURSIVE MACRO\n");
+
+
+				break;
+				
+
 			//If we get this it means we've run off of the end of file. This is a big error
 			//and an immediate fail case
 			case DONE:
@@ -569,7 +595,7 @@ static u_int8_t generate_parameter_substitution_array(ollie_token_array_t* old_a
  * This expanded version will be created and stored in a token array, then that array will be copy-pasted in place of 
  * the macro call site above
  */
-static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
 	//Store how many parameters this macro has
 	u_int32_t parameter_count = macro->parameters.current_index;
 
@@ -605,7 +631,7 @@ static u_int8_t perform_parameterized_substitution(ollie_token_array_t* target_a
 		}
 
 		//Let the helper populate the array that we give. This will also allocate said array
-		u_int8_t result = generate_parameter_substitution_array(old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]));
+		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]));
 
 		//If this didn't work then we're done
 		if(result == FAILURE){
@@ -742,12 +768,12 @@ static inline u_int8_t perform_non_parameterized_substitution(ollie_token_array_
  *
  * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
  */
-static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
 	//Does this macro have parameters? If it does not, we are going to perform a regular pass
 	if(macro->parameters.current_index == 0){
 		return perform_non_parameterized_substitution(target_array, macro);
 	} else {
-		return perform_parameterized_substitution(target_array, old_array, old_token_array_index, macro);
+		return perform_parameterized_substitution(macro_symtab, target_array, old_array, old_token_array_index, macro);
 	}
 }
 
@@ -813,7 +839,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 				}
 
 				//Use the new array and the macro we found to do our substitution
-				u_int8_t substitution_result = perform_macro_substitution(&new_token_array, old_token_array, &old_token_array_index, found_macro);
+				u_int8_t substitution_result = perform_macro_substitution(macro_symtab, &new_token_array, old_token_array, &old_token_array_index, found_macro);
 
 				//Get out if we have a failure here
 				if(substitution_result == FAILURE){
