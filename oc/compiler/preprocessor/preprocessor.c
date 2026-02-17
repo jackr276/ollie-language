@@ -34,19 +34,10 @@ static char info_message[2000];
 static u_int32_t current_line_number;
 
 //Grouping stack for parameter checking
-static lex_stack_t* grouping_stack;
+static lex_stack_t* paren_grouping_stack;
 
 //Predeclaration in case it's needed in non-linear order
 static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro);
-
-/**
- * A simple wrapper for readability. We need this because we want to be able to check
- * if the user has left extra parenthesis inside of the macro that we haven't yet accounted
- * for
- */
-static inline u_int32_t get_grouping_stack_nesting_level(lex_stack_t* grouping_stack){
-	return grouping_stack->num_tokens;
-}
 
 
 /**
@@ -58,6 +49,37 @@ static inline void print_preprocessor_message(error_message_type_t message, char
 
 	//Print this out on a single line
 	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | OLLIE PREPROCESSOR %s]: %s\n", current_file_name, line_number, type[message], info);
+}
+
+
+/**
+ * A simple wrapper that will help us maintain the *per-parameter* nesting level
+ * whenever we push to the grouping stack. This is just for cohesion so when
+ * we revisit this it's clear what is happening
+ */
+static inline void push_token_and_update_nesting_level(lex_stack_t* paren_grouping_stack, lexitem_t* token, u_int32_t* nesting_level){
+	//Push it onto the stack
+	push_token(paren_grouping_stack, *token);
+
+	//Increment the nesting level since we pushed
+	(*nesting_level)++;
+}
+
+
+/**
+ * A simple wrapper that will help us maintain the *per-parameter* nesting level
+ * we pop from the grouping stack. This is for cohesion so when we revisit this 
+ * it's clear what is happening
+ */
+static inline ollie_token_t pop_token_and_update_nesting_level(lex_stack_t* paren_grouping_stack, u_int32_t* nesting_level){
+	//Pop it and get the token
+	ollie_token_t token = pop_token(paren_grouping_stack).tok;
+
+	//Decrement the nesting level
+	(*nesting_level)--;
+
+	//Give this back so we can inline/chain easy
+	return token;
 }
 
 
@@ -225,7 +247,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 		lookahead->ignore = TRUE;
 
 		//Push this onto the grouping stack
-		push_token(grouping_stack, *lookahead);
+		push_token(paren_grouping_stack, *lookahead);
 
 		//We have parameters so allocate the space for them
 		macro_record->parameters = token_array_alloc();
@@ -255,7 +277,7 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 				//This means that we're done
 				case R_PAREN:
 					//Just a quick check here
-					if(pop_token(grouping_stack).tok != L_PAREN){
+					if(pop_token(paren_grouping_stack).tok != L_PAREN){
 						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Mismatched parenthesis detected", lookahead->line_num);
 						preprocessor_error_count++;
 						return FAILURE;
@@ -502,7 +524,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 				}
 
 				//Otherwise pop the grouping stack and check for matched parens
-				if(pop_token(grouping_stack).tok != L_PAREN){
+				if(pop_token(paren_grouping_stack).tok != L_PAREN){
 					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", lookahead->line_num);
 				}
 
@@ -517,7 +539,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 			//If we have an L_PAREN then we need to record that in the grouping stack
 			case L_PAREN:
 				//Push it up
-				push_token(grouping_stack, *lookahead);
+				push_token(paren_grouping_stack, *lookahead);
 
 				//Update the nesting level
 				(*nesting_level)++;
@@ -634,7 +656,7 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 	}
 
 	//Push this onto the grouping stack
-	push_token(grouping_stack, *old_array_lookahead);
+	push_token(paren_grouping_stack, *old_array_lookahead);
 	//Update the grouping level
 	substitution_grouping_level++;
 
@@ -723,7 +745,7 @@ parameter_list_end:
 	}
 
 	//Let's also clean up the grouping stack
-	if(pop_token(grouping_stack).tok != L_PAREN){
+	if(pop_token(paren_grouping_stack).tok != L_PAREN){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", old_array_lookahead->line_num);
 		preprocessor_error_count++;
 		return FAILURE;
@@ -918,7 +940,7 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	lex_stack_t stack = lex_stack_alloc();
 
 	//This just holds a pointer to it
-	grouping_stack = &stack;
+	paren_grouping_stack = &stack;
 
 	//Keep trace of how many macros we've seen
 	u_int32_t num_macros = 0;
@@ -983,7 +1005,7 @@ finalizer:
 	macro_symtab_dealloc(macro_symtab);
 
 	//Let's also deallocate the grouping stack
-	lex_stack_dealloc(grouping_stack);
+	lex_stack_dealloc(paren_grouping_stack);
 
 	//Give the results back
 	return results;
