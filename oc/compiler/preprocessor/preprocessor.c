@@ -696,11 +696,19 @@ parameter_list_end:
 			//We will extract the appropriate replacement from the parameter subsitutions temporary storage
 			ollie_token_array_t param_replacement = parameter_subsitutions[token_pointer->constant_values.parameter_number];
 
+			//Run through the entire array and add it in
+			for(u_int32_t j = 0; j < param_replacement.current_index; j++){
+				//Extract it
+				lexitem_t* param_token = token_array_get_pointer_at(&param_replacement, j);
+
+				//Add it into the list
+				token_array_add(target_array, param_token);
+			}
+
+			//Unlike above, the actual parameter token itself is not going to be added because it's been replaced. Once
+			//we've gone through and done the whole subsitution we are set
 		}
-
 	}
-
-	//TODO check for param counts
 
 	//If we got all the way here then this worked
 	return SUCCESS;
@@ -735,9 +743,6 @@ static inline u_int8_t perform_non_parameterized_substitution(ollie_token_array_
  * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
  */
 static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
-	//Store how many parameters this macro has
-	u_int32_t parameter_count = macro->parameters.current_index;
-
 	//Does this macro have parameters? If it does not, we are going to perform a regular pass
 	if(macro->parameters.current_index == 0){
 		return perform_non_parameterized_substitution(target_array, macro);

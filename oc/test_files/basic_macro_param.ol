@@ -10,7 +10,7 @@ $endmacro
 
 
 pub fn main() -> i32 {
-	let mut abc:i32 = 2;
+	let abc:mut i32 = 2;
 
 	//Invoke the paramaterized macro
 	INC_BY_5(abc);
