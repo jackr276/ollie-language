@@ -466,6 +466,18 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 			case COMMA:
 				//This means we're in theory at the end. We are going to push this token
 				//back and get out
+				//
+				//
+				//
+				//TODO THIS IS AN ISSUE - we need a grouping stack level that is per substituion. Either a per-subsitution
+				//grouping stack itself or just keep track of the nesting level for every single macro. This is what is
+				//causing issue for the recursive macro susbstitution because it is confused from the parent
+				//subsitution
+				//
+				//
+				//
+				//
+				//
 				if(get_grouping_stack_nesting_level(grouping_stack) == 1){
 					//Fail case: we cannot have an empty parameter
 					if(target_array->current_index == 0){
@@ -536,6 +548,8 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 					token_array_add(target_array, lookahead);
 					break;
 				}
+
+				printf("HERE\n");
 
 				/**
 				 * If we made it here, then we've found a recursive macro. We need to now
