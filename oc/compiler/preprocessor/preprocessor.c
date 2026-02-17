@@ -678,6 +678,28 @@ parameter_list_end:
 		return FAILURE;
 	}
 
+	/**
+	 * Now that we've gone through and handled all of the macro parameters, we are able to actually do the substitution for
+	 * the macro. We will run through all of the macro's tokens, and use the built up parameter token arrays
+	 * to replace the appropriate parameters whenever we see them
+	 */
+	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
+		//Grab the pointer to this token
+		lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
+
+		//We expect this to be the most common case, in which case we just copy over
+		if(token_pointer->tok != MACRO_PARAM){
+			token_array_add(target_array, token_pointer);
+
+		//Otherwise we've got a macro param, so let's find it's actual token stream
+		} else {
+			//We will extract the appropriate replacement from the parameter subsitutions temporary storage
+			ollie_token_array_t param_replacement = parameter_subsitutions[token_pointer->constant_values.parameter_number];
+
+		}
+
+	}
+
 	//TODO check for param counts
 
 	//If we got all the way here then this worked
