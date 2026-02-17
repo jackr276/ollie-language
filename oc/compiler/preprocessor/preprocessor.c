@@ -449,7 +449,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  * NOTE: by the time we are in here, the grouping stack will be at nesting level 1 because we've already seen the open paren. To avoid
  * improperly exiting, we will not exit if we see a comma/closing paren unless we are at nesting level 1
  */
-static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array){
+static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array, u_int32_t* nesting_level){
 	//Allocate the target array
 	*target_array = token_array_alloc();
 
@@ -466,19 +466,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 			case COMMA:
 				//This means we're in theory at the end. We are going to push this token
 				//back and get out
-				//
-				//
-				//
-				//TODO THIS IS AN ISSUE - we need a grouping stack level that is per substituion. Either a per-subsitution
-				//grouping stack itself or just keep track of the nesting level for every single macro. This is what is
-				//causing issue for the recursive macro susbstitution because it is confused from the parent
-				//subsitution
-				//
-				//
-				//
-				//
-				//
-				if(get_grouping_stack_nesting_level(grouping_stack) == 1){
+				if(*nesting_level == 1){
 					//Fail case: we cannot have an empty parameter
 					if(target_array->current_index == 0){
 						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parameters may not be left empty", lookahead->line_num);
@@ -500,7 +488,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 			case R_PAREN:
 				//This means we're in theory at the end. We are going to push this token
 				//back and get out
-				if(get_grouping_stack_nesting_level(grouping_stack) == 1){
+				if(*nesting_level == 1){
 					//Fail case: we cannot have an empty parameter
 					if(target_array->current_index == 0){
 						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parameters may not be left empty", lookahead->line_num);
@@ -518,6 +506,9 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", lookahead->line_num);
 				}
 
+				//Decrement the nesting level
+				(*nesting_level)--;
+
 				//Add it into the array
 				token_array_add(target_array, lookahead);
 
@@ -527,6 +518,9 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 			case L_PAREN:
 				//Push it up
 				push_token(grouping_stack, *lookahead);
+
+				//Update the nesting level
+				(*nesting_level)++;
 
 				//Add it in and go about our business
 				token_array_add(target_array, lookahead);
@@ -548,8 +542,6 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
 					token_array_add(target_array, lookahead);
 					break;
 				}
-
-				printf("HERE\n");
 
 				/**
 				 * If we made it here, then we've found a recursive macro. We need to now
@@ -625,6 +617,11 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 	//Store how many parameters this macro has
 	u_int32_t parameter_count = macro->parameters.current_index;
 
+	//What is the grouping stack level for this individual substitution? This needs to be separate in
+	//case we have recursive macro subsitution. This is what we will use to keep track of the parenthesization
+	//level that we're in
+	u_int32_t substitution_grouping_level = 0;
+
 	//Otherwise, this macro does have parameters, so we need to process accordingly
 	lexitem_t* old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
 
@@ -638,6 +635,8 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 
 	//Push this onto the grouping stack
 	push_token(grouping_stack, *old_array_lookahead);
+	//Update the grouping level
+	substitution_grouping_level++;
 
 	//Keep track of the current param number. This is how we index into the array
 	u_int32_t current_parameter_number = 0;
@@ -657,7 +656,7 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 		}
 
 		//Let the helper populate the array that we give. This will also allocate said array
-		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]));
+		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]), &substitution_grouping_level);
 
 		//If this didn't work then we're done
 		if(result == FAILURE){
@@ -710,7 +709,7 @@ parameter_list_end:
 	 * that we don't know how to deal with. Throw an error and leave in this
 	 * case
 	 */
-	if(get_grouping_stack_nesting_level(grouping_stack) != 1){
+	if(substitution_grouping_level != 1){
 		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable macro parameter list detected", old_array_lookahead->line_num);
 		preprocessor_error_count++;
 		return FAILURE;
@@ -729,6 +728,9 @@ parameter_list_end:
 		preprocessor_error_count++;
 		return FAILURE;
 	}
+
+	//Decrement the nesting level here
+	substitution_grouping_level--;
 
 	/**
 	 * Now that we've gone through and handled all of the macro parameters, we are able to actually do the substitution for
