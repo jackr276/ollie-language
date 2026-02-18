@@ -131,7 +131,7 @@ int main(int argc, char** argv){
 	printf("============================= BEFORE PREPROCESSOR =====================================\n");
 
 	//We now need to preprocess
-	preprocessor_results_t results = preprocess(options->file_name, options->token_stream);
+	preprocessor_results_t results = preprocess(options, options->token_stream);
 	
 	//This did not work, get out
 	if(results.status == PREPROCESSOR_FAILURE){

@@ -5245,7 +5245,7 @@ static void handle_division_instruction(instruction_window_t* window){
  */
 static inline void handle_sse_division_instruction(instruction_t* instruction){
 	//Go based on what the assignee's type is
-	switch(instruction->assignee->type->type_size){
+	switch(instruction->assignee->variable_size){
 		case SINGLE_PRECISION:
 			instruction->instruction_type = DIVSS;
 			break;
@@ -5253,7 +5253,7 @@ static inline void handle_sse_division_instruction(instruction_t* instruction){
 			instruction->instruction_type = DIVSD;
 			break;
 		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction");
+			printf("Fatal internal compiler error: invalid assignee size for SSE division instruction\n");
 	}
 
 	//Handle any/all converting moves that are going to be needed here
@@ -5275,7 +5275,7 @@ static inline void handle_sse_division_instruction(instruction_t* instruction){
  */
 static inline void handle_sse_multiplication_instruction(instruction_t* instruction){
 	//Go based on what the assignee's type is
-	switch(instruction->assignee->type->type_size){
+	switch(instruction->assignee->variable_size){
 		case SINGLE_PRECISION:
 			instruction->instruction_type = MULSS;
 			break;
@@ -5283,7 +5283,7 @@ static inline void handle_sse_multiplication_instruction(instruction_t* instruct
 			instruction->instruction_type = MULSD;
 			break;
 		default:
-			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction");
+			printf("Fatal internal compiler error: invalid assignee size for SSE multiplication instruction\n");
 	}
 
 	//Handle any/all converting moves that are going to be needed here

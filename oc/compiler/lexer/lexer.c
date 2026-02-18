@@ -348,6 +348,9 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "~";
 		case L_NOT:
 			return "!";
+		case MACRO_PARAM:
+			sprintf(info, "%s", lexitem->lexeme.string);
+			return info;
 		default:
 			return "UNKNOWN";
 	}
@@ -1686,6 +1689,20 @@ ollie_token_stream_t tokenize(char* current_file_name){
 
 	//Give it back
 	return token_stream;
+}
+
+/**
+ * Print an entire token array using the lexitem_to_string helper
+ */
+void print_token_array(ollie_token_array_t* array){
+	printf("========== Token Array =============\n");
+
+	for(u_int32_t i = 0; i < array->current_index; i++){
+		lexitem_t* item = token_array_get_pointer_at(array, i);
+		printf("%d.] %s\n", i, lexitem_to_string(item));
+	}
+
+	printf("========== Token Array =============\n");
 }
 
 

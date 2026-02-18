@@ -77,6 +77,11 @@ void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number
 void reset_stream_to_given_index(ollie_token_stream_t* stream, u_int32_t reconsume_start);
 
 /**
+ * Print an entire token array using the lexitem_to_string helper
+ */
+void print_token_array(ollie_token_array_t* array);
+
+/**
  * Convert a token into a string for error printing purposes
  */
 char* lexitem_to_string(lexitem_t* lexitem);

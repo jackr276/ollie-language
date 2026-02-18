@@ -148,6 +148,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
 	//If we want module specific timing, we'll print out here
 	if(options->module_specific_timing == TRUE){
 		printf("Lexer took: %.8f seconds\n", times->lexer_time);
+		printf("Preprocessor took: %.8f seconds\n", times->preprocessor_time);
 		printf("Parser took: %.8f seconds\n", times->parser_time);
 		printf("CFG constuctor took: %.8f seconds\n", times->cfg_time);
 		printf("Optimizer took: %.8f seconds\n", times->optimizer_time);
@@ -247,7 +248,7 @@ static u_int8_t compile(compiler_options_t* options){
 	 * Let the preprocessor handle everything to do with macros. Note that this does have the potential
 	 * to fail
 	 */
-	preprocessor_results_t preprocessor_results = preprocess(options->file_name, options->token_stream);
+	preprocessor_results_t preprocessor_results = preprocess(options, options->token_stream);
 
 	//Update the warnings/errors if there are any
 	num_errors += preprocessor_results.error_count;

@@ -15,6 +15,7 @@
 #include "../utils/constants.h"
 #include "../utils/ollie_token_array/ollie_token_array.h"
 #include "../symtab/symtab.h"
+#include "../utils/stack/lexstack.h"
 #include <stdio.h>
 #include <strings.h>
 #include <sys/types.h>
@@ -32,6 +33,17 @@ static char info_message[2000];
 //The current line number that we're after
 static u_int32_t current_line_number;
 
+//Do we want to print intermediary representations? This comes in via compiler options
+//and defaults to false. Really only for developer use
+static u_int8_t print_irs = FALSE;
+
+//Grouping stack for parameter checking
+static lex_stack_t* paren_grouping_stack;
+
+//Predeclaration in case it's needed in non-linear order
+static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro);
+
+
 /**
  * A generic printer for any preprocessor errors that we may encounter
  */
@@ -41,6 +53,37 @@ static inline void print_preprocessor_message(error_message_type_t message, char
 
 	//Print this out on a single line
 	fprintf(stdout, "\n[FILE: %s] --> [LINE %d | OLLIE PREPROCESSOR %s]: %s\n", current_file_name, line_number, type[message], info);
+}
+
+
+/**
+ * A simple wrapper that will help us maintain the *per-parameter* nesting level
+ * whenever we push to the grouping stack. This is just for cohesion so when
+ * we revisit this it's clear what is happening
+ */
+static inline void push_token_and_update_nesting_level(lex_stack_t* paren_grouping_stack, lexitem_t* token, u_int32_t* nesting_level){
+	//Push it onto the stack
+	push_token(paren_grouping_stack, *token);
+
+	//Increment the nesting level since we pushed
+	(*nesting_level)++;
+}
+
+
+/**
+ * A simple wrapper that will help us maintain the *per-parameter* nesting level
+ * we pop from the grouping stack. This is for cohesion so when we revisit this 
+ * it's clear what is happening
+ */
+static inline ollie_token_t pop_token_and_update_nesting_level(lex_stack_t* paren_grouping_stack, u_int32_t* nesting_level){
+	//Pop it and get the token
+	ollie_token_t token = pop_token(paren_grouping_stack).tok;
+
+	//Decrement the nesting level
+	(*nesting_level)--;
+
+	//Give this back so we can inline/chain easy
+	return token;
 }
 
 
@@ -64,6 +107,80 @@ static inline lexitem_t* get_token_pointer_and_increment(ollie_token_array_t* ar
 
 
 /**
+ * "Push back" a token by decrementing the index, and return the prior token
+ */
+static inline lexitem_t* push_back_token_pointer(ollie_token_array_t* array, u_int32_t* index){
+	//Decrement it
+	(*index)--;
+
+	//Get the prior token
+	lexitem_t* token_pointer = token_array_get_pointer_at(array, *index);
+
+	//Update our line number
+	current_line_number = token_pointer->line_num;
+
+	//And give back the prior token
+	return token_pointer;
+}
+
+// ======================================================== Consumption Pass ========================================================================================
+
+/**
+ * Process a macro parameter and add it into the current macro's list of parameters
+ *
+ * NOTE: By the time we get here, we have already seen the opening L_PAREN
+ */
+static inline u_int8_t process_macro_parameter(symtab_macro_record_t* macro, ollie_token_array_t* token_array, u_int32_t* index){
+	//Get the next token
+	lexitem_t* lookahead = get_token_pointer_and_increment(token_array, index);
+
+	//There's only one correct option to see here
+	switch(lookahead->tok){
+		//We can't see this - it would mean it's empty
+		case R_PAREN:
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Macro parameter lists may not be empty. Remove the paranthesis for an unparameterized macro", lookahead->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+
+		//This is the one and only valid thing to see
+		case IDENT:
+			break;
+
+		//Anything else here is some weird error - we will throw and then get out
+		default:
+			sprintf(info_message, "Expected identifier in macro parameter list but got %s", lexitem_to_string(lookahead));
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+	}
+
+	//Flag that we're ignoring
+	lookahead->ignore = TRUE;
+
+	//If we make it here then we know that we got a valid ident token as a parameter, but we don't know if it's a duplicate
+	//or not. We will check now
+	for(u_int32_t i = 0; i < macro->parameters.current_index; i++){
+		//Extract the macro token
+		lexitem_t* token = token_array_get_pointer_at(&(macro->parameters), i);
+
+		//If these two are equal, then we'll need to fail out because the user cannot duplicate parameters
+		if(dynamic_strings_equal(&(token->lexeme), &(lookahead->lexeme)) == TRUE){
+			sprintf(info_message, "Macro \"%s\" already has a parameter \"%s\"", macro->name.string, lookahead->lexeme.string);
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+		}
+	}
+
+	//Otherwise we're set so add this into the macro array
+	token_array_add(&(macro->parameters), lookahead);
+
+	//If we made it here then this all worked
+	return SUCCESS;
+}
+
+
+/**
  * Process a macro starting at the begin index
  *
  * NOTE: this function will update the index that is in use here. If this function
@@ -71,6 +188,9 @@ static inline lexitem_t* get_token_pointer_and_increment(ollie_token_array_t* ar
  * token
  */
 static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macro_symtab, u_int32_t* index) {
+	//The macro parameter count(set to 0 at first)
+	u_int32_t macro_parameter_count = 0;
+
 	//Hang onto this here for convenience
 	ollie_token_array_t* token_array = &(stream->token_stream);
 
@@ -122,6 +242,71 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 	//Grab a pointer to this macro's token array
 	ollie_token_array_t* macro_token_array = &(macro_record->tokens);
 
+	//Refresh the lookahead to see if we have any parameters
+	lookahead = get_token_pointer_and_increment(token_array, index);
+
+	//If we see an L_PAREN, we will begin processing parameters
+	if(lookahead->tok == L_PAREN){
+		//Flag that we're ignoring
+		lookahead->ignore = TRUE;
+
+		//Push this onto the grouping stack
+		push_token(paren_grouping_stack, *lookahead);
+
+		//We have parameters so allocate the space for them
+		macro_record->parameters = token_array_alloc();
+
+		//We keep looping so long as we are seeing commas
+		while(TRUE){
+			//Let the helper process the parameter
+			u_int8_t status = process_macro_parameter(macro_record, token_array, index);
+
+			//If this failed then we need to get out
+			if(status == FAILURE){
+				return FAILURE;
+			}
+
+			//Refresh the token
+			lookahead = get_token_pointer_and_increment(token_array, index);
+
+			//Flag that we're ignoring this too
+			lookahead->ignore = TRUE;
+
+			//There are only two valid options here so we'll process accordingly
+			switch(lookahead->tok){
+				//If it's a comma go right around
+				case COMMA:
+					continue;
+
+				//This means that we're done
+				case R_PAREN:
+					//Just a quick check here
+					if(pop_token(paren_grouping_stack).tok != L_PAREN){
+						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Mismatched parenthesis detected", lookahead->line_num);
+						preprocessor_error_count++;
+						return FAILURE;
+					}
+
+					goto end_parameter_processing;
+
+				//Anything else here does not work
+				default:
+					sprintf(info_message, "Comma expected between parameters but saw %s instead", lexitem_to_string(lookahead));
+					print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, lookahead->line_num);
+					preprocessor_error_count++;
+					return FAILURE;
+			}
+		}
+
+	//Otherwise we found nothing so just push this back and move along
+	} else {
+		lookahead = push_back_token_pointer(token_array, index);
+	}
+
+end_parameter_processing:
+	//Store how many parameters that we got in the end
+	macro_parameter_count = macro_record->parameters.current_index;
+
 	//Unbounded loop through the entire macro
 	while(TRUE){
 		//Refresh the lookahead token
@@ -165,6 +350,37 @@ static u_int8_t process_macro(ollie_token_stream_t* stream, macro_symtab_t* macr
 				print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, macro_record->line_number);
 				preprocessor_error_count++;
 				return FAILURE;
+
+			/**
+			 * If we have an identifier, there is a chance that this is a macro parameter. If it is, then we're going to
+			 * want to flag this here to make future searching easier
+			 */
+			case IDENT:
+				//Run through all of our parameters and see if we have a match
+				for(u_int32_t i = 0; i < macro_parameter_count; i++){
+					//Extract it
+					lexitem_t* parameter = token_array_get_pointer_at(&(macro_record->parameters), i);
+
+					//If these are the same, then we've found a parameter
+					if(dynamic_strings_equal(&(parameter->lexeme), &(lookahead->lexeme)) == TRUE){
+						//Flag for later processing that this is in fact a macro parameter
+						lookahead->tok = MACRO_PARAM;
+
+						/**
+						 * Store the parameter number so that we have easy access later on down the road. This allows
+						 * us constant time access instead of having to search through an entire array
+						 */
+						lookahead->constant_values.parameter_number = i;
+
+						//Already found a match so leave
+						break;
+					}
+				}
+
+				//Whatever happened, we need to add the lookahead into the array
+				token_array_add(macro_token_array, lookahead);
+
+				break;
 
 			//In theory anything else that we see in here is valid, so we'll
 			//just do our bookkeeping and move along
@@ -245,12 +461,347 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
 	return SUCCESS;
 }
 
+// ======================================================== Consumption Pass ========================================================================================
+
+// ======================================================== Replacement Pass ========================================================================================
 
 /**
- * Perform the macro substitution itself. This involves splicing in the
- * token stream that our given macro expands to
+ * The value of a macro parameter may be one or more tokens, and may include a recursive macro subsitution inside of it
+ *
+ * This function returns an array of tokens that represents the complete subsitution for this given macro parameter. When
+ * the caller receives this result, they are going to splice this entire token array onto the end of the final array verbatim. It
+ * is for this reason that we can leave no stone unturned here
+ *
+ * NOTE: by the time we are in here, the grouping stack will be at nesting level 1 because we've already seen the open paren. To avoid
+ * improperly exiting, we will not exit if we see a comma/closing paren unless we are at nesting level 1
  */
-static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_array, symtab_macro_record_t* macro){
+static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array, u_int32_t* nesting_level){
+	//Allocate the target array
+	*target_array = token_array_alloc();
+
+	//In case we see any recursive macros, declare a holder here
+	symtab_macro_record_t* recursive_macro;
+
+	//Unterminating loop here
+	while(TRUE){
+		//Advance the lookahead here
+		lexitem_t* lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+	
+		//Handle any/all cases we have here
+		switch(lookahead->tok){
+			case COMMA:
+				//This means we're in theory at the end. We are going to push this token
+				//back and get out
+				if(*nesting_level == 1){
+					//Fail case: we cannot have an empty parameter
+					if(target_array->current_index == 0){
+						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parameters may not be left empty", lookahead->line_num);
+						preprocessor_error_count++;
+						return FAILURE;
+					}
+
+					//Will be reprocessed by the caller
+					push_back_token_pointer(old_array, old_token_array_index);
+					return SUCCESS;
+				}
+
+				//Otherwise we're inside of something so add this into the array
+				token_array_add(target_array, lookahead);
+				
+				break;
+
+			//This could be a terminating case as well if we're on the last parameter
+			case R_PAREN:
+				//This means we're in theory at the end. We are going to push this token
+				//back and get out
+				if(*nesting_level == 1){
+					//Fail case: we cannot have an empty parameter
+					if(target_array->current_index == 0){
+						print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parameters may not be left empty", lookahead->line_num);
+						preprocessor_error_count++;
+						return FAILURE;
+					}
+
+					//Will be reprocessed by the caller
+					push_back_token_pointer(old_array, old_token_array_index);
+					return SUCCESS;
+				}
+
+				//Otherwise pop the grouping stack and check for matched parens
+				if(pop_token_and_update_nesting_level(paren_grouping_stack, nesting_level) != L_PAREN){
+					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", lookahead->line_num);
+				}
+
+				//Add it into the array
+				token_array_add(target_array, lookahead);
+
+				break;
+
+			//If we have an L_PAREN then we need to record that in the grouping stack
+			case L_PAREN:
+				//Let the helper push it and update our level
+				push_token_and_update_nesting_level(paren_grouping_stack, lookahead, nesting_level);
+
+				//Add it in and go about our business
+				token_array_add(target_array, lookahead);
+
+				break;
+
+			/**
+			 * Ollie supports recursive macro parameter calling. So, if we see an ident here, there's a chance that
+			 * that could be another macro. If so, we need to identify that here and get the appropriate subsitution
+			 * into the parameter array that we're building
+			 */
+			case IDENT:
+				//Let's see if it's a macro. Most of the time this is just going to be null
+				recursive_macro = lookup_macro(macro_symtab, lookahead->lexeme.string);
+
+				//Most common case - which is fine. We just add it into the array and go
+				//to the next iteration
+				if(recursive_macro == NULL){
+					token_array_add(target_array, lookahead);
+					break;
+				}
+
+				/**
+				 * If we made it here, then we've found a recursive macro. We need to now
+				 * be recursive ourselves and call the macro processing rule all over again, 
+				 * except this time we'll be inserting into the target array itself. Once
+				 * we return back to this function, we should have everything that we need in
+				 * one place
+				 */
+				u_int8_t recursive_macro_success = perform_macro_substitution(macro_symtab, target_array, old_array, old_token_array_index, recursive_macro);
+
+				//If it failed then fail out
+				if(recursive_macro_success == FAILURE){
+					print_preprocessor_message(MESSAGE_TYPE_ERROR, "Invalid recursive macro parameter given", lookahead->line_num);
+					preprocessor_error_count++;
+					return FAILURE;
+				}
+
+				break;
+				
+
+			//If we get this it means we've run off of the end of file. This is a big error
+			//and an immediate fail case
+			case DONE:
+				print_preprocessor_message(MESSAGE_TYPE_ERROR, "Parser ran off of the file. Do you have an unterminated parenthesis?", lookahead->line_num);
+				preprocessor_error_count++;
+				return FAILURE;
+
+			//By default this just goes into the array
+			default:
+				token_array_add(target_array, lookahead);
+				break;
+		}
+	}
+
+	//If we made it here then it worked
+	return SUCCESS;
+}
+
+
+/**
+ * This rule handles all of the parameter processing for any given macro. This can get complex as ollie allows
+ * users to recursively call macros inside of macro parameters themselves
+ *
+ * For every single parameter, we are going to maintain a token array that represents what that parameter is going to expand to
+ *
+ * Let's work through an example:
+ *
+ * $macro EXAMPLE(x, y, z)
+ *  y - x + sizeof(z) + x
+ * $endmacro
+ *
+ * pub fn sample(arg1:i32, arg2:i16) -> i32 {
+ * 	  let x:i32 = 3333;
+ * 	  let y:i32 = 2222;
+ *
+ * 	  let final_result:i32 = EXAMPLE((arg1 + x), (arg2 - y), arg2);
+ * }
+ *
+ * Let's analyze how example will be handled. We will first note that example is a macro and we need to subsitute.
+ * Once we enter into the parameter processing step, we will first hit x
+ *
+ * Macro paraemeter "x" -> "(arg1 + x)"
+ * Macro parameter "y" -> "(arg2 - y)"
+ * Macro parameter "z" -> "arg2"
+ *
+ * So our version of this macro is going to expand to: "(arg2 - y) - (arg1 + x) + sizeof(arg2) + (arg1 + x)"
+ * 															y		     x                z           x
+ *
+ * This expanded version will be created and stored in a token array, then that array will be copy-pasted in place of 
+ * the macro call site above
+ */
+static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+	//Store how many parameters this macro has
+	const u_int32_t parameter_count = macro->parameters.current_index;
+
+	/**
+	 * IMPORTANT NOTE: this grouping level needs to be maintained for every parameterized substitution
+	 * separately within this function's stack frame so that we are able to track this per-param
+	 * subsitution. This is vital because if we were to just use the nesting level inside of the
+	 * grouping stack, it would get muddied if we have a recurisve substitution like: MACRO1(MACRO2((x + 1))). 
+	 * This solution allows us to get around that entirely. We will use two special functions to maintain this
+	 * whenever we push or pop to the grouping stack within these parameter substitutions. This is done for
+	 * code cohesion
+	 */
+	u_int32_t paren_grouping_level = 0;
+
+	//Otherwise, this macro does have parameters, so we need to process accordingly
+	lexitem_t* old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+
+	//We need to see this here
+	if(old_array_lookahead->tok != L_PAREN){
+		sprintf(info_message, "Macro \"%s\" takes %d parameters. Opening parenthesis is expected", macro->name.string, parameter_count);
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Let the helper push this and maintain our grouping level counter
+	push_token_and_update_nesting_level(paren_grouping_stack, old_array_lookahead, &paren_grouping_level);
+
+	//Keep track of the current param number. This is how we index into the array
+	u_int32_t current_parameter_number = 0;
+
+	/**
+	 * Maintain a 1-to-1 array mapping for the parameter itself to the
+	 * token array that we've generated for it
+	 *
+	 * Stack VLA here - it's fine because we have a const parameter count
+	 * by this point in the program
+	 */
+	ollie_token_array_t parameter_subsitutions[parameter_count];
+
+	//Run through all of the parameters here
+	while(TRUE){
+		//Bail out if this happens, the error message will be printed
+		//below
+		if(current_parameter_number >= parameter_count){
+			break;
+		}
+
+		//Let the helper populate the array that we give. This will also allocate said array
+		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]), &paren_grouping_level);
+
+		//If this didn't work then we're done
+		if(result == FAILURE){
+			print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable parameter macro detected", old_array_lookahead->line_num);
+			preprocessor_error_count++;
+			return FAILURE;
+		}
+
+		//If we are printing out the debug logging, emit the final token array that we got for this substitution
+		if(print_irs == TRUE){
+			printf("MACRO PARAM EXPANDS TO:\n");
+			print_token_array(&(parameter_subsitutions[current_parameter_number]));
+		}
+
+		//Bump it up
+		current_parameter_number++;
+
+		//Refresh the token
+		old_array_lookahead = get_token_pointer_and_increment(old_array, old_token_array_index);
+
+		//Based on the token here we could have an exit
+		switch(old_array_lookahead->tok){
+			//This is fine
+			case COMMA:
+				break;
+
+			//If we see an R_PAREN that means we are done
+			case R_PAREN:
+				goto parameter_list_end;
+
+			//This should be impossible but have the catch-all
+			default:
+				printf("Fatal internal preprocessor error. Expected R_PAREN or COMMA but got %s", lexitem_to_string(old_array_lookahead));
+				exit(1);
+		}
+	}
+
+parameter_list_end:
+	/**
+	 * Let's first check the parameter counts. If we have a mismatched number, then
+	 * we fail out before doing any other checking
+	 */
+	if(current_parameter_number != parameter_count){
+		sprintf(info_message, "Macro \"%s\" expects %d parameters but was given %d instead", macro->name.string, parameter_count, current_parameter_number);
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, info_message, old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	/**
+	 * If we get here and the nesting level is not 1, it means
+	 * that the user has entered some kind of unparseable parameter list
+	 * that we don't know how to deal with. Throw an error and leave in this
+	 * case
+	 */
+	if(paren_grouping_level != 1){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unparseable macro parameter list detected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Double check that this is working too
+	if(old_array_lookahead->tok != R_PAREN){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	//Let's also clean up the grouping stack
+	if(pop_token_and_update_nesting_level(paren_grouping_stack, &paren_grouping_level) != L_PAREN){
+		print_preprocessor_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", old_array_lookahead->line_num);
+		preprocessor_error_count++;
+		return FAILURE;
+	}
+
+	/**
+	 * Now that we've gone through and handled all of the macro parameters, we are able to actually do the substitution for
+	 * the macro. We will run through all of the macro's tokens, and use the built up parameter token arrays
+	 * to replace the appropriate parameters whenever we see them
+	 */
+	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
+		//Grab the pointer to this token
+		lexitem_t* token_pointer = token_array_get_pointer_at(&(macro->tokens), i);
+
+		//We expect this to be the most common case, in which case we just copy over
+		if(token_pointer->tok != MACRO_PARAM){
+			token_array_add(target_array, token_pointer);
+
+		//Otherwise we've got a macro param, so let's find it's actual token stream
+		} else {
+			//We will extract the appropriate replacement from the parameter subsitutions temporary storage
+			ollie_token_array_t param_replacement = parameter_subsitutions[token_pointer->constant_values.parameter_number];
+
+			//Run through the entire array and add it in
+			for(u_int32_t j = 0; j < param_replacement.current_index; j++){
+				//Extract it
+				lexitem_t* param_token = token_array_get_pointer_at(&param_replacement, j);
+
+				//Add it into the list
+				token_array_add(target_array, param_token);
+			}
+
+			//Unlike above, the actual parameter token itself is not going to be added because it's been replaced. Once
+			//we've gone through and done the whole subsitution we are set
+		}
+	}
+
+	//If we got all the way here then this worked
+	return SUCCESS;
+
+}
+
+
+/**
+ * Perform a simple macro substitution where we are guaranteed to have no parameters. This function will only be invoked
+ * when we know that there are no parameters
+ */
+static inline u_int8_t perform_non_parameterized_substitution(ollie_token_array_t* target_array, symtab_macro_record_t* macro){
 	//Run through all of the tokens in this macro, and splice them over into
 	//the target macro
 	for(u_int32_t i = 0; i < macro->tokens.current_index; i++){
@@ -263,6 +814,22 @@ static inline u_int8_t perform_macro_substitution(ollie_token_array_t* target_ar
 
 	//This worked so
 	return SUCCESS;
+}
+
+
+/**
+ * Perform the macro substitution itself. This involves splicing in the
+ * token stream that our given macro expands to
+ *
+ * NOTE: By the time that we get here, we've already seen the macro name and know that this macro does in fact exist
+ */
+static inline u_int8_t perform_macro_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
+	//Does this macro have parameters? If it does not, we are going to perform a regular pass
+	if(macro->parameters.current_index == 0){
+		return perform_non_parameterized_substitution(target_array, macro);
+	} else {
+		return perform_parameterized_substitution(macro_symtab, target_array, old_array, old_token_array_index, macro);
+	}
 }
 
 
@@ -327,7 +894,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 				}
 
 				//Use the new array and the macro we found to do our substitution
-				u_int8_t substitution_result = perform_macro_substitution(&new_token_array, found_macro);
+				u_int8_t substitution_result = perform_macro_substitution(macro_symtab, &new_token_array, old_token_array, &old_token_array_index, found_macro);
 
 				//Get out if we have a failure here
 				if(substitution_result == FAILURE){
@@ -353,13 +920,14 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
 	return SUCCESS;
 }
 
+// ======================================================== Replacement Pass ========================================================================================
 
 /**
  * Entry point to the entire preprocessor is here. The preprocessor
  * will traverse the token stream and make replacements as it sees
  * fit with defined macros
  */
-preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream){
+preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_stream_t* stream){
 	//Store the preprocessor results
 	preprocessor_results_t results;
 
@@ -371,7 +939,16 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	results.status = PREPROCESSOR_SUCCESS;
 
 	//Store the file name up top globally
-	current_file_name = file_name;
+	current_file_name = options->file_name;
+
+	//Store whether or not we want to print any debug logs
+	print_irs = options->print_irs;
+
+	//Allocate the global lex stack for use in both the consumption and replacement passes
+	lex_stack_t stack = lex_stack_alloc();
+
+	//This just holds a pointer to it
+	paren_grouping_stack = &stack;
 
 	//Keep trace of how many macros we've seen
 	u_int32_t num_macros = 0;
@@ -434,6 +1011,9 @@ finalizer:
 	 * on them to figure out
 	*/
 	macro_symtab_dealloc(macro_symtab);
+
+	//Let's also deallocate the grouping stack
+	lex_stack_dealloc(paren_grouping_stack);
 
 	//Give the results back
 	return results;
