@@ -20,6 +20,9 @@
 #include <strings.h>
 #include <sys/types.h>
 
+//Most people are not using more than 5 tokens in their macro params ever. This is our initial size
+#define PARAM_SUB_ARRAY_INIT_SIZE 5
+
 //What is the name of the file that we are preprocessing
 static char* current_file_name;
 
@@ -477,7 +480,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  */
 static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array, u_int32_t* nesting_level){
 	//Allocate the target array
-	*target_array = token_array_alloc();
+	*target_array = token_array_alloc_initial_size(PARAM_SUB_ARRAY_INIT_SIZE);
 
 	//In case we see any recursive macros, declare a holder here
 	symtab_macro_record_t* recursive_macro;
@@ -802,9 +805,13 @@ parameter_list_end:
 		}
 	}
 
+	//Let's now go through and deallocate all of the parameter subsitutions now that we're done
+	for(u_int32_t i = 0; i < parameter_count; i++){
+		token_array_dealloc(&(parameter_subsitutions[i]));
+	}
+
 	//If we got all the way here then this worked
 	return SUCCESS;
-
 }
 
 
