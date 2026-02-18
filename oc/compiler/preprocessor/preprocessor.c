@@ -676,8 +676,11 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 
 	//Run through all of the parameters here
 	while(TRUE){
-		//Stack allocate the control structure for the current parameter
-		//array. This will be allocated by the rule
+		/**
+		 * First stack allocate some local storage for the current parameter array. This is going to be 
+		 * truly allocated by the "generate_parameter_substitution_array" function that it gets passed into
+		 * and will then get thrown into the official array *if* the parameter numbers check out
+		 */
 		ollie_token_array_t current_parameter_array;
 
 		//Let the helper populate the array that we give. This will also allocate said array
@@ -699,7 +702,8 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 		/**
 		 * If we are less than the parameter count, we will add this into our VLA of parameter substitutions.
 		 * Even if we run over, we will keep going because we want to generate accurate error messages for
-		 * the user in the end if they do go over
+		 * the user in the end if we give 4 parameters but only have 2 in our definition for example. If we
+		 * didn't do this bounds check then a case like that would lead to undefined memory access
 		 */
 		if(current_parameter_number < parameter_count){
 			parameter_subsitutions[current_parameter_number] = current_parameter_array;
