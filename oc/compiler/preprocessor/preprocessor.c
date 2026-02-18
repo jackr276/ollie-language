@@ -20,6 +20,9 @@
 #include <strings.h>
 #include <sys/types.h>
 
+//Most people are not using more than 5 tokens in their macro params ever. This is our initial size
+#define PARAM_SUB_ARRAY_INIT_SIZE 5
+
 //What is the name of the file that we are preprocessing
 static char* current_file_name;
 
@@ -477,7 +480,7 @@ static inline u_int8_t macro_consumption_pass(ollie_token_stream_t* stream, macr
  */
 static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symtab, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, ollie_token_array_t* target_array, u_int32_t* nesting_level){
 	//Allocate the target array
-	*target_array = token_array_alloc();
+	*target_array = token_array_alloc_initial_size(PARAM_SUB_ARRAY_INIT_SIZE);
 
 	//In case we see any recursive macros, declare a holder here
 	symtab_macro_record_t* recursive_macro;
@@ -676,14 +679,15 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 
 	//Run through all of the parameters here
 	while(TRUE){
-		//Bail out if this happens, the error message will be printed
-		//below
-		if(current_parameter_number >= parameter_count){
-			break;
-		}
+		/**
+		 * First stack allocate some local storage for the current parameter array. This is going to be 
+		 * truly allocated by the "generate_parameter_substitution_array" function that it gets passed into
+		 * and will then get thrown into the official array *if* the parameter numbers check out
+		 */
+		ollie_token_array_t current_parameter_array;
 
 		//Let the helper populate the array that we give. This will also allocate said array
-		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]), &paren_grouping_level);
+		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &current_parameter_array, &paren_grouping_level);
 
 		//If this didn't work then we're done
 		if(result == FAILURE){
@@ -695,7 +699,17 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 		//If we are printing out the debug logging, emit the final token array that we got for this substitution
 		if(print_irs == TRUE){
 			printf("MACRO PARAM EXPANDS TO:\n");
-			print_token_array(&(parameter_subsitutions[current_parameter_number]));
+			print_token_array(&current_parameter_array);
+		}
+
+		/**
+		 * If we are less than the parameter count, we will add this into our VLA of parameter substitutions.
+		 * Even if we run over, we will keep going because we want to generate accurate error messages for
+		 * the user in the end if we give 4 parameters but only have 2 in our definition for example. If we
+		 * didn't do this bounds check then a case like that would lead to undefined memory access
+		 */
+		if(current_parameter_number < parameter_count){
+			parameter_subsitutions[current_parameter_number] = current_parameter_array;
 		}
 
 		//Bump it up
@@ -791,9 +805,13 @@ parameter_list_end:
 		}
 	}
 
+	//Let's now go through and deallocate all of the parameter subsitutions now that we're done
+	for(u_int32_t i = 0; i < parameter_count; i++){
+		token_array_dealloc(&(parameter_subsitutions[i]));
+	}
+
 	//If we got all the way here then this worked
 	return SUCCESS;
-
 }
 
 

@@ -4816,6 +4816,14 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 						//Let's see whether or not we already have it
 						stack_region_t* existing_region = does_stack_contain_pointer_to_variable(&(current_function->data_area), unary_expression_child->variable);
 
+						//
+						//
+						//
+						//TODO - this is wrong
+						//Needs to be updated
+						//
+						//
+
 						//We don't have it, so we need to go through our whole procedure
 						if(existing_region == NULL){
 							//We need to load a reference to this into memory
