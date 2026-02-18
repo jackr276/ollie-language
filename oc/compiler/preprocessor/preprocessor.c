@@ -676,14 +676,12 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 
 	//Run through all of the parameters here
 	while(TRUE){
-		//Bail out if this happens, the error message will be printed
-		//below
-		if(current_parameter_number >= parameter_count){
-			break;
-		}
+		//Stack allocate the control structure for the current parameter
+		//array. This will be allocated by the rule
+		ollie_token_array_t current_parameter_array;
 
 		//Let the helper populate the array that we give. This will also allocate said array
-		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &(parameter_subsitutions[current_parameter_number]), &paren_grouping_level);
+		u_int8_t result = generate_parameter_substitution_array(macro_symtab, old_array, old_token_array_index, &current_parameter_array, &paren_grouping_level);
 
 		//If this didn't work then we're done
 		if(result == FAILURE){
@@ -695,7 +693,16 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 		//If we are printing out the debug logging, emit the final token array that we got for this substitution
 		if(print_irs == TRUE){
 			printf("MACRO PARAM EXPANDS TO:\n");
-			print_token_array(&(parameter_subsitutions[current_parameter_number]));
+			print_token_array(&current_parameter_array);
+		}
+
+		/**
+		 * If we are less than the parameter count, we will add this into our VLA of parameter substitutions.
+		 * Even if we run over, we will keep going because we want to generate accurate error messages for
+		 * the user in the end if they do go over
+		 */
+		if(current_parameter_number < parameter_count){
+			parameter_subsitutions[current_parameter_number] = current_parameter_array;
 		}
 
 		//Bump it up
