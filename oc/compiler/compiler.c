@@ -248,7 +248,7 @@ static u_int8_t compile(compiler_options_t* options){
 	 * Let the preprocessor handle everything to do with macros. Note that this does have the potential
 	 * to fail
 	 */
-	preprocessor_results_t preprocessor_results = preprocess(options->file_name, options->token_stream);
+	preprocessor_results_t preprocessor_results = preprocess(options, options->token_stream);
 
 	//Update the warnings/errors if there are any
 	num_errors += preprocessor_results.error_count;

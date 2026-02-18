@@ -103,7 +103,7 @@ int main(int argc, char** argv){
 	options->token_stream = &stream;
 
 	//We now need to preprocess
-	preprocessor_results_t preprocessor_results = preprocess(options->file_name, options->token_stream);
+	preprocessor_results_t preprocessor_results = preprocess(options, options->token_stream);
 
 	//If we failed then bail out
 	if(preprocessor_results.status == PREPROCESSOR_FAILURE){

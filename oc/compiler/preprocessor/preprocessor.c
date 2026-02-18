@@ -33,6 +33,10 @@ static char info_message[2000];
 //The current line number that we're after
 static u_int32_t current_line_number;
 
+//Do we want to print intermediary representations? This comes in via compiler options
+//and defaults to false. Really only for developer use
+static u_int8_t print_irs = FALSE;
+
 //Grouping stack for parameter checking
 static lex_stack_t* paren_grouping_stack;
 
@@ -631,7 +635,7 @@ static u_int8_t generate_parameter_substitution_array(macro_symtab_t* macro_symt
  */
 static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab, ollie_token_array_t* target_array, ollie_token_array_t* old_array, u_int32_t* old_token_array_index, symtab_macro_record_t* macro){
 	//Store how many parameters this macro has
-	u_int32_t parameter_count = macro->parameters.current_index;
+	const u_int32_t parameter_count = macro->parameters.current_index;
 
 	/**
 	 * IMPORTANT NOTE: this grouping level needs to be maintained for every parameterized substitution
@@ -664,6 +668,9 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 	/**
 	 * Maintain a 1-to-1 array mapping for the parameter itself to the
 	 * token array that we've generated for it
+	 *
+	 * Stack VLA here - it's fine because we have a const parameter count
+	 * by this point in the program
 	 */
 	ollie_token_array_t parameter_subsitutions[parameter_count];
 
@@ -685,9 +692,11 @@ static u_int8_t perform_parameterized_substitution(macro_symtab_t* macro_symtab,
 			return FAILURE;
 		}
 
-		//TODO DEBUG LOG
-		printf("MACRO PARAM EXPANDS TO:\n");
-		print_token_array(&(parameter_subsitutions[current_parameter_number]));
+		//If we are printing out the debug logging, emit the final token array that we got for this substitution
+		if(print_irs == TRUE){
+			printf("MACRO PARAM EXPANDS TO:\n");
+			print_token_array(&(parameter_subsitutions[current_parameter_number]));
+		}
 
 		//Bump it up
 		current_parameter_number++;
@@ -918,7 +927,7 @@ static u_int8_t macro_replacement_pass(ollie_token_stream_t* stream, macro_symta
  * will traverse the token stream and make replacements as it sees
  * fit with defined macros
  */
-preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream){
+preprocessor_results_t preprocess(compiler_options_t* options, ollie_token_stream_t* stream){
 	//Store the preprocessor results
 	preprocessor_results_t results;
 
@@ -930,7 +939,10 @@ preprocessor_results_t preprocess(char* file_name, ollie_token_stream_t* stream)
 	results.status = PREPROCESSOR_SUCCESS;
 
 	//Store the file name up top globally
-	current_file_name = file_name;
+	current_file_name = options->file_name;
+
+	//Store whether or not we want to print any debug logs
+	print_irs = options->print_irs;
 
 	//Allocate the global lex stack for use in both the consumption and replacement passes
 	lex_stack_t stack = lex_stack_alloc();
