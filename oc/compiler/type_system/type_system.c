@@ -34,7 +34,6 @@ u_int8_t is_memory_region(generic_type_t* type){
 u_int8_t is_memory_address_type(generic_type_t* type){
 	switch(type->type_class){
 		case TYPE_CLASS_POINTER:
-		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
@@ -128,9 +127,6 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
 			case TYPE_CLASS_POINTER:
 				current_type = current_type->internal_types.points_to;
 				break;
-			case TYPE_CLASS_REFERENCE:
-				current_type = current_type->internal_types.points_to;
-				break;
 			//Nothing for us here
 			default:
 				break;
@@ -154,7 +150,6 @@ u_int8_t is_type_address_calculation_compatible(generic_type_t* type){
 		//These are all essentially pointers
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_POINTER:
-		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
 			return TRUE;
@@ -195,7 +190,6 @@ u_int8_t is_type_valid_for_memory_addressing(generic_type_t* type){
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_POINTER:
-		case TYPE_CLASS_REFERENCE:
 			return FALSE;
 		case TYPE_CLASS_ENUMERATED:
 			return TRUE;
@@ -233,7 +227,6 @@ u_int8_t is_type_valid_for_conditional(generic_type_t* type){
 		case TYPE_CLASS_STRUCT:
 			return FALSE;
 		case TYPE_CLASS_POINTER:
-		case TYPE_CLASS_REFERENCE:
 			return TRUE;
 		case TYPE_CLASS_ENUMERATED:
 			return TRUE;
