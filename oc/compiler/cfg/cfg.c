@@ -3132,15 +3132,13 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		(ident_node->variable->stack_variable == TRUE || ident_node->variable->membership == GLOBAL_VARIABLE)){
 		//Extract the "true type" here in case we are dealing with a reference type
 		generic_type_t* type = ident_node->variable->type_defined_as;
-		//"True" type for dereferencing
-		generic_type_t* true_type = ident_node->variable->type_defined_as;
 
 		//Emit the memory address var for later on
 		three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
 
 		//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
 		//a reference
-		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(true_type), memory_address, true_type);
+		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
 		load_instruction->is_branch_ending = is_branch_ending;
 
 		//This counts as a use
@@ -4326,14 +4324,14 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//store to get the variable back to where it needs to be
 	} else if (postfix_node->variable->stack_variable == TRUE){
 		//Get the "true type". If we have a reference, this goes through an implicit dereference
-		generic_type_t* true_type = postfix_node->variable->type_defined_as; 
+		generic_type_t* type = postfix_node->variable->type_defined_as; 
 
 		//Get the version that represents our memory indirection. Be sure to use the "true type" here
 		//just in case we were dealing with a reference
 		three_addr_var_t* memory_address_var = emit_memory_address_var(postfix_node->variable);
 
 		//Now we need to add the final store
-		instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, true_type);
+		instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, type);
 
 		//Counts as a use
 		add_used_variable(current_block, assignee);
@@ -4515,15 +4513,14 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
 			//store to get the variable back to where it needs to be
 			} else if (unary_expression_child->variable->stack_variable == TRUE){
-				//Get the "true type". If we have a reference, this goes through an implicit dereference
-				generic_type_t* true_type = unary_expression_child->variable->type_defined_as; 
+				//Type of the variable
+				generic_type_t* type = unary_expression_child->variable->type_defined_as; 
 
-				//Get the version that represents our memory indirection. Be sure to use the "true type" here
-				//just in case we were dealing with a reference
+				//Get the version that represents our memory indirection
 				three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
 				//Now we need to add the final store
-				instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, true_type);
+				instruction_t* store_instruction = emit_store_ir_code(memory_address_var, assignee, type);
 
 				//Counts as a use
 				add_used_variable(current_block, assignee);
@@ -5348,12 +5345,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		//Emit the memory address var for this variable
 		three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
 
-		//We need to extract the "true type". For references, we implicitly dereference,
-		//so the true type is whatever it points to
-		generic_type_t* true_type = left_hand_var->type;
-
 		//Now for the final store code
-		instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, true_type);
+		instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, left_hand_var->type);
 		final_assignment->is_branch_ending = is_branch_ending;
 
 		//If the last instruction is *not* a constant assignment, we can go ahead like this
@@ -5554,9 +5547,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
-		//Extract the parameter type here
-		generic_type_t* parameter_type = signature->parameters[current_func_param_idx - 1];
-
 		//Emit whatever we have here into the basic block
 		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
 
@@ -5685,9 +5675,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
-		//Extract the parameter type here
-		generic_type_t* parameter_type = signature->parameters[current_func_param_idx - 1];
-
 		//Emit whatever we have here into the basic block
 		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
 
