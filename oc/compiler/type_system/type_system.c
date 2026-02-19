@@ -545,7 +545,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
 					 * memory regions of the same size
 					 */
-					if(get_type_size(destination_type->internal_types.points_to) != get_type_size(true_source_type->internal_types.member_type)){
+
+					u_int32_t source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.member_type));
+					u_int32_t dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
+					if(dest_size_bytes != source_size_bytes){
 						return NULL;
 					}
 
