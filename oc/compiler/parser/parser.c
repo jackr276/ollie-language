@@ -6632,6 +6632,8 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
  *
  * mut i32[35] -> this creates a mutable array(so the actual arr var is mutable) of mutable i32's(every single member
  * is also mutable)
+ *
+ * TODO - this is wrong and does not support pointers to arrays
  */
 static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	//We always assume immutability
@@ -6666,66 +6668,28 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	//Let's see where we go from here
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//As long as we are seeing pointer/reference specifiers
-	while(lookahead.tok == STAR || lookahead.tok == SINGLE_AND){
-		//Predeclare here due to switch rules
-		symtab_type_record_t* found_pointer;
-		symtab_type_record_t* found_reference;
-		
-		//Handle either a pointer or reference
-		switch(lookahead.tok){
-			//Pointer type(also called a raw pointer) here
-			case STAR:
-				//Let's see if we can find it first. We want to avoid creating memory if we're able to,
-				//so this step is important
-				found_pointer = lookup_pointer_type(type_symtab, current_type_record->type, mutability);
+	//As long as we are seeing pointer specifiers
+	while(lookahead.tok == STAR){
+		//Let's see if we can find it first. We want to avoid creating memory if we're able to,
+		//so this step is important
+		symtab_type_record_t* found_pointer = lookup_pointer_type(type_symtab, current_type_record->type, mutability);
 
-				//If we did not find it, we will add it into the symbol table
-				if(found_pointer == NULL){
-					//Let's create the pointer type. This pointer type will point to the current type
-					generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
+		//If we did not find it, we will add it into the symbol table
+		if(found_pointer == NULL){
+			//Let's create the pointer type. This pointer type will point to the current type
+			generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
 
-					//Create the type record
-					symtab_type_record_t* created_pointer = create_type_record(pointer);
-					//Insert it into the symbol table
-					insert_type(type_symtab, created_pointer);
-					//We'll also set the current type record to be this
-					current_type_record = created_pointer;
+			//Create the type record
+			symtab_type_record_t* created_pointer = create_type_record(pointer);
+			//Insert it into the symbol table
+			insert_type(type_symtab, created_pointer);
+			//We'll also set the current type record to be this
+			current_type_record = created_pointer;
 
-				//Otherwise we've already gotten it, so just use it for our purposes here
-				} else {
-					//Otherwise, just set the current type record to be what we found
-					current_type_record = found_pointer;
-				}
-
-				break;
-
-			//Reference type - a pointer with more rules & restrictions
-			case SINGLE_AND:
-				//Let's see if we're able to find a reference type like this that already exists
-				found_reference = lookup_reference_type(type_symtab, current_type_record->type, mutability);
-
-				//If we did not find it, we will add it into the symbol table
-				if(found_reference == NULL){
-					//Create it using the helper. It will be pointing to our current type
-					generic_type_t* reference = create_reference_type(current_type_record->type, parser_line_num, mutability);
-
-					//Create the type record
-					symtab_type_record_t* created_reference = create_type_record(reference);
-					//Insert it into the symbol table
-					insert_type(type_symtab, created_reference);
-					//We'll also set the current type record to be this
-					current_type_record = created_reference;
-				} else {
-					//Otherwise, just set the current type record to be what we found
-					current_type_record = found_reference;
-				}
-
-				break;
-				
-			//Should be unreachable
-			default:
-				break;
+		//Otherwise we've already gotten it, so just use it for our purposes here
+		} else {
+			//Otherwise, just set the current type record to be what we found
+			current_type_record = found_pointer;
 		}
 
 		//Refresh the search, keep hunting
