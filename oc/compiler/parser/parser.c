@@ -2736,14 +2736,8 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//The inferred type is the current type *or* the dereferenced type
-			//if we have a reference
-			if(cast_expr->inferred_type->type_class != TYPE_CLASS_REFERENCE){
-				return_type = cast_expr->inferred_type;
-			//Otherwise we have a reference - so on-the-fly deref here
-			} else {
-				return_type = cast_expr->inferred_type->internal_types.references;
-			}
+			//Save the return type as whatever the cast expression got
+			return_type = cast_expr->inferred_type;
 
 			//This is not assignable
 			is_assignable = FALSE;
@@ -2761,14 +2755,8 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//The inferred type is the current type *or* the dereferenced type
-			//if we have a reference
-			if(cast_expr->inferred_type->type_class != TYPE_CLASS_REFERENCE){
-				return_type = cast_expr->inferred_type;
-			//Otherwise we have a reference - so on-the-fly deref here
-			} else {
-				return_type = cast_expr->inferred_type->internal_types.references;
-			}
+			//Save the return type as whatever the cast expression got
+			return_type = cast_expr->inferred_type;
 
 			//This is not assignable
 			is_assignable = FALSE;
@@ -2797,15 +2785,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
-
-			//The inferred type is the current type *or* the dereferenced type
-			//if we have a reference
-			if(cast_expr->inferred_type->type_class != TYPE_CLASS_REFERENCE){
-				return_type = cast_expr->inferred_type;
-			//Otherwise we have a reference - so on-the-fly deref here
-			} else {
-				return_type = cast_expr->inferred_type->internal_types.references;
-			}
+			
+			//Save the return type as whatever the cast expression got
+			return_type = cast_expr->inferred_type;
 
 			//This counts as mutation -- unless it's a constant
 			if(cast_expr->variable != NULL){
@@ -7718,11 +7700,6 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Another special case - if we're trying to pass a non-reference as a reference return, we will fail
-	if(current_function->return_type->type_class == TYPE_CLASS_REFERENCE && expr_node->inferred_type->type_class != TYPE_CLASS_REFERENCE){
-		return print_and_return_error("Ollie does not support implicit referencing in return statements", parser_line_num);
-	}
-
 	//If this is a constant, we'll force it to be whatever the new type is
 	if(expr_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
 		//Set the type
@@ -9349,22 +9326,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Special restriction here - references must be initialized
-	//upon declaration. In other words, the user is mandated to
-	//use "let" to declare & initialize all at once
-	if(type_spec->type_class == TYPE_CLASS_REFERENCE){
-		//First potential issue - you can't use references
-		//in the global scope
-		if(is_global == TRUE){
-			sprintf(info, "Variable %s is of type %s. Reference types cannot be used in the global scope", name.string, type_spec->type_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Otherwise - another issue here. You can never declare a reference
-		sprintf(info, "Variable %s is of type %s. Reference types must be declared and intialized in the same step using the \"let\" keyword", name.string, type_spec->type_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
 	//One thing here, we aren't allowed to see void
 	if(strcmp(type_spec->type_name.string, "void") == 0){
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
@@ -9762,28 +9723,6 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
 				return NULL;
 			}
 
-			//Additional validation here - it is not possible to assign a reference
-			//to another reference. The types_assignable will let that go because
-			//of our need to do it inside of function calls. But, if we catch that here,
-			//we can't have it. However, we can have something like: assigning a reference
-			//to another reference that's returned from a function call. It all depends on
-			//what the return node type is here
-			if(return_type->type_class == TYPE_CLASS_REFERENCE && initializer_node->ast_node_type == AST_NODE_TYPE_IDENTIFIER){
-				//This is a fail case
-				if(initializer_node->inferred_type->type_class == TYPE_CLASS_REFERENCE){
-					//Detailed error message
-					sprintf(info, "Reference of type %s%s may not be assigned to another %s%s reference type",
-								return_type->mutability == MUTABLE ? "mut " : "",
-								return_type->type_name.string, 
-								initializer_node->inferred_type->mutability == MUTABLE ? "mut " : "",
-								initializer_node->inferred_type->type_name.string);
-
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					//NULL signifies failure
-					return NULL;
-				}
-			}
-
 			//If we have a constant node, we need to perform any needed type coercion here
 			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
 				//Set the final type
@@ -9886,14 +9825,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		return print_and_return_error("\"void\" type is only valid for function returns, not variable declarations", parser_line_num);
 	}
 
-	//We cannot have reference types in the global scope
-	if(type_spec->type_class == TYPE_CLASS_REFERENCE){
-		if(is_global == TRUE){
-			sprintf(info, "Variable %s is of type %s. Reference types cannot be used in the global scope", name.string, type_spec->type_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-	}
-
 	//Now we know that it wasn't a duplicate, so we must see a valid assignment operator
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -9946,38 +9877,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
-
-	/**
-	 * If we have a reference type, then we know off the bat that whatever
-	 * variable we are assigning here will be stored/used by reference, even
-	 * if it is implicitly. As such, we will flag that our variable from above
-	 * is a "stack variable". This will tell the compiler to skip trying to keep
-	 * it in a register and throw it in the stack immediately. Luckily, setting
-	 * this flag is all that we need to do in the parser
-	 */
-	if(type_spec->type_class == TYPE_CLASS_REFERENCE){
-		//If the initialized node's variable is a thing and it's not a stack variable, we'll
-		//need to make it one
-		if(initializer_node->variable != NULL){
-			//If it's not already a stack variable, then make it
-			//one
-			if(initializer_node->variable->stack_region == NULL){
-				//Otherwise, we need to flag that the variable that is being referenced here *must* be stored
-				//on the stack going forward, because it is being referenced
-				initializer_node->variable->stack_variable = TRUE;
-
-				//Make the stack region right now while we're at it
-				initializer_node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), initializer_node->inferred_type);
-			}
-
-			//This is a stack variable. We need to load to & from memory whenever we use it
-			declared_var->stack_variable = TRUE;
-
-			//This variable's stack region just points to the one that the referenced variable has. This may
-			//not always be the case, but it usually is
-			declared_var->stack_region = initializer_node->variable->stack_region;
-		}
-	}
 
 	//Add the reference into the root node
 	let_stmt_node->variable = declared_var;
@@ -10358,12 +10257,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 	//This parameter was declared in whatever function we're currently in
 	param_record->function_declared_in = current_function;
-
-	//If we have a reference type, we need to flag that this is
-	//a "stack variable" and needs to be dereferenced as we go
-	if(type->type_class == TYPE_CLASS_REFERENCE){
-		param_record->stack_variable = TRUE;
-	}
 
 	//We've now built up our param record, so we'll give add it to the symtab
 	insert_variable(variable_symtab, param_record);
