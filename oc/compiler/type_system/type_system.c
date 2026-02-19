@@ -518,16 +518,6 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					}
 
 				//Check if they're assignable
-				//
-				//
-				//
-				//
-				////TODO
-				///
-				///
-				///
-				///
-				///
 				case TYPE_CLASS_ARRAY:
 					//This is invalid - we cannot take an immutable pointer
 					//and then assign it over to a mutable pointer, because
@@ -539,6 +529,16 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 							return NULL;
 						}
 					}
+
+					//int x[5];
+
+					//int* y = x;
+
+					if(true_source_type->internal_types.member_type->type_class == TYPE_CLASS_ARRAY){
+						return NULL;
+					}
+
+
 
 					/**
 					 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
