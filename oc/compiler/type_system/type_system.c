@@ -517,7 +517,26 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 							return destination_type;
 					}
 
-				//Check if they're assignable
+
+				/**
+				 * Pointer to array assignability:
+				 *
+				 * We need to allow things like this to happen:
+				 *
+				 * 	i32* = i32[](single dimensional array decay to pointer). The reason why? These would
+				 * 	both lead to contiguous memory access if we ended up dereferencing them
+				 *
+				 * 
+				 *  However, something like this;
+				 *  	i32**  = i32[][]
+				 *  		 or
+				 *  	i32*[] = i32[][]
+				 *
+				 *  Needs to be smacked down. These are not the same at all. The left hand side is a non-contiguous
+				 *  memory type. It means that if we had to access it using the [] operation, we'd need to do a dereference implicitly. If
+				 *  we were to do the [] operation on the regular flat array, then we would just need to calculate an address offset
+				 *
+				 */
 				case TYPE_CLASS_ARRAY:
 					//This is invalid - we cannot take an immutable pointer
 					//and then assign it over to a mutable pointer, because
@@ -530,6 +549,20 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						}
 					}
 
+					if(destination_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS){
+						printf("DSETINATION %s is contiguous\n", destination_type->type_name.string);
+					} else {
+						printf("DSETINATION %s is non-contiguous\n", destination_type->type_name.string);
+					}
+
+					if(true_source_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS){
+						printf("SOURCE %s is contiguous\n", true_source_type->type_name.string);
+					} else {
+						printf("SOURCE %s is non-contiguous\n", true_source_type->type_name.string);
+					}
+
+
+					//TODO DOCUMENT
 					if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
 						return NULL;
 					}
@@ -577,6 +610,24 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 					//Let's see if what they point to is the exact same
 					} else {
+
+						if(destination_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS){
+							//printf("DSETINATION %s is contiguous\n", destination_type->type_name.string);
+						} else {
+							//printf("DSETINATION %s is non-contiguous\n", destination_type->type_name.string);
+						}
+
+						if(true_source_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS){
+							//printf("SOURCE %s is contiguous\n", true_source_type->type_name.string);
+						} else {
+							//printf("SOURCE %s is non-contiguous\n", true_source_type->type_name.string);
+						}
+
+						//TODO DOCUMENT
+						if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
+							return NULL;
+						}
+
 						/**
 						 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
 						 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
@@ -2412,16 +2463,29 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 
 /**
  * Generate a failure message for when the "types_assignable" call fails
+ *
+ * This will also go through and try to create a more helpful error 
  */
 void generate_types_assignable_failure_message(char* info, generic_type_t* source_type, generic_type_t* destination_type){
-	//Grab the mutability levels
+	//Grab the mutability levels as strings for our use
 	char* source_mutability = source_type->mutability == MUTABLE ? "mut " : "";
 	char* dest_mutability = destination_type->mutability == MUTABLE ? "mut " : "";
 
-	//Print into the buffer
-	sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
-			source_mutability, source_type->type_name.string,
-			dest_mutability, destination_type->type_name.string);
+	char* source_layout = source_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS ? "Contiguous" : "Non-contiguous";
+	char* dest_layout = destination_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS ? "contiguous" : "non-contiguous";
+
+	//If this is the region why, then we'll print out a special message
+	if(destination_type->memory_layout_type != source_type->memory_layout_type){
+		//Print into the buffer
+		sprintf(info, "%s Type \"%s%s\" cannot be assigned to incompatible %s type \"%s%s\"",
+		  		source_layout, source_mutability, source_type->type_name.string,
+				dest_layout, dest_mutability, destination_type->type_name.string);
+	} else {
+		//Print into the buffer
+		sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
+				source_mutability, source_type->type_name.string,
+				dest_mutability, destination_type->type_name.string);
+	}
 }
 
 
