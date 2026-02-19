@@ -2783,31 +2783,20 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	//a special case. We always need our return variable to be in %rax, and that may
 	//not happen all the time naturally. As such, we need this assignment here
 	if(ret_node->first_child != NULL){
-		//Most common case so it's the if for branch-pred. If we're not returning a
-		//reference that *is* an identifier, we go through all of the common steps
-		if(ret_node->inferred_type->type_class != TYPE_CLASS_REFERENCE || ret_node->first_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-			//Perform the binary operation here
-			cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
+		//Perform the binary operation here
+		cfg_result_package_t expression_package = emit_expression(current, ret_node->first_child, is_branch_ending, FALSE);
 
-			//If we hit a ternary here, we'll need to reassign what our current block is
-			if(expression_package.final_block != current){
-				//Assign current to be the new end
-				current = expression_package.final_block;
+		//If we hit a ternary here, we'll need to reassign what our current block is
+		if(expression_package.final_block != current){
+			//Assign current to be the new end
+			current = expression_package.final_block;
 
-				//The final block of the overall return chunk will be this
-				return_package.final_block = current;
-			}
-
-			//Grab this out to look at
-			return_variable = expression_package.assignee;
-
-		//If we get here, we know for a fact that we have the special case of returning a reference that is
-		//an identifier. Since this is the case, we need to hijack the normal identifier pipeline and emit
-		//this as-is
-		} else {
-			//Just emit the var like this - no dereference
-			return_variable = emit_var(ret_node->first_child->variable);
+			//The final block of the overall return chunk will be this
+			return_package.final_block = current;
 		}
+
+		//Grab this out to look at
+		return_variable = expression_package.assignee;
 
 		/**
 		 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
@@ -8719,9 +8708,7 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 
 		//If we have a stack variable that is *not* a reference type, we will
 		//go through here and pre-load it onto the stack
-		if(parameter->stack_variable == TRUE 
-			&& parameter->type_defined_as->type_class != TYPE_CLASS_REFERENCE){
-
+		if(parameter->stack_variable == TRUE){
 			//However if it is a stack variable, we need to add it to the stack and emit an initial store of it
 			if(parameter->stack_region == NULL){
 				//Add this variable onto the stack now, since we know it is not already on it
@@ -9480,20 +9467,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 		//Store the "true" stored type. This will only change if our type is a reference, because
 		//we need to account for the implicit dereference that's happening
 		generic_type_t* true_stored_type = let_variable->type;
-
-		//Handle the implicit dereference here if appropriate
-		if(true_stored_type->type_class == TYPE_CLASS_REFERENCE){
-			//If we have something like let x:i32& = y;, we actually
-			//don't need to write anything down at all because why will
-			//have already been flagged as being on the stack. In this
-			//instance, we can just bail out here
-			if(expression_node->ast_node_type == AST_NODE_TYPE_IDENTIFIER){
-				return let_results;
-			}
-
-			//Otherwise we'll need to emit something, so derefernce this
-			true_stored_type = dereference_type(true_stored_type);
-		}
 
 		//NOTE: We use the type of our let variable here for the address assignment
 		three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
