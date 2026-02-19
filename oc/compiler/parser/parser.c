@@ -1083,72 +1083,21 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			return print_and_return_error("Bad parameter passed to function call", current_line);
 		}
 
-		//Needed in this scope
-		generic_type_t* final_type = NULL;
+		//Let's see if we're even able to assign this here
+		generic_type_t* final_type = types_assignable(param_type, current_param->inferred_type);
 
-		//If we do *not* have a reference type, we will go through the normal types_assignable
-		//pipeline(most common case)
-		if(param_type->type_class != TYPE_CLASS_REFERENCE){
-			//Let's see if we're even able to assign this here
-			final_type = types_assignable(param_type, current_param->inferred_type);
+		//If this is null, it means that our check failed
+		if(final_type == NULL){
+			sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an input of type \"%s%s\". Defined as: %s",
+					function_name.string, 
+					(param_type->mutability == MUTABLE ? "mut ": ""),
+					param_type->type_name.string, num_params,
+					//Print the mut keyword if we need it
+					(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+					current_param->inferred_type->type_name.string, function_type->type_name.string);
 
-			//If this is null, it means that our check failed
-			if(final_type == NULL){
-				sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an input of type \"%s%s\". Defined as: %s",
-						function_name.string, 
-						(param_type->mutability == MUTABLE ? "mut ": ""),
-						param_type->type_name.string, num_params,
-						//Print the mut keyword if we need it
-						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						current_param->inferred_type->type_name.string, function_type->type_name.string);
-
-				//Use the helper to return this
-				return print_and_return_error(info, parser_line_num);
-			}
-
-		//Otherwise, we have a reference type and we will do some special handling
-		} else {
-			//This is a hard no - we cannot have references being created on-the-fly
-			//here, so if the user is trying to do something like increment a reference - that's a no
-			if(current_param->inferred_type->type_class != TYPE_CLASS_REFERENCE
-				//If it's an identifier, we can automatically make it a reference. If it's not,
-				//then we're out of luck here
-				&& current_param->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-				sprintf(info, "Attempt to pass type %s%s to parameter of type %s%s",
-							current_param->inferred_type->mutability == MUTABLE ? "mut ": "",
-							current_param->inferred_type->type_name.string,
-							param_type->mutability == MUTABLE ? "mut ": "",
-							param_type->type_name.string);
-
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//Let's see if we're even able to assign this here
-			final_type = types_assignable(param_type, current_param->inferred_type);
-
-			//If this is null, it means that our check failed
-			if(final_type == NULL){
-				sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an input of type \"%s%s\". Defined as: %s",
-						function_name.string, 
-						(param_type->mutability == MUTABLE ? "mut ": ""),
-						param_type->type_name.string, num_params,
-						//Print the mut keyword if we need it
-						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						current_param->inferred_type->type_name.string, function_type->type_name.string);
-
-				//Use the helper to return this
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//The param type is a reference, but the inferred type is not. What we'll do in this case 
-			//is automatically make the variable that we're dealing with a stack variable
-			if(current_param->inferred_type->type_class != TYPE_CLASS_REFERENCE){
-				//Make this a stack variable - the CFG will auto-insert into the stack
-				current_param->variable->stack_variable = TRUE;
-
-				//Create the stack region here and now to avoid any confusion
-				current_param->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), current_param->inferred_type);
-			}
+			//Use the helper to return this
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//If this is a constant node, we'll force it to be whatever we expect from the type assignability
@@ -1826,17 +1775,6 @@ loop_end:
 		case TYPE_CLASS_ARRAY:
 			return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
 
-		//Reference types, whether they are mutable or not, may not be reassigned after they are declared and
-		//initialized
-		case TYPE_CLASS_REFERENCE:
-			//Can't have an equals
-			if(assignment_operator == EQUALS){
-				return print_and_return_error("Reference types may only be assigned to in a \"let\" statement", parser_line_num);
-			}
-
-			//Other things are fine, like the compressed equality operators
-			break;
-
 		//If we don't have the 2 above, then we have no issue
 		default:
 			break;
@@ -1929,11 +1867,6 @@ loop_end:
 	} else {
 		//Convert this into the assignment operator
 		ollie_token_t binary_op = compressed_assignment_to_binary_op(assignment_operator);
-
-		//We need to account for the automatic dereference here
-		if(left_hand_type->type_class == TYPE_CLASS_REFERENCE){
-			left_hand_type = dereference_type(left_hand_type);
-		}
 
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
@@ -2425,14 +2358,8 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 	//The parent node is a child of this one
 	add_child_node(postoperation_node, parent_node);
 
-	//The inferred type is the current type *or* the dereferenced type
-	//if we have a reference
-	if(current_type->type_class != TYPE_CLASS_REFERENCE){
-		postoperation_node->inferred_type = current_type;
-	//Otherwise we have a reference - so on-the-fly deref here
-	} else {
-		postoperation_node->inferred_type = current_type->internal_types.references;
-	}
+	//Saved the inferred type of this postoperation node as the current type
+	postoperation_node->inferred_type = current_type;
 
 	postoperation_node->line_number = parser_line_num;
 	//Store the unary operator too
