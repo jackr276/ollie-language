@@ -218,6 +218,9 @@ void sweep_stack_data_area(stack_data_area_t* area){
 
 	//And once all of the deletion is done, we will invoke the stack realigner to fix all of the alignments
 	realign_data_area(area);
+
+	//Scrap the array
+	dynamic_array_dealloc(&marked_for_deletion);
 }
 
 

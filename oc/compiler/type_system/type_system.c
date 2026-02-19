@@ -530,14 +530,9 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						}
 					}
 
-					//int x[5];
-
-					//int* y = x;
-
-					if(true_source_type->internal_types.member_type->type_class == TYPE_CLASS_ARRAY){
+					if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
 						return NULL;
 					}
-
 
 
 					/**
@@ -1662,6 +1657,9 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 	//This is always compelete at definition
 	type->type_complete = TRUE;
 
+	//This is contiguous
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+
 	//Give back the pointer, it will need to be freed eventually
 	return type;
 }
@@ -1808,6 +1806,9 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 	//This is always compelete at definition
 	type->type_complete = TRUE;
 
+	//This is contiguous as well
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+
 	return type;
 }
 
@@ -1831,6 +1832,9 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 
 	//Reserve dynamic array space for the struct table
 	type->internal_types.struct_table = dynamic_array_alloc();
+
+	//This is contiguous as well
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
 
 	//Give back the pointer
 	return type;
@@ -1858,6 +1862,9 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 
 	//Reserve the dynamic array as well
 	type->internal_types.union_table = dynamic_array_alloc();
+
+	//This is contiguous as well
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
 
 	//And give the type pointer back
 	return type;
