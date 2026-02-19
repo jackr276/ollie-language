@@ -67,7 +67,6 @@ typedef enum type_class_t {
 	TYPE_CLASS_STRUCT,
 	TYPE_CLASS_ENUMERATED,
 	TYPE_CLASS_POINTER,
-	TYPE_CLASS_REFERENCE, /* Reference type */
 	TYPE_CLASS_FUNCTION_SIGNATURE, /* Function pointer type */
 	TYPE_CLASS_UNION, /* For discriminating union types */
 	TYPE_CLASS_ALIAS /* Alias types */
@@ -109,8 +108,6 @@ struct generic_type_t{
 		generic_type_t* member_type;
 		//What does a pointer type point to?
 		generic_type_t* points_to;
-		//What does a reference type reference?
-		generic_type_t* references;
 		//For function pointers
 		function_type_t* function_type;
 		//Store all values in a struct
@@ -217,11 +214,6 @@ generic_type_t* get_base_alignment_type(generic_type_t* type);
 u_int32_t get_data_section_alignment(generic_type_t* type);
 
 /**
- * Get the referenced type regardless of how many indirection levels there are
- */
-generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t indirection_level);
-
-/**
  * Is the given type memory movement appropriate
  */
 u_int8_t is_type_address_calculation_compatible(generic_type_t* type);
@@ -287,11 +279,6 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_number, mutability_type_t mutability);
 
 /**
- * Dynamically allocate and create a reference type
- */
-generic_type_t* create_reference_type(generic_type_t* type_referenced, u_int32_t line_number, mutability_type_t mutability);
-
-/**
  * Is the given binary operation valid for the type that was specificed?
  */
 u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t binary_op, side_type_t side);
@@ -341,6 +328,11 @@ void* get_struct_member(generic_type_t* structure, char* name);
  * Does this union contain said member? Return the variable if yes, NULL if not
  */
 void* get_union_member(generic_type_t* union_type, char* name);
+
+/**
+ * Get the referenced type regardless of how many indirection levels there are
+ */
+generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t indirection_level);
 
 /**
  * Dynamically allocate and create an array type

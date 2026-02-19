@@ -178,7 +178,6 @@ static inline u_int8_t is_type_unsigned_64_bit(generic_type_t* type){
 		//These are memory addresses - so yes
 		case TYPE_CLASS_POINTER:
 		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_REFERENCE:
 		case TYPE_CLASS_STRUCT:
 			return TRUE;
 
