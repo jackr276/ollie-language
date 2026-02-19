@@ -2810,27 +2810,6 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		}
 
 		/**
-		 * Special case here - we have a reference that is the result of our expression, but we do *not* want to return a reference
-		 * As such, we will perform an automatic dereference here to get the actual value that we're after
-		 */
-		if(return_variable->type->type_class == TYPE_CLASS_REFERENCE && ret_node->inferred_type->type_class != TYPE_CLASS_REFERENCE){
-			//Dereference the type
-			generic_type_t* dereferenced_type = dereference_type(return_variable->type);
-
-			//Dereference the return variable into this
-			instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(ret_node->inferred_type), return_variable, dereferenced_type);
-			
-			//Counts as a use
-			add_used_variable(current, load_instruction->op1);
-
-			//Get it into the block
-			add_statement(current, load_instruction);
-
-			//This is the new return variable
-			return_variable = load_instruction->assignee;
-		}
-
-		/**
 		 * The type of this final assignee will *always* be the inferred type of the node. We need to ensure that
 		 * the function is returning the type as promised, and not what is done through type coercion
 		 */
@@ -3167,27 +3146,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		//"True" type for dereferencing
 		generic_type_t* true_type = ident_node->variable->type_defined_as;
 
-		//If it is a reference, we need to grab what it references
-		if(true_type->type_class == TYPE_CLASS_REFERENCE){
-			true_type = true_type->internal_types.references;
-		}
-
-		//Store for later on
-		three_addr_var_t* memory_address;
-
-		//There are 2 cases here - if we have a local stack variable, we'll need to load the memory
-		//address up itself. However, if we have a function parameter that's a reference variable,
-		//we know that it already is a memory address, so we can just adjust the base address and
-		//not load a memory address at all
-		if(type->type_class != TYPE_CLASS_REFERENCE || ident_node->variable->membership != FUNCTION_PARAMETER){
-			//Emit the memory address variable
-			memory_address = emit_memory_address_var(ident_node->variable);
-
-		//Otherwise this is our special case with a reference function parameter - so all we'll do
-		//is rememdiate the type
-		} else {
-			memory_address = emit_var(ident_node->variable);
-		}
+		//Emit the memory address var for later on
+		three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
 
 		//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
 		//a reference
@@ -4379,11 +4339,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		//Get the "true type". If we have a reference, this goes through an implicit dereference
 		generic_type_t* true_type = postfix_node->variable->type_defined_as; 
 
-		//The real type in this case is whatever is one layer beneath here
-		if(true_type->type_class == TYPE_CLASS_REFERENCE){
-			true_type = true_type->internal_types.references;
-		}
-
 		//Get the version that represents our memory indirection. Be sure to use the "true type" here
 		//just in case we were dealing with a reference
 		three_addr_var_t* memory_address_var = emit_memory_address_var(postfix_node->variable);
@@ -4573,11 +4528,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			} else if (unary_expression_child->variable->stack_variable == TRUE){
 				//Get the "true type". If we have a reference, this goes through an implicit dereference
 				generic_type_t* true_type = unary_expression_child->variable->type_defined_as; 
-
-				//The real type in this case is whatever is one layer beneath here
-				if(true_type->type_class == TYPE_CLASS_REFERENCE){
-					true_type = true_type->internal_types.references;
-				}
 
 				//Get the version that represents our memory indirection. Be sure to use the "true type" here
 				//just in case we were dealing with a reference
@@ -5406,34 +5356,12 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * Otherwise, we'll need to emit a store operation here
 	 */
 	} else {
-		/**
-		 * Two possibilities here - we may have a memory address assignment if our variable is *not* a function
-		 * parameter. If it is a function parameter, then all we need to do here is emit the variable name itself
-		 */
-		three_addr_var_t* memory_address;
-
-		//If we actually have a stack region to deal with. Things like references as params will have no such thing. We will check to make
-		//sure we are *not* a reference function param. If we aren't then this is just fine for the memory address assignment
-		if(left_hand_var->membership != FUNCTION_PARAMETER || left_hand_var->linked_var->type_defined_as->type_class != TYPE_CLASS_REFERENCE){
-			//This is the memory address
-			memory_address = emit_memory_address_var(left_hand_var->linked_var);
-
-		//Otherwise, it's just the variable itself. This usually happens when we have function parameters
-		//that are references
-		} else {
-			//It's just the left hand var
-			memory_address = left_hand_var;
-		}
+		//Emit the memory address var for this variable
+		three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
 
 		//We need to extract the "true type". For references, we implicitly dereference,
 		//so the true type is whatever it points to
 		generic_type_t* true_type = left_hand_var->type;
-
-		//If this is a reference type, we need to represent our implicit
-		//dereference here
-		if(true_type->type_class == TYPE_CLASS_REFERENCE){
-			true_type = true_type->internal_types.references;
-		}
 
 		//Now for the final store code
 		instruction_t* final_assignment = emit_store_ir_code(memory_address, NULL, true_type);
@@ -5640,37 +5568,21 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//Extract the parameter type here
 		generic_type_t* parameter_type = signature->parameters[current_func_param_idx - 1];
 
-		//Assignee for us to use
-		three_addr_var_t* param_assignee;
+		//Emit whatever we have here into the basic block
+		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
 
-		//Most common case - we aren't dealing with reference parameters here - we follow the
-		//normal pattern
-		if(parameter_type->type_class != TYPE_CLASS_REFERENCE || param_cursor->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-			//Emit whatever we have here into the basic block
-			cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
+		//to reassign
+		if(package.final_block != current){
+			//We've seen a ternary, reassign current
+			current = package.final_block;
 
-			//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
-			//to reassign
-			if(package.final_block != current){
-				//We've seen a ternary, reassign current
-				current = package.final_block;
-
-				//Reassign this as well, so that we stay current
-				result_package.final_block = current;
-			}
-
-			//For later down the road
-			param_assignee = package.assignee;
-
-		//Otherwise we have the unique case of a reference parameter. We need to bypass the
-		//entire identifier system and simply get the memory address of said identifier here
-		} else {
-			//The assignee is just this one's assignee
-			param_assignee = emit_memory_address_var(param_cursor->variable);
+			//Reassign this as well, so that we stay current
+			result_package.final_block = current;
 		}
 
 		//Add this final result into our parameter results list
-		dynamic_array_add(&function_parameter_results, param_assignee);
+		dynamic_array_add(&function_parameter_results, package.assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -5787,37 +5699,21 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//Extract the parameter type here
 		generic_type_t* parameter_type = signature->parameters[current_func_param_idx - 1];
 
-		//Assignee for us to use
-		three_addr_var_t* param_assignee;
+		//Emit whatever we have here into the basic block
+		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
 
-		//Most common case - we aren't dealing with reference parameters here - we follow the
-		//normal pattern
-		if(parameter_type->type_class != TYPE_CLASS_REFERENCE || param_cursor->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-			//Emit whatever we have here into the basic block
-			cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
+		//to reassign
+		if(package.final_block != current){
+			//We've seen a ternary, reassign current
+			current = package.final_block;
 
-			//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
-			//to reassign
-			if(package.final_block != current){
-				//We've seen a ternary, reassign current
-				current = package.final_block;
-
-				//Reassign this as well, so that we stay current
-				result_package.final_block = current;
-			}
-
-			//For later down the road
-			param_assignee = package.assignee;
-
-		//Otherwise we have the unique case of a reference parameter. We need to bypass the
-		//entire identifier system and simply get the memory address of said identifier here
-		} else {
-			//The assignee is just this one's assignee
-			param_assignee = emit_memory_address_var(param_cursor->variable);
+			//Reassign this as well, so that we stay current
+			result_package.final_block = current;
 		}
 
 		//Add this final result into our parameter results list
-		dynamic_array_add(&function_parameter_results, param_assignee);
+		dynamic_array_add(&function_parameter_results, package.assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
