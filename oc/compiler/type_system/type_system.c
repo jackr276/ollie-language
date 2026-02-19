@@ -45,6 +45,35 @@ u_int8_t is_memory_address_type(generic_type_t* type){
 
 
 /**
+ * Convert the raw type size into the nubmer of bytes that it has
+ */
+static inline u_int32_t convert_type_size_to_bytes(variable_size_t size){
+	switch(size) {
+		case BYTE:
+			return 1;
+
+		case WORD:
+			return 2;
+
+		case DOUBLE_WORD:
+			return 4;
+
+		case QUAD_WORD:
+			return 8;
+
+		case SINGLE_PRECISION:
+			return 4;
+
+		case DOUBLE_PRECISION:
+			return 8;;
+
+		default:
+			return 8;
+	}
+}
+
+
+/**
  * What is the value that this needs to be aligned by?
  *
  * For arrays -> we align so that the base address is a multiple of the member type
@@ -489,6 +518,16 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					}
 
 				//Check if they're assignable
+				//
+				//
+				//
+				//
+				////TODO
+				///
+				///
+				///
+				///
+				///
 				case TYPE_CLASS_ARRAY:
 					//This is invalid - we cannot take an immutable pointer
 					//and then assign it over to a mutable pointer, because
@@ -543,9 +582,12 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						/**
 						 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
 						 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
-						 * memory regions of the same size
+						 * memory regions of the same physical size
 						 */
-						if(get_type_size(destination_type->internal_types.points_to) != get_type_size(true_source_type->internal_types.points_to)){
+						u_int32_t source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.points_to));
+						u_int32_t dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
+
+						if(dest_size_bytes != source_size_bytes){
 							return NULL;
 						}
 
@@ -2303,6 +2345,7 @@ variable_size_t get_type_size(generic_type_t* type){
 	//Give it back
 	return size;
 }
+
 
 /**
  * Generate the full name for the function pointer type

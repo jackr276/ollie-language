@@ -16,7 +16,7 @@ pub fn negate_float(x:mut f32*) -> void {
 	let negated:i32 = int_bits ^ (1 << 31);
 
 	//Trick it into being an f32 again
-	*f32 = *(<f32*>(&negated));
+	*x = *(<f32*>(&negated));
 
 	ret;
 }
