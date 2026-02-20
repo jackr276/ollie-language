@@ -377,6 +377,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 	//Predeclare these for now
 	ollie_token_t source_basic_type;
 	ollie_token_t dest_basic_type;
+	u_int32_t source_size_bytes;
+	u_int32_t dest_size_bytes;
 
 	//The true source type. We will use this to avoid having
 	//if statements everywhere. In most cases, the true source is
@@ -507,7 +509,27 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						return NULL;
 					}
 
-					break;
+					/**
+					 * If we have pointers/pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+					 * memory regions of the same size
+					 */
+					source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.points_to));
+					dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.member_type));
+
+					if(dest_size_bytes != source_size_bytes){
+						return NULL;
+					}
+
+					/**
+					 * No recursively check the nested types here to see if we are fully set
+					 */
+					if(types_assignable(destination_type->internal_types.member_type, true_source_type->internal_types.points_to) == NULL){
+						return NULL;
+					}
+
+					//If we survived to down here then return the dest type
+					return destination_type;
 
 				case TYPE_CLASS_ARRAY:
 					/** 
@@ -531,35 +553,40 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						return NULL;
 					}
 
+					/**
+					 * If we have pointers/pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+					 * memory regions of the same size
+					 */
+					source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.member_type));
+					dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.member_type));
+
+					if(dest_size_bytes != source_size_bytes){
+						return NULL;
+					}
+
+					/**
+					 * In order to assign an array to an array, we require that the bounds of the destination
+					 * are *at least* the size as the bounds in the source
+					 */
+					if(destination_type->internal_values.num_members < true_source_type->internal_values.num_members){
+						return NULL;
+					}
+					
+					/**
+					 * No recursively check the nested types here to see if we are fully set
+					 */
+					if(types_assignable(destination_type->internal_types.member_type, true_source_type->internal_types.member_type) == NULL){
+						return NULL;
+					}
+
+					//If we survived to down here then return the dest type
+					return destination_type;
 
 				//Everything else we won't even bother with
 				default:
 					return NULL;
 			}
-
-
-			//If this isn't a char[], we're done
-			if(destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
-				|| destination_type->internal_types.member_type->basic_type_token != CHAR){
-				return NULL;
-			}
-
-			//If it's a pointer
-			if(source_type->type_class == TYPE_CLASS_POINTER){
-				generic_type_t* points_to = true_source_type->internal_types.points_to;
-
-				//If it's not a basic type then leave
-				if(points_to->type_class != TYPE_CLASS_BASIC){
-					return NULL;
-				}
-
-				//If it's a char, then we're set
-				if(points_to->basic_type_token == CHAR){
-					return destination_type;
-				}
-			}
-
-			return NULL;
 
 		case TYPE_CLASS_POINTER:
 			switch(true_source_type->type_class){
@@ -622,9 +649,9 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
 					 * memory regions of the same size
 					 */
+					source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.member_type));
+					dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
 
-					u_int32_t source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.member_type));
-					u_int32_t dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
 					if(dest_size_bytes != source_size_bytes){
 						return NULL;
 					}
@@ -673,8 +700,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 						 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
 						 * memory regions of the same physical size
 						 */
-						u_int32_t source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.points_to));
-						u_int32_t dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
+						source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.points_to));
+						dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
 
 						if(dest_size_bytes != source_size_bytes){
 							return NULL;
