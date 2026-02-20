@@ -477,10 +477,67 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					return NULL;
 			}
 
-		//Only one type of array is assignable - and that would be a char[] to a char*
-		//
-		//TODO FIX - arrays should be assignable
+		/**
+		 * Arrays are not assignable in a general sense but we do support assigning inside of this
+		 * rule in case we're doing casting, passing a parameter, etc.. The parser guards all
+		 * attempts to do any kind of naive reassignment which we do not allow
+		 */
 		case TYPE_CLASS_ARRAY:
+			//Go based on the source type
+			switch(true_source_type->type_class){
+				case TYPE_CLASS_POINTER:
+					/** 
+					 * This is invalid - we cannot take an immutable pointer 
+					 * and then assign it over to a mutable pointer, because
+					 * that would allow mutation of the underlying value
+					 */
+					if(destination_type->mutability == MUTABLE){
+						if(true_source_type->mutability != MUTABLE){
+							return NULL;
+						}
+					}
+
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * assign them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
+					if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
+						return NULL;
+					}
+
+					break;
+
+				case TYPE_CLASS_ARRAY:
+					/** 
+					 * This is invalid - we cannot take an immutable pointer 
+					 * and then assign it over to a mutable pointer, because
+					 * that would allow mutation of the underlying value
+					 */
+					if(destination_type->mutability == MUTABLE){
+						if(true_source_type->mutability != MUTABLE){
+							return NULL;
+						}
+					}
+
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * assign them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
+					if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
+						return NULL;
+					}
+
+
+				//Everything else we won't even bother with
+				default:
+					return NULL;
+			}
+
+
 			//If this isn't a char[], we're done
 			if(destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
 				|| destination_type->internal_types.member_type->basic_type_token != CHAR){
