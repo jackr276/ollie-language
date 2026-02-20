@@ -1088,7 +1088,12 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
-			sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an input of type \"%s%s\". Defined as: %s",
+			//Let's first generate the types_assignable failure message
+			generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+			//Following that we'll generate another error message to make it more clear
+			sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
 					function_name.string, 
 					(param_type->mutability == MUTABLE ? "mut ": ""),
 					param_type->type_name.string, num_params,

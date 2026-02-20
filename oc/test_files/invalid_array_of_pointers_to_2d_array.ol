@@ -4,14 +4,15 @@
 * array of pointers
 */
 
+pub fn take_pointer_array(ptr:mut i32*[3]) -> i32 {
+	ret (*ptr)[2];
+}
+
 pub fn main() -> i32 {
 	//Flat data structure. One contiguous block of stack data
 	let x:mut i32[][] = [[1, 2, 3], [2, 3, 4], [4, 5, 6]];
 
-	declare ptr:mut i32*[3];
-
-	//This should fail. "Ptr" is a non-contiguous memory region, whereas "x" is contiguous
-	ptr = x;
-
-	ret ptr[2][1];
+	//This should fail. We cannot assign a flat data structure(x)
+	//to a non-contiguous region(the function param)
+	ret @take_pointer_array(x);
 }
