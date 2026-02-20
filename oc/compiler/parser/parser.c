@@ -912,7 +912,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	//For any error printing if need be
 	char error[ERROR_SIZE];
 	//The current line num
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
 	//We'll also keep a nicer reference to the function name
@@ -1310,7 +1310,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 	generic_ast_node_t* func_call;
 
 	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -1658,7 +1658,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
  */
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//For any eventual duplication
@@ -2133,7 +2133,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
  */
 static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, generic_type_t* current_type, side_type_t side){
 	//Freeze the current line
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
 
@@ -2250,7 +2250,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//The lookahead token
 	lexitem_t lookahead;
 	//Freeze the current line
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 
 	//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
 	if(type->type_class != TYPE_CLASS_ARRAY && type->type_class != TYPE_CLASS_POINTER){
@@ -5204,7 +5204,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
  */
 static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 	//Freeze the line num
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token for our uses
 	lexitem_t lookahead;
 
@@ -7029,7 +7029,7 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
  */
 static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -7119,7 +7119,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
  */
 static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead tokens
 	lexitem_t lookahead;
 	lexitem_t lookahead2;
@@ -7173,7 +7173,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	add_child_node(if_stmt, expression_node);
 
 	//Now following this, we need to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, TRUE);
 
 	//If this node fails, whole thing is bad
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7236,7 +7236,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 		add_child_node(else_if_node, else_if_expression_node);
 
 		//Now following this, we need to see a valid compound statement
-		generic_ast_node_t* else_if_compound_stmt_node = compound_statement(token_stream);
+		generic_ast_node_t* else_if_compound_stmt_node = compound_statement(token_stream, TRUE);
 
 		//If this node fails, whole thing is bad
 		if(else_if_compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7263,7 +7263,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//We could've still had an else block here, so we'll check and handle it if we do
 	if(lookahead.tok == ELSE){
 		//We'll now handle the compound statement that comes with this
-		generic_ast_node_t* else_compound_stmt = compound_statement(token_stream);
+		generic_ast_node_t* else_compound_stmt = compound_statement(token_stream, TRUE);
 		
 		//Let's see if it worked
 		if(else_compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7733,7 +7733,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
  */
 static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//By default we have not found one of these
@@ -8181,7 +8181,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 
 	//Push the looping statement onto here
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
@@ -8231,7 +8231,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Following this, we need to see a valid compound statement, and then we're done
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, TRUE);
 
 	//If this is invalid we fail
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8261,7 +8261,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
  */
 static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream){
 	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -8273,7 +8273,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 
 	//Remember by the time that we've gotten here, we have already seen the do keyword
 	//Let's first find a valid compound statement
-	generic_ast_node_t* compound_stmt = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt = compound_statement(token_stream, TRUE);
 
 	//If we fail, then we are done here
 	if(compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8468,7 +8468,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	}
 	
 	//Now that we're all done, we need to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, TRUE);
 
 	//If it's invalid, we'll fail out here
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8749,7 +8749,7 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
  */
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 
 	//If we see any kind of invalid nesting here, we'll need to fail out. Defer
 	//statements can only be nested inside of a function, and nothing else. So, if
@@ -8768,7 +8768,7 @@ static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//We now expect to see a compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, TRUE);
 
 	//If this fails, we bail
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8876,7 +8876,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 			push_back_token(token_stream, &parser_line_num);
 
 			//Return whatever the rule gives us
-			return compound_statement(token_stream);
+			return compound_statement(token_stream, TRUE);
 	
 		//If we see for, we are seeing a for statement
 		case FOR:
@@ -8971,7 +8971,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
 			push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 			//We'll let the helper deal with it
-			default_compound_statement = compound_statement(token_stream);
+			default_compound_statement = compound_statement(token_stream, TRUE);
 
 			//If this is an error, we fail out
 			if(default_compound_statement != NULL && default_compound_statement->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9043,7 +9043,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
  */
 static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* values_max_index){
 	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Switch compound statement node for later on
@@ -9144,7 +9144,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 			push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 			//We'll let the helper deal with it
-			switch_compound_statement = compound_statement(token_stream);
+			switch_compound_statement = compound_statement(token_stream, TRUE);
 
 			//If this is an error, we fail out
 			if(switch_compound_statement != NULL && switch_compound_statement->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9220,7 +9220,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  */
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -9740,7 +9740,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
  */
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//The line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -10711,7 +10711,7 @@ after_rparen:
  */
 static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Have we predeclared this function
@@ -10890,9 +10890,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//We'll need to initialize a new variable scope here. This variable scope is designed
 	//so that we include the function parameters in it. We need to remember to close
 	//this once we leave
-	//
-	//
-	//TODO THIS
 	initialize_variable_scope(variable_symtab);
 
 	//Now we must ensure that we see a valid parameter list. It is important to note that
@@ -10959,8 +10956,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Some housekeeping, if there were previously deferred statements, we want them out
 	deferred_stmts_node = NULL;
 
-	//We are finally required to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	/**
+	 * When we see our compound statement here, we will pass a flag in of false to indicate
+	 * that we do not want to fully open up a new variable scope. We already have a fresh variable scope opened pu
+	 * that has all of our function parameters in it. Ollie disallows copying function parameters in the opening
+	 * scope of a function definition, so we want them to all be in the same variable scope
+	 */
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, FALSE);
 
 	//If this fails we'll just pass it through
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -11012,10 +11014,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Store the line number
 	function_node->line_number = current_line;
 
-	//Close the variable scope that we opened for the parameter list
-	//
-	//
-	//TODO HERE
+	//Close the variable scope that we opened for the parameter list/compound statement
 	finalize_variable_scope(variable_symtab);
 
 	//Remove the nesting level now that we're not in a function
