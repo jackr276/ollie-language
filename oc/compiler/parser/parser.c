@@ -93,7 +93,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 static u_int8_t alias_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream, u_int8_t new_variable_scope_required);
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_stream, side_type_t side);
@@ -8498,12 +8498,16 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
  *
  * NOTE: We assume that we have NOT consumed the { token by the time we make
  * it here
+ * 
+ * Since our compound statement is also the entry point for a function, we may already get here with
+ * a variable scope opened up(think about how a function definition will open up a new variable scope
+ * for the parameter list). In that case, we don't want to be opening up extra variable scopes here
+ * if we don't have to. The "new_variable_scope_required" flag exists for this reason. We will only
+ * be opening up new scopes if this is set to TRUE
  *
  * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}* {<definition>}*}
- *
- * TODO MAKE CONFIGURABLE
  */
-static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream){
+static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream, u_int8_t new_variable_scope_required){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -8520,12 +8524,14 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 
 	//Now if we make it here, we're safe to create the actual node
 	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
-	//Store the line number here
-	compound_stmt_node->line_number = parser_line_num;
 
-	//Begin a new lexical scope for types and variables
+	//No matter what we need a new type scope 
 	initialize_type_scope(type_symtab);
-	initialize_variable_scope(variable_symtab);
+
+	//Variable scope is configurable based on a function param
+	if(new_variable_scope_required == TRUE){
+		initialize_variable_scope(variable_symtab);
+	}
 
 	//Now we can keep going until we see a closing curly
 	//We'll seed the search
@@ -8562,16 +8568,19 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 
 	//Once we've escaped out of the while loop, we know that the token we currently have
 	//is an R_CURLY
-	//We still must check for matching
 	if(pop_token(&grouping_stack).tok != L_CURLY){
 		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
 
-	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
-	//"finalize" both of these scopes
+	//We always finalize this
 	finalize_type_scope(type_symtab);
-	finalize_variable_scope(variable_symtab);
-	//Add in the line number
+
+	//This is configurable via function param
+	if(new_variable_scope_required == TRUE){
+		finalize_variable_scope(variable_symtab);
+	}
+
+	//Save the line num
 	compound_stmt_node->line_number = parser_line_num;
 
 	//And we're all done, so we'll return the reference to the root node
