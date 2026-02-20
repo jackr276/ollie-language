@@ -6639,6 +6639,8 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	//We always assume immutability
 	mutability_type_t mutability = NOT_MUTABLE;
 
+	u_int8_t is_pure_pointer_type = FALSE;
+
 	//Lookahead var
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -6668,6 +6670,8 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	//Let's see where we go from here
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
+
+	//TODO COMPLETELY REWORK
 	//As long as we are seeing pointer specifiers
 	while(lookahead.tok == STAR){
 		//Let's see if we can find it first. We want to avoid creating memory if we're able to,
@@ -8496,6 +8500,8 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
  * it here
  *
  * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}* {<definition>}*}
+ *
+ * TODO MAKE CONFIGURABLE
  */
 static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream){
 	//Lookahead token
@@ -9757,6 +9763,15 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Check that it isn't some duplicated variable name. We will only check in the
 	//local scope for this one
+	//
+	//
+	//
+	//TODO WRONG - parameters must be in a different scope - this is leading to duplicate parameter
+	//names which is a big issue
+	//
+	//
+	//
+	//
 	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
@@ -10866,6 +10881,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//We'll need to initialize a new variable scope here. This variable scope is designed
 	//so that we include the function parameters in it. We need to remember to close
 	//this once we leave
+	//
+	//
+	//TODO THIS
 	initialize_variable_scope(variable_symtab);
 
 	//Now we must ensure that we see a valid parameter list. It is important to note that
@@ -10986,6 +11004,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	function_node->line_number = current_line;
 
 	//Close the variable scope that we opened for the parameter list
+	//
+	//
+	//TODO HERE
 	finalize_variable_scope(variable_symtab);
 
 	//Remove the nesting level now that we're not in a function

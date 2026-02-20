@@ -478,6 +478,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 			}
 
 		//Only one type of array is assignable - and that would be a char[] to a char*
+		//
+		//TODO FIX - arrays should be assignable
 		case TYPE_CLASS_ARRAY:
 			//If this isn't a char[], we're done
 			if(destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
@@ -502,7 +504,6 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 			return NULL;
 
-		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
 			switch(true_source_type->type_class){
 				//We can assign any integer type to a pointer
@@ -538,35 +539,26 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				 *
 				 */
 				case TYPE_CLASS_ARRAY:
-					//This is invalid - we cannot take an immutable pointer
-					//and then assign it over to a mutable pointer, because
-					//that would allow mutation of the underlying value
+					/** 
+					 * This is invalid - we cannot take an immutable pointer 
+					 * and then assign it over to a mutable pointer, because
+					 * that would allow mutation of the underlying value
+					 */
 					if(destination_type->mutability == MUTABLE){
-						//If the destination is mutable but the source
-						//is not, we can't go forward
 						if(true_source_type->mutability != MUTABLE){
 							return NULL;
 						}
 					}
 
-					if(destination_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS){
-						printf("DSETINATION %s is contiguous\n", destination_type->type_name.string);
-					} else {
-						printf("DSETINATION %s is non-contiguous\n", destination_type->type_name.string);
-					}
-
-					if(true_source_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS){
-						printf("SOURCE %s is contiguous\n", true_source_type->type_name.string);
-					} else {
-						printf("SOURCE %s is non-contiguous\n", true_source_type->type_name.string);
-					}
-
-
-					//TODO DOCUMENT
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * assign them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
 					if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
 						return NULL;
 					}
-
 
 					/**
 					 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
@@ -587,14 +579,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					
 					return NULL;
 		
-				//Likely the most common case
 				case TYPE_CLASS_POINTER:
-					//This is invalid - we cannot take an immutable pointer
-					//and then assign it over to a mutable pointer, because
-					//that would allow mutation of the underlying value
+					/** 
+					 * This is invalid - we cannot take an immutable pointer
+					 * and then assign it over to a mutable pointer, because
+					 * that would allow mutation of the underlying value
+					 */
 					if(destination_type->mutability == MUTABLE){
-						//If the destination is mutable but the source
-						//is not, we can't go forward
 						if(true_source_type->mutability != MUTABLE){
 							return NULL;
 						}
@@ -610,20 +601,12 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 
 					//Let's see if what they point to is the exact same
 					} else {
-
-						if(destination_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS){
-							//printf("DSETINATION %s is contiguous\n", destination_type->type_name.string);
-						} else {
-							//printf("DSETINATION %s is non-contiguous\n", destination_type->type_name.string);
-						}
-
-						if(true_source_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS){
-							//printf("SOURCE %s is contiguous\n", true_source_type->type_name.string);
-						} else {
-							//printf("SOURCE %s is non-contiguous\n", true_source_type->type_name.string);
-						}
-
-						//TODO DOCUMENT
+						/**
+						 * If the memory layout type of the source and destination are different, then we cannot
+						 * assign them to eachother because if we were eventually to go and do memory access
+						 * using the [] operator, we would produce entirely different assembly code. Using
+						 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+						 */
 						if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
 							return NULL;
 						}
@@ -707,9 +690,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					}
 			}
 
-		//We should never get here
+		//Should be impossible to hit this
 		default:
-			return NULL;
+			printf("Fatal internal compiler error. Unrecognized type detetected inside of types_assignable\n");
+			exit(1);
 	}
 }
 
