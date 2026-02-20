@@ -566,10 +566,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					}
 
 					/**
-					 * In order to assign an array to an array, we require that the bounds of the destination
-					 * are *at least* the size as the bounds in the source
+					 * These need to be an *exact* match here because whenever we go to index in, if we say have a multidimensional
+					 * array, we need to know what the rowcount is to get a proper offset calculation
 					 */
-					if(destination_type->internal_values.num_members < true_source_type->internal_values.num_members){
+					if(destination_type->internal_values.num_members != true_source_type->internal_values.num_members){
 						return NULL;
 					}
 					
