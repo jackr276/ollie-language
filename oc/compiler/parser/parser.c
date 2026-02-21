@@ -6642,12 +6642,10 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	//Needed for the eventual loop
 	symtab_type_record_t* found_pointer;
 	symtab_type_record_t* found_array; 
+	generic_ast_node_t* logical_or_expr;
 
 	//We always assume immutability
 	mutability_type_t mutability = NOT_MUTABLE;
-
-	//TODO MAYBE
-	u_int8_t is_pure_pointer_type = FALSE;
 
 	//Lookahead var
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6656,7 +6654,6 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	if(lookahead.tok == MUT){
 		mutability = MUTABLE;
 	} else {
-		//Put it back if not
 		push_back_token(token_stream, &parser_line_num);
 	}
 
@@ -6672,16 +6669,10 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		return NULL;
 	}
 
-	//Otherwise, we know we're in for the array
-	//We'll use a lightstack for the bounds reversal
-
-
-	//Now once we make it here, we know that we have a name that actually exists in the symtab
-	//The current type record is what we will eventually point our node to
+	//Maintain a reference to the current type
 	symtab_type_record_t* current_type_record = type;
 	
 	//Let's see where we go from here
-	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	/**
 	 * Using a lightstack here because of the way that the type specifiers work
@@ -6693,10 +6684,85 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	 *
 	 * 	TODO DOC
 	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
 	while(TRUE){
 		//Only two things that would tell us about an address here, L_BRACKET or STAR
 		switch(lookahead.tok){
+			/**
+			 * For array types, there are two distinct cases:
+			 * 	case 1 -> our previous type is not an array:
+			 * 		Easy, then we'll just create an array type with a given
+			 * 		number of bounds and a member type of the one that we were
+			 * 		just given
+			 *
+			 * 	case 2 -> our previous type is an array:
+			 * 		Example:
+			 * 			i32[3][4]
+			 *
+			 * 	    In this case we would've seen the i32[3] first. We're going
+			 * 	    to have to now update the previous type along with the current
+			 * 	    type to reflect this. At the very end, we will go through and recalculate
+			 * 	    the overall size of the given type
+			 */
 			case L_BRACKET:
+
+				//TODO OPTIONAL ARRAY
+
+
+				//The first thing that we have to see is a logical or expression that becomes a constant
+				logical_or_expr = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+
+				//First let's determine if we what type of node this gave back
+				switch(logical_or_expr->ast_node_type){
+					//Failures obviously get propogated
+					case AST_NODE_TYPE_ERR_NODE:	
+						print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant given in array declaration", parser_line_num);
+						num_errors++;
+						return NULL;
+
+					//This is the only valid value
+					case AST_NODE_TYPE_CONSTANT:
+						break;
+
+					//Anything that is not a constant cannot be used
+					default:
+						
+				}
+
+				/**
+				 * Once we get here we know that we've got a constant. We can
+				 * still fail out if we get an illegal type of constant though
+				 */
+				switch(logical_or_expr->constant_type){
+					case FLOAT_CONST:
+					case DOUBLE_CONST:
+					case STR_CONST:
+						print_parse_message(MESSAGE_TYPE_ERROR, "Illegal constant given as array bounds", parser_line_num);
+						num_errors++;
+						return NULL;
+
+					default:
+						break;
+				}
+
+				//Extract for some final validations
+				int64_t constant_numeric_value = logical_or_expr->constant_value.signed_long_value;
+
+				//Is this a negative value? If so we fail
+				if(constant_numeric_value < 0){
+					print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be negative", parser_line_num);
+					num_errors++;
+					return NULL;
+				}
+
+				//It also can't be 0
+				if(constant_numeric_value == 0){
+					print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be zero", parser_line_num);
+					num_errors++;
+					return NULL;
+				}
+
+
 				break;
 
 
@@ -6812,34 +6878,6 @@ loop_end:
 			return NULL;
 		}
 
-		//Determine if we have an illegal constant given as the array bounds
-		switch(const_node->constant_type){
-			case FLOAT_CONST:
-			case STR_CONST:
-				print_parse_message(MESSAGE_TYPE_ERROR, "Illegal constant given as array bounds", parser_line_num);
-				num_errors++;
-				return NULL;
-			default:
-				break;
-		}
-
-		//The constant value
-		int64_t constant_numeric_value = const_node->constant_value.unsigned_long_value;
-
-		//What if this is a negative or zero?
-		//If it's negative we fail like this
-		if(constant_numeric_value < 0){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be negative", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//If it's zero we fail like this
-		if(constant_numeric_value == 0){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be zero", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
 
 		//We're all set, push this onto the lightstack
 		lightstack_push(&lightstack, constant_numeric_value);
@@ -6903,9 +6941,6 @@ loop_end:
 			current_type_record = created_array;
 		}
 	}
-
-	//We're done with it, so deallocate
-	lightstack_dealloc(&lightstack);
 
 	//Give back whatever the current type may be
 	return current_type_record->type;
