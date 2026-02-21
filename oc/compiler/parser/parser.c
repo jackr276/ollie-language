@@ -6637,13 +6637,12 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
  *
  * mut i32[35] -> this creates a mutable array(so the actual arr var is mutable) of mutable i32's(every single member
  * is also mutable)
- *
- * TODO - this is wrong and does not support pointers to arrays
  */
 static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	//We always assume immutability
 	mutability_type_t mutability = NOT_MUTABLE;
 
+	//TODO MAYBE
 	u_int8_t is_pure_pointer_type = FALSE;
 
 	//Lookahead var
@@ -6657,14 +6656,15 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		push_back_token(token_stream, &parser_line_num);
 	}
 
-	//Now we'll hand off the rule to the <type-name> function. The type name function will
-	//return a record of the node that the type name has. If the type name function could not
-	//find the name, then it will send back an error that we can handle here
+	/**
+	 * Now we'll hand off the rule to the <type-name> function. The type name function will
+	 * return a record of the node that the type name has. If the type name function could not
+	 * find the name, then it will send back an error that we can handle here
+	 */
 	symtab_type_record_t* type = type_name(token_stream, mutability);
 
 	//We'll just fail here, no need for any error printing
 	if(type == NULL){
-		//It's already in error so just NULL out
 		return NULL;
 	}
 
@@ -6674,6 +6674,29 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	
 	//Let's see where we go from here
 	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Loop until we break out ourselves
+	while(TRUE){
+		//Only two things that would tell us about an address here, L_BRACKET or STAR
+		switch(lookahead.tok){
+			case L_BRACKET:
+				break;
+
+			case STAR:
+				break;
+
+			default:
+				goto loop_end;
+		}
+
+		//Refresh the lookahead
+		lookahead = get_next_token(token_stream, &parser_line_num);
+	}
+
+loop_end:
+	//Now that we've gotten here we need to push back the residual token
+	push_back_token(token_stream, &parser_line_num);
+
 
 
 	//TODO COMPLETELY REWORK
