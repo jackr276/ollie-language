@@ -6618,6 +6618,49 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 
 
 /**
+ * Handle the creation of a pointer type. 
+ *
+ * NOTE: we've already seen the STAR by the time we get here
+ */
+static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* current_type, mutability_type_t mutability){
+	//Can we find a pointer to this type already?
+	symtab_type_record_t* found_pointer = lookup_pointer_type(type_symtab, current_type->type, mutability);
+
+	//If it's NULL then we need to make one. If it's not NULL, then we're good
+	if(found_pointer == NULL){
+		//Create the new pointer record
+		symtab_type_record_t* pointer_record = create_type_record(create_pointer_type(current_type->type, parser_line_num, mutability));
+
+		//Put it into the sytmab
+		insert_type(type_symtab, pointer_record);
+
+		//Give back back what we created
+		return pointer_record;
+
+	} else {
+		//Give back what we found
+		return found_pointer;
+	}
+}
+
+
+/**
+ * Handle the creation of an array type
+ *
+ * NOTE: We've already seen the L_BRACKET by the time we get here
+ */
+static inline symtab_type_record_t* parse_array_type(symtab_type_record_t* current_type, lightstack_t* bounds_stack, mutability_type_t mutability){
+
+}
+
+
+
+static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* current_type, lightstack_t* bounds_stack){
+
+}
+
+
+/**
  * A type specifier is a type name that is then followed by an address specifier, this being  
  * the array brackets or address indicator. Like all rules, the type specifier rule will
  * always return a reference to the root of the subtree it creates
@@ -6798,23 +6841,15 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 			 * that we've currently constructed
 			 */
 			case STAR:
-				//Can we find a pointer to this type already?
-				found_pointer = lookup_pointer_type(type_symtab, current_type_record->type, mutability);
+				//TODO UNWIND ARRAY
+				//
 
-				//If it's NULL then we need to make one. If it's not NULL, then we're good
-				if(found_pointer == NULL){
-					//Create the new pointer record
-					symtab_type_record_t* pointer_record = create_type_record(create_pointer_type(current_type_record->type, parser_line_num, mutability));
+				//Let the helper deal with the rest
+				current_type_record = parse_pointer_type(current_type_record, mutability);
 
-					//Put it into the sytmab
-					insert_type(type_symtab, pointer_record);
-
-					//This is now our current type
-					current_type_record = found_pointer;
-
-				} else {
-					//The current type is whatever we found
-					current_type_record = found_pointer;
+				//If this returns NULL then it failed, just kick it back
+				if(current_type_record == NULL){
+					return NULL;
 				}
 
 				break;
@@ -6824,6 +6859,8 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 			 * We leave the loop and stop doing anything else
 			 */
 			default:
+				//TODO UNWIND ARRAY
+
 				goto loop_end;
 		}
 
