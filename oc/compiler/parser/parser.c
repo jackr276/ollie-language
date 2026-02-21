@@ -6639,6 +6639,10 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
  * is also mutable)
  */
 static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
+	//Needed for the eventual loop
+	symtab_type_record_t* found_pointer;
+	symtab_type_record_t* found_array; 
+
 	//We always assume immutability
 	mutability_type_t mutability = NOT_MUTABLE;
 
@@ -6668,6 +6672,10 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		return NULL;
 	}
 
+	//Otherwise, we know we're in for the array
+	//We'll use a lightstack for the bounds reversal
+
+
 	//Now once we make it here, we know that we have a name that actually exists in the symtab
 	//The current type record is what we will eventually point our node to
 	symtab_type_record_t* current_type_record = type;
@@ -6675,16 +6683,54 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	//Let's see where we go from here
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//Loop until we break out ourselves
+	/**
+	 * Using a lightstack here because of the way that the type specifiers work
+	 * For example:
+	 * 		i32[5]*
+	 * 	This is really a pointer to an i32[5]
+	 *
+	 * 	i32[5][5]
+	 *
+	 * 	TODO DOC
+	 */
 	while(TRUE){
 		//Only two things that would tell us about an address here, L_BRACKET or STAR
 		switch(lookahead.tok){
 			case L_BRACKET:
 				break;
 
+
+			/**
+			 * Handle a pointer. Unlike stuff with an array, for a pointer all that we
+			 * need to do is create(or find) a pointer type to whatever the type is
+			 * that we've currently constructed
+			 */
 			case STAR:
+				//Can we find a pointer to this type already?
+				found_pointer = lookup_pointer_type(type_symtab, current_type_record->type, mutability);
+
+				//If it's NULL then we need to make one. If it's not NULL, then we're good
+				if(found_pointer == NULL){
+					//Create the new pointer record
+					symtab_type_record_t* pointer_record = create_type_record(create_pointer_type(current_type_record->type, parser_line_num, mutability));
+
+					//Put it into the sytmab
+					insert_type(type_symtab, pointer_record);
+
+					//This is now our current type
+					current_type_record = found_pointer;
+
+				} else {
+					//The current type is whatever we found
+					current_type_record = found_pointer;
+				}
+
 				break;
 
+			/**
+			 * Anything else means that we have seen the end of what we're supposed to be processing.
+			 * We leave the loop and stop doing anything else
+			 */
 			default:
 				goto loop_end;
 		}
@@ -6696,37 +6742,6 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 loop_end:
 	//Now that we've gotten here we need to push back the residual token
 	push_back_token(token_stream, &parser_line_num);
-
-
-
-	//TODO COMPLETELY REWORK
-	//As long as we are seeing pointer specifiers
-	while(lookahead.tok == STAR){
-		//Let's see if we can find it first. We want to avoid creating memory if we're able to,
-		//so this step is important
-		symtab_type_record_t* found_pointer = lookup_pointer_type(type_symtab, current_type_record->type, mutability);
-
-		//If we did not find it, we will add it into the symbol table
-		if(found_pointer == NULL){
-			//Let's create the pointer type. This pointer type will point to the current type
-			generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
-
-			//Create the type record
-			symtab_type_record_t* created_pointer = create_type_record(pointer);
-			//Insert it into the symbol table
-			insert_type(type_symtab, created_pointer);
-			//We'll also set the current type record to be this
-			current_type_record = created_pointer;
-
-		//Otherwise we've already gotten it, so just use it for our purposes here
-		} else {
-			//Otherwise, just set the current type record to be what we found
-			current_type_record = found_pointer;
-		}
-
-		//Refresh the search, keep hunting
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
 
 	//If we don't see an array here, we can just leave now
 	if(lookahead.tok != L_BRACKET){
@@ -6750,9 +6765,6 @@ loop_end:
 		return current_type_record->type;
 	}
 
-	//Otherwise, we know we're in for the array
-	//We'll use a lightstack for the bounds reversal
-	lightstack_t lightstack = lightstack_initialize();
 
 	//As long as we are seeing L_BRACKETS
 	while(lookahead.tok == L_BRACKET){
