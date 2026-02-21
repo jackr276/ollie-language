@@ -11,15 +11,15 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 	declare my_arr:mut i32[400];
 	my_arr[0] = 3;
 
-	let argc:mut u32 = 14;
+	let argc2:mut u32 = 14;
 
-	while(argc > 0) {
-		argc--;
+	while(argc2 > 0) {
+		argc2--;
 	}
 
 	do {
-		argc++;
-	} while(argc < 15);
+		argc2++;
+	} while(argc2 < 15);
 	
 	@example(my_arr, 23);
 

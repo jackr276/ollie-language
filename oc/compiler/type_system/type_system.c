@@ -45,6 +45,35 @@ u_int8_t is_memory_address_type(generic_type_t* type){
 
 
 /**
+ * Convert the raw type size into the nubmer of bytes that it has
+ */
+static inline u_int32_t convert_type_size_to_bytes(variable_size_t size){
+	switch(size) {
+		case BYTE:
+			return 1;
+
+		case WORD:
+			return 2;
+
+		case DOUBLE_WORD:
+			return 4;
+
+		case QUAD_WORD:
+			return 8;
+
+		case SINGLE_PRECISION:
+			return 4;
+
+		case DOUBLE_PRECISION:
+			return 8;;
+
+		default:
+			return 8;
+	}
+}
+
+
+/**
  * What is the value that this needs to be aligned by?
  *
  * For arrays -> we align so that the base address is a multiple of the member type
@@ -348,6 +377,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 	//Predeclare these for now
 	ollie_token_t source_basic_type;
 	ollie_token_t dest_basic_type;
+	u_int32_t source_size_bytes;
+	u_int32_t dest_size_bytes;
 
 	//The true source type. We will use this to avoid having
 	//if statements everywhere. In most cases, the true source is
@@ -448,32 +479,115 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					return NULL;
 			}
 
-		//Only one type of array is assignable - and that would be a char[] to a char*
+		/**
+		 * Arrays are not assignable in a general sense but we do support assigning inside of this
+		 * rule in case we're doing casting, passing a parameter, etc.. The parser guards all
+		 * attempts to do any kind of naive reassignment which we do not allow
+		 */
 		case TYPE_CLASS_ARRAY:
-			//If this isn't a char[], we're done
-			if(destination_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC
-				|| destination_type->internal_types.member_type->basic_type_token != CHAR){
-				return NULL;
-			}
+			//Go based on the source type
+			switch(true_source_type->type_class){
+				case TYPE_CLASS_POINTER:
+					/** 
+					 * This is invalid - we cannot take an immutable pointer 
+					 * and then assign it over to a mutable pointer, because
+					 * that would allow mutation of the underlying value
+					 */
+					if(destination_type->mutability == MUTABLE){
+						if(true_source_type->mutability != MUTABLE){
+							return NULL;
+						}
+					}
 
-			//If it's a pointer
-			if(source_type->type_class == TYPE_CLASS_POINTER){
-				generic_type_t* points_to = true_source_type->internal_types.points_to;
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * assign them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
+					if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
+						return NULL;
+					}
 
-				//If it's not a basic type then leave
-				if(points_to->type_class != TYPE_CLASS_BASIC){
-					return NULL;
-				}
+					/**
+					 * If we have pointers/pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+					 * memory regions of the same size
+					 */
+					source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.points_to));
+					dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.member_type));
 
-				//If it's a char, then we're set
-				if(points_to->basic_type_token == CHAR){
+					if(dest_size_bytes != source_size_bytes){
+						return NULL;
+					}
+
+					/**
+					 * No recursively check the nested types here to see if we are fully set
+					 */
+					if(types_assignable(destination_type->internal_types.member_type, true_source_type->internal_types.points_to) == NULL){
+						return NULL;
+					}
+
+					//If we survived to down here then return the dest type
 					return destination_type;
-				}
+
+				case TYPE_CLASS_ARRAY:
+					/** 
+					 * This is invalid - we cannot take an immutable pointer 
+					 * and then assign it over to a mutable pointer, because
+					 * that would allow mutation of the underlying value
+					 */
+					if(destination_type->mutability == MUTABLE){
+						if(true_source_type->mutability != MUTABLE){
+							return NULL;
+						}
+					}
+
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * assign them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
+					if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
+						return NULL;
+					}
+
+					/**
+					 * If we have pointers/pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
+					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
+					 * memory regions of the same size
+					 */
+					source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.member_type));
+					dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.member_type));
+
+					if(dest_size_bytes != source_size_bytes){
+						return NULL;
+					}
+
+					/**
+					 * These need to be an *exact* match here because whenever we go to index in, if we say have a multidimensional
+					 * array, we need to know what the rowcount is to get a proper offset calculation
+					 */
+					if(destination_type->internal_values.num_members != true_source_type->internal_values.num_members){
+						return NULL;
+					}
+					
+					/**
+					 * No recursively check the nested types here to see if we are fully set
+					 */
+					if(types_assignable(destination_type->internal_types.member_type, true_source_type->internal_types.member_type) == NULL){
+						return NULL;
+					}
+
+					//If we survived to down here then return the dest type
+					return destination_type;
+
+				//Everything else we won't even bother with
+				default:
+					return NULL;
 			}
 
-			return NULL;
-
-		//Refer to the rules above for details
 		case TYPE_CLASS_POINTER:
 			switch(true_source_type->type_class){
 				//We can assign any integer type to a pointer
@@ -488,17 +602,46 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 							return destination_type;
 					}
 
-				//Check if they're assignable
+
+				/**
+				 * Pointer to array assignability:
+				 *
+				 * We need to allow things like this to happen:
+				 *
+				 * 	i32* = i32[](single dimensional array decay to pointer). The reason why? These would
+				 * 	both lead to contiguous memory access if we ended up dereferencing them
+				 *
+				 * 
+				 *  However, something like this;
+				 *  	i32**  = i32[][]
+				 *  		 or
+				 *  	i32*[] = i32[][]
+				 *
+				 *  Needs to be smacked down. These are not the same at all. The left hand side is a non-contiguous
+				 *  memory type. It means that if we had to access it using the [] operation, we'd need to do a dereference implicitly. If
+				 *  we were to do the [] operation on the regular flat array, then we would just need to calculate an address offset
+				 *
+				 */
 				case TYPE_CLASS_ARRAY:
-					//This is invalid - we cannot take an immutable pointer
-					//and then assign it over to a mutable pointer, because
-					//that would allow mutation of the underlying value
+					/** 
+					 * This is invalid - we cannot take an immutable pointer 
+					 * and then assign it over to a mutable pointer, because
+					 * that would allow mutation of the underlying value
+					 */
 					if(destination_type->mutability == MUTABLE){
-						//If the destination is mutable but the source
-						//is not, we can't go forward
 						if(true_source_type->mutability != MUTABLE){
 							return NULL;
 						}
+					}
+
+					/**
+					 * If the memory layout type of the source and destination are different, then we cannot
+					 * assign them to eachother because if we were eventually to go and do memory access
+					 * using the [] operator, we would produce entirely different assembly code. Using
+					 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+					 */
+					if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
+						return NULL;
 					}
 
 					/**
@@ -506,7 +649,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
 					 * memory regions of the same size
 					 */
-					if(get_type_size(destination_type->internal_types.points_to) != get_type_size(true_source_type->internal_types.member_type)){
+					source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.member_type));
+					dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
+
+					if(dest_size_bytes != source_size_bytes){
 						return NULL;
 					}
 
@@ -517,14 +663,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					
 					return NULL;
 		
-				//Likely the most common case
 				case TYPE_CLASS_POINTER:
-					//This is invalid - we cannot take an immutable pointer
-					//and then assign it over to a mutable pointer, because
-					//that would allow mutation of the underlying value
+					/** 
+					 * This is invalid - we cannot take an immutable pointer
+					 * and then assign it over to a mutable pointer, because
+					 * that would allow mutation of the underlying value
+					 */
 					if(destination_type->mutability == MUTABLE){
-						//If the destination is mutable but the source
-						//is not, we can't go forward
 						if(true_source_type->mutability != MUTABLE){
 							return NULL;
 						}
@@ -541,11 +686,24 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					//Let's see if what they point to is the exact same
 					} else {
 						/**
+						 * If the memory layout type of the source and destination are different, then we cannot
+						 * assign them to eachother because if we were eventually to go and do memory access
+						 * using the [] operator, we would produce entirely different assembly code. Using
+						 * non-contiguous access on a contiguous region is almost certain to cause segfaults
+						 */
+						if(destination_type->memory_layout_type != true_source_type->memory_layout_type){
+							return NULL;
+						}
+
+						/**
 						 * If we have pointers that have different underlying sizes, that is invalid. When we go to dereference the larger
 						 * pointer, we are now either reading into/corrupting other memory. For this reason, pointers must point to 
-						 * memory regions of the same size
+						 * memory regions of the same physical size
 						 */
-						if(get_type_size(destination_type->internal_types.points_to) != get_type_size(true_source_type->internal_types.points_to)){
+						source_size_bytes = convert_type_size_to_bytes(get_type_size(true_source_type->internal_types.points_to));
+						dest_size_bytes = convert_type_size_to_bytes(get_type_size(destination_type->internal_types.points_to));
+
+						if(dest_size_bytes != source_size_bytes){
 							return NULL;
 						}
 
@@ -616,9 +774,10 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 					}
 			}
 
-		//We should never get here
+		//Should be impossible to hit this
 		default:
-			return NULL;
+			printf("Fatal internal compiler error. Unrecognized type detetected inside of types_assignable\n");
+			exit(1);
 	}
 }
 
@@ -1617,6 +1776,9 @@ generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mut
 	//This is always compelete at definition
 	type->type_complete = TRUE;
 
+	//This is contiguous
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+
 	//Give back the pointer, it will need to be freed eventually
 	return type;
 }
@@ -1763,6 +1925,9 @@ generic_type_t* create_enumerated_type(dynamic_string_t type_name, u_int32_t lin
 	//This is always compelete at definition
 	type->type_complete = TRUE;
 
+	//This is contiguous as well
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
+
 	return type;
 }
 
@@ -1786,6 +1951,9 @@ generic_type_t* create_struct_type(dynamic_string_t type_name, u_int32_t line_nu
 
 	//Reserve dynamic array space for the struct table
 	type->internal_types.struct_table = dynamic_array_alloc();
+
+	//This is contiguous as well
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
 
 	//Give back the pointer
 	return type;
@@ -1813,6 +1981,9 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 
 	//Reserve the dynamic array as well
 	type->internal_types.union_table = dynamic_array_alloc();
+
+	//This is contiguous as well
+	type->memory_layout_type = MEMORY_LAYOUT_TYPE_CONTIGUOUS;
 
 	//And give the type pointer back
 	return type;
@@ -2304,6 +2475,7 @@ variable_size_t get_type_size(generic_type_t* type){
 	return size;
 }
 
+
 /**
  * Generate the full name for the function pointer type
  */
@@ -2359,16 +2531,29 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 
 /**
  * Generate a failure message for when the "types_assignable" call fails
+ *
+ * This will also go through and try to create a more helpful error 
  */
 void generate_types_assignable_failure_message(char* info, generic_type_t* source_type, generic_type_t* destination_type){
-	//Grab the mutability levels
+	//Grab the mutability levels as strings for our use
 	char* source_mutability = source_type->mutability == MUTABLE ? "mut " : "";
 	char* dest_mutability = destination_type->mutability == MUTABLE ? "mut " : "";
 
-	//Print into the buffer
-	sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
-			source_mutability, source_type->type_name.string,
-			dest_mutability, destination_type->type_name.string);
+	char* source_layout = source_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS ? "Contiguous" : "Non-contiguous";
+	char* dest_layout = destination_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS ? "contiguous" : "non-contiguous";
+
+	//If this is the region why, then we'll print out a special message
+	if(destination_type->memory_layout_type != source_type->memory_layout_type){
+		//Print into the buffer
+		sprintf(info, "%s Type \"%s%s\" cannot be assigned to incompatible %s type \"%s%s\"",
+		  		source_layout, source_mutability, source_type->type_name.string,
+				dest_layout, dest_mutability, destination_type->type_name.string);
+	} else {
+		//Print into the buffer
+		sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
+				source_mutability, source_type->type_name.string,
+				dest_mutability, destination_type->type_name.string);
+	}
 }
 
 

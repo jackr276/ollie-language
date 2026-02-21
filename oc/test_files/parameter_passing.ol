@@ -12,9 +12,9 @@ fn parameter_pass(x:i32, y:i32, z:i32, a:char, b:char, c:char) -> i32 {
 
 fn parameter_pass2(x:i32, y:i32, z:i32, a:char, b:char, c:char) -> i32 {
 	let k:mut i32 = x + y + z;
-	let c:mut char = a + b + c;
+	let cc:mut char = a + b + c;
 
-	ret k + c;
+	ret k + cc;
 }
 
 fn parameter_pass3(a:i32) -> i32 {
