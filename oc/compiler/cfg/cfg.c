@@ -3007,11 +3007,23 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			 * first check if the constant value is 0 to see if that's a viable option
 			 */
 			if(constant_node->constant_value.float_value == 0.0f){
-				printf("HERE\n");
+				//Emit a temp var for this value
+				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
+
+				//We will now use a specialized IR instruction to clear this variable out. In reality
+				//this clearing will be a PXOR statement
+				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var);
+
+				//This is an assignment and a use
+				add_used_variable(basic_block, cleared_var);
+				add_assigned_variable(basic_block, cleared_var);
+
+				//Add it into the block
+				add_statement(basic_block, clear_instruction);
+
+				//We will now give back the created variable
+				return cleared_var;
 			}
-
-
-
 
 			//Let's first see if we can find it
 			local_constant = get_f32_local_constant(&(cfg->local_f32_constants), constant_node->constant_value.float_value);
@@ -3041,8 +3053,23 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
 			 * first check if the constant value is 0 to see if that's a viable option
 			 */
-			if(constant_node->constant_value.float_value == 0.0f){
-				printf("HERE\n");
+			if(constant_node->constant_value.double_value == 0.0){
+				//Emit a temp var for this value
+				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
+
+				//We will now use a specialized IR instruction to clear this variable out. In reality
+				//this clearing will be a PXOR statement
+				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var);
+
+				//This is an assignment and a use
+				add_used_variable(basic_block, cleared_var);
+				add_assigned_variable(basic_block, cleared_var);
+
+				//Add it into the block
+				add_statement(basic_block, clear_instruction);
+
+				//We will now give back the created variable
+				return cleared_var;
 			}
 
 			//Let's first see if we can find it

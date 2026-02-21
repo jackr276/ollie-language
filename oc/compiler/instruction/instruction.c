@@ -2570,8 +2570,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			break;
 
 		case THREE_ADDR_CODE_CLEAR_STMT:
-			fprintf(fl, "CLEAR ");
+			fprintf(fl, "clear_sse ");
 			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
 
 			break;
 
