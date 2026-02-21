@@ -1087,6 +1087,25 @@ instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_v
 
 
 /**
+ * Emit a CLEAR instruction that is meant for the FP register to be zeroed out
+ * This function only takes an assignee because that's all that we're clearing
+ */
+instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee){
+	//First allocate
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//This is a clear instruction
+	instruction->statement_type = THREE_ADDR_CODE_CLEAR_STMT;
+
+	//We've only got an assignee
+	instruction->assignee = assignee;
+
+	//And give it back
+	return instruction;
+}
+
+
+/**
  * Emit a pop instruction. We only have one kind of popping - quadwords - we don't
  * deal with getting granular when popping 
  */
@@ -2548,6 +2567,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Now the variable
 			print_variable(fl, stmt->op1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_CLEAR_STMT:
+			fprintf(fl, "CLEAR ");
+			print_variable(fl, stmt->assignee, PRINTING_VAR_INLINE);
+
 			break;
 
 		default:

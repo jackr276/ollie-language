@@ -140,6 +140,8 @@ typedef enum {
 	THREE_ADDR_CODE_PHI_FUNC,
 	//A memory access statement
 	THREE_ADDR_CODE_MEM_ACCESS_STMT,
+	//A specialized CLEAR instruction
+	THREE_ADDR_CODE_CLEAR_STMT,
 } instruction_stmt_type_t;
 
 #endif /* OLLIE_INTERMEDIARY_REPRESENTATION_H */
