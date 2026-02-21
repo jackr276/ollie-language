@@ -6649,8 +6649,95 @@ static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* cur
  *
  * NOTE: We've already seen the L_BRACKET by the time we get here
  */
-static inline symtab_type_record_t* parse_array_type(symtab_type_record_t* current_type, lightstack_t* bounds_stack, mutability_type_t mutability){
+static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token_stream, symtab_type_record_t* current_type, lightstack_t* bounds_stack, mutability_type_t mutability){
+	//We do not allow for such a thing as "void[]". As such, we need to check if we are
+	//creating a void type here or not
+	if(IS_VOID_TYPE(current_type->type) == TRUE){
 
+	}
+
+
+
+
+	//Quickly referesh the token to see what we have
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If we don't see an R_BRACKET, it means that we're definining bounds for this array
+	if(lookahead.tok != R_BRACKET){
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
+
+		//The first thing that we have to see is a logical or expression that becomes a constant
+		generic_ast_node_t* logical_or_expr = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+
+		//First let's determine if we what type of node this gave back
+		switch(logical_or_expr->ast_node_type){
+			//Failures obviously get propogated
+			case AST_NODE_TYPE_ERR_NODE:	
+				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant given in array declaration", parser_line_num);
+				num_errors++;
+				return NULL;
+
+			//This is the only valid value
+			case AST_NODE_TYPE_CONSTANT:
+				break;
+
+			//Anything that is not a constant cannot be used
+			default:
+				print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds must be expressions that reduce to constants", parser_line_num);
+				num_errors++;
+				return NULL;
+		}
+
+		/**
+		 * Once we get here we know that we've got a constant. We can
+		 * still fail out if we get an illegal type of constant though
+		 */
+		switch(logical_or_expr->constant_type){
+			case FLOAT_CONST:
+			case DOUBLE_CONST:
+			case STR_CONST:
+				print_parse_message(MESSAGE_TYPE_ERROR, "Illegal constant given as array bounds", parser_line_num);
+				num_errors++;
+				return NULL;
+
+			default:
+				break;
+		}
+
+		//Extract for some final validations
+		int64_t constant_numeric_value = logical_or_expr->constant_value.signed_long_value;
+
+		//Is this a negative value? If so we fail
+		if(constant_numeric_value < 0){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be negative", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//It also can't be 0
+		if(constant_numeric_value == 0){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be zero", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+
+		//TODO R_BRACKET
+		
+		//Push this value up onto the lightstack
+		lightstack_push(&bounds_stack, constant_numeric_value);
+
+	//Otherwise we're leaving it undefined. We need to now
+	} else {
+		//Pop the grouping stack
+		if(pop_token(&grouping_stack).tok != L_BRACKET){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+	}
 }
 
 
@@ -6740,100 +6827,24 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 		//Only two things that would tell us about an address here, L_BRACKET or STAR
 		switch(lookahead.tok){
 			/**
-			 * For array types, there are two distinct cases:
-			 * 	case 1 -> our previous type is not an array:
-			 * 		Easy, then we'll just create an array type with a given
-			 * 		number of bounds and a member type of the one that we were
-			 * 		just given
-			 *
-			 * 	case 2 -> our previous type is an array:
-			 * 		Example:
-			 * 			i32[3][4]
-			 *
-			 * 	    In this case we would've seen the i32[3] first. We're going
-			 * 	    to have to now update the previous type along with the current
-			 * 	    type to reflect this. At the very end, we will go through and recalculate
-			 * 	    the overall size of the given type
+			 * To parse an array type, we will utilize our stack based approach where bounds
+			 * are pushed onto the stack and only processed once we stop seeing array types. 
+			 * Unlike the other two cases, since this is also an array type, we will not
+			 * be unwinding the bounds stack before processing here
 			 */
 			case L_BRACKET:
-				//Quickly referesh the token to see what we have
-				lookahead = get_next_token(token_stream, &parser_line_num);
+				//Push this onto the grouping stack
+				push_token(&grouping_stack, lookahead);
 
-				//If we don't see an R_BRACKET, it means that we're definining bound
-				if(lookahead.tok != R_BRACKET){
-					//Push it back
-					push_back_token(token_stream, &parser_line_num);
+				//Let the helper do the work
+				current_type_record = parse_array_type(token_stream, current_type_record, &bounds_stack, mutability);
 
-					//The first thing that we have to see is a logical or expression that becomes a constant
-					logical_or_expr = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
-
-					//First let's determine if we what type of node this gave back
-					switch(logical_or_expr->ast_node_type){
-						//Failures obviously get propogated
-						case AST_NODE_TYPE_ERR_NODE:	
-							print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant given in array declaration", parser_line_num);
-							num_errors++;
-							return NULL;
-
-						//This is the only valid value
-						case AST_NODE_TYPE_CONSTANT:
-							break;
-
-						//Anything that is not a constant cannot be used
-						default:
-							print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds must be expressions that reduce to constants", parser_line_num);
-							num_errors++;
-							return NULL;
-					}
-
-					/**
-					 * Once we get here we know that we've got a constant. We can
-					 * still fail out if we get an illegal type of constant though
-					 */
-					switch(logical_or_expr->constant_type){
-						case FLOAT_CONST:
-						case DOUBLE_CONST:
-						case STR_CONST:
-							print_parse_message(MESSAGE_TYPE_ERROR, "Illegal constant given as array bounds", parser_line_num);
-							num_errors++;
-							return NULL;
-
-						default:
-							break;
-					}
-
-					//Extract for some final validations
-					int64_t constant_numeric_value = logical_or_expr->constant_value.signed_long_value;
-
-					//Is this a negative value? If so we fail
-					if(constant_numeric_value < 0){
-						print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be negative", parser_line_num);
-						num_errors++;
-						return NULL;
-					}
-
-					//It also can't be 0
-					if(constant_numeric_value == 0){
-						print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be zero", parser_line_num);
-						num_errors++;
-						return NULL;
-					}
-
-
-					//TODO R_BRACKET
-					
-					//Push this value up onto the lightstack
-					lightstack_push(&bounds_stack, constant_numeric_value);
-
-				//Otherwise we're leaving it undefined. We need to now
-				} else {
-
+				//If it failed it'll be NULL, and we'll pass it up the chain
+				if(current_type_record == NULL){
+					return NULL;
 				}
 
-
-
 				break;
-
 
 			/**
 			 * Handle a pointer. Unlike stuff with an array, for a pointer all that we
@@ -6872,27 +6883,34 @@ loop_end:
 	//Now that we've gotten here we need to push back the residual token
 	push_back_token(token_stream, &parser_line_num);
 
+	/**
+	 * This is a very unique case. Internally, the system needs to have
+	 * a "mutable" void type in order to support things like mut void*, etc.. However,
+	 * if the user attempts to do something like fn my_fn() -> mut void, we should
+	 * throw an error here and disallow that. For all the user knows, there is no
+	 * mut void
+	 */
+	if(current_type_record->type == mut_void){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Void types do not contain values and therefore cannot be declared mutable. Remove the \"mut\" specificer", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
 
-	//Clean up the lightstack
-	lightstack_dealloc(&bounds_stack);
+
+
+
+
+
+
+
+
+
 
 	//If we don't see an array here, we can just leave now
 	if(lookahead.tok != L_BRACKET){
 		//Put it back
 		push_back_token(token_stream, &parser_line_num);
 
-		/**
-		 * This is a very unique case. Internally, the system needs to have
-		 * a "mutable" void type in order to support things like mut void*, etc.. However,
-		 * if the user attempts to do something like fn my_fn() -> mut void, we should
-		 * throw an error here and disallow that. For all the user knows, there is no
-		 * mut void
-		 */
-		if(current_type_record->type == mut_void){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Void types do not contain values and therefore cannot be declared mutable. Remove the \"mut\" specificer", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
 
 		//We're done here
 		return current_type_record->type;
