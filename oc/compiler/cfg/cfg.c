@@ -3001,6 +3001,18 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 		//For float constants, we need to emit the local constant equivalent via the helper
 		case FLOAT_CONST:
+			/**
+			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
+			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
+			 * first check if the constant value is 0 to see if that's a viable option
+			 */
+			if(constant_node->constant_value.float_value == 0.0f){
+				printf("HERE\n");
+			}
+
+
+
+
 			//Let's first see if we can find it
 			local_constant = get_f32_local_constant(&(cfg->local_f32_constants), constant_node->constant_value.float_value);
 
@@ -3024,6 +3036,15 @@ static three_addr_var_t* emit_constant_assignment(basic_block_t* basic_block, ge
 
 		//For double constants, we need to emit the local constant equivalent via the helper
 		case DOUBLE_CONST:
+			/**
+			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
+			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
+			 * first check if the constant value is 0 to see if that's a viable option
+			 */
+			if(constant_node->constant_value.float_value == 0.0f){
+				printf("HERE\n");
+			}
+
 			//Let's first see if we can find it
 			local_constant = get_f64_local_constant(&(cfg->local_f64_constants), constant_node->constant_value.double_value);
 
