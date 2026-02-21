@@ -6888,6 +6888,19 @@ static inline void handle_not_instruction(instruction_t* instruction){
 
 
 /**
+ * Handle a three address code CLEAR instruction. In reality this is just going to turn into
+ * a PXOR_CLEAR instruction on the backend
+ */
+static inline void handle_clear_instruction(instruction_t* instruction){
+	//This is a PXOR_CLEAR
+	instruction->instruction_type = PXOR_CLEAR;
+
+	//And the destination register is just the assignee
+	instruction->destination_register = instruction->assignee;
+}
+
+
+/**
  * Emit a register to register converting move instruction directly
  *
  * This bypasses all register allocation entirely
@@ -8842,6 +8855,9 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
 			handle_test_if_not_zero_instruction(window);
+			break;
+		case THREE_ADDR_CODE_CLEAR_STMT:
+			handle_clear_instruction(instruction);
 			break;
 		default:
 			break;
