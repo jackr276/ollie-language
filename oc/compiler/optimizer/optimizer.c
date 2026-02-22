@@ -1031,7 +1031,7 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 
 	//Invoke the stack sweeper. This function will go through an remove any stack regions
 	//that have been flagged as unimportant
-	sweep_stack_data_area(&(function_entry_block->function_defined_in->data_area));
+	sweep_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
 }
 
 

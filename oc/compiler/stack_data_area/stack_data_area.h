@@ -45,9 +45,14 @@ void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region);
 void sweep_stack_data_area(stack_data_area_t* area);
 
 /**
+ * Print out the passed parameter stack data
+ */
+void print_passed_parameter_stack_data_area(stack_data_area_t* area);
+
+/**
  * Print the stack data area out in its entirety
  */
-void print_stack_data_area(stack_data_area_t* area);
+void print_local_stack_data_area(stack_data_area_t* area);
 
 /**
  * Does the stack contain a given pointer value? This is used for avoiding redundant addresses

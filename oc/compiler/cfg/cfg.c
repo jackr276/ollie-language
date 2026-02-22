@@ -5775,8 +5775,9 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		//Grab this out for convenience
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
-		//We'll want to see what the stack looks like
-		print_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
+		//We'll want to see what the both stacks look like
+		print_passed_parameter_stack_data_area(&(function_entry_block->function_defined_in->stack_passed_parameters));
+		print_local_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
 
 		//Seed the search by adding the funciton block into the queue
 		enqueue(&queue, function_entry_block);

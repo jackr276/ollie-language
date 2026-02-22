@@ -414,7 +414,8 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
 		//Function entry blocks need extra printing
 		case BLOCK_TYPE_FUNC_ENTRY:
 			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_stack_data_area(&(block->function_defined_in->data_area));
+			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
+			print_local_stack_data_area(&(block->function_defined_in->local_stack));
 			break;
 
 		//By default just print the name

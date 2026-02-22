@@ -283,7 +283,8 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		case BLOCK_TYPE_FUNC_ENTRY:
 			//Then the name
 			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_stack_data_area(&(block->function_defined_in->data_area));
+			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
+			print_local_stack_data_area(&(block->function_defined_in->local_stack));
 			break;
 
 		//By default just print the name
@@ -438,7 +439,8 @@ static void print_block_with_registers(basic_block_t* block){
 		case BLOCK_TYPE_FUNC_ENTRY:
 			//Then the name
 			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_stack_data_area(&(block->function_defined_in->data_area));
+			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
+			print_local_stack_data_area(&(block->function_defined_in->local_stack));
 			break;
 
 		//By default just print the name
@@ -3119,7 +3121,7 @@ static void spill_in_function(basic_block_t* function_entry_block, dynamic_array
 	symtab_function_record_t* function = function_entry_block->function_defined_in;
 
 	//Let's first create the stack region for our spill range
-	stack_region_t* spill_region = create_stack_region_for_type(&(function->data_area), get_largest_type_in_live_range(spill_range));
+	stack_region_t* spill_region = create_stack_region_for_type(&(function->local_stack), get_largest_type_in_live_range(spill_range));
 
 	//Grab a cursor
 	basic_block_t* block_cursor = function_entry_block;
@@ -3647,11 +3649,11 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				if(get_bitmap_at_index(callee->assigned_sse_registers, sse_reg - 1) == TRUE){
 					//Do we already have a stack region for this exact LR? We will check and if
 					//so, we don't need to make any more room on the stack for it
-					stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->data_area), lr);
+					stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->local_stack), lr);
 
 					//If we didn't have a spill region, then we'll make one
 					if(stack_region == NULL){
-						stack_region = create_stack_region_for_type(&(caller->data_area), get_largest_type_in_live_range(lr));
+						stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr));
 
 						//Cache this for later
 						stack_region->variable_referenced = lr;
@@ -3793,11 +3795,11 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 
 				//By the time we get here, we know that we need to save this
 				//First check if this has already been saved before
-				stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->data_area), lr);
+				stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->local_stack), lr);
 
 				//If it's NULL, we need to make one ourselves
 				if(stack_region == NULL){
-					stack_region = create_stack_region_for_type(&(caller->data_area), get_largest_type_in_live_range(lr));
+					stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr));
 
 					//Cache this for later
 					stack_region->variable_referenced = lr;
@@ -3895,13 +3897,13 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	symtab_function_record_t* function = function_entry->function_defined_in;
 
 	//We'll also need it's stack data area
-	stack_data_area_t area = function_entry->function_defined_in->data_area;
+	stack_data_area_t* area = &(function_entry->function_defined_in->local_stack);
 
 	//Align it
-	align_stack_data_area(&area);
+	align_stack_data_area(area);
 
 	//Grab the total size out
-	u_int32_t total_size = area.total_size;
+	u_int32_t total_size = area->total_size;
 
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){

@@ -225,9 +225,18 @@ void sweep_stack_data_area(stack_data_area_t* area){
 
 
 /**
+ * Print out the passed parameter stack data
+ */
+void print_passed_parameter_stack_data_area(stack_data_area_t* area){
+	//TODO
+
+}
+
+
+/**
  * Print the stack data area out in its entirety
  */
-void print_stack_data_area(stack_data_area_t* area){
+void print_local_stack_data_area(stack_data_area_t* area){
 	printf("================== Stack Layout ===================\n");
 
 	//If it's empty we'll leave
