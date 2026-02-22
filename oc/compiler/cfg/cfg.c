@@ -9134,11 +9134,31 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//If the last instruction is *not* a constant assignment, we can go ahead like this
 	if(last_instruction == NULL
 		|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//This is now our op1
-		store_instruction->op2 = expression_results.assignee;
+
+		//This may change below
+		three_addr_var_t* final_assignee = expression_results.assignee;
+
+		/**
+		 * If we have a memory address variable, we need to emit a final assignment
+		 * to because our instruction selector is not designed to handle MEM<> variables
+		 * on the RHS of an initializer equation. This is an easy fix
+		 */
+		if(expression_results.assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+			//Emit a new var to use
+			final_assignee = emit_temp_var(expression_results.assignee->type);
+
+			//Assign this over
+			instruction_t* temp_assignment = emit_assignment_instruction(final_assignee, expression_results.assignee);
+
+			//Add it into the block
+			add_statement(current_block, temp_assignment);
+		}
+
+		//This is now our op2
+		store_instruction->op2 = final_assignee;
 
 		//No matter what happened, we used this
-		add_used_variable(current_block, expression_results.assignee);
+		add_used_variable(current_block, final_assignee);
 
 	//Otherwise, we can do a small optimization here by scrapping the 
 	//constant assignment and just putting the constant in directly
