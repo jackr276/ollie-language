@@ -8672,8 +8672,33 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
  *  Storage for *stack passed* parameters
  * ---------
  * --------------- Function x ----------------
+ *
+ *
+ * Stack passed parameters convention: any/all stack passed parameters will be *at the bottom* of the stack frame, and will
+ * be stored in the order that they are declared via the function signature. This means that if we have float, int, float, they
+ * will be stored at the very bottom in that order
  */
 static inline void setup_function_parameters(symtab_function_record_t* function_record, basic_block_t* function_entry_block){
+	/**
+	 * First step: handle function parameters that are *passed in via stack*. In our structure, this means that if their
+	 * "class_relative_parameter_number" is more than 6(the max), then we are loading it into the stack. It is very important
+	 * that this is done *before* anything happens with parameters whose address we eventually plan to take. Thos need to go
+	 * on top of this
+	 */
+
+
+
+
+	//Run through all of our function parameters
+	for(u_int32_t i = 0; i < function_record->function_parameters.current_index; i++){
+		//Extract the parameter
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
+
+	}
+
+
+
+
 	/**
 	 * If we have function parameters that are *also* stack variables(meaning the user will
 	 * at some point want to take the memory address of them), then we need to load
@@ -8683,8 +8708,6 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		//Extract the parameter
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
-		//If we have a stack variable that is *not* a reference type, we will
-		//go through here and pre-load it onto the stack
 		if(parameter->stack_variable == TRUE){
 			//However if it is a stack variable, we need to add it to the stack and emit an initial store of it
 			if(parameter->stack_region == NULL){
@@ -8752,7 +8775,6 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		}
 	}
 }
-
 
 /**
  * A function definition will always be considered a leader statement. As such, it

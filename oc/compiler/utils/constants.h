@@ -24,6 +24,9 @@
 //All error sizes are 2000
 #define ERROR_SIZE 2000
 
+//The maximum number of per-class register passed parameters
+#define MAX_PER_CLASS_REGISTER_PASSED_PARAMS 6
+
 //The number of colors that we have for general use registers
 #define K_COLORS_GEN_USE 15
 
