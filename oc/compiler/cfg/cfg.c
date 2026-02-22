@@ -4617,12 +4617,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * 		y <- 20 + rsp
 			 *
 			 * So when we go to "dereference" y, we just need to assign the value over in a simple
-			 * move instruction
-			 *
-			 *
-			 * TODO WHAT ABOUT STRUCTS, UNIONS?
+			 * move instruction. This is the same kind of rule for structs & unions, which is why
+			 * we use the "is_memory_region" check to see what kind of pointer we have. Again, a pointer
+			 * to a struct is simply that struct's address that's been copied in memory, so there's no additional
+			 * indirection that we need to do
 			 */
-			if(dereferenced_type->type_class == TYPE_CLASS_ARRAY){
+			if(is_memory_region(dereferenced_type) == TRUE){
 				//Emit the assignment
 				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee);
 
