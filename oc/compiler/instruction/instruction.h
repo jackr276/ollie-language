@@ -776,16 +776,6 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64);
 
 /**
- * Emit a stack allocation statement
- */
-instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset);
-
-/**
- * Emit a stack deallocation statement
- */
-instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset);
-
-/**
  * Are two variables equal? A helper method for searching
  */
 u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b, u_int8_t ignore_indirection);

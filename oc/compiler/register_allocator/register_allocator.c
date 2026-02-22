@@ -171,6 +171,48 @@ static inline u_int8_t is_general_purpose_register_callee_saved(general_purpose_
 
 
 /**
+ * Emit a stack allocation statement
+ */
+static inline instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
+	//Allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//This is always a subq statement
+	stmt->instruction_type = SUBQ;
+
+	//Store the destination as the stack pointer
+	stmt->destination_register = stack_pointer;
+
+	//Emit this directly
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
+
+	//Just give this back
+	return stmt;
+}
+
+
+/**
+ * Emit a stack deallocation statement
+ */
+static inline instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
+	//Allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//This is always an addq statement
+	stmt->instruction_type = ADDQ;
+
+	//Destination is always the stack pointer
+	stmt->destination_register = stack_pointer;
+
+	//Emit this directly
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
+
+	//Just give this back
+	return stmt;
+}
+
+
+/**
  * Developer utility function to validate the priority queue implementation
  */
 static void print_live_range_array(dynamic_array_t* live_ranges){
