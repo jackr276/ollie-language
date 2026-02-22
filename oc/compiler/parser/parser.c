@@ -6653,11 +6653,10 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 	//We do not allow for such a thing as "void[]". As such, we need to check if we are
 	//creating a void type here or not
 	if(IS_VOID_TYPE(current_type->type) == TRUE){
-
+		print_parse_message(MESSAGE_TYPE_ERROR, "void types may not be used as array members", parser_line_num);
+		num_errors++;
+		return NULL;
 	}
-
-
-
 
 	//Quickly referesh the token to see what we have
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6722,11 +6721,25 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 			return NULL;
 		}
 
+		//We now need to see an R_BRACKET
+		lookahead = get_next_token(token_stream, &parser_line_num);
 
-		//TODO R_BRACKET
-		
-		//Push this value up onto the lightstack
-		lightstack_push(&bounds_stack, constant_numeric_value);
+		//If we don't see one that's an error
+		if(lookahead.tok != R_BRACKET){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Pop the grouping stack to make sure the match is there
+		if(pop_token(&grouping_stack).tok != L_BRACKET){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Push this value up onto the lightstack now that we know it's valid
+		lightstack_push(bounds_stack, constant_numeric_value);
 
 	//Otherwise we're leaving it undefined. We need to now
 	} else {
@@ -6737,7 +6750,13 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 			return NULL;
 		}
 
+		//Push 0 on as our lightstack value since we're leaving this uninitialized
+		lightstack_push(bounds_stack, 0);
 	}
+
+	//Give back the current type for right now. Remember that all of the array
+	//processing doesn't take place until we stop seeing more array brackets
+	return current_type;
 }
 
 
