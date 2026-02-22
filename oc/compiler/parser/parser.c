@@ -6658,6 +6658,18 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 		return NULL;
 	}
 
+	/**
+	 * If we're trying to create an array out of a type that is not yet fully
+	 * defined, we also need to fail out. There exists a special exception here for array types, because we can
+	 * initially define them as blank if and only if we're using an initializer
+	 */
+	if(current_type->type->type_class != TYPE_CLASS_ARRAY && current_type->type->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type->type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
 	//Quickly referesh the token to see what we have
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -6771,11 +6783,21 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
  * 	to that type as our final type in the processing run.
  */
 static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* current_type, lightstack_t* bounds_stack){
-	//Just a quick and easy 
-	if(bounds_stack->current_size == 0){
-		return current_type;
-	}
+	//Pointer to the current type
+	symtab_type_record_t* last_type = current_type;
 
+	//So long as there are more bounds to process
+	while(lightstack_is_empty(bounds_stack) == FALSE){
+		//Get the number of members out of here
+		u_int32_t num_members = lightstack_pop(bounds_stack);
+
+		//If we have more than 0 members, we're creating a fully fledged array type
+		if(num_members > 0){
+
+		} else {
+
+		}
+	}
 }
 
 
@@ -6943,95 +6965,11 @@ loop_end:
 
 
 
-
-
-
-
-
-
-
-	//If we don't see an array here, we can just leave now
-	if(lookahead.tok != L_BRACKET){
-		//Put it back
-		push_back_token(token_stream, &parser_line_num);
-
-
-		//We're done here
-		return current_type_record->type;
-	}
-
-
-	//As long as we are seeing L_BRACKETS
-	while(lookahead.tok == L_BRACKET){
-		//Scan ahead to see
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//We could just see an empty one here. This tells us that we have 
-		//an empty array initializer. If we do see this, we can break out here
-		if(lookahead.tok == R_BRACKET){
-			//Scan ahead to see
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			//This is a special case where we are able to have an unitialized array for the time
-			//being. This only works if we have an array initializer afterwards
-			
-			//We're all set, push this onto the lightstack
-			lightstack_push(&lightstack, 0);
-
-			//Onto the next iteration
-			continue;
-		}
-
-		//Otherwise we need to put this token back
-		push_back_token(token_stream, &parser_line_num);
-
-		//The next thing that we absolutely must see is a constant. If we don't, we're
-		//done here
-		generic_ast_node_t* const_node = constant(token_stream, SIDE_TYPE_LEFT);
-
-		//If it failed, then we're done here
-		if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant given in array declaration", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//One last thing before we do expensive validation - what if there's no closing bracket? If there's not, this
-		//is an easy fail case 
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//Fail case here 
-		if(lookahead.tok != R_BRACKET){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-
-		//We're all set, push this onto the lightstack
-		lightstack_push(&lightstack, constant_numeric_value);
-
-		//Refresh the search
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
-
-	//Since we made it down here, we need to push the token back
-	push_back_token(token_stream, &parser_line_num);
-
 	//Now we'll go back through and unwind the lightstack
 	while(lightstack_is_empty(&lightstack) == FALSE){
 		//Grab the member count
 		u_int32_t num_members = lightstack_pop(&lightstack);
 
-		//If we're trying to create an array out of a type that is not yet fully
-		//defined, we also need to fail out. There exists a special exception here for array types, because we can
-		//initially define them as blank if and only if we're using an initializer
-		if(current_type_record->type->type_class != TYPE_CLASS_ARRAY && current_type_record->type->type_complete == FALSE){
-			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return NULL;
-		}
 
 		//We can do some optimization with our allocations if we have a set array member count already
 		if(num_members != 0){
