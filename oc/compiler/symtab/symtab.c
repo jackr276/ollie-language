@@ -625,23 +625,12 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed
  */
-u_int8_t add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
-	//We have too many parameters, fail out
-	if(function_record->number_of_params == 6){
-		return FAILURE;
-	}
-
+void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
-	function_record->func_params[function_record->number_of_params] = variable_record;
+	dynamic_array_add(&(function_record->function_parameters), variable_record);
 	
 	//Store what function this came from
 	variable_record->function_declared_in = function_record;
-
-	//Increment the count
-	(function_record->number_of_params)++;
-
-	//All went well
-	return SUCCESS;
 }
 
 /**
@@ -656,6 +645,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 
 	//Allocate the array for all function blocks
 	record->function_blocks = dynamic_array_alloc();
+
+	//Allocate space for the function parameter
+	record->function_parameters = dynamic_array_alloc();
 
 	//Copy the name over
 	record->func_name = name;
@@ -1535,15 +1527,17 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Print out the params
-	for(u_int8_t i = 0; i < record->number_of_params; i++){
+	for(u_int8_t i = 0; i < record->function_parameters.current_index; i++){
+		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
+
 		//Print if it's mutable
-		if(record->func_params[i]->type_defined_as->mutability == MUTABLE){
+		if(current_parameter->type_defined_as->mutability == MUTABLE){
 			printf("mut ");
 		}
 
-		printf("%s : %s", record->func_params[i]->var_name.string, record->func_params[i]->type_defined_as->type_name.string);
+		printf("%s : %s", current_parameter->var_name.string, current_parameter->type_defined_as->type_name.string);
 		//Comma if needed
-		if(i < record->number_of_params-1){
+		if(i < record->function_parameters.current_index - 1){
 			printf(", ");
 		}
 	}
@@ -2014,6 +2008,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 
 			//Destroy the block storage
 			dynamic_array_dealloc(&(temp->function_blocks));
+
+			//Destroy the parameters
+			dynamic_array_dealloc(&(temp->function_parameters));
 
 			//Dealloate the function type
 			type_dealloc(temp->signature);

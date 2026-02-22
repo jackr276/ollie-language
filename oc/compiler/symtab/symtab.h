@@ -31,9 +31,6 @@
 //There's only one function keyspace per program, so it can be a bit larger
 #define FUNCTION_KEYSPACE 1024 
 
-//The maximum number of function paramaters
-#define MAX_FUNCTION_PARAMS 6
-
 //A variable symtab
 typedef struct variable_symtab_t variable_symtab_t;
 //A function symtab
@@ -108,7 +105,7 @@ struct symtab_function_record_t{
 	//All of the basic blocks that make up this function
 	dynamic_array_t function_blocks;
 	//The parameters for the function
-	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
+	dynamic_array_t function_parameters;
 	//The name of the function
 	dynamic_string_t func_name;
 	//The data area for the whole function
@@ -129,8 +126,6 @@ struct symtab_function_record_t{
 	u_int32_t called_by_count;
 	//Unique identifier that is not a name
 	u_int32_t function_id;
-	//Number of parameters
-	u_int8_t number_of_params;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
@@ -396,7 +391,7 @@ symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* ty
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed
  */
-u_int8_t add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);
+void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);
 
 /**
  * Make a function record
