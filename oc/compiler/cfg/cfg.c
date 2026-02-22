@@ -8718,18 +8718,24 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 	 * at some point want to take the memory address of them), then we need to load
 	 * these variables into the stack preemptively
 	 */
-	for(u_int16_t i = 0; i < function_record->function_parameters.current_index; i++){
+	/**
+	 * Now we are going to process all of our normal function parameters. There is a special
+	 * case that we need to account for: if the user takes that address of a *non stack-passed*
+	 */
+	for(u_int32_t i = 0; i < function_record->function_parameters.current_index; i++){
 		//Extract the parameter
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
+		//If we see this then we've already dealt with it so move along
+		if(parameter->class_relative_function_parameter_order >= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+			continue;
+		}
+
+		//If we have a parameter that is going to be a stack variable(we've taken it's memory address),
+		//then we'll need to add that in now
 		if(parameter->stack_variable == TRUE){
-			//However if it is a stack variable, we need to add it to the stack and emit an initial store of it
-			if(parameter->stack_region == NULL){
-				//Add this variable onto the stack now, since we know it is not already on it
-				parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
-			} else {
-				printf("HERE\n");
-			}
+			//Add this variable onto the stack now, since we know it is not already on it
+			parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
 
 			//Copy the type over here
 			three_addr_var_t* parameter_var = emit_memory_address_var(parameter);
@@ -8791,6 +8797,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		}
 	}
 }
+
 
 /**
  * A function definition will always be considered a leader statement. As such, it
