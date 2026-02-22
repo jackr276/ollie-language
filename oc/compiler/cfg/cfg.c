@@ -4603,6 +4603,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//And the final type comes from when we dereference it
 			generic_type_t* dereferenced_type = dereference_type(pointer_type);
 
+			printf("DEREFED TYPE IS %s\n", dereferenced_type->type_name.string);
+
 			/**
 			 * If we what we have is an array pointer, then we don't need to do anything besides assign the
 			 * value over. This is because when we take the address of an array, all that we do is load
@@ -4623,6 +4625,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * indirection that we need to do
 			 */
 			if(is_memory_region(dereferenced_type) == TRUE){
+				printf("HERE\n");
 				//Emit the assignment
 				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee);
 

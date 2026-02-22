@@ -12,5 +12,5 @@ pub fn main() -> i32 {
 	//is 16
 	let x:mut i32[4]* = &arr + 1;
 
-	ret *x[3];
+	ret (*x)[3];
 }
