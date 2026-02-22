@@ -10564,16 +10564,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		}
 
 		//Once we're here, we can add the function parameter in
-		status = add_function_parameter(function_record, parameter);
-
-		//If this fails that means we exceeded the maximum number of parameters
-		//This means that we exceeded the number of parameters
-		if(status == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
+		add_function_parameter(function_record, parameter);
 
 		//We made it here, so we've seen one more absolute number
 		absolute_parameter_number++;
@@ -10585,8 +10576,8 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 	} while(lookahead.tok == COMMA);
 
 	//If we're predeclaring, we need to check that the parameter count matches
-	if(defining_predeclared_function == TRUE && function_record->number_of_params != internal_function_type->num_params){
-		sprintf(info, "Function %s was declared with %d parameters, but was only defined with %d", function_record->func_name.string, internal_function_type->num_params, function_record->number_of_params);
+	if(defining_predeclared_function == TRUE && function_record->function_parameters.current_index != internal_function_type->num_params){
+		sprintf(info, "Function %s was declared with %d parameters, but was only defined with %d", function_record->func_name.string, internal_function_type->num_params, function_record->function_parameters.current_index);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
 		return FAILURE;

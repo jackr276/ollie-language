@@ -2371,9 +2371,9 @@ static void rename_block(basic_block_t* entry){
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
 		
 		//We'll run through the parameters and mark them as assigned
-		for(u_int16_t i = 0; i < function_defined_in->number_of_params; i++){
+		for(u_int16_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
 			//make the new name here
-			lhs_new_name_direct(function_defined_in->func_params[i]);
+			lhs_new_name_direct(dynamic_array_get_at(&(function_defined_in->function_parameters), i));
 		}
 	}
 
@@ -2519,16 +2519,21 @@ static void rename_block(basic_block_t* entry){
 		
 		//We need to pop these all only once so that we have parity with what we
 		//did up top
-		for(u_int16_t i = 0; i < function_defined_in->number_of_params; i++){
+		for(u_int16_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
+			//Get the function parameter out
+			symtab_variable_record_t* function_param = dynamic_array_get_at(&(function_defined_in->function_parameters), i);
+
 			//Pop it off here
-			lightstack_pop(&(function_defined_in->func_params[i]->counter_stack));
+			lightstack_pop(&(function_param->counter_stack));
 		}
 	}
 
-	//Once we're done, we'll need to unwind our stack here. Anything that involves an assignee, we'll
-	//need to pop it's stack so we don't have excessive variable numbers. We'll now iterate over again
-	//and perform pops whereever we see a variable being assigned
-	
+	/**
+	 * Once we're done, we'll need to unwind our stack here. Anything that involves an assignee, we'll
+	 * need to pop it's stack so we don't have excessive variable numbers. We'll now iterate over again
+	 * and perform pops whereever we see a variable being assigned
+	 */
+
 	//Grab the cursor again
 	cursor = entry->leader_statement;
 	while(cursor != NULL){
@@ -8687,9 +8692,9 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 	 * at some point want to take the memory address of them), then we need to load
 	 * these variables into the stack preemptively
 	 */
-	for(u_int16_t i = 0; i < func_record->number_of_params; i++){
+	for(u_int16_t i = 0; i < func_record->function_parameters.current_index; i++){
 		//Extract the parameter
-		symtab_variable_record_t* parameter = func_record->func_params[i];
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(func_record->function_parameters), i);
 
 		//If we have a stack variable that is *not* a reference type, we will
 		//go through here and pre-load it onto the stack
