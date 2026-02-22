@@ -32,6 +32,8 @@ static cfg_t* cfg = NULL;
 static symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
 static basic_block_t* function_exit_block = NULL;
+//Keep a varaible/record for the stack pointer(rsp)
+static three_addr_var_t* stack_pointer_variable = NULL;
 //Keep a varaible/record for the instruction pointer(rip)
 static three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
@@ -5633,6 +5635,26 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 /**
  * Emit a function call node. In this iteration of a function call, we will still be parameterized, so the actual 
  * node will record what needs to be passed into the function
+ *
+ * For functions that have stack-passed parameters, we will need to account for this and perform a stack allocation/deallocation
+ * on-the-fly for our function call. This is somewhat simple from the caller's perspective because we just need to setup
+ * the local stack frame and populate it with values 
+ *
+ * For example:
+ *
+ * Function 1 param stack(total size 8)
+ * ------------------------------------
+ * int x   Relative Offset: 4
+ * int y   Relative Offset: 0
+ * ------------------------------------
+ *
+ * .....
+ * subq $8, %rsp //Create the stack fram
+ * ....
+ * movq param7, (%rsp)  //populate
+ * movq param8, 4(%rsp) //populate
+ * call function1 -> %eax
+ * addq $8, %rsp //cleanup post-call
  */
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node, u_int8_t is_branch_ending){
 	//Initially we'll emit this, though it may change
@@ -5640,8 +5662,13 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	//Grab this out first
 	symtab_function_record_t* func_record = function_call_node->func_record;
+
 	//Grab the function's signature type too
 	function_type_t* signature = func_record->signature->internal_types.function_type;
+
+	//Hang onto the parameter stack that this function relies on. Note that this will often
+	//be blank, but we need to hang onto it anyways
+	stack_data_area_t* callee_parameter_stack = &(func_record->stack_passed_parameters);
 
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current = basic_block;
@@ -5701,29 +5728,46 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		current_func_param_idx++;
 	}
 
+	//
+	//
+	//TODO HERE
+	//
+	//
+	//
+
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
 	for(u_int16_t i = 1; i < current_func_param_idx; i++){
 		//Get the result
 		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
-		
-		//Extract the parameter type here
+
+		//Extract our type here
 		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i - 1);
 
-		//We need one more assignment here
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result);
+		//Get the variable record that we're after
+		symtab_variable_record_t* var_record = dynamic_array_get_at(&(func_record->function_parameters), i - 1);
 
-		//Counts as a use
-		add_used_variable(basic_block, result);
+		//If this has no stack region, then we don't need to do anything special
+		if(var_record->passed_by_stack == FALSE){
+			//We need one more assignment here
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result);
 
-		//Add this into the block
-		add_statement(basic_block, assignment);
+			//Counts as a use
+			add_used_variable(basic_block, result);
 
-		//Add the parameter in
-		dynamic_array_add(&func_call_stmt->parameters, assignment->assignee);
+			//Add this into the block
+			add_statement(basic_block, assignment);
 
-		//The assignment here is used implicitly by the function call
-		add_used_variable(current, assignment->assignee);
+			//Add the parameter in
+			dynamic_array_add(&func_call_stmt->parameters, assignment->assignee);
+
+			//The assignment here is used implicitly by the function call
+			add_used_variable(current, assignment->assignee);
+
+		//However if we do have a stack region, we need 
+		} else {
+
+		}
 	}
 
 	//Once we make it here, we should have all of the params stored in temp vars
@@ -9860,6 +9904,10 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	three_addr_var_t* stack_pointer_var = emit_var(stack_pointer);
 	//Mark it
 	stack_pointer_var->is_stack_pointer = TRUE;
+
+	//Keep a global record of it for easy access
+	stack_pointer_variable = stack_pointer_var;
+	
 	//Store the stack pointer
 	cfg->stack_pointer = stack_pointer_var;
 

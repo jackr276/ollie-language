@@ -190,6 +190,8 @@ struct symtab_variable_record_t{
 	//Where does this variable get stored? By default we assume register, so
 	//this flag will only be set if we have a memory address value
 	u_int8_t stack_variable;
+	//Is this a function parameter that is passed via stack?
+	u_int8_t passed_by_stack;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 };
