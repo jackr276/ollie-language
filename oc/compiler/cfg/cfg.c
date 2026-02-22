@@ -8657,55 +8657,31 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
  * parameter aliasing that we're all used to, and it will handle the use of stack
  * parameters as well. It is vital that this function execute *before* any actual
  * user code is translated. 
+ *
+ * If a function has more than 6 of any kind of parameter, this is how the stack frame
+ * will look
+ *
+ * --------------- Function x ----------------
+ * ----------
+ * All other storage(arrays, structs, etc)
+ * ----------
+ * ----------
+ * Storage for normal params that we take the address of
+ * ----------
+ * ---------
+ *  Storage for *stack passed* parameters
+ * ---------
+ * --------------- Function x ----------------
  */
-static inline void setup_function_parameters(basic_block_t* function_entry_block){
-
-}
-
-
-/**
- * A function definition will always be considered a leader statement. As such, it
- * will always have it's own separate block
- */
-static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
-	//Push the nesting level that we're in
-	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
-	
-	//Grab the function record
-	symtab_function_record_t* func_record = function_node->func_record;
-	//We will now store this as the current function
-	current_function = func_record;
-	//Store the pointer to this function's array of blocks too. This will be used by every basic_block_alloc() call
-	current_function_blocks = &(func_record->function_blocks);
-	//We also need to zero out the current stack offset value
-	stack_offset = 0;
-	//We also need to set the labeled block array to be empty
-	current_function_labeled_blocks = dynamic_array_alloc();
-	//Keep an array for all of the jump statements as well
-	current_function_user_defined_jump_statements = dynamic_array_alloc();
-
-	//The starting block
-	basic_block_t* function_starting_block = basic_block_alloc_and_estimate();
-	//The function exit block
-	function_exit_block = basic_block_alloc_and_estimate();
-	//Mark that this is a starting block
-	function_starting_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
-	//Mark that this is an exit block
-	function_exit_block->block_type = BLOCK_TYPE_FUNC_EXIT;
-	//Store this in the entry block
-	function_starting_block->function_defined_in = func_record;
-
-	//These will always be direct successors here
-	function_starting_block->direct_successor = function_exit_block;
-
+static inline void setup_function_parameters(symtab_function_record_t* function_record, basic_block_t* function_entry_block){
 	/**
 	 * If we have function parameters that are *also* stack variables(meaning the user will
 	 * at some point want to take the memory address of them), then we need to load
 	 * these variables into the stack preemptively
 	 */
-	for(u_int16_t i = 0; i < func_record->function_parameters.current_index; i++){
+	for(u_int16_t i = 0; i < function_record->function_parameters.current_index; i++){
 		//Extract the parameter
-		symtab_variable_record_t* parameter = dynamic_array_get_at(&(func_record->function_parameters), i);
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
 		//If we have a stack variable that is *not* a reference type, we will
 		//go through here and pre-load it onto the stack
@@ -8723,11 +8699,11 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 			instruction_t* store_code = emit_store_ir_code(parameter_var, emit_var(parameter), parameter->type_defined_as);
 
 			//Bookkeeping here
-			add_used_variable(function_starting_block, store_code->op1);
-			add_used_variable(function_starting_block, store_code->assignee);
+			add_used_variable(function_entry_block, store_code->op1);
+			add_used_variable(function_entry_block, store_code->assignee);
 
 			//Add it into the starting block
-			add_statement(function_starting_block, store_code);
+			add_statement(function_entry_block, store_code);
 
 		/**
 		 * Parameter aliasing:
@@ -8768,13 +8744,53 @@ static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* 
 			instruction_t* alias_assignment = emit_assignment_instruction(alias_var, parameter_var);
 
 			//Counts as a use for the parameter
-			add_used_variable(function_starting_block, parameter_var);
-			add_assigned_variable(function_starting_block, alias_var);
+			add_used_variable(function_entry_block, parameter_var);
+			add_assigned_variable(function_entry_block, alias_var);
 
 			//Now add the statement in
-			add_statement(function_starting_block, alias_assignment);
+			add_statement(function_entry_block, alias_assignment);
 		}
 	}
+}
+
+
+/**
+ * A function definition will always be considered a leader statement. As such, it
+ * will always have it's own separate block
+ */
+static basic_block_t* visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_node){
+	//Push the nesting level that we're in
+	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
+	
+	//Grab the function record
+	symtab_function_record_t* func_record = function_node->func_record;
+	//We will now store this as the current function
+	current_function = func_record;
+	//Store the pointer to this function's array of blocks too. This will be used by every basic_block_alloc() call
+	current_function_blocks = &(func_record->function_blocks);
+	//We also need to zero out the current stack offset value
+	stack_offset = 0;
+	//We also need to set the labeled block array to be empty
+	current_function_labeled_blocks = dynamic_array_alloc();
+	//Keep an array for all of the jump statements as well
+	current_function_user_defined_jump_statements = dynamic_array_alloc();
+
+	//The starting block
+	basic_block_t* function_starting_block = basic_block_alloc_and_estimate();
+	//The function exit block
+	function_exit_block = basic_block_alloc_and_estimate();
+	//Mark that this is a starting block
+	function_starting_block->block_type = BLOCK_TYPE_FUNC_ENTRY;
+	//Mark that this is an exit block
+	function_exit_block->block_type = BLOCK_TYPE_FUNC_EXIT;
+	//Store this in the entry block
+	function_starting_block->function_defined_in = func_record;
+
+	//These will always be direct successors here
+	function_starting_block->direct_successor = function_exit_block;
+
+	//Setup the function parameters. The helper does all of this
+	setup_function_parameters(func_record, function_starting_block); 
 
 	//We don't care about anything until we reach the compound statement
 	generic_ast_node_t* func_cursor = function_node->first_child;
