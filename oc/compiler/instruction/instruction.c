@@ -2576,6 +2576,20 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			break;
 
+		case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
+			fprintf(fl, "Stack Allocate <-");
+			print_three_addr_constant(fl, stmt->op1_const);
+			fprintf(fl, " bytes\n");
+
+			break;
+
+		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
+			fprintf(fl, "Stack Deallocate <-");
+			print_three_addr_constant(fl, stmt->op1_const);
+			fprintf(fl, " bytes\n");
+
+			break;
+
 		default:
 			printf("UNKNOWN TYPE");
 			break;

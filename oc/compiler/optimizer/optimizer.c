@@ -515,6 +515,18 @@ static void mark(dynamic_array_t* function_blocks){
 					current->contains_mark = TRUE;
 					break;
 
+				/**
+				 * Special cases: these stack allocation and deallocation statements
+				 * do not have any variables in them(%rsp is inferred because it is the stack)
+				 * They must always be marked, and they may never be deleted. However, since there
+				 * are no variables in them to trace around, we will not add them to the worklist
+				 */
+				case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
+				case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
+					current_stmt->mark = TRUE;
+					current->contains_mark = TRUE;
+					break;
+
 				//Let's see what other special cases we have
 				default:
 					break;
