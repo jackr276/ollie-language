@@ -8683,20 +8683,34 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 	 * First step: handle function parameters that are *passed in via stack*. In our structure, this means that if their
 	 * "class_relative_parameter_number" is more than 6(the max), then we are loading it into the stack. It is very important
 	 * that this is done *before* anything happens with parameters whose address we eventually plan to take. Thos need to go
-	 * on top of this
+	 * on top of this. 
+	 *
+	 * Note that it's impossible for this to happen if we have less than 6 parameters, so we will only do this extra work
+	 * if we have more than 6. Even if we do have more than 6, we could have 4 floats and 3 ints, so it's not a guarantee
+	 * that we'll need this but we have to check
 	 */
+	if(function_record->function_parameters.current_index > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+		for(u_int32_t i = 0; i < function_record->function_parameters.current_index; i++){
+			//Extract the parameter
+			symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
+			//If we are below the threshhold, skip this and we can keep going ahead
+			if(parameter->class_relative_function_parameter_order <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+				continue;
+			}
 
+			/**
+			 * If we make it here then we know that this parameter must be passed in via the stack. We need to reflect
+			 * this reality inside of the function's stack frame itself
+			 */
 
+			//Flag that it is a stack variable
+			parameter->stack_variable = TRUE;
 
-	//Run through all of our function parameters
-	for(u_int32_t i = 0; i < function_record->function_parameters.current_index; i++){
-		//Extract the parameter
-		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
-
+			//Create the stack region that we need for this type and store it inside of there
+			parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
+		}
 	}
-
-
 
 
 	/**
@@ -8713,6 +8727,8 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 			if(parameter->stack_region == NULL){
 				//Add this variable onto the stack now, since we know it is not already on it
 				parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
+			} else {
+				printf("HERE\n");
 			}
 
 			//Copy the type over here
