@@ -5671,7 +5671,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	stack_data_area_t* callee_parameter_stack = &(func_record->stack_passed_parameters);
 
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
-	basic_block_t* current = basic_block;
+	basic_block_t* current_block = basic_block;
 
 	//The function's assignee
 	three_addr_var_t* assignee = NULL;
@@ -5706,16 +5706,16 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
 		//Emit whatever we have here into the basic block
-		cfg_result_package_t package = emit_expression(current, param_cursor, is_branch_ending, FALSE);
+		cfg_result_package_t package = emit_expression(current_block, param_cursor, is_branch_ending, FALSE);
 
 		//If we did hit a ternary at some point here, we'd see current as different than the final block, so we'll need
 		//to reassign
-		if(package.final_block != current){
+		if(package.final_block != current_block){
 			//We've seen a ternary, reassign current
-			current = package.final_block;
+			current_block = package.final_block;
 
 			//Reassign this as well, so that we stay current
-			result_package.final_block = current;
+			result_package.final_block = current_block;
 		}
 
 		//Add this final result into our parameter results list
@@ -5727,13 +5727,29 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//Increment this
 		current_func_param_idx++;
 	}
+	
+	/**
+	 * If we have any stack variables, now is the time where we need to emit the local frame allocation
+	 * so that we can load up stack variables for the callee without issue
+	 */
+	if(callee_parameter_stack->total_size != 0){
+		//Emit the constant
+		three_addr_const_t* stack_allocation_offset = emit_direct_integer_or_char_constant(callee_parameter_stack->total_size, u64);
 
-	//
-	//
-	//TODO HERE
-	//
-	//
-	//
+		//
+		//
+		//
+		//TODO this should be a specialized stack allocation statement
+		//
+		//
+		//
+		//
+		//Now the stack allocation
+		instruction_t* stack_allocation = emit_binary_operation_with_const_instruction(stack_pointer_variable, stack_pointer_variable, MINUS, stack_allocation_offset);
+
+		//Get it into the block
+		add_statement(current_block, stack_allocation);
+	}
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
@@ -5753,26 +5769,57 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result);
 
 			//Counts as a use
-			add_used_variable(basic_block, result);
+			add_used_variable(current_block, result);
 
 			//Add this into the block
-			add_statement(basic_block, assignment);
+			add_statement(current_block, assignment);
 
 			//Add the parameter in
 			dynamic_array_add(&func_call_stmt->parameters, assignment->assignee);
 
 			//The assignment here is used implicitly by the function call
-			add_used_variable(current, assignment->assignee);
+			add_used_variable(current_block, assignment->assignee);
 
-		//However if we do have a stack region, we need 
+		//However if we do have a stack region, we need to instead emit a store that gets this
+		//variable into the appopriate spot
 		} else {
+			//Allocation for our offset
+			three_addr_const_t* offset = emit_direct_integer_or_char_constant(var_record->stack_region->base_address, u64);
 
+			//Emit the store instruction
+			instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(stack_pointer_variable, offset, result, parameter_type);
+
+			//This counts as a use
+			add_used_variable(current_block, result);
+
+			//Now get it into the block
+			add_statement(current_block, store_instruction);
 		}
 	}
 
 	//Once we make it here, we should have all of the params stored in temp vars
 	//We can now add the function call statement in
-	add_statement(current, func_call_stmt);
+	add_statement(current_block, func_call_stmt);
+
+	//We need to clean up the stack if we had anything on it
+	if(callee_parameter_stack->total_size != 0){
+		//Emit the constant
+		three_addr_const_t* stack_allocation_offset = emit_direct_integer_or_char_constant(callee_parameter_stack->total_size, u64);
+
+		//
+		//
+		//
+		//TODO this should be a specialized stack allocation statement
+		//
+		//
+		//
+		//
+		//Now the stack deallocation
+		instruction_t* stack_deallocation = emit_binary_operation_with_const_instruction(stack_pointer_variable, stack_pointer_variable, PLUS, stack_allocation_offset);
+
+		//Get it into the block
+		add_statement(current_block, stack_deallocation);
+	}
 
 	//If this is not a void return type, we'll need to emit this temp assignment
 	if(signature->returns_void == FALSE){
@@ -5784,7 +5831,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		assignee = assignment->assignee;
 
 		//Add it in
-		add_statement(current, assignment);
+		add_statement(current_block, assignment);
 	}
 
 	//This is always the assignee we gave above. It is important to note
