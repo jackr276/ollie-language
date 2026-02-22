@@ -6649,7 +6649,7 @@ static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* cur
  *
  * NOTE: We've already seen the L_BRACKET by the time we get here
  */
-static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token_stream, symtab_type_record_t* current_type, lightstack_t* bounds_stack, mutability_type_t mutability){
+static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token_stream, symtab_type_record_t* current_type, lightstack_t* bounds_stack){
 	//We do not allow for such a thing as "void[]". As such, we need to check if we are
 	//creating a void type here or not
 	if(IS_VOID_TYPE(current_type->type) == TRUE){
@@ -6782,9 +6782,9 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
  * 	is we'll create the i32[3][4] like described above and then give that back as our current type. Following that we'll create a pointer
  * 	to that type as our final type in the processing run.
  */
-static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* current_type, lightstack_t* bounds_stack){
+static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* base_member_type, lightstack_t* bounds_stack, mutability_type_t mutability){
 	//Pointer to the current type
-	symtab_type_record_t* last_type = current_type;
+	symtab_type_record_t* current_type = base_member_type;
 
 	//So long as there are more bounds to process
 	while(lightstack_is_empty(bounds_stack) == FALSE){
@@ -6793,11 +6793,46 @@ static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_re
 
 		//If we have more than 0 members, we're creating a fully fledged array type
 		if(num_members > 0){
+			//Let's first see if we can find this array type
+			symtab_type_record_t* found_array_type = lookup_array_type(type_symtab, current_type->type, num_members, mutability);
 
+			//We expect that this is the most common case. Here we'll just have to make our own array type
+			if(found_array_type == NULL){
+				//Create the new one
+				generic_type_t* new_array_type = create_array_type(current_type->type, parser_line_num, num_members, mutability);
+
+				//Create the symtab record for it
+				symtab_type_record_t* type_record = create_type_record(new_array_type);
+
+				//Get it into the symtab
+				insert_type(type_symtab, type_record);
+
+				//And this is now our current type
+				current_type = type_record;
+
+			} else {
+				//Otherwise since we've found it here we'll just grab a pointer to this last type
+				current_type = found_array_type;
+			}
+
+		//For a generic array type - we'll be creating an array with 0 records
 		} else {
+			//If we get here, we need to create an array type
+			generic_type_t* array_type = create_array_type(current_type->type, parser_line_num, 0, mutability);
 
+			//Create the type record
+			symtab_type_record_t* created_array = create_type_record(array_type);
+
+			//Insert it into the symbol table
+			insert_type(type_symtab, created_array);
+
+			//We'll also set the current type record to be this
+			current_type = created_array;
 		}
 	}
+
+	//At the very end give back whatever our most up-to-date type is
+	return current_type;
 }
 
 
@@ -6891,7 +6926,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 				push_token(&grouping_stack, lookahead);
 
 				//Let the helper do the work
-				current_type_record = parse_array_type(token_stream, current_type_record, &bounds_stack, mutability);
+				current_type_record = parse_array_type(token_stream, current_type_record, &bounds_stack);
 
 				//If it failed it'll be NULL, and we'll pass it up the chain
 				if(current_type_record == NULL){
@@ -6907,7 +6942,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 			 */
 			case STAR:
 				//Process any/all array bounds
-				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack);
+				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack, mutability);
 
 				//If this returns NULL then it failed, just kick it back
 				if(current_type_record == NULL){
@@ -6930,7 +6965,7 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 			 */
 			default:
 				//Process any/all array bounds
-				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack);
+				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack, mutability);
 
 				//If this returns NULL then it failed, just kick it back
 				if(current_type_record == NULL){
@@ -6997,15 +7032,6 @@ loop_end:
 		//If we have 0 members, we need to create a distinct array type no matter what so we won't bother 
 		//checking
 		} else {
-			//If we get here, we need to create an array type
-			generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_members, mutability);
-
-			//Create the type record
-			symtab_type_record_t* created_array = create_type_record(array_type);
-			//Insert it into the symbol table
-			insert_type(type_symtab, created_array);
-			//We'll also set the current type record to be this
-			current_type_record = created_array;
 		}
 	}
 
