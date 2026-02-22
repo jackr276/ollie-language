@@ -8653,6 +8653,17 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
 
 
 /**
+ * Setup all of the parameters that we need for our function. This will handle the
+ * parameter aliasing that we're all used to, and it will handle the use of stack
+ * parameters as well. It is vital that this function execute *before* any actual
+ * user code is translated. 
+ */
+static inline void setup_function_parameters(basic_block_t* function_entry_block){
+
+}
+
+
+/**
  * A function definition will always be considered a leader statement. As such, it
  * will always have it's own separate block
  */
