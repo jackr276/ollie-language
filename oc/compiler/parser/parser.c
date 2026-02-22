@@ -10530,6 +10530,8 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		//Once we're here, we can add the function parameter in
 		add_function_parameter(function_record, parameter);
 
+		//TODO NEED A FINALIZER IN HERE
+
 		//We made it here, so we've seen one more absolute number
 		absolute_parameter_number++;
 

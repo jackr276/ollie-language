@@ -32,7 +32,9 @@ static cfg_t* cfg = NULL;
 static symtab_function_record_t* current_function;
 //The current function exit block. Unlike loops, these can't be nested, so this is totally fine
 static basic_block_t* function_exit_block = NULL;
-//Keep a varaible/record for the instruction pointer(rip)
+//Hang onto the stack pointer variable(%rsp)
+static three_addr_var_t* stack_pointer_variable = NULL;
+//Keep a variable/record for the instruction pointer(rip)
 static three_addr_var_t* instruction_pointer_var = NULL;
 //Keep a record for the variable symtab
 static variable_symtab_t* variable_symtab;
@@ -5734,16 +5736,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//Emit the constant
 		three_addr_const_t* stack_allocation_offset = emit_direct_integer_or_char_constant(callee_parameter_stack->total_size, u64);
 
-		//
-		//
-		//
-		//TODO this should be a specialized stack allocation statement
-		//
-		//
-		//
-		//
 		//Now the stack allocation
-		instruction_t* stack_allocation = emit_binary_operation_with_const_instruction(stack_pointer_variable, stack_pointer_variable, MINUS, stack_allocation_offset);
+		instruction_t* stack_allocation = emit_stack_allocation_ir_statement(stack_allocation_offset);
 
 		//Get it into the block
 		add_statement(current_block, stack_allocation);
@@ -5804,16 +5798,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//Emit the constant
 		three_addr_const_t* stack_allocation_offset = emit_direct_integer_or_char_constant(callee_parameter_stack->total_size, u64);
 
-		//
-		//
-		//
-		//TODO this should be a specialized stack allocation statement
-		//
-		//
-		//
-		//
-		//Now the stack deallocation
-		instruction_t* stack_deallocation = emit_binary_operation_with_const_instruction(stack_pointer_variable, stack_pointer_variable, PLUS, stack_allocation_offset);
+		//Now the stack allocation
+		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_allocation_offset);
 
 		//Get it into the block
 		add_statement(current_block, stack_deallocation);
@@ -9951,6 +9937,9 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	stack_pointer_var->is_stack_pointer = TRUE;
 	//Store the stack pointer
 	cfg->stack_pointer = stack_pointer_var;
+
+	//Store it in the global context as well
+	stack_pointer_variable = stack_pointer_var;
 
 	//Create the instruction pointer
 	symtab_variable_record_t* instruction_pointer = initialize_instruction_pointer(results->type_symtab);

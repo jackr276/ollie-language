@@ -2577,14 +2577,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			break;
 
 		case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
-			fprintf(fl, "Stack Allocate <-");
+			fprintf(fl, "Stack Allocate <- ");
 			print_three_addr_constant(fl, stmt->op1_const);
 			fprintf(fl, " bytes\n");
 
 			break;
 
 		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
-			fprintf(fl, "Stack Deallocate <-");
+			fprintf(fl, "Stack Deallocate <- ");
 			print_three_addr_constant(fl, stmt->op1_const);
 			fprintf(fl, " bytes\n");
 
@@ -5176,6 +5176,42 @@ instruction_t* emit_jump_instruction_directly(void* jumping_to_block, instructio
 	//Point to the jumping to block
 	instruction->if_block = jumping_to_block;
 
+	return instruction;
+}
+
+
+/**
+ * Emit a stack allocation statement
+ */
+instruction_t* emit_stack_allocation_ir_statement(three_addr_const_t* bytes_to_allocate){
+	//Allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Directly assign the type here
+	instruction->statement_type = THREE_ADDR_CODE_STACK_ALLOCATION_STMT;
+	
+	//Store the constant
+	instruction->op1_const = bytes_to_allocate;
+
+	//And give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a stack deallocation statement
+ */
+instruction_t* emit_stack_deallocation_ir_statement(three_addr_const_t* bytes_to_deallocate){
+	//Allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Directly assign the type here
+	instruction->statement_type = THREE_ADDR_CODE_STACK_DEALLOCATION_STMT;
+	
+	//Store the constant
+	instruction->op1_const = bytes_to_deallocate;
+
+	//And give it back
 	return instruction;
 }
 

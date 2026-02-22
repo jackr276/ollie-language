@@ -706,6 +706,16 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block);
 instruction_t* emit_jump_instruction_directly(void* jumping_to_block, instruction_type_t jump_instruction_type);
 
 /**
+ * Emit a stack allocation statement
+ */
+instruction_t* emit_stack_allocation_ir_statement(three_addr_const_t* bytes_to_allocate);
+
+/**
+ * Emit a stack deallocation statement
+ */
+instruction_t* emit_stack_deallocation_ir_statement(three_addr_const_t* bytes_to_deallocate);
+
+/**
  * Emit a branch statement
  */
 instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type);
