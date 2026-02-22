@@ -3,7 +3,7 @@
 * Testing array initializers in ollie
 */
 
-pub fn access_array(a:mut i32**) -> i32{
+pub fn access_array(a:mut i32[10]*) -> i32{
 	(*a)[1] = 3;
 	(*a)[2] = 3;
 
@@ -11,7 +11,7 @@ pub fn access_array(a:mut i32**) -> i32{
 }
 
 
-pub fn access_array2(a:mut i32**) -> i32{
+pub fn access_pointer(a:mut i32**) -> i32{
 	//Test our tracking abilities
 	let x:mut i32* = *a;
 

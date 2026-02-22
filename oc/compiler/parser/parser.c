@@ -93,7 +93,7 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 static u_int8_t alias_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream, u_int8_t new_variable_scope_required);
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_stream, side_type_t side);
@@ -912,7 +912,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	//For any error printing if need be
 	char error[ERROR_SIZE];
 	//The current line num
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
 	//We'll also keep a nicer reference to the function name
@@ -1088,7 +1088,12 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 		//If this is null, it means that our check failed
 		if(final_type == NULL){
-			sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an input of type \"%s%s\". Defined as: %s",
+			//Let's first generate the types_assignable failure message
+			generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+			//Following that we'll generate another error message to make it more clear
+			sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
 					function_name.string, 
 					(param_type->mutability == MUTABLE ? "mut ": ""),
 					param_type->type_name.string, num_params,
@@ -1310,7 +1315,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 	generic_ast_node_t* func_call;
 
 	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -1658,7 +1663,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
  */
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//For any eventual duplication
@@ -2133,7 +2138,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
  */
 static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, generic_type_t* current_type, side_type_t side){
 	//Freeze the current line
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//The lookahead token
 	lexitem_t lookahead;
 
@@ -2250,7 +2255,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//The lookahead token
 	lexitem_t lookahead;
 	//Freeze the current line
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 
 	//Before we go on, let's see what we have as the current type here. Both arrays and pointers are subscriptable items
 	if(type->type_class != TYPE_CLASS_ARRAY && type->type_class != TYPE_CLASS_POINTER){
@@ -5204,7 +5209,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
  */
 static u_int8_t struct_definer(ollie_token_stream_t* token_stream){
 	//Freeze the line num
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token for our uses
 	lexitem_t lookahead;
 
@@ -6613,6 +6618,225 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
 
 
 /**
+ * Handle the creation of a pointer type. 
+ *
+ * NOTE: we've already seen the STAR by the time we get here
+ */
+static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* current_type, mutability_type_t mutability){
+	//Can we find a pointer to this type already?
+	symtab_type_record_t* found_pointer = lookup_pointer_type(type_symtab, current_type->type, mutability);
+
+	//If it's NULL then we need to make one. If it's not NULL, then we're good
+	if(found_pointer == NULL){
+		//Create the new pointer record
+		symtab_type_record_t* pointer_record = create_type_record(create_pointer_type(current_type->type, parser_line_num, mutability));
+
+		//Put it into the sytmab
+		insert_type(type_symtab, pointer_record);
+
+		//Give back back what we created
+		return pointer_record;
+
+	} else {
+		//Give back what we found
+		return found_pointer;
+	}
+}
+
+
+/**
+ * Handle the creation of an array type
+ *
+ * NOTE: We've already seen the L_BRACKET by the time we get here
+ */
+static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token_stream, symtab_type_record_t* current_type, lightstack_t* bounds_stack){
+	//We do not allow for such a thing as "void[]". As such, we need to check if we are
+	//creating a void type here or not
+	if(IS_VOID_TYPE(current_type->type) == TRUE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "void types may not be used as array members", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	/**
+	 * If we're trying to create an array out of a type that is not yet fully
+	 * defined, we also need to fail out. There exists a special exception here for array types, because we can
+	 * initially define them as blank if and only if we're using an initializer
+	 */
+	if(current_type->type->type_class != TYPE_CLASS_ARRAY && current_type->type->type_complete == FALSE){
+		sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type->type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Quickly referesh the token to see what we have
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If we don't see an R_BRACKET, it means that we're definining bounds for this array
+	if(lookahead.tok != R_BRACKET){
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
+
+		//The first thing that we have to see is a logical or expression that becomes a constant
+		generic_ast_node_t* logical_or_expr = logical_or_expression(token_stream, SIDE_TYPE_RIGHT);
+
+		//First let's determine if we what type of node this gave back
+		switch(logical_or_expr->ast_node_type){
+			//Failures obviously get propogated
+			case AST_NODE_TYPE_ERR_NODE:	
+				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant given in array declaration", parser_line_num);
+				num_errors++;
+				return NULL;
+
+			//This is the only valid value
+			case AST_NODE_TYPE_CONSTANT:
+				break;
+
+			//Anything that is not a constant cannot be used
+			default:
+				print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds must be expressions that reduce to constants", parser_line_num);
+				num_errors++;
+				return NULL;
+		}
+
+		/**
+		 * Once we get here we know that we've got a constant. We can
+		 * still fail out if we get an illegal type of constant though
+		 */
+		switch(logical_or_expr->constant_type){
+			case FLOAT_CONST:
+			case DOUBLE_CONST:
+			case STR_CONST:
+				print_parse_message(MESSAGE_TYPE_ERROR, "Illegal constant given as array bounds", parser_line_num);
+				num_errors++;
+				return NULL;
+
+			default:
+				break;
+		}
+
+		//Extract for some final validations
+		int64_t constant_numeric_value = logical_or_expr->constant_value.signed_long_value;
+
+		//Is this a negative value? If so we fail
+		if(constant_numeric_value < 0){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be negative", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//It also can't be 0
+		if(constant_numeric_value == 0){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be zero", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//We now need to see an R_BRACKET
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//If we don't see one that's an error
+		if(lookahead.tok != R_BRACKET){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Pop the grouping stack to make sure the match is there
+		if(pop_token(&grouping_stack).tok != L_BRACKET){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Push this value up onto the lightstack now that we know it's valid
+		lightstack_push(bounds_stack, constant_numeric_value);
+
+	//Otherwise we're leaving it undefined. We need to now
+	} else {
+		//Pop the grouping stack
+		if(pop_token(&grouping_stack).tok != L_BRACKET){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
+			num_errors++;
+			return NULL;
+		}
+
+		//Push 0 on as our lightstack value since we're leaving this uninitialized
+		lightstack_push(bounds_stack, 0);
+	}
+
+	//Give back the current type for right now. Remember that all of the array
+	//processing doesn't take place until we stop seeing more array brackets
+	return current_type;
+}
+
+
+/**
+ * We will get to this function once we've stopped seeing the [] tokens in our type definition. The purpose of this rule
+ * is to go through and unwind the stack that we've made using all of the array bounds. For example:
+ * 		i32[3][4]
+ *
+ * 	We will first see the 4 on the stack and create an i32[4]. Following that we will pop the 3 off of the stack and create that
+ * 	type with an accurate type size and all. This method of processing allows us to define types like: i32[3][4]*. What will happen
+ * 	is we'll create the i32[3][4] like described above and then give that back as our current type. Following that we'll create a pointer
+ * 	to that type as our final type in the processing run.
+ */
+static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* base_member_type, lightstack_t* bounds_stack, mutability_type_t mutability){
+	//Pointer to the current type
+	symtab_type_record_t* current_type = base_member_type;
+
+	//So long as there are more bounds to process
+	while(lightstack_is_empty(bounds_stack) == FALSE){
+		//Get the number of members out of here
+		u_int32_t num_members = lightstack_pop(bounds_stack);
+
+		//If we have more than 0 members, we're creating a fully fledged array type
+		if(num_members > 0){
+			//Let's first see if we can find this array type
+			symtab_type_record_t* found_array_type = lookup_array_type(type_symtab, current_type->type, num_members, mutability);
+
+			//We expect that this is the most common case. Here we'll just have to make our own array type
+			if(found_array_type == NULL){
+				//Create the new one
+				generic_type_t* new_array_type = create_array_type(current_type->type, parser_line_num, num_members, mutability);
+
+				//Create the symtab record for it
+				symtab_type_record_t* type_record = create_type_record(new_array_type);
+
+				//Get it into the symtab
+				insert_type(type_symtab, type_record);
+
+				//And this is now our current type
+				current_type = type_record;
+
+			} else {
+				//Otherwise since we've found it here we'll just grab a pointer to this last type
+				current_type = found_array_type;
+			}
+
+		//For a generic array type - we'll be creating an array with 0 records
+		} else {
+			//If we get here, we need to create an array type
+			generic_type_t* array_type = create_array_type(current_type->type, parser_line_num, 0, mutability);
+
+			//Create the type record
+			symtab_type_record_t* created_array = create_type_record(array_type);
+
+			//Insert it into the symbol table
+			insert_type(type_symtab, created_array);
+
+			//We'll also set the current type record to be this
+			current_type = created_array;
+		}
+	}
+
+	//At the very end give back whatever our most up-to-date type is
+	return current_type;
+}
+
+
+/**
  * A type specifier is a type name that is then followed by an address specifier, this being  
  * the array brackets or address indicator. Like all rules, the type specifier rule will
  * always return a reference to the root of the subtree it creates
@@ -6632,8 +6856,6 @@ static symtab_type_record_t* type_name(ollie_token_stream_t* token_stream, mutab
  *
  * mut i32[35] -> this creates a mutable array(so the actual arr var is mutable) of mutable i32's(every single member
  * is also mutable)
- *
- * TODO - this is wrong and does not support pointers to arrays
  */
 static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	//We always assume immutability
@@ -6646,222 +6868,129 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	if(lookahead.tok == MUT){
 		mutability = MUTABLE;
 	} else {
-		//Put it back if not
 		push_back_token(token_stream, &parser_line_num);
 	}
 
-	//Now we'll hand off the rule to the <type-name> function. The type name function will
-	//return a record of the node that the type name has. If the type name function could not
-	//find the name, then it will send back an error that we can handle here
+	/**
+	 * Now we'll hand off the rule to the <type-name> function. The type name function will
+	 * return a record of the node that the type name has. If the type name function could not
+	 * find the name, then it will send back an error that we can handle here
+	 */
 	symtab_type_record_t* type = type_name(token_stream, mutability);
 
 	//We'll just fail here, no need for any error printing
 	if(type == NULL){
-		//It's already in error so just NULL out
 		return NULL;
 	}
 
-	//Now once we make it here, we know that we have a name that actually exists in the symtab
-	//The current type record is what we will eventually point our node to
+	//Maintain a reference to the current type
 	symtab_type_record_t* current_type_record = type;
 	
-	//Let's see where we go from here
+	/**
+	 * The lighstack is used for array processing. Whenever we get
+	 * an array type, we need to push the number of bounds onto the lightstack
+	 * This is because dimensional array types are declared backwards. For example,
+	 * an i32[3][4] is an array of 3 i32[4]. We don't know that until we get to the
+	 * very end. To support this, we have a lightstack that we push the bound count onto
+	 * when processing an array and then unwind once done to get the full picture
+	 */
+	lightstack_t bounds_stack = lightstack_initialize();
+
+	/**
+	 * Using a lightstack here because of the way that the type specifiers work
+	 * For example:
+	 * 		i32[5]*
+	 * 	This is really a pointer to an i32[5]
+	 *
+	 * 	i32[5][5]
+	 *
+	 * 	TODO DOC
+	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
+	while(TRUE){
+		//Only two things that would tell us about an address here, L_BRACKET or STAR
+		switch(lookahead.tok){
+			/**
+			 * To parse an array type, we will utilize our stack based approach where bounds
+			 * are pushed onto the stack and only processed once we stop seeing array types. 
+			 * Unlike the other two cases, since this is also an array type, we will not
+			 * be unwinding the bounds stack before processing here
+			 */
+			case L_BRACKET:
+				//Push this onto the grouping stack
+				push_token(&grouping_stack, lookahead);
 
-	//As long as we are seeing pointer specifiers
-	while(lookahead.tok == STAR){
-		//Let's see if we can find it first. We want to avoid creating memory if we're able to,
-		//so this step is important
-		symtab_type_record_t* found_pointer = lookup_pointer_type(type_symtab, current_type_record->type, mutability);
+				//Let the helper do the work
+				current_type_record = parse_array_type(token_stream, current_type_record, &bounds_stack);
 
-		//If we did not find it, we will add it into the symbol table
-		if(found_pointer == NULL){
-			//Let's create the pointer type. This pointer type will point to the current type
-			generic_type_t* pointer = create_pointer_type(current_type_record->type, parser_line_num, mutability);
+				//If it failed it'll be NULL, and we'll pass it up the chain
+				if(current_type_record == NULL){
+					return NULL;
+				}
 
-			//Create the type record
-			symtab_type_record_t* created_pointer = create_type_record(pointer);
-			//Insert it into the symbol table
-			insert_type(type_symtab, created_pointer);
-			//We'll also set the current type record to be this
-			current_type_record = created_pointer;
-
-		//Otherwise we've already gotten it, so just use it for our purposes here
-		} else {
-			//Otherwise, just set the current type record to be what we found
-			current_type_record = found_pointer;
-		}
-
-		//Refresh the search, keep hunting
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
-
-	//If we don't see an array here, we can just leave now
-	if(lookahead.tok != L_BRACKET){
-		//Put it back
-		push_back_token(token_stream, &parser_line_num);
-
-		/**
-		 * This is a very unique case. Internally, the system needs to have
-		 * a "mutable" void type in order to support things like mut void*, etc.. However,
-		 * if the user attempts to do something like fn my_fn() -> mut void, we should
-		 * throw an error here and disallow that. For all the user knows, there is no
-		 * mut void
-		 */
-		if(current_type_record->type == mut_void){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Void types do not contain values and therefore cannot be declared mutable. Remove the \"mut\" specificer", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//We're done here
-		return current_type_record->type;
-	}
-
-	//Otherwise, we know we're in for the array
-	//We'll use a lightstack for the bounds reversal
-	lightstack_t lightstack = lightstack_initialize();
-
-	//As long as we are seeing L_BRACKETS
-	while(lookahead.tok == L_BRACKET){
-		//Scan ahead to see
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//We could just see an empty one here. This tells us that we have 
-		//an empty array initializer. If we do see this, we can break out here
-		if(lookahead.tok == R_BRACKET){
-			//Scan ahead to see
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			//This is a special case where we are able to have an unitialized array for the time
-			//being. This only works if we have an array initializer afterwards
-			
-			//We're all set, push this onto the lightstack
-			lightstack_push(&lightstack, 0);
-
-			//Onto the next iteration
-			continue;
-		}
-
-		//Otherwise we need to put this token back
-		push_back_token(token_stream, &parser_line_num);
-
-		//The next thing that we absolutely must see is a constant. If we don't, we're
-		//done here
-		generic_ast_node_t* const_node = constant(token_stream, SIDE_TYPE_LEFT);
-
-		//If it failed, then we're done here
-		if(const_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid constant given in array declaration", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//One last thing before we do expensive validation - what if there's no closing bracket? If there's not, this
-		//is an easy fail case 
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//Fail case here 
-		if(lookahead.tok != R_BRACKET){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched brackets in array declaration", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//Determine if we have an illegal constant given as the array bounds
-		switch(const_node->constant_type){
-			case FLOAT_CONST:
-			case STR_CONST:
-				print_parse_message(MESSAGE_TYPE_ERROR, "Illegal constant given as array bounds", parser_line_num);
-				num_errors++;
-				return NULL;
-			default:
 				break;
+
+			/**
+			 * Handle a pointer. Unlike stuff with an array, for a pointer all that we
+			 * need to do is create(or find) a pointer type to whatever the type is
+			 * that we've currently constructed
+			 */
+			case STAR:
+				//Process any/all array bounds
+				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack, mutability);
+
+				//If this returns NULL then it failed, just kick it back
+				if(current_type_record == NULL){
+					return NULL;
+				}
+
+				//Let the helper deal with the rest
+				current_type_record = parse_pointer_type(current_type_record, mutability);
+
+				//If this returns NULL then it failed, just kick it back
+				if(current_type_record == NULL){
+					return NULL;
+				}
+
+				break;
+
+			/**
+			 * Anything else means that we have seen the end of what we're supposed to be processing.
+			 * We leave the loop and stop doing anything else
+			 */
+			default:
+				//Process any/all array bounds
+				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack, mutability);
+
+				//If this returns NULL then it failed, just kick it back
+				if(current_type_record == NULL){
+					return NULL;
+				}
+
+				//Now that we've gotten here we need to push back the residual token
+				push_back_token(token_stream, &parser_line_num);
+
+				//Get out of the loop by jumping out
+				goto loop_end;
 		}
 
-		//The constant value
-		int64_t constant_numeric_value = const_node->constant_value.unsigned_long_value;
-
-		//What if this is a negative or zero?
-		//If it's negative we fail like this
-		if(constant_numeric_value < 0){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be negative", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//If it's zero we fail like this
-		if(constant_numeric_value == 0){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Array bounds may not be zero", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//We're all set, push this onto the lightstack
-		lightstack_push(&lightstack, constant_numeric_value);
-
-		//Refresh the search
+		//Refresh the lookahead
 		lookahead = get_next_token(token_stream, &parser_line_num);
 	}
 
-	//Since we made it down here, we need to push the token back
-	push_back_token(token_stream, &parser_line_num);
-
-	//Now we'll go back through and unwind the lightstack
-	while(lightstack_is_empty(&lightstack) == FALSE){
-		//Grab the member count
-		u_int32_t num_members = lightstack_pop(&lightstack);
-
-		//If we're trying to create an array out of a type that is not yet fully
-		//defined, we also need to fail out. There exists a special exception here for array types, because we can
-		//initially define them as blank if and only if we're using an initializer
-		if(current_type_record->type->type_class != TYPE_CLASS_ARRAY && current_type_record->type->type_complete == FALSE){
-			sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type_record->type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		//We can do some optimization with our allocations if we have a set array member count already
-		if(num_members != 0){
-			//Lookup the array type first
-			symtab_type_record_t* found_array = lookup_array_type(type_symtab, current_type_record->type, num_members, mutability);
-
-			//If we did not find it, we will add it into the symbol table
-			if(found_array == NULL){
-				//If we get here, we need to create an array type
-				generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_members, mutability);
-
-				//Create the type record
-				symtab_type_record_t* created_array = create_type_record(array_type);
-				//Insert it into the symbol table
-				insert_type(type_symtab, created_array);
-				//We'll also set the current type record to be this
-				current_type_record = created_array;
-
-			//Otherwise we already have it, no need to do any extra creation
-			} else {
-				//Otherwise, just set the current type record to be what we found
-				current_type_record = found_array;
-			}
-
-		//If we have 0 members, we need to create a distinct array type no matter what so we won't bother 
-		//checking
-		} else {
-			//If we get here, we need to create an array type
-			generic_type_t* array_type = create_array_type(current_type_record->type, parser_line_num, num_members, mutability);
-
-			//Create the type record
-			symtab_type_record_t* created_array = create_type_record(array_type);
-			//Insert it into the symbol table
-			insert_type(type_symtab, created_array);
-			//We'll also set the current type record to be this
-			current_type_record = created_array;
-		}
+loop_end:
+	/**
+	 * This is a very unique case. Internally, the system needs to have
+	 * a "mutable" void type in order to support things like mut void*, etc.. However,
+	 * if the user attempts to do something like fn my_fn() -> mut void, we should
+	 * throw an error here and disallow that. For all the user knows, there is no
+	 * mut void
+	 */
+	if(current_type_record->type == mut_void){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Void types do not contain values and therefore cannot be declared mutable. Remove the \"mut\" specificer", parser_line_num);
+		num_errors++;
+		return NULL;
 	}
-
-	//We're done with it, so deallocate
-	lightstack_dealloc(&lightstack);
 
 	//Give back whatever the current type may be
 	return current_type_record->type;
@@ -7025,7 +7154,7 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
  */
 static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -7115,7 +7244,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
  */
 static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead tokens
 	lexitem_t lookahead;
 	lexitem_t lookahead2;
@@ -7169,7 +7298,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	add_child_node(if_stmt, expression_node);
 
 	//Now following this, we need to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, TRUE);
 
 	//If this node fails, whole thing is bad
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7232,7 +7361,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 		add_child_node(else_if_node, else_if_expression_node);
 
 		//Now following this, we need to see a valid compound statement
-		generic_ast_node_t* else_if_compound_stmt_node = compound_statement(token_stream);
+		generic_ast_node_t* else_if_compound_stmt_node = compound_statement(token_stream, TRUE);
 
 		//If this node fails, whole thing is bad
 		if(else_if_compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7259,7 +7388,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//We could've still had an else block here, so we'll check and handle it if we do
 	if(lookahead.tok == ELSE){
 		//We'll now handle the compound statement that comes with this
-		generic_ast_node_t* else_compound_stmt = compound_statement(token_stream);
+		generic_ast_node_t* else_compound_stmt = compound_statement(token_stream, TRUE);
 		
 		//Let's see if it worked
 		if(else_compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7729,7 +7858,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
  */
 static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//By default we have not found one of these
@@ -8177,7 +8306,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 
 	//Push the looping statement onto here
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
@@ -8227,7 +8356,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Following this, we need to see a valid compound statement, and then we're done
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, TRUE);
 
 	//If this is invalid we fail
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8257,7 +8386,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
  */
 static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream){
 	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -8269,7 +8398,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 
 	//Remember by the time that we've gotten here, we have already seen the do keyword
 	//Let's first find a valid compound statement
-	generic_ast_node_t* compound_stmt = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt = compound_statement(token_stream, TRUE);
 
 	//If we fail, then we are done here
 	if(compound_stmt->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8464,7 +8593,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	}
 	
 	//Now that we're all done, we need to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, TRUE);
 
 	//If it's invalid, we'll fail out here
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8494,10 +8623,16 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
  *
  * NOTE: We assume that we have NOT consumed the { token by the time we make
  * it here
+ * 
+ * Since our compound statement is also the entry point for a function, we may already get here with
+ * a variable scope opened up(think about how a function definition will open up a new variable scope
+ * for the parameter list). In that case, we don't want to be opening up extra variable scopes here
+ * if we don't have to. The "new_variable_scope_required" flag exists for this reason. We will only
+ * be opening up new scopes if this is set to TRUE
  *
  * BNF Rule: <compound-statement> ::= {{<declaration>}* {<statement>}* {<definition>}*}
  */
-static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream){
+static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream, u_int8_t new_variable_scope_required){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -8514,12 +8649,14 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 
 	//Now if we make it here, we're safe to create the actual node
 	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
-	//Store the line number here
-	compound_stmt_node->line_number = parser_line_num;
 
-	//Begin a new lexical scope for types and variables
+	//No matter what we need a new type scope 
 	initialize_type_scope(type_symtab);
-	initialize_variable_scope(variable_symtab);
+
+	//Variable scope is configurable based on a function param
+	if(new_variable_scope_required == TRUE){
+		initialize_variable_scope(variable_symtab);
+	}
 
 	//Now we can keep going until we see a closing curly
 	//We'll seed the search
@@ -8556,16 +8693,19 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 
 	//Once we've escaped out of the while loop, we know that the token we currently have
 	//is an R_CURLY
-	//We still must check for matching
 	if(pop_token(&grouping_stack).tok != L_CURLY){
 		return print_and_return_error("Unmatched curly braces detected", parser_line_num);
 	}
 
-	//Otherwise, we've reached the end of the new lexical scope that we made. As such, we'll
-	//"finalize" both of these scopes
+	//We always finalize this
 	finalize_type_scope(type_symtab);
-	finalize_variable_scope(variable_symtab);
-	//Add in the line number
+
+	//This is configurable via function param
+	if(new_variable_scope_required == TRUE){
+		finalize_variable_scope(variable_symtab);
+	}
+
+	//Save the line num
 	compound_stmt_node->line_number = parser_line_num;
 
 	//And we're all done, so we'll return the reference to the root node
@@ -8734,7 +8874,7 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
  */
 static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 
 	//If we see any kind of invalid nesting here, we'll need to fail out. Defer
 	//statements can only be nested inside of a function, and nothing else. So, if
@@ -8753,7 +8893,7 @@ static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//We now expect to see a compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, TRUE);
 
 	//If this fails, we bail
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -8861,7 +9001,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 			push_back_token(token_stream, &parser_line_num);
 
 			//Return whatever the rule gives us
-			return compound_statement(token_stream);
+			return compound_statement(token_stream, TRUE);
 	
 		//If we see for, we are seeing a for statement
 		case FOR:
@@ -8956,7 +9096,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
 			push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 			//We'll let the helper deal with it
-			default_compound_statement = compound_statement(token_stream);
+			default_compound_statement = compound_statement(token_stream, TRUE);
 
 			//If this is an error, we fail out
 			if(default_compound_statement != NULL && default_compound_statement->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9028,7 +9168,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
  */
 static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, int32_t* values, int32_t* values_max_index){
 	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Switch compound statement node for later on
@@ -9129,7 +9269,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 			push_nesting_level(&nesting_stack, NESTING_CASE_STATEMENT);
 
 			//We'll let the helper deal with it
-			switch_compound_statement = compound_statement(token_stream);
+			switch_compound_statement = compound_statement(token_stream, TRUE);
 
 			//If this is an error, we fail out
 			if(switch_compound_statement != NULL && switch_compound_statement->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -9205,7 +9345,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  */
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//Freeze the current line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -9725,7 +9865,7 @@ static generic_type_t* validate_intializer_types(generic_type_t* target_type, ge
  */
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//The line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -9757,6 +9897,15 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Check that it isn't some duplicated variable name. We will only check in the
 	//local scope for this one
+	//
+	//
+	//
+	//TODO WRONG - parameters must be in a different scope - this is leading to duplicate parameter
+	//names which is a big issue
+	//
+	//
+	//
+	//
 	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
@@ -10687,7 +10836,7 @@ after_rparen:
  */
 static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
 	//Freeze the line number
-	u_int16_t current_line = parser_line_num;
+	u_int32_t current_line = parser_line_num;
 	//Lookahead token
 	lexitem_t lookahead;
 	//Have we predeclared this function
@@ -10932,8 +11081,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Some housekeeping, if there were previously deferred statements, we want them out
 	deferred_stmts_node = NULL;
 
-	//We are finally required to see a valid compound statement
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream);
+	/**
+	 * When we see our compound statement here, we will pass a flag in of false to indicate
+	 * that we do not want to fully open up a new variable scope. We already have a fresh variable scope opened pu
+	 * that has all of our function parameters in it. Ollie disallows copying function parameters in the opening
+	 * scope of a function definition, so we want them to all be in the same variable scope
+	 */
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, FALSE);
 
 	//If this fails we'll just pass it through
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -10985,7 +11139,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Store the line number
 	function_node->line_number = current_line;
 
-	//Close the variable scope that we opened for the parameter list
+	//Close the variable scope that we opened for the parameter list/compound statement
 	finalize_variable_scope(variable_symtab);
 
 	//Remove the nesting level now that we're not in a function

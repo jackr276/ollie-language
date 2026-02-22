@@ -1,9 +1,9 @@
 /**
 * Author: Jack Robbins
-* Attempt to assign to immutable array
+* Assign to a mutable array
 */
 
-pub fn tester(x:mut i32**) -> void{
+pub fn tester(x:mut i32[33]*) -> void{
 	//Should work
 	(*x)[3] = 3;
 }

@@ -5,16 +5,16 @@
 
 fn parameter_pass(x:i32, y:i32, z:i32, a:i32, b:i32, c:i32) -> i32 {
 	let k:mut i32 = x + y + z;
-	let c:mut i32 = a + b + c;
+	let cc:mut i32 = a + b + c;
 
-	ret k + c;
+	ret k + cc;
 }
 
 fn parameter_pass2(x:i32, y:i32, z:i32, a:i32, b:i32, c:i32) -> i32 {
 	let k:mut i32 = x + y + z;
-	let c:mut i32 = a + b + c;
+	let cc:mut i32 = a + b + c;
 
-	ret k + c;
+	ret k + cc;
 }
 
 fn parameter_pass3(a:i32) -> i32 {

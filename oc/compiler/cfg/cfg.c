@@ -4604,6 +4604,40 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			generic_type_t* dereferenced_type = dereference_type(pointer_type);
 
 			/**
+			 * If we what we have is an array pointer, then we don't need to do anything besides assign the
+			 * value over. This is because when we take the address of an array, all that we do is load
+			 * the rsp offset in memory
+			 *
+			 * Example:
+			 * 	 declare x:i32[5]; //Suppose that this is at rsp + 20
+			 *
+			 * 	 let y:i32[5]* = &x;
+			 *
+			 * All that this really is in our assembly is:
+			 * 		y <- 20 + rsp
+			 *
+			 * So when we go to "dereference" y, we just need to assign the value over in a simple
+			 * move instruction. This is the same kind of rule for structs & unions, which is why
+			 * we use the "is_memory_region" check to see what kind of pointer we have. Again, a pointer
+			 * to a struct is simply that struct's address that's been copied in memory, so there's no additional
+			 * indirection that we need to do
+			 */
+			if(is_memory_region(dereferenced_type) == TRUE){
+				//Emit the assignment
+				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee);
+
+				//Counts as a use
+				add_used_variable(current_block, assignee);
+
+				//Get this into the block
+				add_statement(current_block, assignment_instruction);
+
+				//Package this up and get out
+				unary_package.assignee = assignment_instruction->assignee;
+				return unary_package;
+			}
+
+			/**
 			 * If we make it here, we will return an *incomplete* store
 			 * instruction with the knowledge that whomever called use
 			 * will fill it in
@@ -4769,108 +4803,24 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 						unary_expression_child->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), unary_expression_child->variable->type_defined_as);
 					} 
 
-					//If it's *not* an array type, we can proceed doing this as we normally do
-					if(unary_expression_child->variable->type_defined_as->type_class != TYPE_CLASS_ARRAY){
-						//The memory address itself
-						three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
-
-						//Emit a custom assignment instruction for this
-						instruction_t* address_assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address_var);
-						address_assignment->is_branch_ending = is_branch_ending;
-
-						//Add this into the block
-						add_statement(current_block, address_assignment);
-
-						//And package the value up as what we want here
-						unary_package.assignee = address_assignment->assignee;
-
 					/**
-					 * For an array type, we'll need to create a pointer to this in memory before we are able to load
-					 * up the address. Since the array type is already in memory, we'll create a pointer and load it
-					 * with the address of the base of the array.
-					 *
-					 * There are two scenarios here:
-					 *  1.) This is the first time we're taking the address of the array. We'll need to go through,
-					 *  make the pointer, load it's address and then return it
-					 *
-					 *  2.) We've already taken the address of this array and there already exists a pointer in memory to it. In
-					 *  this case, we will reuse that same region
+					 * Otherwise, this variable is already on the stack. As such, to get it's memory address,
+					 * all we need to do is take emit a specialized "memory address var" from the existing
+					 * stack region and slap it into a variable
 					 */
-					} else {
-						//Let's see whether or not we already have it
-						stack_region_t* existing_region = does_stack_contain_pointer_to_variable(&(current_function->data_area), unary_expression_child->variable);
 
-						//
-						//
-						//
-						//TODO - this is wrong
-						//Needs to be updated
-						//
-						//
+					//The memory address itself
+					three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
-						//We don't have it, so we need to go through our whole procedure
-						if(existing_region == NULL){
-							//We need to load a reference to this into memory
-							stack_region_t* region = create_stack_region_for_type(&(current_function->data_area), unary_expression_parent->inferred_type);
+					//Emit a custom assignment instruction for this
+					instruction_t* address_assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address_var);
+					address_assignment->is_branch_ending = is_branch_ending;
 
-							//This is what is being referenced
-							region->variable_referenced = unary_expression_child->variable;
+					//Add this into the block
+					add_statement(current_block, address_assignment);
 
-							//Emit the purpose made memory address var
-							three_addr_var_t* memory_address = emit_memory_address_var(unary_expression_child->variable);
-
-							//Emit a custom assignment instruction for this
-							instruction_t* address_assignment = emit_assignment_instruction(emit_temp_var(u64), memory_address);
-							address_assignment->is_branch_ending = is_branch_ending;
-
-							//Add this into the block
-							add_statement(current_block, address_assignment);
-
-							//Create the memory address var through the symtab to avoid compatibility issues
-							symtab_variable_record_t* memory_address_temp_var = create_temp_memory_address_variable(u64, variable_symtab, region, increment_and_get_temp_id());
-
-
-							//Emit the temp memory address var here
-							three_addr_var_t* stored_memory_address = emit_memory_address_var(memory_address_temp_var);
-
-							//We now store the memory address of the array into the stack itself. This is how we create a pointer to a pointer effectively
-							instruction_t* store = emit_store_ir_code(stored_memory_address, address_assignment->assignee, u64);
-							store->is_branch_ending = is_branch_ending;
-
-							//This comes afterwards
-							add_statement(current_block, store);
-
-							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
-							//a simple binary operation instruction
-							instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(unary_expression_parent->inferred_type), stored_memory_address);
-							final_assignment->is_branch_ending = is_branch_ending;
-
-							//Add it into the block
-							add_statement(current_block, final_assignment);
-
-							//The final assignee is this offset here
-							unary_package.assignee = final_assignment->assignee;
-
-						//Otherwise, we do have it, so all we need to do is reuse the pointer that we already have
-						} else {
-							//Create the memory address var through the symtab to avoid compatibility issues
-							symtab_variable_record_t* memory_address_temp_var = create_temp_memory_address_variable(u64, variable_symtab, existing_region, increment_and_get_temp_id());
-
-							//Emit the temp memory address var here
-							three_addr_var_t* stored_memory_address = emit_memory_address_var(memory_address_temp_var);
-
-							//The final instruction will be us grabbing the memory address of the value that we just put in memory. We can do this with
-							//a simple binary operation instruction
-							instruction_t* final_assignment = emit_assignment_instruction(emit_temp_var(unary_expression_parent->inferred_type), stored_memory_address);
-							final_assignment->is_branch_ending = is_branch_ending;
-
-							//Add it into the block
-							add_statement(current_block, final_assignment); 
-
-							//The final assignee is this offset here
-							unary_package.assignee = final_assignment->assignee;
-						}
-					}
+					//And package the value up as what we want here
+					unary_package.assignee = address_assignment->assignee;
 
 					break;
 
@@ -9184,11 +9134,31 @@ static cfg_result_package_t emit_final_initialization(basic_block_t* current_blo
 	//If the last instruction is *not* a constant assignment, we can go ahead like this
 	if(last_instruction == NULL
 		|| last_instruction->statement_type != THREE_ADDR_CODE_ASSN_CONST_STMT){
-		//This is now our op1
-		store_instruction->op2 = expression_results.assignee;
+
+		//This may change below
+		three_addr_var_t* final_assignee = expression_results.assignee;
+
+		/**
+		 * If we have a memory address variable, we need to emit a final assignment
+		 * to because our instruction selector is not designed to handle MEM<> variables
+		 * on the RHS of an initializer equation. This is an easy fix
+		 */
+		if(expression_results.assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+			//Emit a new var to use
+			final_assignee = emit_temp_var(expression_results.assignee->type);
+
+			//Assign this over
+			instruction_t* temp_assignment = emit_assignment_instruction(final_assignee, expression_results.assignee);
+
+			//Add it into the block
+			add_statement(current_block, temp_assignment);
+		}
+
+		//This is now our op2
+		store_instruction->op2 = final_assignee;
 
 		//No matter what happened, we used this
-		add_used_variable(current_block, expression_results.assignee);
+		add_used_variable(current_block, final_assignee);
 
 	//Otherwise, we can do a small optimization here by scrapping the 
 	//constant assignment and just putting the constant in directly

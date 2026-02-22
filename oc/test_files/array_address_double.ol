@@ -3,7 +3,7 @@
 * Test what happens if we take the address of an array twice
 */
 
-pub fn access_array(a:mut i32**) -> i32{
+pub fn access_array(a:mut i32[10]*) -> i32{
 	(*a)[1] = 3;
 	(*a)[2] = 3;
 
