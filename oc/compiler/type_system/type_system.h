@@ -174,11 +174,9 @@ struct generic_type_t{
 struct function_type_t{
 	//A list of parameters which are just types - since we encode everything
 	//that we need to into the type system
-	generic_type_t* parameters[MAX_FUNCTION_TYPE_PARAMS];
+	dynamic_array_t function_parameters;
 	//The return type
 	generic_type_t* return_type;
-	//Store the number of parameters
-	u_int8_t num_params;
 	//Does this return a void type?
 	u_int8_t returns_void;
 	//Is this function public? By default it is not
@@ -352,7 +350,7 @@ generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inl
 /**
  * Add a function's parameter in
  */
-u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter);
+void add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter);
 
 /**
  * Print a function pointer type out
