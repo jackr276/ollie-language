@@ -10478,9 +10478,6 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		//We will also store the "absolute" parameter number as well
 		parameter->absolute_function_parameter_order = absolute_parameter_number;
 
-		//Status tracker
-		u_int8_t status;
-
 		//If we're not defining a predeclared function, we need to add this parameter in
 		if(defining_predeclared_function == FALSE){
 			//Let the helper add it in

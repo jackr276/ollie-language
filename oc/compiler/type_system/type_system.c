@@ -2290,6 +2290,9 @@ generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inl
 	//Now we need to create the internal function pointer type
 	type->internal_types.function_type = calloc(1, sizeof(function_type_t));
 
+	//Allocate space for the parameters
+	type->internal_types.function_type->function_parameters = dynamic_array_alloc();
+
 	//Store whether or not this is public
 	type->internal_types.function_type->is_public = is_public;
 
@@ -2629,6 +2632,9 @@ void type_dealloc(generic_type_t* type){
 			dynamic_array_dealloc(&(type->internal_types.enumeration_table));
 			break;
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			//Deallocate the parameters
+			dynamic_array_dealloc(&(type->internal_types.function_type->function_parameters));
+			//Free the overall type
 			free(type->internal_types.function_type);
 			break;
 		//For this one we can deallocate the struct table

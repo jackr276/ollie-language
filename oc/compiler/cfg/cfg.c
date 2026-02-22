@@ -5580,7 +5580,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
 
 		//Extract the parameter type here
-		generic_type_t* paramter_type = signature->parameters[i - 1];
+		generic_type_t* paramter_type = dynamic_array_get_at(&(signature->function_parameters), i - 1);
 
 		//We need one more assignment here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
@@ -5708,7 +5708,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
 		
 		//Extract the parameter type here
-		generic_type_t* parameter_type = signature->parameters[i - 1];
+		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i - 1);
 
 		//We need one more assignment here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(parameter_type), result);
