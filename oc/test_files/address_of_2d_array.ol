@@ -6,8 +6,8 @@
 /**
 * Dummy for testing
 */
-pub fn mutate_array(x:mut i32[3]) -> void {
-	x[2] = 5;
+pub fn mutate_array(x:mut i32[3]*) -> void {
+	(*x)[2] = 5;
 
 	ret;
 }

@@ -4604,6 +4604,40 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			generic_type_t* dereferenced_type = dereference_type(pointer_type);
 
 			/**
+			 * If we what we have is an array pointer, then we don't need to do anything besides assign the
+			 * value over. This is because when we take the address of an array, all that we do is load
+			 * the rsp offset in memory
+			 *
+			 * Example:
+			 * 	 declare x:i32[5]; //Suppose that this is at rsp + 20
+			 *
+			 * 	 let y:i32[5]* = &x;
+			 *
+			 * All that this really is in our assembly is:
+			 * 		y <- 20 + rsp
+			 *
+			 * So when we go to "dereference" y, we just need to assign the value over in a simple
+			 * move instruction
+			 *
+			 *
+			 * TODO WHAT ABOUT STRUCTS, UNIONS?
+			 */
+			if(dereferenced_type->type_class == TYPE_CLASS_ARRAY){
+				//Emit the assignment
+				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee);
+
+				//Counts as a use
+				add_used_variable(current_block, assignee);
+
+				//Get this into the block
+				add_statement(current_block, assignment_instruction);
+
+				//Package this up and get out
+				unary_package.assignee = assignment_instruction->assignee;
+				return unary_package;
+			}
+
+			/**
 			 * If we make it here, we will return an *incomplete* store
 			 * instruction with the knowledge that whomever called use
 			 * will fill it in
