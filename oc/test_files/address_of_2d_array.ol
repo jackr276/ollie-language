@@ -6,8 +6,8 @@
 /**
 * Dummy for testing
 */
-pub fn mutate_array(x:mut i32**) -> void {
-	x[3][2] = 5;
+pub fn mutate_array(x:mut i32[3]) -> void {
+	x[2] = 5;
 
 	ret;
 }
@@ -27,7 +27,7 @@ pub fn main() -> i32 {
 	let arr:mut i32[][] = [[1,2,3],[3,4,5],[6,7,8]];
 
 	//Get a double pointer address
-	let arr_ptr:mut i32** = &arr[2];
+	let arr_ptr:mut i32[3]* = &arr[2];
 
 	//Use this to mutate it
 	@mutate_array(arr_ptr);
