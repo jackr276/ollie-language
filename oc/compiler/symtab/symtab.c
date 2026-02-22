@@ -624,6 +624,12 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
 
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed
+ *
+ * *Stack Parameters*
+ * Every function internally maintains a stack structure *separate* from the local stack that is used for
+ * passing function parameters via the stack. If we notice that we are adding a function parameter that
+ * is more than the max per class register passing value, we will add that into the specialized stack
+ * data area
  */
 void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
@@ -631,7 +637,19 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 	
 	//Store what function this came from
 	variable_record->function_declared_in = function_record;
+
+	//Do we need to pass via stack? If so add it here
+	if(variable_record->class_relative_function_parameter_order > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+		//Allocate it if need be
+		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
+			stack_data_area_alloc(&(function_record->stack_passed_parameters));
+		}
+
+		//Add this type into said stack region
+		create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
+	}
 }
+
 
 /**
  * Dynamically allocate a function record
@@ -641,7 +659,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
 	//Allocate the data area internally
-	stack_data_area_alloc(&(record->data_area));
+	stack_data_area_alloc(&(record->local_stack));
 
 	//Allocate the array for all function blocks
 	record->function_blocks = dynamic_array_alloc();
@@ -2016,7 +2034,7 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			type_dealloc(temp->signature);
 
 			//Deallocate the data area itself
-			stack_data_area_dealloc(&(temp->data_area));
+			stack_data_area_dealloc(&(temp->local_stack));
 
 			free(temp);
 		}

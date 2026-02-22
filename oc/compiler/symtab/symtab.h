@@ -108,8 +108,12 @@ struct symtab_function_record_t{
 	dynamic_array_t function_parameters;
 	//The name of the function
 	dynamic_string_t func_name;
-	//The data area for the whole function
-	stack_data_area_t data_area;
+	//The data area for the whole function. This is the *local stack*. 
+	//There is a separate stack data area for the passed parameters
+	stack_data_area_t local_stack;
+	//An entire stack data area dedicated to parameters that are passed in. This is
+	//only allocated on an as-needed basis so it's normal for it to be blank
+	stack_data_area_t stack_passed_parameters;
 	//The type of the function
 	generic_type_t* signature;
 	//The list of all functions that this function calls out to

@@ -4805,7 +4805,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 						//Is it not on the stack already?
 						&& unary_expression_child->variable->stack_region == NULL) {
 						//Create the stack region and store it in the variable
-						unary_expression_child->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), unary_expression_child->variable->type_defined_as);
+						unary_expression_child->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), unary_expression_child->variable->type_defined_as);
 					} 
 
 					/**
@@ -5776,7 +5776,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//We'll want to see what the stack looks like
-		print_stack_data_area(&(function_entry_block->function_defined_in->data_area));
+		print_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
 
 		//Seed the search by adding the funciton block into the queue
 		enqueue(&queue, function_entry_block);
@@ -8661,6 +8661,14 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
  * If a function has more than 6 of any kind of parameter, this is how the stack frame
  * will look
  *
+ * --------------- Function caller ----------------
+ * --------
+ * ALL STACK PASSED PARAMS
+ * --------
+ * --------------- Function caller ----------------
+ * --------
+ * Return address(8 bytes)
+ * --------
  * --------------- Function x ----------------
  * ----------
  * All other storage(arrays, structs, etc)
@@ -8668,9 +8676,6 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
  * ----------
  * Storage for normal params that we take the address of
  * ----------
- * ---------
- *  Storage for *stack passed* parameters
- * ---------
  * --------------- Function x ----------------
  *
  *
@@ -8679,43 +8684,6 @@ static void finalize_all_user_defined_jump_statements(dynamic_array_t* labeled_b
  * will be stored at the very bottom in that order
  */
 static inline void setup_function_parameters(symtab_function_record_t* function_record, basic_block_t* function_entry_block){
-	/**
-	 * First step: handle function parameters that are *passed in via stack*. In our structure, this means that if their
-	 * "class_relative_parameter_number" is more than 6(the max), then we are loading it into the stack. It is very important
-	 * that this is done *before* anything happens with parameters whose address we eventually plan to take. Thos need to go
-	 * on top of this. 
-	 *
-	 * Note that it's impossible for this to happen if we have less than 6 parameters, so we will only do this extra work
-	 * if we have more than 6. Even if we do have more than 6, we could have 4 floats and 3 ints, so it's not a guarantee
-	 * that we'll need this but we have to check
-	 */
-	if(function_record->function_parameters.current_index > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
-		for(u_int32_t i = 0; i < function_record->function_parameters.current_index; i++){
-			//Extract the parameter
-			symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
-
-			//If we are below the threshhold, skip this and we can keep going ahead
-			if(parameter->class_relative_function_parameter_order <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
-				continue;
-			}
-
-			/**
-			 * If we make it here then we know that this parameter must be passed in via the stack. We need to reflect
-			 * this reality inside of the function's stack frame itself
-			 */
-
-			//Flag that it is a stack variable
-			parameter->stack_variable = TRUE;
-
-			//Create the stack region that we need for this type and store it inside of there
-			parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
-
-			//This stack region *has* to stay in, we cannot get rid of it. Let's mark it now just to avoid optimizer issues
-			parameter->stack_region->mark = TRUE;
-		}
-	}
-
-
 	/**
 	 * If we have function parameters that are *also* stack variables(meaning the user will
 	 * at some point want to take the memory address of them), then we need to load
@@ -8738,7 +8706,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		//then we'll need to add that in now
 		if(parameter->stack_variable == TRUE){
 			//Add this variable onto the stack now, since we know it is not already on it
-			parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
+			parameter->stack_region = create_stack_region_for_type(&(current_function->local_stack), parameter->type_defined_as);
 
 			//Copy the type over here
 			three_addr_var_t* parameter_var = emit_memory_address_var(parameter);
@@ -9173,7 +9141,7 @@ static inline void visit_global_declare_statement(generic_ast_node_t* node){
  */
 static void visit_declaration_statement(generic_ast_node_t* node){
 	//Create a stack region for this variable
-	node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), node->inferred_type);
+	node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 }
 
 
@@ -9618,7 +9586,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 			//Create a stack region for this variable and store it in the associated region
-			node->variable->stack_region = create_stack_region_for_type(&(current_function->data_area), node->inferred_type);
+			node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
 			//Emit the memory address variable
 			assignee = emit_memory_address_var(node->variable);
