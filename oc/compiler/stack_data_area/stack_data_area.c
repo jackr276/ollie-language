@@ -228,8 +228,23 @@ void sweep_stack_data_area(stack_data_area_t* area){
  * Print out the passed parameter stack data
  */
 void print_passed_parameter_stack_data_area(stack_data_area_t* area){
-	//TODO
+	//No point in printing out if we have this
+	if(area->total_size == 0){
+		return;
+	}
 
+	printf("================== Stack Passed Parameters ===================\n");
+	//Run through all of the regions backwards and print
+	for(int16_t i = area->stack_regions.current_index - 1; i >= 0; i--){
+		//Extract it
+		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
+
+		//Print it
+		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->base_address, region->mark == TRUE ? "marked" : "unmarked");
+	}
+
+	printf("================== Stack Passed Parameters ===================\n");
+	printf("====================== Return Address(8 Bytes) ========================\n");
 }
 
 
