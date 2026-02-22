@@ -9878,15 +9878,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Check that it isn't some duplicated variable name. We will only check in the
 	//local scope for this one
-	//
-	//
-	//
-	//TODO WRONG - parameters must be in a different scope - this is leading to duplicate parameter
-	//names which is a big issue
-	//
-	//
-	//
-	//
 	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here

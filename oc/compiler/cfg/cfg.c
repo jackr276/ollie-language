@@ -8709,6 +8709,9 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 
 			//Create the stack region that we need for this type and store it inside of there
 			parameter->stack_region = create_stack_region_for_type(&(current_function->data_area), parameter->type_defined_as);
+
+			//This stack region *has* to stay in, we cannot get rid of it. Let's mark it now just to avoid optimizer issues
+			parameter->stack_region->mark = TRUE;
 		}
 	}
 
@@ -8727,7 +8730,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
 		//If we see this then we've already dealt with it so move along
-		if(parameter->class_relative_function_parameter_order >= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+		if(parameter->class_relative_function_parameter_order > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
 			continue;
 		}
 
