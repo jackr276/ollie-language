@@ -6760,8 +6760,21 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 }
 
 
-
+/**
+ * We will get to this function once we've stopped seeing the [] tokens in our type definition. The purpose of this rule
+ * is to go through and unwind the stack that we've made using all of the array bounds. For example:
+ * 		i32[3][4]
+ *
+ * 	We will first see the 4 on the stack and create an i32[4]. Following that we will pop the 3 off of the stack and create that
+ * 	type with an accurate type size and all. This method of processing allows us to define types like: i32[3][4]*. What will happen
+ * 	is we'll create the i32[3][4] like described above and then give that back as our current type. Following that we'll create a pointer
+ * 	to that type as our final type in the processing run.
+ */
 static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* current_type, lightstack_t* bounds_stack){
+	//Just a quick and easy 
+	if(bounds_stack->current_size == 0){
+		return current_type;
+	}
 
 }
 
@@ -6871,8 +6884,13 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 			 * that we've currently constructed
 			 */
 			case STAR:
-				//TODO UNWIND ARRAY
-				//
+				//Process any/all array bounds
+				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack);
+
+				//If this returns NULL then it failed, just kick it back
+				if(current_type_record == NULL){
+					return NULL;
+				}
 
 				//Let the helper deal with the rest
 				current_type_record = parse_pointer_type(current_type_record, mutability);
@@ -6889,8 +6907,18 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 			 * We leave the loop and stop doing anything else
 			 */
 			default:
-				//TODO UNWIND ARRAY
+				//Process any/all array bounds
+				current_type_record = create_array_type_from_bounds(current_type_record, &bounds_stack);
 
+				//If this returns NULL then it failed, just kick it back
+				if(current_type_record == NULL){
+					return NULL;
+				}
+
+				//Now that we've gotten here we need to push back the residual token
+				push_back_token(token_stream, &parser_line_num);
+
+				//Get out of the loop by jumping out
 				goto loop_end;
 		}
 
@@ -6899,9 +6927,6 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	}
 
 loop_end:
-	//Now that we've gotten here we need to push back the residual token
-	push_back_token(token_stream, &parser_line_num);
-
 	/**
 	 * This is a very unique case. Internally, the system needs to have
 	 * a "mutable" void type in order to support things like mut void*, etc.. However,
