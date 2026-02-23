@@ -6884,8 +6884,6 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	 * 	This is really a pointer to an i32[5]
 	 *
 	 * 	i32[5][5]
-	 *
-	 * 	TODO DOC
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
 	while(TRUE){
@@ -10530,8 +10528,6 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		//Once we're here, we can add the function parameter in
 		add_function_parameter(function_record, parameter);
 
-		//TODO NEED A FINALIZER IN HERE
-
 		//We made it here, so we've seen one more absolute number
 		absolute_parameter_number++;
 
@@ -10561,6 +10557,15 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 		num_errors++;
 		return FAILURE;
+	}
+
+	/**
+	 * Once we are fully done with all of our parameters, we will need to finalize the alignment
+	 * on the given stack data area. This ensures that the overall size is going to be 8-byte
+	 * aligned, and that all of the padding if needed is present
+	 */
+	if(sse_parameter_number > 6 || general_purpose_parameter_number > 6){
+		align_stack_data_area(&(function_record->stack_passed_parameters));
 	}
 
 	//If we make it down here then this all worked, so
