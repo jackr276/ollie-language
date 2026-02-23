@@ -5496,13 +5496,63 @@ static cfg_result_package_t emit_expression_chain(basic_block_t* basic_block, ge
 }
 
 
+/**
+ * Simple helper that gets the total number of general purpose parameters
+ */
+static inline u_int32_t get_number_of_gp_params(function_type_t* signature){
+	//Initialize
+	u_int32_t number_of_gp_params = 0;
+
+	//Run through all of them
+	for(u_int32_t i = 0; i < signature->function_parameters.current_index; i++){
+		//Extract it
+		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
+
+		//Bump the count if it's not an FP param
+		if(IS_FLOATING_POINT(parameter_type) == FALSE){
+			number_of_gp_params++;
+		}
+	}
+
+	//The final result
+	return number_of_gp_params;
+}
+
+
+/**
+ * Simple helper that gets the total number of floating point(SSE) parameters
+ */
+static inline u_int32_t get_number_of_sse_params(function_type_t* signature){
+	//Initialize
+	u_int32_t number_of_sse_params = 0;
+
+	//Run through all of them
+	for(u_int32_t i = 0; i < signature->function_parameters.current_index; i++){
+		//Extract it
+		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), i);
+
+		//Bump the count if is an FP param
+		if(IS_FLOATING_POINT(parameter_type) == TRUE){
+			number_of_sse_params++;
+		}
+	}
+
+	//The final result
+	return number_of_sse_params;
+}
+
+
 
 /**
  * Emit an indirect function call like such
  *
  * call *<function_name>
  *
- * Unlike in a regular call, we don't have the function record on hand to inspect. We'll instead need to rely entirely on the function signature
+ * Unlike in a regular call, we don't have the function record on hand to inspect. We'll instead need to rely entirely on the function signature.
+ *
+ * This presents an issue when dealing with variables that are stored on the stack. Basically, we're going to need to do what the parser had to
+ * for regular function calls all over again here to determine what our stack region is going to look like. We don't need to do any allocations for it,
+ * but we are going to need to keep track of things
  */
 static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_block, generic_ast_node_t* indirect_function_call_node, u_int8_t is_branch_ending){
 	//Initially we'll emit this, though it may change
@@ -5510,6 +5560,10 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//Grab the function's signature type too
 	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->internal_types.function_type;
+
+	//Store the number of each type of param we've got
+	u_int32_t number_of_see_params = get_number_of_sse_params(signature);
+	u_int32_t number_of_gp_params = get_number_of_gp_params(signature);
 
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current = basic_block;
@@ -5549,6 +5603,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
 	u_int8_t current_func_param_idx = 1;
+
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
