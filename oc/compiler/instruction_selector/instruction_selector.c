@@ -8573,6 +8573,37 @@ static void combine_lea_with_variable_offset_store_instruction(instruction_windo
 
 
 /**
+ * Handle the OIR stack allocation statement. Under the hood this is really just a subtraction
+ */
+static inline void handle_stack_allocation_statement(instruction_t* instruction){
+	//First thing we'll do is more op1_const over
+	instruction->source_immediate = instruction->op1_const;
+
+	//The destination register is RSP since we are dealing with a stack allocation
+	instruction->destination_register = stack_pointer_variable;
+
+	//And change the type to subtraction
+	instruction->instruction_type = SUBQ;
+}
+
+
+/**
+ * Handle an OIR stack deallocation statement. This is in reality the exact
+ * same as a stack allocation statement
+ */
+static inline void handle_stack_deallocation_statement(instruction_t* instruction){
+	//First thing we'll do is more op1_const over
+	instruction->source_immediate = instruction->op1_const;
+
+	//The destination register is RSP since we are dealing with a stack allocation
+	instruction->destination_register = stack_pointer_variable;
+
+	//And change the type to subtraction
+	instruction->instruction_type = ADDQ;
+}
+
+
+/**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
  */
@@ -8859,6 +8890,12 @@ static void select_instruction_patterns(instruction_window_t* window){
 			break;
 		case THREE_ADDR_CODE_CLEAR_STMT:
 			handle_clear_instruction(instruction);
+			break;
+		case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
+			handle_stack_allocation_statement(instruction);
+			break;
+		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
+			handle_stack_deallocation_statement(instruction);
 			break;
 		default:
 			break;
