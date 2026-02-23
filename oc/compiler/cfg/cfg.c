@@ -5566,7 +5566,8 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	u_int32_t number_of_gp_params = get_number_of_gp_params(signature);
 
 	//Store a flag as to whether or not we have stack parameters
-	u_int8_t has_stack_params = (number_of_gp_params > 6) || (number_of_sse_params > 6) ? TRUE : FALSE;
+	u_int8_t has_stack_params = (number_of_gp_params > MAX_PER_CLASS_REGISTER_PASSED_PARAMS) 
+									|| (number_of_sse_params > MAX_PER_CLASS_REGISTER_PASSED_PARAMS) ? TRUE : FALSE;
 
 	//Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
 	//have stack parameters though
@@ -5648,33 +5649,58 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		//Extract the parameter type here
 		generic_type_t* paramter_type = dynamic_array_get_at(&(signature->function_parameters), i);
 
-		if(current_sse_index > 6){
-			printf("NEEDS SSE STACK PARAM\n");
-		}
-
-		if(current_gp_index > 6){
-			printf("NEEDS GP STACK PARAM\n");
-		}
-
-		//We need one more assignment here
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
-
-		//Counts as a use
-		add_used_variable(basic_block, result);
-
-		//Add this into the block
-		add_statement(basic_block, assignment);
-
-		//Add the parameter in
-		dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
-
-		//The assignment here is used implicitly by the function call
-		add_used_variable(current, assignment->assignee);
-
-		//Update the indices accordingly
+		/**
+		 * Deconstruct our processing to be by-class. This is going to be important for tracking
+		 * when/for which parameter we need to start doing stack allocations for(if any)
+		 */
 		if(IS_FLOATING_POINT(paramter_type) == FALSE){
+			//We're under the limit, we don't need a stack allocation
+			if(current_gp_index <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+				//Add the final assignment
+				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
+
+				//Counts as a use
+				add_used_variable(basic_block, result);
+
+				//Add this into the block
+				add_statement(basic_block, assignment);
+
+				//Add the parameter in
+				dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
+
+				//The assignment here is used implicitly by the function call
+				add_used_variable(current, assignment->assignee);
+
+			} else {
+
+			}
+
+
+			//Bump the current index at the end
 			current_gp_index++;
+
 		} else {
+			//We're under the limit, so we don't need a stack allocation
+			if(current_sse_index <= MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+				//Add the final assignment
+				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
+
+				//Counts as a use
+				add_used_variable(basic_block, result);
+
+				//Add this into the block
+				add_statement(basic_block, assignment);
+
+				//Add the parameter in
+				dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
+
+				//The assignment here is used implicitly by the function call
+				add_used_variable(current, assignment->assignee);
+			} else {
+
+			}
+
+			//Bump the index at the end
 			current_sse_index++;
 		}
 	}
