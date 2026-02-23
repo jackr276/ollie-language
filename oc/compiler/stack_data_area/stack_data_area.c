@@ -31,6 +31,9 @@ static u_int32_t increment_and_get_stack_region_id(){
 void stack_data_area_alloc(stack_data_area_t* area){
 	//Allocate the regions array
 	area->stack_regions = dynamic_array_alloc();
+
+	//Wipe this out too
+	area->total_size = 0;
 }
 
 
