@@ -5789,7 +5789,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
 
 		//This goes right after the function call statement
-		insert_instruction_after_given(stack_deallocation, func_call_stmt);
+		add_statement(current_block, stack_deallocation);
 
 		//Once we've done all of that - this has served its purpose
 		stack_data_area_dealloc(&stack_passed_parameters);
