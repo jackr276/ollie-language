@@ -5757,14 +5757,43 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 		}
 	}
 
-	//Once we're done down here, if there is a stack region, we need to align it
-	if(has_stack_params == TRUE){
-		align_stack_data_area(&stack_passed_parameters);
-	}
-
 	//Once we make it here, we should have all of the params stored in temp vars
 	//We can now add the function call statement in
 	add_statement(current_block, func_call_stmt);
+
+	/**
+	 * Let's now handle everything that we need to do with the stack(if we're touching it at all)
+	 *
+	 * If we have stack parameters, then we need to emit an allocation and deallocation statement. The
+	 * allocation has to go before all of the parameter assignments, and the deallocation must go immediately
+	 * after the function call. However before we do all that, we need to make sure that stack memory is
+	 * properly aligned, so we'll call out to the stack aligner first
+	 */
+	if(has_stack_params == TRUE){
+		//First thing we do is align it
+		align_stack_data_area(&stack_passed_parameters);
+
+		//Now we'll emit the stack constant
+		three_addr_const_t* stack_allocation_constant = emit_direct_integer_or_char_constant(stack_passed_parameters.total_size, u64);
+
+		//Now we'll emit the allocation
+		instruction_t* stack_allocation = emit_stack_allocation_ir_statement(stack_allocation_constant);
+
+		//This must go before the first assignment that we have for our parameters
+		insert_instruction_before_given(stack_allocation, first_assignment_instruction);
+
+		//Now we'll emit the stack deallocation constant. The memory has to be separate in case of future optimization
+		three_addr_const_t* stack_deallocation_constant = emit_direct_integer_or_char_constant(stack_passed_parameters.total_size, u64);
+
+		//And then the stack deallocation statement
+		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
+
+		//This goes right after the function call statement
+		insert_instruction_after_given(stack_deallocation, func_call_stmt);
+
+		//Once we've done all of that - this has served its purpose
+		stack_data_area_dealloc(&stack_passed_parameters);
+	}
 
 	//If this is not a void return type, we'll need to emit this temp assignment
 	if(signature->returns_void == FALSE){
@@ -5788,12 +5817,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//Destroy the function parameter results here
 	dynamic_array_dealloc(&function_parameter_results);
-
-	//If we have parameters then deallocate the stack that we
-	//were using
-	if(has_stack_params == TRUE){
-		stack_data_area_dealloc(&stack_passed_parameters);
-	}
 
 	//Give back what we assigned to
 	return result_package;
