@@ -5562,9 +5562,21 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	function_type_t* signature = indirect_function_call_node->variable->type_defined_as->internal_types.function_type;
 
 	//Store the number of each type of param we've got
-	u_int32_t number_of_see_params = get_number_of_sse_params(signature);
+	u_int32_t number_of_sse_params = get_number_of_sse_params(signature);
 	u_int32_t number_of_gp_params = get_number_of_gp_params(signature);
 
+	//Store a flag as to whether or not we have stack parameters
+	u_int8_t has_stack_params = (number_of_gp_params > 6) || (number_of_sse_params > 6) ? TRUE : FALSE;
+
+	//Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
+	//have stack parameters though
+	stack_data_area_t stack_passed_parameters;
+
+	//If we have parameters then allocate thie
+	if(has_stack_params == TRUE){
+		stack_data_area_alloc(&stack_passed_parameters);
+	}
+	
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
 	basic_block_t* current = basic_block;
 
@@ -5602,8 +5614,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
 	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
-	u_int8_t current_func_param_idx = 1;
-
+	u_int32_t current_func_param_idx = 0;
 
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
@@ -5632,12 +5643,12 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
-	for(u_int16_t i = 1; i < current_func_param_idx; i++){
+	for(u_int32_t i = 0; i < current_func_param_idx; i++){
 		//Get the result
-		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
+		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i);
 
 		//Extract the parameter type here
-		generic_type_t* paramter_type = dynamic_array_get_at(&(signature->function_parameters), i - 1);
+		generic_type_t* paramter_type = dynamic_array_get_at(&(signature->function_parameters), i);
 
 		//We need one more assignment here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
@@ -5681,6 +5692,12 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//Destroy the function parameter results here
 	dynamic_array_dealloc(&function_parameter_results);
+
+	//If we have parameters then deallocate the stack that we
+	//were using
+	if(has_stack_params == TRUE){
+		stack_data_area_dealloc(&stack_passed_parameters);
+	}
 
 	//Give back what we assigned to
 	return result_package;
