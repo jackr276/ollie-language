@@ -5613,9 +5613,6 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	//Create a temporary storage array for all of our function parameter results
 	dynamic_array_t function_parameter_results = dynamic_array_alloc();
 
-	//The current param of the indext9 <- call parameter_pass2(t10, t11, t12, t14, t16, t18)
-	u_int32_t current_func_param_idx = 0;
-
 	//So long as this isn't NULL
 	while(param_cursor != NULL){
 		//Emit whatever we have here into the basic block
@@ -5636,19 +5633,28 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
-
-		//Increment this
-		current_func_param_idx++;
 	}
+
+	//Keep track of the indices for our specific counts. This will be important if we have to do stack-saving
+	u_int32_t current_sse_index = 1;
+	u_int32_t current_gp_index = 1;
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
-	for(u_int32_t i = 0; i < current_func_param_idx; i++){
+	for(u_int32_t i = 0; i < function_parameter_results.current_index; i++){
 		//Get the result
 		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i);
 
 		//Extract the parameter type here
 		generic_type_t* paramter_type = dynamic_array_get_at(&(signature->function_parameters), i);
+
+		if(current_sse_index > 6){
+			printf("NEEDS SSE STACK PARAM\n");
+		}
+
+		if(current_gp_index > 6){
+			printf("NEEDS GP STACK PARAM\n");
+		}
 
 		//We need one more assignment here
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
@@ -5664,6 +5670,13 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 		//The assignment here is used implicitly by the function call
 		add_used_variable(current, assignment->assignee);
+
+		//Update the indices accordingly
+		if(IS_FLOATING_POINT(paramter_type) == FALSE){
+			current_gp_index++;
+		} else {
+			current_sse_index++;
+		}
 	}
 
 	//Once we make it here, we should have all of the params stored in temp vars
