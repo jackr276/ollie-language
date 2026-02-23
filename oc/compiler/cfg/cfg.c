@@ -5640,6 +5640,10 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 	u_int32_t current_sse_index = 1;
 	u_int32_t current_gp_index = 1;
 
+	//Keep track of the first assignment instruction. We're going to need to insert
+	//the stack allocation before it
+	instruction_t* first_assignment_instruction = NULL;
+
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
 	for(u_int32_t i = 0; i < function_parameter_results.current_index; i++){
@@ -5659,6 +5663,11 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				//Add the final assignment
 				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(paramter_type), result);
 
+				//This is the first assignment if it's NULL
+				if(first_assignment_instruction == NULL){
+					first_assignment_instruction = assignment;
+				}
+
 				//Counts as a use
 				add_used_variable(basic_block, result);
 
@@ -5676,13 +5685,16 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				//Create it
 				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, paramter_type);
 
-				printf("OFFSET IS %d\n", region->base_address);
-
 				//The offset
 				three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->base_address, u64);
 
 				//We need to emit a store statement now for our result
 				instruction_t* store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result, paramter_type);
+
+				//This is the first assignment if it's NULL
+				if(first_assignment_instruction == NULL){
+					first_assignment_instruction = store_operation;
+				}
 
 				//This counts as a use for our result
 				add_used_variable(current_block, result);
@@ -5706,6 +5718,11 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				//Add this into the block
 				add_statement(basic_block, assignment);
 
+				//This is the first assignment if it's NULL
+				if(first_assignment_instruction == NULL){
+					first_assignment_instruction = assignment;
+				}
+
 				//Add the parameter in
 				dynamic_array_add(&(func_call_stmt->parameters), assignment->assignee);
 
@@ -5723,6 +5740,11 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				//We need to emit a store statement now for our result
 				instruction_t* store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result, paramter_type);
 
+				//This is the first assignment if it's NULL
+				if(first_assignment_instruction == NULL){
+					first_assignment_instruction = store_operation;
+				}
+
 				//This counts as a use for our result
 				add_used_variable(current_block, result);
 
@@ -5733,6 +5755,11 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			//Bump the index at the end
 			current_sse_index++;
 		}
+	}
+
+	//Once we're done down here, if there is a stack region, we need to align it
+	if(has_stack_params == TRUE){
+		align_stack_data_area(&stack_passed_parameters);
 	}
 
 	//Once we make it here, we should have all of the params stored in temp vars
