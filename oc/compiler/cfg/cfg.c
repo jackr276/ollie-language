@@ -5935,7 +5935,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls
 	//themselves
-	for(u_int16_t i = 1; i < current_func_param_idx; i++){
+	for(u_int32_t i = 1; i < current_func_param_idx; i++){
 		//Get the result
 		three_addr_var_t* result = dynamic_array_get_at(&function_parameter_results, i - 1);
 
