@@ -9003,9 +9003,11 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 				//Emit the alias that we're assigning to
 				three_addr_var_t* alias_var = emit_var(alias);
 
-				//Flag that the parameter does have this alias. Note that once we do this, any time
-				//emit_var() is called on the parameter, the alias will be used instead so the order
-				//here is very important. Once this is done - there is no going back
+				/**
+				 * Flag that the parameter does have this alias. Note that once we do this, any time
+				 * emit_var() is called on the parameter, the alias will be used instead so the order
+				 * here is very important. Once this is done - there is no going back
+				 */
 				parameter->alias = alias;
 
 				//Emit the assignment here
@@ -9043,7 +9045,47 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 * stack variables whose memory address will be taken. In that case, we will just leave them be
 		 */
 		} else {
+			//No matter what, all stack-passed-params must have a stack region associated with them
+			stack_region_t* stack_passing_region = parameter->stack_region;
 
+			//TODO - this creates a TON of interference. Really it's not a plausible solution unfortunately
+
+			//Simplest case - this is not a stack variable
+			/*
+			if(parameter->stack_variable == FALSE){
+				//Create the aliased variable
+				symtab_variable_record_t* alias = create_parameter_alias_variable(parameter, variable_symtab, increment_and_get_temp_id());
+
+				//Very important that we emit this first for the below reason
+				three_addr_var_t* parameter_var = emit_var(parameter);
+
+				//Emit the alias that we're assigning to
+				three_addr_var_t* alias_var = emit_var(alias);
+
+				 * Flag that the parameter does have this alias. Note that once we do this, any time
+				 * emit_var() is called on the parameter, the alias will be used instead so the order
+				 * here is very important. Once this is done - there is no going back
+				parameter->alias = alias;
+
+				//The offset constant
+				//
+				//UPDATE ME THIS IS TEMP
+				three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_passing_region->base_address, u64);
+
+				//Emit the assignment here
+				instruction_t* alias_assignment = emit_load_with_constant_offset_ir_code(alias_var, stack_pointer_variable, offset_constant, parameter->type_defined_as);
+
+				//Counts as a use
+				add_assigned_variable(function_entry_block, alias_var);
+
+				//Now add the statement in
+				add_statement(function_entry_block, alias_assignment);
+
+			} else {
+				//TODO FLESH OUT
+
+			}
+		*/
 		}
 	}
 }

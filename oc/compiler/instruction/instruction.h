@@ -254,6 +254,8 @@ struct three_addr_const_t{
 		 *
 		 *
 		 * TODO
+		 *
+		 * THREE_ADDR_CONST_TYPE_STACK_REGION_OFFSET
 		 */
 
 	} constant_value;
