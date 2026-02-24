@@ -15,6 +15,7 @@
 #include "../postprocessor/postprocessor.h"
 #include "../utils/queue/max_priority_queue.h"
 #include "../cfg/cfg.h"
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -3720,34 +3721,48 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		}
 	}
 
+	//We'll need to keep track of the last instruction to return it in the end
+	instruction_t* first_instruction = before_stack_param_setup;
+	instruction_t* last_instruction = after_stack_param_setup;
 
-					//Emit a direct push with this live range's register
-					instruction_t* push_inst = emit_direct_gp_register_push_instruction(general_purpose_reg);
+	/**
+	 * Due to the way that we use push/pop for general purpose caller saving, we need
+	 * to guarantee that this are inserted first and that any SSE saving happens
+	 * afterwards. If we didn't do this, we'd run the risk of clobbering any SSE
+	 * values that had been saved on the stack
+	 */
+	for(u_int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
+		//Grab out the LR
+		live_range_t* lr_to_save = dynamic_array_get_at(&general_purpose_lrs_to_save, i);
 
-					//Emit the pop instruction for this
-					instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(general_purpose_reg);
+		//Emit a direct push with this live range's register
+		instruction_t* push_inst = emit_direct_gp_register_push_instruction(lr_to_save->reg.gen_purpose);
 
-					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(push_inst, before_stack_param_setup);
+		//Emit the pop instruction for this
+		instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(lr_to_save->reg.gen_purpose);
 
-					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(pop_inst, after_stack_param_setup);
+		//Insert the push instruction directly before any stack parameter setup
+		insert_instruction_before_given(push_inst, first_instruction);
 
-					//If the first instruction still is the original instruction. That
-					//means that this is the first push instruction that we're inserting.
-					//As such, we'll set the first instruction to be this push instruction
-					//to save ourselves time down the line
-					if(first_instruction == function_call){
-						first_instruction = push_inst;
-					}
+		//Insert the pop instruction directly after any stack parameter setup
+		insert_instruction_after_given(pop_inst, last_instruction);
 
-					//If the last instruction still is the original instruction. That
-					//means that this is the first pop instruction that we're inserting.
-					//As such, we'll set the last instruction to be this pop instruction
-					//to save ourselves time down the line
-					if(last_instruction == function_call){
-						last_instruction = pop_inst;
-					}
+		/**
+		 * This instruction now is the very first instruction in our big block
+		 * of instructions
+		 */
+		first_instruction = push_inst;
+
+		/**
+		 * And the pop instruction is now the very last instruction(currently) in
+		 * our big block of instructions
+		 */
+		last_instruction = pop_inst;
+	}
+
+
+
+
 
 
 					//Do we already have a stack region for this exact LR? We will check and if
