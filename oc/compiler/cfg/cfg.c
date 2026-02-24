@@ -5574,7 +5574,7 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 
 	//If we have parameters then allocate thie
 	if(has_stack_params == TRUE){
-		stack_data_area_alloc(&stack_passed_parameters);
+		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE);
 	}
 	
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations

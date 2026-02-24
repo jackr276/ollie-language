@@ -35,7 +35,7 @@ typedef enum {
 	//For temp use
 	STACK_TYPE_TEMP_USE,
 	//For a function's local stack
-	STACK_TYPE_LOCAL,
+	STACK_TYPE_FUNCTION_LOCAL,
 	//For parameter passing
 	STACK_TYPE_PARAMETER_PASSING
 } stack_data_area_type_t;

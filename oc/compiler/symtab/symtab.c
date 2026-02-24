@@ -642,7 +642,8 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 	if(variable_record->class_relative_function_parameter_order > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
 		//Allocate it if need be
 		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
-			stack_data_area_alloc(&(function_record->stack_passed_parameters));
+			//This is specifically a parameter passing stack region. We must be sure to mention that
+			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING);
 		}
 
 		//Add this type into said stack region
@@ -665,7 +666,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
 	//Allocate the data area internally
-	stack_data_area_alloc(&(record->local_stack));
+	stack_data_area_alloc(&(record->local_stack), STACK_TYPE_FUNCTION_LOCAL);
 
 	//Allocate the array for all function blocks
 	record->function_blocks = dynamic_array_alloc();
