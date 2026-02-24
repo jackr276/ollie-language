@@ -3760,35 +3760,44 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		last_instruction = pop_inst;
 	}
 
+	/**
+	 * Now let's do the exact same procedure for SSE registers. We're doing this last because again, we
+	 * need to guarantee that all of this movement happens *after* any pushing or popping
+	 */
+	for(u_int32_t i = 0; i < SSE_lrs_to_save.current_index; i++){
+		//What is the LR that we want to save
+		live_range_t* lr_to_save = dynamic_array_get_at(&SSE_lrs_to_save, i);
 
+		/**
+		 * Do we already have a stack region for this exact LR? We will check and if
+		 * so, we don't need to make any more room on the stack for it
+		 */
+		stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->local_stack), lr_to_save);
 
+		//If we didn't have a spill region, then we'll make one
+		if(stack_region == NULL){
+			stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr_to_save));
 
+			//Cache this for later
+			stack_region->variable_referenced = lr_to_save;
+		}
 
+		//Emit the store instruction and load instruction
+		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
+		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
 
-					//Do we already have a stack region for this exact LR? We will check and if
-					//so, we don't need to make any more room on the stack for it
-					stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->local_stack), lr);
+		//Insert the push instruction directly before the call instruction
+		insert_instruction_before_given(store_instruction, first_instruction);
 
-					//If we didn't have a spill region, then we'll make one
-					if(stack_region == NULL){
-						stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr));
+		//This now is the first instruction
+		first_instruction = store_instruction;
 
-						//Cache this for later
-						stack_region->variable_referenced = lr;
-					}
+		//Insert the pop instruction directly after the last instruction
+		insert_instruction_after_given(load_instruction, last_instruction);
 
-					//Emit the store instruction and load instruction
-					instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
-					instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
-
-					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(store_instruction, first_push_instruction);
-
-					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(load_instruction, last_push_instruction);
-
-
-
+		//And this now is the last instruction
+		last_instruction = load_instruction;
+	}
 
 	//Free it up once done
 	dynamic_array_dealloc(&live_after);
@@ -3805,6 +3814,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	//Return whatever this ended up being
 	return last_instruction;
 }
+
 
 /**
  *
