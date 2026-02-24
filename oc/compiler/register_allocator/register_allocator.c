@@ -3941,65 +3941,72 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 		}
 	}
 
+	//We'll need to keep track of the last instruction to return it in the end
+	instruction_t* first_instruction = before_stack_param_setup;
+	instruction_t* last_instruction = after_stack_param_setup;
 
+	//Now let's run through all of the general purpose registers first
+	for(u_int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
+		//Extract what we want to save
+		live_range_t* lr_to_save = dynamic_array_get_at(&general_purpose_lrs_to_save, i);
 
-				//Emit a direct push with this live range's register
-				instruction_t* push_inst_gp = emit_direct_gp_register_push_instruction(general_purpose_reg);
+		//Emit a direct push with this live range's register
+		instruction_t* push_inst_gp = emit_direct_gp_register_push_instruction(lr_to_save->reg.gen_purpose);
 
-				//Emit the pop instruction for this
-				instruction_t* pop_inst_gp = emit_direct_gp_register_pop_instruction(general_purpose_reg);
+		//Emit the pop instruction for this
+		instruction_t* pop_inst_gp = emit_direct_gp_register_pop_instruction(lr_to_save->reg.gen_purpose);
 
-				//Insert the push instruction directly before the call instruction
-				insert_instruction_before_given(push_inst_gp, first_instruction);
+		//The push goes directly before the push instruction
+		insert_instruction_before_given(push_inst_gp, first_instruction);
+		
+		//This now is the first instruction
+		first_instruction = push_inst_gp;
 
-				//Insert the pop instruction directly after the last instruction
-				insert_instruction_after_given(pop_inst_gp, last_instruction);
+		//Insert the pop instruction directly after the last instruction
+		insert_instruction_after_given(pop_inst_gp, last_instruction);
 
-				//If the first instruction still is the original instruction. That
-				//means that this is the first push instruction that we're inserting.
-				//As such, we'll set the first instruction to be this pushinstruction
-				//to save ourselves time down the line
-				if(first_instruction == function_call){
-					first_instruction = push_inst_gp;
-				}
+		//This now is the last instruction
+		last_instruction = pop_inst_gp;
+	}
 
-				//If the last instruction still is the original instruction. That
-				//means that this is the first pop instruction that we're inserting.
-				//As such, we'll set the last instruction to be this pop instruction
-				//to save ourselves time down the line
-				if(last_instruction == function_call){
-					last_instruction = pop_inst_gp;
-				}
+	/**
+	 * Once we are entirely done with all of that, we will now handle saving the SSE registers.
+	 * These must come before and after the general purpose ones because pushing and popping silently
+	 * modifies the stack pointer, meaning that our offsets for this would be inaccurate if we did them
+	 * after pushing
+	 */
+	for(u_int32_t i = 0; i < SSE_lrs_to_save.current_index; i++){
+		//Extract the LR
+		live_range_t* lr_to_save = dynamic_array_get_at(&SSE_lrs_to_save, i);
 
-				//By the time we get here, we know that we need to save this
-				//First check if this has already been saved before
-				stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->local_stack), lr);
+		//By the time we get here, we know that we need to save this
+		//First check if this has already been saved before
+		stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->local_stack), lr_to_save);
 
-				//If it's NULL, we need to make one ourselves
-				if(stack_region == NULL){
-					stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr));
+		//If it's NULL, we need to make one ourselves
+		if(stack_region == NULL){
+			stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr_to_save));
 
-					//Cache this for later
-					stack_region->variable_referenced = lr;
-				}
+			//Cache this for later
+			stack_region->variable_referenced = lr_to_save;
+		}
 
-				//Emit the store instruction and load instruction
-				instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
-				instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
+		//Emit the store instruction and load instruction
+		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
+		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
 
-				//Insert the push instruction directly before the call instruction
-				insert_instruction_before_given(store_instruction, first_instruction);
+		//Insert the push instruction directly before the first instruction
+		insert_instruction_before_given(store_instruction, first_instruction);
 
-				//The first instruction now is the store
-				first_instruction = store_instruction;
+		//The first instruction now is the store
+		first_instruction = store_instruction;
 
-				//Insert the pop instruction directly after the last instruction
-				insert_instruction_after_given(load_instruction, last_instruction);
+		//Insert the pop instruction directly after the last instruction
+		insert_instruction_after_given(load_instruction, last_instruction);
 
-				//And the last one now is the load
-				last_instruction = load_instruction;
-
-
+		//And the last one now is the load
+		last_instruction = load_instruction;
+	}
 
 	//Free it up once done
 	dynamic_array_dealloc(&live_after);
