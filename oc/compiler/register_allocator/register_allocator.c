@@ -3590,16 +3590,29 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
-	//Keep pointers to the first/last instruction in our chain
-	//
-	//
-	//
-	//TODO this needs to take into account for stack passed parameter allocations
-	//
-	//
-	//
+	//Initially our current first and last instruction are just the function
+	//call
 	instruction_t* first_instruction = function_call;
 	instruction_t* last_instruction = function_call;
+
+	/**
+	 * If our function contains stack parameters, then we need to look for the
+	 * actual stack allocation/deallocation statements and ensure that we are
+	 * putting all of our saving logic *before and after* said statements
+	 */
+	if(callee->contains_stack_params == TRUE){
+		//Let's first find the stack allocation statement. Note that it *has to be here*
+		while(first_instruction->statement_type != THREE_ADDR_CODE_STACK_ALLOCATION_STMT){
+			//Go back
+			first_instruction = first_instruction->previous_statement;
+		}
+
+		//Now by a similar token let's find the deallocation statement
+		while(last_instruction->statement_type != THREE_ADDR_CODE_STACK_DEALLOCATION_STMT){
+			//Push it up
+			last_instruction = last_instruction->next_statement;
+		}
+	}
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
 	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
@@ -3651,14 +3664,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 					instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(general_purpose_reg);
 
 					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(push_inst, function_call);
+					insert_instruction_before_given(push_inst, first_instruction);
 
 					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(pop_inst, function_call);
+					insert_instruction_after_given(pop_inst, last_instruction);
 
 					//If the first instruction still is the original instruction. That
 					//means that this is the first push instruction that we're inserting.
-					//As such, we'll set the first instruction to be this pushinstruction
+					//As such, we'll set the first instruction to be this push instruction
 					//to save ourselves time down the line
 					if(first_instruction == function_call){
 						first_instruction = push_inst;
@@ -3813,10 +3826,10 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 				instruction_t* pop_inst_gp = emit_direct_gp_register_pop_instruction(general_purpose_reg);
 
 				//Insert the push instruction directly before the call instruction
-				insert_instruction_before_given(push_inst_gp, function_call);
+				insert_instruction_before_given(push_inst_gp, first_instruction);
 
 				//Insert the pop instruction directly after the last instruction
-				insert_instruction_after_given(pop_inst_gp, function_call);
+				insert_instruction_after_given(pop_inst_gp, last_instruction);
 
 				//If the first instruction still is the original instruction. That
 				//means that this is the first push instruction that we're inserting.

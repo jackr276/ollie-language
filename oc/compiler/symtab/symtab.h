@@ -136,6 +136,8 @@ struct symtab_function_record_t{
 	u_int8_t called;
 	//Has this function been inlined?
 	u_int8_t inlined;
+	//Does this function contain stack params?
+	u_int8_t contains_stack_params;
 	//Is this function public or private
 	function_visibility_t function_visibility;
 };

@@ -8,7 +8,7 @@ fn parameter_pass(x:i32, y:i32, z:i32, a:char, b:char, c:char, d:i32) -> i32 {
 	let k:mut i32 = x + y + z;
 	let cc:mut char = a + b + c;
 
-	let quotient = k / c;
+	let quotient:i32 = k / c;
 	
 	ret k + cc - d + quotient;
 }
