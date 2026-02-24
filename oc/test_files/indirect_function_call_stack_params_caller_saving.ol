@@ -24,7 +24,9 @@ pub fn main() -> i32 {
 	let ee:mut i32 = x - y;
 	let ff:mut i32 = x - y;
 
-	let result:i32 = @parameter_pass(aa, bb, cc, 'a', 'b', 'c', x);
+	//Kind of dumb but just to show a point
+	let func:fn(i32, i32, i32, char, char, char, i32) -> i32 = parameter_pass;
+	let result:i32 = @func(aa, bb, cc, 'a', 'b', 'c', x);
 
 	let k:mut i32 = y / ee + aa;
 	let c:mut i32 = y % k + cc + ee + ff;
