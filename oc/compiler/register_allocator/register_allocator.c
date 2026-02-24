@@ -3843,10 +3843,23 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
-	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
-	//have, but will change to be the first pop instruction that we make 
-	instruction_t* first_instruction = function_call;
-	instruction_t* last_instruction = function_call;
+	/**
+	 * Maintain dynamic arrays that are(as of yet) unallocated. We will build
+	 * these arrays out with all of the live ranges that need to be saved in 
+	 * each class of variable(GP or SSE). When we are done, we will need
+	 * to traverse them. GP always comes first to avoid any issues with the stack, which is then
+	 * followed by SSE afterwards
+	 */
+	dynamic_array_t general_purpose_lrs_to_save;
+	dynamic_array_t SSE_lrs_to_save;
+	
+	//Wipe them all out first
+	INITIALIZE_NULL_DYNAMIC_ARRAY(general_purpose_lrs_to_save);
+	INITIALIZE_NULL_DYNAMIC_ARRAY(SSE_lrs_to_save);
+
+	//Maintain pointers to instructions that are our landmarks, especially if we have stack param passing
+	instruction_t* before_stack_param_setup = function_call;
+	instruction_t* after_stack_param_setup = function_call;
 
 	/**
 	 * NOTE: if we have any stack passed parameter logic, we need to detect that now and ensure that we 
@@ -3854,7 +3867,17 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	 * don't clobber our values inadvertently
 	 */
 	if(function_type->internal_types.function_type->contains_stack_params == TRUE){
-		printf("HERE\n");
+		//Let's first find the stack allocation statement. Note that it *has to be here*
+		while(before_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_ALLOCATION_STMT){
+			//Go back
+			before_stack_param_setup = before_stack_param_setup->previous_statement;
+		}
+
+		//Now by a similar token let's find the deallocation statement
+		while(after_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_DEALLOCATION_STMT){
+			//Push it up
+			after_stack_param_setup = after_stack_param_setup->next_statement;
+		}
 	}
 
 	//Grab the live_after array for up to but not including the actual call
@@ -3866,30 +3889,59 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	 * Now we will run through every live range in live_after and check if it is caller-saved or not
 	 * We are not able to fine-tune things here like we are in the the direct call unfortunately
 	 */
-	for(u_int16_t i = 0; i < live_after.current_index; i++){
+	for(u_int32_t i = 0; i < live_after.current_index; i++){
 		//Grab it out
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
-
-		general_purpose_register_t general_purpose_reg;
-		sse_register_t sse_reg;
 
 		//Go based on the given LR class
 		switch(lr->live_range_class){
 			case LIVE_RANGE_CLASS_GEN_PURPOSE:
-				general_purpose_reg = lr->reg.gen_purpose;
-
 				//This register must be caller saved to be relevant
-				if(is_general_purpose_register_caller_saved(general_purpose_reg) == FALSE){
+				if(is_general_purpose_register_caller_saved(lr->reg.gen_purpose) == FALSE){
 					continue;
 				}
 
 				//Let's now check to see if it matches the function destination's register. If it
 				//does, we'll bail
 				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					if(destination_lr->reg.gen_purpose == general_purpose_reg){
+					if(destination_lr->reg.gen_purpose == lr->reg.gen_purpose){
 						continue;
 					}
 				}
+
+				//If we make it down here, then we need to save this LR
+				if(general_purpose_lrs_to_save.internal_array == NULL){
+					general_purpose_lrs_to_save = dynamic_array_alloc();
+				}
+
+				//Add it into the array
+				dynamic_array_add(&general_purpose_lrs_to_save, lr);
+
+				break;
+
+			//Remember that by default these are all caller saved
+			case LIVE_RANGE_CLASS_SSE:
+				//Let's now check to see if it matches the function destination's register. If it
+				//does, we'll bail
+				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
+					if(destination_lr->reg.sse_reg == lr->reg.sse_reg){
+						continue;
+					}
+				}
+
+				//If we make it down here then this is an LR that we need to save
+				if(SSE_lrs_to_save.internal_array == NULL){
+					SSE_lrs_to_save = dynamic_array_alloc();
+				}
+
+				//Add it into the array
+				dynamic_array_add(&SSE_lrs_to_save, lr);
+
+				break;
+		}
+	}
+
+
 
 				//Emit a direct push with this live range's register
 				instruction_t* push_inst_gp = emit_direct_gp_register_push_instruction(general_purpose_reg);
@@ -3917,21 +3969,6 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 				//to save ourselves time down the line
 				if(last_instruction == function_call){
 					last_instruction = pop_inst_gp;
-				}
-
-				break;
-
-			case LIVE_RANGE_CLASS_SSE:
-				//Extract the register. We know that all SSE registers are caller saved, so we
-				//do not need to check for that
-				sse_reg = lr->reg.sse_reg;
-
-				//Let's now check to see if it matches the function destination's register. If it
-				//does, we'll bail
-				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
-					if(destination_lr->reg.sse_reg == sse_reg){
-						continue;
-					}
 				}
 
 				//By the time we get here, we know that we need to save this
@@ -3962,12 +3999,19 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 				//And the last one now is the load
 				last_instruction = load_instruction;
 
-				break;
-		}
-	}
+
 
 	//Free it up once done
 	dynamic_array_dealloc(&live_after);
+	
+	//If we had arrays to save, now is the time to deallocate them
+	if(general_purpose_lrs_to_save.internal_array != NULL){
+		dynamic_array_dealloc(&general_purpose_lrs_to_save);
+	}
+
+	if(SSE_lrs_to_save.internal_array != NULL){
+		dynamic_array_dealloc(&SSE_lrs_to_save);
+	}
 
 	//Return the last instruction to save time when drilling
 	return last_instruction;
