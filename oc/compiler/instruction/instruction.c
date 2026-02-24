@@ -157,9 +157,10 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
 	if(after_given != NULL){
 		//Tie this in as the previous
 		after_given->previous_statement = insertee;
+
 	//Otherwise this is the exit statement
 	} else {
-		block->exit_statement = given;
+		block->exit_statement = insertee;
 	}
 
 	//Save the function as well
