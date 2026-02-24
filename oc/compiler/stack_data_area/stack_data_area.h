@@ -20,7 +20,7 @@
 /**
  * Allocate the internal dynamic array in the data area
  */
-void stack_data_area_alloc(stack_data_area_t* area);
+void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type);
 
 /**
  * Create a stack region for the type provided. This will handle alignment and addition
