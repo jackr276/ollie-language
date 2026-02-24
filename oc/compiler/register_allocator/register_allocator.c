@@ -3619,15 +3619,18 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	}
 
 	/**
-	 * Maintain pointers to the first/last *push* instructions that we've emitted. This is
-	 * done because we need to ensure that if we have any floating point values being saved,
-	 * they must go before/after the pushing/popping to avoid any stack clobbering
+	 * Maintain dynamic arrays that are(as of yet) unallocated. We will build
+	 * these arrays out with all of the live ranges that need to be saved in 
+	 * each class of variable(GP or SSE). When we are done, we will need
+	 * to traverse them. GP always comes first to avoid any issues with the stack, which is then
+	 * followed by SSE afterwards
 	 */
-	instruction_t* first_push_instruction = before_stack_param_setup;
-	instruction_t* last_push_instruction = after_stack_param_setup;
-
-	//Also keep track of the very last instruction that we've inserted, whatever it is
-	instruction_t* last_instruction = after_stack_param_setup;
+	dynamic_array_t general_purpose_lrs_to_save;
+	dynamic_array_t SSE_lrs_to_save;
+	
+	//Wipe them all out first
+	INITIALIZE_NULL_DYNAMIC_ARRAY(general_purpose_lrs_to_save);
+	INITIALIZE_NULL_DYNAMIC_ARRAY(SSE_lrs_to_save);
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
 	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
@@ -3638,7 +3641,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * Run through everything that is alive after this function runs(live_after)
 	 * and check if we need to save any registers from that set
 	 */
-	for(u_int16_t i = 0; i < live_after.current_index; i++){
+	for(u_int32_t i = 0; i < live_after.current_index; i++){
 		//Extract it
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
@@ -3672,6 +3675,52 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				 * value it has that we're relying on would not survive the call
 				 */
 				if(get_bitmap_at_index(callee->assigned_general_purpose_registers, general_purpose_reg - 1) == TRUE){
+					//Allocate here if need be
+					if(general_purpose_lrs_to_save.internal_array == NULL){
+						general_purpose_lrs_to_save = dynamic_array_alloc();
+					}
+
+					//Add this into our list of GP LRs to save
+					dynamic_array_add(&general_purpose_lrs_to_save, lr);
+				}
+
+				break;
+
+			//We know that *all* SSE registers are caller saved. As such, we will
+			//need to save anything/everything that is live after for these
+			case LIVE_RANGE_CLASS_SSE:
+				//Extract the SSE register
+				sse_reg = lr->reg.sse_reg;
+
+				//There's also no point in saving this. This could happen if we have precoloring
+				//We'll only check this if the classes match though
+				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
+					//Skip it
+					if(sse_reg == destination_lr->reg.sse_reg){
+						continue;
+					}
+				}
+
+				/**
+				 * Once we get past here, we know that we need to save this
+				 * register because the callee will also assign it, so whatever
+				 * value it has that we're relying on would not survive the call
+				 */
+				if(get_bitmap_at_index(callee->assigned_sse_registers, sse_reg - 1) == TRUE){
+					//Allocate here if need be
+					if(SSE_lrs_to_save.internal_array == NULL){
+						SSE_lrs_to_save = dynamic_array_alloc();
+					}
+
+					//Add this into our list of GP LRs to save
+					dynamic_array_add(&SSE_lrs_to_save, lr);
+				}
+
+				break;
+		}
+	}
+
+
 					//Emit a direct push with this live range's register
 					instruction_t* push_inst = emit_direct_gp_register_push_instruction(general_purpose_reg);
 
@@ -3699,31 +3748,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 					if(last_instruction == function_call){
 						last_instruction = pop_inst;
 					}
-				}
 
-				break;
 
-			//We know that *all* SSE registers are caller saved. As such, we will
-			//need to save anything/everything that is live after for these
-			case LIVE_RANGE_CLASS_SSE:
-				//Extract the SSE register
-				sse_reg = lr->reg.sse_reg;
-
-				//There's also no point in saving this. This could happen if we have precoloring
-				//We'll only check this if the classes match though
-				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
-					//Skip it
-					if(sse_reg == destination_lr->reg.sse_reg){
-						continue;
-					}
-				}
-
-				/**
-				 * Once we get past here, we know that we need to save this
-				 * register because the callee will also assign it, so whatever
-				 * value it has that we're relying on would not survive the call
-				 */
-				if(get_bitmap_at_index(callee->assigned_sse_registers, sse_reg - 1) == TRUE){
 					//Do we already have a stack region for this exact LR? We will check and if
 					//so, we don't need to make any more room on the stack for it
 					stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->local_stack), lr);
@@ -3745,14 +3771,21 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 
 					//Insert the pop instruction directly after the last instruction
 					insert_instruction_after_given(load_instruction, last_push_instruction);
-				}
 
-				break;
-		}
-	}
+
+
 
 	//Free it up once done
 	dynamic_array_dealloc(&live_after);
+
+	//Let's also free the temporary storage if need be
+	if(general_purpose_lrs_to_save.internal_array != NULL){
+		dynamic_array_dealloc(&general_purpose_lrs_to_save);
+	}
+	
+	if(SSE_lrs_to_save.internal_array != NULL){
+		dynamic_array_dealloc(&SSE_lrs_to_save);
+	}
 
 	//Return whatever this ended up being
 	return last_instruction;
