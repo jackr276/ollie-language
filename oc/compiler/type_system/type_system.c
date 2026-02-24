@@ -2317,6 +2317,24 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 	//Extract this for convenience
 	function_type_t* internal_type = function_type->internal_types.function_type;
 
+	//Let's up our counts for parameter types before we add this in
+	if(IS_FLOATING_POINT(parameter) == FALSE){
+		internal_type->general_purpose_param_count++;
+
+		//If we have more than 6 that's stack params
+		if(internal_type->general_purpose_param_count > 6){
+			internal_type->contains_stack_params = TRUE;
+		}
+
+	} else {
+		internal_type->SSE_param_count++;
+
+		//If we have more than 6 that's stack params
+		if(internal_type->SSE_param_count > 6){
+			internal_type->contains_stack_params = TRUE;
+		}
+	}
+
 	//Add this into the dynamic array
 	dynamic_array_add(&(internal_type->function_parameters), parameter);
 }

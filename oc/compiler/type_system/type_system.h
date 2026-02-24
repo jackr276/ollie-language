@@ -177,12 +177,18 @@ struct function_type_t{
 	dynamic_array_t function_parameters;
 	//The return type
 	generic_type_t* return_type;
+	//General purpose count
+	u_int32_t general_purpose_param_count;
+	//SSE param count
+	u_int32_t SSE_param_count;
 	//Does this return a void type?
 	u_int8_t returns_void;
 	//Is this function public? By default it is not
 	u_int8_t is_public;
 	//Is this function inlined:
 	u_int8_t is_inlined;
+	//Does this contain stack params?
+	u_int8_t contains_stack_params;
 };
 
 

@@ -3749,8 +3749,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	return last_instruction;
 }
 
-
 /**
+ *
  * For an indirect call, we can not know for certain what registers are and are not used
  * inside of the function. As such, we'll need to save any/all caller saved registers that are in use
  * at the time that the function is called
