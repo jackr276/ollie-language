@@ -4166,7 +4166,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case INDIRECT_CALL:
 			//Indirect function calls store the location of the call in op1
 			fprintf(fl, "call *");
-			print_variable(fl, instruction->op1, mode);
+			print_variable(fl, instruction->source_register, mode);
 
 			if(instruction->destination_register != NULL){
 				fprintf(fl, " /* --> ");

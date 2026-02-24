@@ -3765,6 +3765,9 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	//Also cache what the class of the destination LR is
 	live_range_class_t destination_lr_class;
 
+	//Extract the actual function type
+	generic_type_t* function_type = function_call->source_register->type;
+
 	//Extract if not null
 	if(function_call->destination_register != NULL){
 		destination_lr = function_call->destination_register->associated_live_range;
@@ -3775,15 +3778,17 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 
 	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
 	//have, but will change to be the first pop instruction that we make 
-	//
-	//
-	//TODO - this needs to take into consideration the stack allocations for stack passed parameters
-	//
-	//
-	//
-	//
 	instruction_t* first_instruction = function_call;
 	instruction_t* last_instruction = function_call;
+
+	/**
+	 * NOTE: if we have any stack passed parameter logic, we need to detect that now and ensure that we 
+	 * are inserting our caller saving logic both before and after any of that takes place to ensure we
+	 * don't clobber our values inadvertently
+	 */
+	if(function_type->internal_types.function_type->contains_stack_params == TRUE){
+		printf("HERE\n");
+	}
 
 	//Grab the live_after array for up to but not including the actual call
 	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
