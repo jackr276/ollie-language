@@ -242,6 +242,20 @@ struct three_addr_const_t{
 		 * These pointers are always 8 bytes
 		 */
 		three_addr_var_t* local_constant_address;
+		/**
+		 *
+		 *
+		 * TODO MORE SPECIAL CASES
+		 *
+		 * Make this a stack-param passed offset constant. We will only act upon it inside of the regsiter allocator/postprocessor
+		 * once we are done with all spilling/stack maanagement logic. There should be a "const type" to do this. In fact, we should
+		 * probably make the "const_type" an actual type and not just some tacked on token extension
+		 *
+		 *
+		 *
+		 * TODO
+		 */
+
 	} constant_value;
 
 	//What kind of constant is it
