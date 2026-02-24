@@ -3568,11 +3568,11 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
  */
-static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* instruction){
+static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* function_call){
 	//If we get here we know that we have a call instruction. Let's
 	//grab whatever it's calling out. We're able to do this for a direct call,
 	//whereas in an indirect call we are not
-	symtab_function_record_t* callee = instruction->called_function;
+	symtab_function_record_t* callee = function_call->called_function;
 
 	//Grab out this LR for reference later on. Remember that this is nullable, so we 
 	//need to account for that
@@ -3582,20 +3582,27 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	live_range_class_t destination_lr_class;
 	
 	//Assign if it's not null
-	if(instruction->destination_register != NULL){
+	if(function_call->destination_register != NULL){
 		//Extract the destination LR for our uses later
-		destination_lr = instruction->destination_register->associated_live_range;
+		destination_lr = function_call->destination_register->associated_live_range;
 
 		//Cache the class as well
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
 	//Keep pointers to the first/last instruction in our chain
-	instruction_t* first_instruction = instruction;
-	instruction_t* last_instruction = instruction;
+	//
+	//
+	//
+	//TODO this needs to take into account for stack passed parameter allocations
+	//
+	//
+	//
+	instruction_t* first_instruction = function_call;
+	instruction_t* last_instruction = function_call;
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
-	dynamic_array_t live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
 	//We can remove the destination LR from here, there's no point in keeping it in
 	dynamic_array_delete(&live_after, destination_lr);
 
@@ -3644,16 +3651,16 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 					instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(general_purpose_reg);
 
 					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(push_inst, instruction);
+					insert_instruction_before_given(push_inst, function_call);
 
 					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(pop_inst, instruction);
+					insert_instruction_after_given(pop_inst, function_call);
 
 					//If the first instruction still is the original instruction. That
 					//means that this is the first push instruction that we're inserting.
 					//As such, we'll set the first instruction to be this pushinstruction
 					//to save ourselves time down the line
-					if(first_instruction == instruction){
+					if(first_instruction == function_call){
 						first_instruction = push_inst;
 					}
 
@@ -3661,7 +3668,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 					//means that this is the first pop instruction that we're inserting.
 					//As such, we'll set the last instruction to be this pop instruction
 					//to save ourselves time down the line
-					if(last_instruction == instruction){
+					if(last_instruction == function_call){
 						last_instruction = pop_inst;
 					}
 				}
@@ -3738,7 +3745,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
  */
-static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* caller, instruction_t* instruction){
+static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* caller, instruction_t* function_call){
 	//Get the destination LR. Remember that this is nullable
 	live_range_t* destination_lr = NULL;
 
@@ -3746,8 +3753,8 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	live_range_class_t destination_lr_class;
 
 	//Extract if not null
-	if(instruction->destination_register != NULL){
-		destination_lr = instruction->destination_register->associated_live_range;
+	if(function_call->destination_register != NULL){
+		destination_lr = function_call->destination_register->associated_live_range;
 
 		//What is the class
 		destination_lr_class = destination_lr->live_range_class;
@@ -3755,11 +3762,18 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 
 	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
 	//have, but will change to be the first pop instruction that we make 
-	instruction_t* first_instruction = instruction;
-	instruction_t* last_instruction = instruction;
+	//
+	//
+	//TODO - this needs to take into consideration the stack allocations for stack passed parameters
+	//
+	//
+	//
+	//
+	instruction_t* first_instruction = function_call;
+	instruction_t* last_instruction = function_call;
 
 	//Grab the live_after array for up to but not including the actual call
-	dynamic_array_t live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
 	//Delete the destination LR from here as it will be assigned by the instruction anyway
 	dynamic_array_delete(&live_after, destination_lr);
 
@@ -3799,16 +3813,16 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 				instruction_t* pop_inst_gp = emit_direct_gp_register_pop_instruction(general_purpose_reg);
 
 				//Insert the push instruction directly before the call instruction
-				insert_instruction_before_given(push_inst_gp, instruction);
+				insert_instruction_before_given(push_inst_gp, function_call);
 
 				//Insert the pop instruction directly after the last instruction
-				insert_instruction_after_given(pop_inst_gp, instruction);
+				insert_instruction_after_given(pop_inst_gp, function_call);
 
 				//If the first instruction still is the original instruction. That
 				//means that this is the first push instruction that we're inserting.
 				//As such, we'll set the first instruction to be this pushinstruction
 				//to save ourselves time down the line
-				if(first_instruction == instruction){
+				if(first_instruction == function_call){
 					first_instruction = push_inst_gp;
 				}
 
@@ -3816,7 +3830,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 				//means that this is the first pop instruction that we're inserting.
 				//As such, we'll set the last instruction to be this pop instruction
 				//to save ourselves time down the line
-				if(last_instruction == instruction){
+				if(last_instruction == function_call){
 					last_instruction = pop_inst_gp;
 				}
 
@@ -3879,7 +3893,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
  * Run through the current function and insert all needed save/restore logic
  * for caller-saved registers
  */
-static void insert_caller_saved_register_logic(basic_block_t* function_entry_block){
+static inline void insert_caller_saved_register_logic(basic_block_t* function_entry_block){
 	//We'll grab out everything we need from this function
 	//Extract this for convenience
 	symtab_function_record_t* function = function_entry_block->function_defined_in;
