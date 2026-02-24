@@ -2322,7 +2322,7 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 		internal_type->general_purpose_param_count++;
 
 		//If we have more than 6 that's stack params
-		if(internal_type->general_purpose_param_count > 6){
+		if(internal_type->general_purpose_param_count > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
 			internal_type->contains_stack_params = TRUE;
 		}
 
@@ -2330,7 +2330,7 @@ void add_parameter_to_function_type(generic_type_t* function_type, generic_type_
 		internal_type->SSE_param_count++;
 
 		//If we have more than 6 that's stack params
-		if(internal_type->SSE_param_count > 6){
+		if(internal_type->SSE_param_count > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
 			internal_type->contains_stack_params = TRUE;
 		}
 	}

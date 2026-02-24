@@ -3590,10 +3590,14 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
-	//Initially our current first and last instruction are just the function
-	//call
-	instruction_t* first_instruction = function_call;
-	instruction_t* last_instruction = function_call;
+	/**
+	 * Keep track of what is immediately before and after
+	 * our stack param setup. In the event that there
+	 * is no stack param setup, these will just be the
+	 * function call
+	 */
+	instruction_t* before_stack_param_setup = function_call;
+	instruction_t* after_stack_param_setup = function_call;
 
 	/**
 	 * If our function contains stack parameters, then we need to look for the
@@ -3602,17 +3606,28 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 */
 	if(callee->contains_stack_params == TRUE){
 		//Let's first find the stack allocation statement. Note that it *has to be here*
-		while(first_instruction->statement_type != THREE_ADDR_CODE_STACK_ALLOCATION_STMT){
+		while(before_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_ALLOCATION_STMT){
 			//Go back
-			first_instruction = first_instruction->previous_statement;
+			before_stack_param_setup = before_stack_param_setup->previous_statement;
 		}
 
 		//Now by a similar token let's find the deallocation statement
-		while(last_instruction->statement_type != THREE_ADDR_CODE_STACK_DEALLOCATION_STMT){
+		while(after_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_DEALLOCATION_STMT){
 			//Push it up
-			last_instruction = last_instruction->next_statement;
+			after_stack_param_setup = after_stack_param_setup->next_statement;
 		}
 	}
+
+	/**
+	 * Maintain pointers to the first/last *push* instructions that we've emitted. This is
+	 * done because we need to ensure that if we have any floating point values being saved,
+	 * they must go before/after the pushing/popping to avoid any stack clobbering
+	 */
+	instruction_t* first_push_instruction = before_stack_param_setup;
+	instruction_t* last_push_instruction = after_stack_param_setup;
+
+	//Also keep track of the very last instruction that we've inserted, whatever it is
+	instruction_t* last_instruction = after_stack_param_setup;
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
 	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
@@ -3664,10 +3679,10 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 					instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(general_purpose_reg);
 
 					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(push_inst, first_instruction);
+					insert_instruction_before_given(push_inst, before_stack_param_setup);
 
 					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(pop_inst, last_instruction);
+					insert_instruction_after_given(pop_inst, after_stack_param_setup);
 
 					//If the first instruction still is the original instruction. That
 					//means that this is the first push instruction that we're inserting.
@@ -3726,16 +3741,10 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 					instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
 
 					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(store_instruction, first_instruction);
-
-					//The first instruction now is the store
-					first_instruction = store_instruction;
+					insert_instruction_before_given(store_instruction, first_push_instruction);
 
 					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(load_instruction, last_instruction);
-
-					//And the last one now is the load
-					last_instruction = load_instruction;
+					insert_instruction_after_given(load_instruction, last_push_instruction);
 				}
 
 				break;
