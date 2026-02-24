@@ -652,9 +652,6 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 		//Flag that this is passed via the stack
 		variable_record->passed_by_stack = TRUE;
 
-		//Flag that this a stack variable
-		variable_record->stack_variable = TRUE;
-
 		//Flag that this function contains stack params
 		function_record->contains_stack_params = TRUE;
 	}
