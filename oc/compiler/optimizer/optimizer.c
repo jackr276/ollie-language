@@ -1088,9 +1088,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 				//This counts as a change
 				changed = TRUE;
-
-				//TODO HERE
-				mark_and_sweep_given_block();
 			}
 		}
 
