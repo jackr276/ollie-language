@@ -1036,31 +1036,6 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 
 
 /**
- * Delete all branching statements in the current block. We know if a statement is branching if it is 
- * marks as branch ending. 
- *
- * NOTE: This should only be called after we have identified this block as a candidate for block folding
- */
-static inline void delete_all_branching_statements(basic_block_t* block){
-	//We'll always start from the end and work our way up
-	instruction_t* current = block->exit_statement;
-	//To hold while we delete
-	instruction_t* temp;
-
-	//So long as this is NULL and it's branch ending
-	while(current != NULL && current->is_branch_ending == TRUE){
-		temp = current;
-		//Advance this
-		current = current->previous_statement;
-		//Then we delete
-		delete_statement(temp);
-	}
-
-	//After we've gotten here we're all done
-}
-
-
-/**
  * The branch reduce function is what we use on each pass of the function
  * postorder
  *
@@ -1105,14 +1080,17 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * 	replace branch with a jump to j
 			 */
 			if(branch->if_block == branch->else_block){
-				//Remove these all
-				delete_all_branching_statements(current);
-
 				//Emit a jump here instead
 				emit_jump(current, branch->if_block);
 
+				//Delete the branch statement afterwards 
+				delete_statement(branch);
+
 				//This counts as a change
 				changed = TRUE;
+
+				//TODO HERE
+				mark_and_sweep_given_block();
 			}
 		}
 
