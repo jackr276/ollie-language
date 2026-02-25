@@ -4091,9 +4091,6 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	//We'll also need it's stack data area
 	stack_data_area_t* area = &(function_entry->function_defined_in->local_stack);
 
-	//Align it
-	align_stack_data_area(area);
-
 	//Grab the total size out
 	u_int32_t total_size = area->total_size;
 
@@ -4193,14 +4190,36 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 
 
 /**
+ * Now that we've done any spilling that we need to do, we'll need to finalize the
+ * local stack for this function. In addition to that, we're also going to need to 
+ * finalize the stack passed parameters(if there are any) because those values
+ * will need to have their stack offsets modified if we did anything to change
+ * how large the stack frame of this function is. This helper function will handle
+ * all of that
+ */
+static inline void finalize_local_and_parameter_stacks(cfg_t* cfg){
+	//Run through every function entry point in the CFG
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Get the entry block out
+		basic_block_t* current_function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+
+		//Extract the function out too
+		symtab_function_record_t* function = current_function_entry->function_defined_in;
+
+	}
+
+}
+
+
+/**
  * Now that we are done spilling, we need to insert all of the stack logic,
  * including additions and subtractions, into the functions. We also need
  * to insert pushing of any/all callee saved and caller saved registers to maintain
  * our calling convention
  */
-static void insert_saving_logic(cfg_t* cfg){
+static inline void insert_saving_logic(cfg_t* cfg){
 	//Run through every function entry point in the CFG
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Grab out the function exit and entry blocks
 		basic_block_t* current_function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 		basic_block_t* current_function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
@@ -4619,6 +4638,9 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	//Destroy both of these now that we're done
 	dynamic_array_dealloc(&general_purpose_live_ranges);
 	dynamic_array_dealloc(&sse_live_ranges);
+	
+
+	//TODO MOVE STACK ALIGNMENT, SAVING DOWN HERE
 }
 
 
@@ -4651,8 +4673,25 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		allocate_registers_for_function(options, function_entry);
 	}
 
+	//Align it
+	align_stack_data_area(area);
+
 	/**
-	 * STEP 8: caller/callee saving logic
+	 * STEP 8: function local stack alignment and stack passed parameter offset updates
+	 *
+	 * Now that we've done any spilling that we need to do, we'll need to finalize the
+	 * local stack for this function. In addition to that, we're also going to need to 
+	 * finalize the stack passed parameters(if there are any) because those values
+	 * will need to have their stack offsets modified if we did anything to change
+	 * how large the stack frame of this function is. This helper function will handle
+	 * all of that
+	 *
+	 * TODO MOVE TO PER-FUNCTION
+	 */
+	finalize_local_and_parameter_stacks(cfg);
+
+	/**
+	 * STEP 9: caller/callee saving logic
 	 *
 	 * Once we make it down here, we have colored the entire graph successfully. But,
 	 * we still need to insert any caller/callee saving logic that is needed
@@ -4660,11 +4699,13 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 *
 	 * NOTE: We cannot do this at the individual function step because it does require
 	 * that we have all functions completely allocated before going forward.
+	 *
+	 * TODO MOVE TO PER-FUNCTION
 	*/
 	insert_saving_logic(cfg);
 
 	/**
-	 * STEP 9: final cleanup pass
+	 * STEP 10: final cleanup pass
 	 *
 	 * This is detailed more in the postprocessor.c file that we're invoking
 	 * here
