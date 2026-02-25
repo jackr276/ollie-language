@@ -11,6 +11,9 @@
 #include <stdlib.h>
 #include "../utils/constants.h"
 
+//The number of bytes added for a return address on the stack during a function call
+#define RETURN_ADDRESS_SIZE_BYTES 8
+
 //Atomically increasing stack region ID
 static u_int32_t current_stack_region_id = 0;
 
@@ -227,6 +230,43 @@ void sweep_stack_data_area(stack_data_area_t* area){
 
 	//Scrap the array
 	dynamic_array_dealloc(&marked_for_deletion);
+}
+
+
+/**
+ * Realign a parameter/argument build stack data area after the function that it's calling
+ * out to is fully known. This is done because we need to account for local stack allocations
+ * in the callee and more importantly the way that the return address has been pushed onto the
+ * stack
+ */
+void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_passed_parameter_region, stack_data_area_t* callee_local_stack){
+	/**
+	 * Due to the way that a function call works, we are guaranteed to have *at least* 8 bytes of additional
+	 * distance on the stack to hold the return address for the caller. As such, we need to account
+	 * for at least this here
+	 */
+	u_int32_t additional_offset = RETURN_ADDRESS_SIZE_BYTES;
+
+	/**
+	 * In addition to this return address, we need add whatever the local stack
+	 * allocation's size is onto it as well. Sometimes this will be 0, and that is
+	 * fine, but we will not overcomplicate the logic by having separate paths for that
+	 */
+	additional_offset += callee_local_stack->total_size;
+
+	//Now run through every stack region
+	for(u_int32_t i = 0; i < stack_passed_parameter_region->stack_regions.current_index; i++){
+		//Extract the region to work on
+		stack_region_t* region = dynamic_array_get_at(&(stack_passed_parameter_region->stack_regions), i);
+
+		/**
+		 * Now we very specifically have a distinction between the function local stack base address 
+		 * and the base address that we have to use if we're referencing this region in the context of it
+		 * being a stack passed parameter. We will now update the parameter passed version specifically
+		 * here
+		 */
+		region->stack_passed_parameter_base_address = region->function_local_base_address + additional_offset;
+	}
 }
 
 

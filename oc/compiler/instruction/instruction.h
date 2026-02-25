@@ -189,7 +189,7 @@ struct three_addr_var_t{
 	u_int32_t use_count;
 	//What is the parameter number of this var? Used for parameter passing. If
 	//it is 0, it's ignored
-	u_int16_t class_relative_parameter_order;
+	u_int32_t class_relative_parameter_order;
 	//What is the indirection level
 	//Is this variable dereferenced in some way
 	//(either loaded from or stored to)

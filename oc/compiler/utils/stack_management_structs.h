@@ -67,14 +67,14 @@ struct stack_region_t {
 	 */
 	u_int32_t function_local_base_address;
 	/**
-	 * The callee side base address is specifically
+	 * The stack passed parameter base address is specifically
 	 * used by stack regions for stack-passed parameters. This is
 	 * needed because when we add the return address(8 bytes) and
 	 * the additional local stack allocations from the function itself,
 	 * we actually need to increase this base address to maintain a correct
 	 * reference
 	 */
-	u_int32_t callee_side_base_address;
+	u_int32_t stack_passed_parameter_base_address;
 	//The size
 	u_int32_t size;
 	//Is this marked or not
