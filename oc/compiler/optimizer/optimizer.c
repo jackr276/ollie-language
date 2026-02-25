@@ -1067,17 +1067,24 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 
+		//If the exit statement is NULL then we can get out
+		if(current->exit_statement == NULL){
+			continue;
+		}
+
+
 		/**
 		 * If block i ends in a conditional branch
 		 */
-		if(current->exit_statement != NULL 
-			&& current->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+		if(current->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
 			//Extract the branch statement
 			instruction_t* branch = current->exit_statement;
 
 			/**
 			 * If both targets are identical(j) then:
 			 * 	replace branch with a jump to j
+			 *
+			 * 	TODO - we actually never get here
 			 */
 			if(branch->if_block == branch->else_block){
 				//Emit a jump here instead
@@ -1095,8 +1102,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 		/**
 		 * If block i ends in a jump to j then..
 		 */
-		if(current->exit_statement != NULL
-			&& current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
+		if(current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
 			//Extract the block(j) that we're going to
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
