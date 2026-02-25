@@ -1036,6 +1036,19 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 
 
 /**
+ * Trace up the block to find all statements that a given statement
+ * relies on
+ *
+ * TODO I bet this is why nothing is working for the last conditional. The starting
+ * statement is probably never "branch ending"
+ */
+static inline dynamic_array_t* get_all_statements_relied_on_by_parent(){
+
+}
+
+
+
+/**
  * The branch reduce function is what we use on each pass of the function
  * postorder
  *
@@ -2053,6 +2066,15 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
 		//Let's run through and see if we can find a statement that's eligible for short circuiting.
 		while(cursor != NULL){
 			//Not branch ending - move on
+			//
+			//TODO UPDATE ME - we can do this without the is branch ending if we trace
+			//our way up the block starting at the branching statement
+			//
+			//
+			//
+			//TODO look at something like the instruction scheduler where we're building block dependence
+			//for a given variable. All branch statements have their op1 set to be the result of the
+			//comparison that the branch is based on. We can use this for our basis
 			if(cursor->is_branch_ending == FALSE){
 				cursor = cursor->previous_statement;
 				continue;
