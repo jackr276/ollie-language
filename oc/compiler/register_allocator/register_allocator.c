@@ -3022,7 +3022,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 		//Case we want here
 		if(instruction->source_register->associated_live_range == spill_range){
 			//Let the helper deal with it
-			handle_pure_copy_source_spill(instruction, spill_region->base_address);
+			handle_pure_copy_source_spill(instruction, spill_region->function_local_base_address);
 
 			//We're done here
 			return instruction;
@@ -3038,7 +3038,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 		//What we're after here
 		if(instruction->destination_register->associated_live_range == spill_range){
 			//Let the helper deal with it
-			handle_constant_assignment_destination_spill(instruction, spill_region->base_address);
+			handle_constant_assignment_destination_spill(instruction, spill_region->function_local_base_address);
 
 			//We're done
 			return instruction;
@@ -3050,10 +3050,10 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 	instruction_t* latest = instruction;
 
 	//Handle all source spills first
-	handle_source_spill(live_ranges, instruction->source_register, spill_range, currently_spilled, instruction, spill_region->base_address);
-	handle_source_spill(live_ranges, instruction->source_register2, spill_range, currently_spilled, instruction, spill_region->base_address);
-	handle_source_spill(live_ranges, instruction->address_calc_reg1, spill_range, currently_spilled, instruction, spill_region->base_address);
-	handle_source_spill(live_ranges, instruction->address_calc_reg2, spill_range, currently_spilled, instruction, spill_region->base_address);
+	handle_source_spill(live_ranges, instruction->source_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(live_ranges, instruction->source_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(live_ranges, instruction->address_calc_reg1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(live_ranges, instruction->address_calc_reg2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 	//Run through all function parameters
 	if(instruction->instruction_type != PHI_FUNCTION){
@@ -3066,7 +3066,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			three_addr_var_t* parameter = dynamic_array_get_at(&parameters, i);
 
 			//Invoke the helper
-			handle_source_spill(live_ranges, parameter, spill_range, currently_spilled, instruction, spill_region->base_address);
+			handle_source_spill(live_ranges, parameter, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 		}
 	}
 
@@ -3084,10 +3084,10 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			//In this case, we need to handle a source spill and a destination store
 			if(is_destination_also_operand(instruction) == TRUE){
 				//Handle the source first
-				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->base_address);
+				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 				//Emit the store instruction for this now
-				handle_destination_spill(instruction->destination_register, instruction, spill_region->base_address);
+				handle_destination_spill(instruction->destination_register, instruction, spill_region->function_local_base_address);
 
 				//Update latest
 				latest = instruction->next_statement;
@@ -3095,12 +3095,12 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			//In the case like this, we just need to emit the load
 			} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
 				//Handle the source spill only
-				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->base_address);
+				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 			//In all other cases, we just have the store
 			} else {
 				//Emit the store instruction for this now
-				handle_destination_spill(instruction->destination_register, instruction, spill_region->base_address);
+				handle_destination_spill(instruction->destination_register, instruction, spill_region->function_local_base_address);
 
 				//Update latest
 				latest = instruction->next_statement;
@@ -3115,7 +3115,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			|| instruction->destination_register2->associated_live_range == *currently_spilled){
 
 			//Emit the store instruction for this now
-			handle_destination_spill(instruction->destination_register2, instruction, spill_region->base_address);
+			handle_destination_spill(instruction->destination_register2, instruction, spill_region->function_local_base_address);
 
 			//Update latest
 			latest = instruction->next_statement;
@@ -3783,8 +3783,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 		}
 
 		//Emit the store instruction and load instruction
-		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
-		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
+		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
+		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
 
 		//Insert the push instruction directly before the call instruction
 		insert_instruction_before_given(store_instruction, first_instruction);
@@ -3992,8 +3992,8 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 		}
 
 		//Emit the store instruction and load instruction
-		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
-		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
+		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
+		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
 
 		//Insert the push instruction directly before the first instruction
 		insert_instruction_before_given(store_instruction, first_instruction);

@@ -785,7 +785,7 @@ static void remediate_memory_address_in_non_access_context(instruction_window_t*
 
 		//Extract the stack offset for our use. This will determine how 
 		//we process things down below
-		int64_t stack_offset = var->stack_region->base_address;
+		int64_t stack_offset = var->stack_region->function_local_base_address;
 
 		//Go based on what kind of statement that we've got here
 		switch(instruction->statement_type){
@@ -7491,12 +7491,12 @@ static void handle_load_instruction(instruction_window_t* window){
 		//If this is *not* a global variable
 		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
 
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
 				//Let's get the offset from this memory address
-				three_addr_const_t* offset = emit_direct_integer_or_char_constant(load_instruction->op1->linked_var->stack_region->base_address, u64);
+				three_addr_const_t* offset = emit_direct_integer_or_char_constant(load_instruction->op1->linked_var->stack_region->function_local_base_address, u64);
 
 				//We now will have something like <offset>(%rsp)
 				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
@@ -7561,7 +7561,7 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
 		//If this is *not* a global variable
 		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
 
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
@@ -7632,7 +7632,7 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 		//If this is *not* a global variable
 		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
 
 			//If we actually have a stack offset to deal with
 			if(stack_offset != 0){
@@ -7733,7 +7733,7 @@ static void handle_load_statement_base_address(instruction_t* load_statement){
 		//If this is *not* a global variable
 		if(load_statement->op1->linked_var->membership != GLOBAL_VARIABLE){
 			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = load_statement->op1->linked_var->stack_region->base_address;
+			int64_t stack_offset = load_statement->op1->linked_var->stack_region->function_local_base_address;
 
 			//If we actually have a stack offset to deal with. We'll store the offset constant
 			//and op1
@@ -7988,12 +7988,12 @@ static void handle_store_instruction(instruction_t* instruction){
 		//If it is *not* a global variable(most common case)
 		if(instruction->assignee->linked_var->membership != GLOBAL_VARIABLE){
 			//Get the stack offset
-			int64_t stack_offset = instruction->assignee->linked_var->stack_region->base_address;
+			int64_t stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
 
 			//If it's not 0, we need to do some arithmetic
 			if(stack_offset != 0){
 				//Let's get the offset from this memory address
-				three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->base_address, u64);
+				three_addr_const_t* offset = emit_direct_integer_or_char_constant(instruction->assignee->linked_var->stack_region->function_local_base_address, u64);
 
 				//The first address calc register will be the stack pointer
 				instruction->address_calc_reg1 = stack_pointer_variable;
@@ -8065,7 +8065,7 @@ static void handle_store_with_constant_offset_instruction(instruction_t* instruc
 		//address
 		if(linked_var->membership != GLOBAL_VARIABLE){
 			//Get the stack offset
-			int64_t stack_offset = instruction->assignee->linked_var->stack_region->base_address;
+			int64_t stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
 
 			//If it's not 0, we need to do some arithmetic with the constants
 			if(stack_offset != 0){
@@ -8140,7 +8140,7 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 		//address
 		if(linked_var->membership != GLOBAL_VARIABLE){
 			//Get the stack offset
-			int64_t stack_offset = instruction->assignee->linked_var->stack_region->base_address;
+			int64_t stack_offset = instruction->assignee->linked_var->stack_region->function_local_base_address;
 
 			//If it's not 0, we need to do some arithmetic with the constants
 			if(stack_offset != 0){
@@ -8249,7 +8249,7 @@ static void handle_store_statement_base_address(instruction_t* store_instruction
 		//address
 		if(linked_var->membership != GLOBAL_VARIABLE){
 			//Get the stack offset
-			int64_t stack_offset = linked_var->stack_region->base_address;
+			int64_t stack_offset = linked_var->stack_region->function_local_base_address;
 
 			//If it's not 0, we need to do some arithmetic with the constants
 			if(stack_offset != 0){

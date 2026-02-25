@@ -78,7 +78,7 @@ static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t siz
 
 	//Populate
 	region->size = size;
-	region->base_address = base_address;
+	region->function_local_base_address = base_address;
 
 	//Assign it a unique ID
 	region->stack_region_id = increment_and_get_stack_region_id();
@@ -177,7 +177,7 @@ static void realign_data_area(stack_data_area_t* area){
 		}
 
 		//This one's stack offset is the original total size plus whatever padding we need
-		region->base_address = area->total_size + needed_padding;
+		region->function_local_base_address = area->total_size + needed_padding;
 		
 		//Update the total size of the stack too. The new size is the original size
 		//with the needed padding and the new type's size added onto it
@@ -246,7 +246,7 @@ void print_passed_parameter_stack_data_area(stack_data_area_t* area){
 		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
 
 		//Print it
-		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->base_address, region->mark == TRUE ? "marked" : "unmarked");
+		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->function_local_base_address, region->mark == TRUE ? "marked" : "unmarked");
 	}
 
 	printf("================== Stack Passed Parameters ===================\n");
@@ -273,7 +273,7 @@ void print_local_stack_data_area(stack_data_area_t* area){
 		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
 
 		//Print it
-		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->base_address, region->mark == TRUE ? "marked" : "unmarked");
+		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->function_local_base_address, region->mark == TRUE ? "marked" : "unmarked");
 	}
 
 	printf("================== Stack Layout ===================\n");

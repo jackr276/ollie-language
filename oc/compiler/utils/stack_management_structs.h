@@ -61,8 +61,20 @@ struct stack_region_t {
 	//used for array addresses
 	//The unique ID for this region
 	u_int32_t stack_region_id;
-	//The base address
-	u_int32_t base_address;
+	/**
+	 * The function local base address is the address
+	 * that is used for all function-local stack allocations
+	 */
+	u_int32_t function_local_base_address;
+	/**
+	 * The callee side base address is specifically
+	 * used by stack regions for stack-passed parameters. This is
+	 * needed because when we add the return address(8 bytes) and
+	 * the additional local stack allocations from the function itself,
+	 * we actually need to increase this base address to maintain a correct
+	 * reference
+	 */
+	u_int32_t callee_side_base_address;
 	//The size
 	u_int32_t size;
 	//Is this marked or not

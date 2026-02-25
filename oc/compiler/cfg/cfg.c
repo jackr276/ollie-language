@@ -5684,8 +5684,8 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				//Create it
 				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, paramter_type);
 
-				//The offset
-				three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->base_address, u64);
+				//The offset. Note that this comes from the function local base address because there is no offset to add here
+				three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->function_local_base_address, u64);
 
 				//We need to emit a store statement now for our result
 				instruction_t* store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result, paramter_type);
@@ -5733,8 +5733,9 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 				//Create it
 				stack_region_t* region = create_stack_region_for_type(&stack_passed_parameters, paramter_type);
 
-				//The offset
-				three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->base_address, u64);
+				//The offset. Note that this comes from the function local base address because we are in the function that has
+				//allocated this value
+				three_addr_const_t* stack_offset = emit_direct_integer_or_char_constant(region->function_local_base_address, u64);
 
 				//We need to emit a store statement now for our result
 				instruction_t* store_operation = emit_store_with_constant_offset_ir_code(stack_pointer_variable, stack_offset, result, paramter_type);
@@ -5965,8 +5966,9 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//However if we do have a stack region, we need to instead emit a store that gets this
 		//variable into the appopriate spot
 		} else {
-			//Allocation for our offset
-			three_addr_const_t* offset = emit_direct_integer_or_char_constant(var_record->stack_region->base_address, u64);
+			//Allocation for our offset. Note that this is from the function local base address because we are in the funciton that has allocated
+			//this value
+			three_addr_const_t* offset = emit_direct_integer_or_char_constant(var_record->stack_region->function_local_base_address, u64);
 
 			//Emit the store instruction
 			instruction_t* store_instruction = emit_store_with_constant_offset_ir_code(stack_pointer_variable, offset, result, parameter_type);
