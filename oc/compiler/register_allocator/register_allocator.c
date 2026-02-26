@@ -4201,6 +4201,15 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	u_int32_t local_stack_size = area->total_size;
 
 	/**
+	 * The total stack frame size is the total footprint that this function will take
+	 * up on the stack. Note that this is not always *just* the local stack size. If 
+	 * we have callee-saving instructions(pushq instructions) at the top, that also
+	 * adds to the total size. We need to keep track of this in case we have stack-passed
+	 * parameters who will need their offsets updated
+	 */
+	u_int32_t total_stack_frame_size = local_stack_size;
+
+	/**
 	 * If we have a local stack size that is more than 0, we'll emit it now. Note that
 	 * we need to specifically emit this *after* any push instructions at the beginning of the function
 	 */
@@ -4208,10 +4217,16 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 		//We need to find where to put this
 		instruction_t* after_stack_allocation = function_entry->leader_statement;
 
-		//So long as we keep seeing the leading "push" instructions, we need
-		//to keep searching through. Once this loop exits, we know that
-		//we'll have a pointer to the instruction after the last push instruction
+		/**
+		 * So long as we keep seeing the leading "push" instructions, we need
+		 * to keep searching through. Once this loop exits, we know that
+		 * we'll have a pointer to the instruction after the last push instruction
+		 */
 		while(after_stack_allocation->is_callee_saving_instruction == TRUE){
+			//This increases the total stack frame size by 8 bytes
+			total_stack_frame_size += CALLEE_SAVED_REGISTER_STACK_SIZE_BYTES;
+
+			//Push it down
 			after_stack_allocation = after_stack_allocation->next_statement;
 		}
 
@@ -4264,6 +4279,18 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			//last callee saving statement(pop inst). Our stack deallocator goes before this
 			insert_instruction_before_given(stack_deallocation, last_callee_saving_instruction);
 		}
+	}
+
+	/**
+	 * Does this function contain stack params? If so, now is the time
+	 * were we need to modify all of their offsets to ensure that we are
+	 * grabbing these from the correct stack region when we're inside of 
+	 * the function
+	 */
+	if(function->contains_stack_params == TRUE){
+		//Make use of the total stack frame size to recompute all of these offsets
+		recompute_stack_passed_parameter_region_offsets(&(function->stack_passed_parameters), total_stack_frame_size);
+
 	}
 }
 

@@ -50,7 +50,7 @@ void sweep_stack_data_area(stack_data_area_t* area);
  * in the callee and more importantly the way that the return address has been pushed onto the
  * stack
  */
-void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_passed_parameter_region, stack_data_area_t* callee_local_stack);
+void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_passed_parameter_region, u_int32_t function_stack_frame_size_bytes);
 
 /**
  * Print out the passed parameter stack data

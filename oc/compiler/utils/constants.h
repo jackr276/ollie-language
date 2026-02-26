@@ -27,6 +27,9 @@
 //The maximum number of per-class register passed parameters
 #define MAX_PER_CLASS_REGISTER_PASSED_PARAMS 6
 
+//The size that it takes for a parameter to be callee-saved
+#define CALLEE_SAVED_REGISTER_STACK_SIZE_BYTES 8
+
 //The number of colors that we have for general use registers
 #define K_COLORS_GEN_USE 15
 

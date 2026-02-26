@@ -239,7 +239,7 @@ void sweep_stack_data_area(stack_data_area_t* area){
  * in the callee and more importantly the way that the return address has been pushed onto the
  * stack
  */
-void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_passed_parameter_region, stack_data_area_t* callee_local_stack){
+void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_passed_parameter_region, u_int32_t function_stack_frame_size_bytes){
 	/**
 	 * Due to the way that a function call works, we are guaranteed to have *at least* 8 bytes of additional
 	 * distance on the stack to hold the return address for the caller. As such, we need to account
@@ -252,7 +252,7 @@ void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_pa
 	 * allocation's size is onto it as well. Sometimes this will be 0, and that is
 	 * fine, but we will not overcomplicate the logic by having separate paths for that
 	 */
-	additional_offset += callee_local_stack->total_size;
+	additional_offset += function_stack_frame_size_bytes;
 
 	//Now run through every stack region
 	for(u_int32_t i = 0; i < stack_passed_parameter_region->stack_regions.current_index; i++){
