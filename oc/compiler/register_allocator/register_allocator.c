@@ -4217,27 +4217,20 @@ static inline void finalize_local_and_parameter_stacks(cfg_t* cfg){
  * to insert pushing of any/all callee saved and caller saved registers to maintain
  * our calling convention
  */
-static inline void insert_saving_logic(cfg_t* cfg){
-	//Run through every function entry point in the CFG
-	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Grab out the function exit and entry blocks
-		basic_block_t* current_function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
-		basic_block_t* current_function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
-		
-		//We'll first insert the caller saved logic. This logic has the potential to
-		//generate stack allocations for XMM registers so it needs to come first
-		insert_caller_saved_register_logic(current_function_entry);
+static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+	//We'll first insert the caller saved logic. This logic has the potential to
+	//generate stack allocations for XMM registers so it needs to come first
+	insert_caller_saved_register_logic(function_entry_block);
 
-		//Then we'll do all callee saving
-		insert_stack_and_callee_saving_logic(cfg, current_function_entry, current_function_exit);
-	}
+	//Then we'll do all callee saving
+	insert_stack_and_callee_saving_logic(cfg, function_entry_block, function_exit_block);
 }
 
 
 /**
  * Perform our function level allocation process
  */
-static void allocate_registers_for_function(compiler_options_t* options, basic_block_t* function_entry){
+static void allocate_registers_for_function(compiler_options_t* options, basic_block_t* function_entry, basic_block_t* function_exit){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
 	u_int8_t debug_printing = options->enable_debug_printing;
@@ -4640,7 +4633,20 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	dynamic_array_dealloc(&sse_live_ranges);
 	
 
-	//TODO MOVE STACK ALIGNMENT, SAVING DOWN HERE
+
+	/**
+	 * STEP 9: caller/callee saving logic
+	 *
+	 * Once we make it down here, we have colored the entire graph successfully. But,
+	 * we still need to insert any caller/callee saving logic that is needed
+	 * when appropriate
+	 *
+	 * NOTE: We cannot do this at the individual function step because it does require
+	 * that we have all functions completely allocated before going forward.
+	 *
+	 * TODO MOVE TO PER-FUNCTION
+	*/
+	insert_saving_logic(cfg);
 }
 
 
@@ -4669,8 +4675,11 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		//Extract the given function entry
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
+		//Also extract the function exit block
+		basic_block_t* function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
+
 		//Invoke the function-level allocator
-		allocate_registers_for_function(options, function_entry);
+		allocate_registers_for_function(options, function_entry, function_exit);
 	}
 
 	//Align it
@@ -4690,19 +4699,6 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	 */
 	finalize_local_and_parameter_stacks(cfg);
 
-	/**
-	 * STEP 9: caller/callee saving logic
-	 *
-	 * Once we make it down here, we have colored the entire graph successfully. But,
-	 * we still need to insert any caller/callee saving logic that is needed
-	 * when appropriate
-	 *
-	 * NOTE: We cannot do this at the individual function step because it does require
-	 * that we have all functions completely allocated before going forward.
-	 *
-	 * TODO MOVE TO PER-FUNCTION
-	*/
-	insert_saving_logic(cfg);
 
 	/**
 	 * STEP 10: final cleanup pass
