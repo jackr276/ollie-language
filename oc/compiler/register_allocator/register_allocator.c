@@ -4275,14 +4275,27 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 				last_callee_saving_instruction = last_callee_saving_instruction->previous_statement;
 			}
 
+			/**
+			 * Do we have an end of a function like this:
+			 * ....
+			 * addq $16, %rsp
+			 * addq $32, %rsp
+			 * ret
+			 *
+			 * In that case, we can save an instruction be combining the two into something like:
+			 * ...
+			 * addq $48, %rsp
+			 * ret
+			 */
+			if(last_callee_saving_instruction->instruction_type == ADDQ
+				&& last_callee_saving_instruction->destination_register->associated_live_range == stack_pointer_lr){
+				printf("HERE\n");
 
-			//TODO IF WE HAVE LOCAL SAVING HERE WE SHOULD COMBINE STACK ALLOCATIONS
-			//
-			//SEE MORE_THAN_6_PARAMS_WITH_STACK.ol
-
-			//By the time we get down here, we should have a pointer to either the ret statement *or* the very
-			//last callee saving statement(pop inst). Our stack deallocator goes before this
-			insert_instruction_before_given(stack_deallocation, last_callee_saving_instruction);
+			} else {
+				//By the time we get down here, we should have a pointer to either the ret statement *or* the very
+				//last callee saving statement(pop inst). Our stack deallocator goes before this
+				insert_instruction_before_given(stack_deallocation, last_callee_saving_instruction);
+			}
 		}
 	}
 
