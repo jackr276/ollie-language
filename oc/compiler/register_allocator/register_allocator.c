@@ -4078,7 +4078,7 @@ static inline void insert_caller_saved_register_logic(basic_block_t* function_en
  * NOTE: since all SSE registers are caller-saved, we actually don't need to worry about any SSE registers here because
  * they will all be handled by the caller anyway
  */
-static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
+static void insert_callee_saving_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
 	//Keep a reference to the original entry instruction that we had before
 	//we insert any pushes. This will be important for when we need to
 	//reassign the function's leader statement
@@ -4105,6 +4105,9 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 
 		//Now we'll need to add an instruction to push this at the entry point of our function
 		instruction_t* push_instruction = emit_direct_gp_register_push_instruction(used_reg);
+
+		//Flag that this is a callee saving instruction
+		push_instruction->is_callee_saving_instruction = TRUE;
 
 		//Insert this push before the leader instruction
 		insert_instruction_before_given(push_instruction, entry_instruction);
@@ -4150,6 +4153,9 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 			//If we make it here, we know that we'll need to save this register
 			instruction_t* pop_instruction = emit_direct_gp_register_pop_instruction(used_reg);
 
+			//Flag that this is a callee-saving instruction
+			pop_instruction->is_callee_saving_instruction = TRUE;
+
 			//Insert it before the ret
 			insert_instruction_before_given(pop_instruction, predecessor->exit_statement);
 		}
@@ -4165,53 +4171,65 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
  * how large the stack frame of this function is. This helper function will handle
  * all of that
  */
-static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_block_t* function_entry){
+static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
 	//Extract what function this is
 	symtab_function_record_t* function = function_entry->function_defined_in;
 
 	//The first thing that we'll want to do is align the local stack
 	align_stack_data_area(&(function->local_stack));
 
-	//TODO UPDATE PARAM STACK
-	
-
-	//TODO INSERT ALL STACK SAVING
-
 	//We'll also need it's stack data area
 	stack_data_area_t* area = &(function_entry->function_defined_in->local_stack);
 
 	//Grab the total size out
-	u_int32_t total_size = area->total_size;
+	u_int32_t local_stack_size = area->total_size;
 
+	/**
+	 * If we have a local stack size that is more than 0, we'll emit it now. Note that
+	 * we need to specifically emit this *after* any push instructions at the beginning of the function
+	 */
+	if(local_stack_size != 0){
+		//We need to find where to put this
+		instruction_t* after_stack_allocation = function_entry->leader_statement;
 
-	//If we have a total size to emit, we'll add it in here
-	if(total_size != 0){
+		//So long as we keep seeing the leading "push" instructions, we need
+		//to keep searching through. Once this loop exits, we know that
+		//we'll have a pointer to the instruction after the last push instruction
+		while(after_stack_allocation->is_callee_saving_instruction == TRUE){
+			after_stack_allocation = after_stack_allocation->next_statement;
+		}
+
 		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
-		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
 
 		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
-		insert_instruction_before_given(stack_allocation, entry_instruction);
+		insert_instruction_before_given(stack_allocation, after_stack_allocation);
 
 		//If the entry instruction was the function's leader statement, then this now will be the leader statement
-		if(entry_instruction == function_entry->leader_statement){
-			function_entry->leader_statement = entry_instruction;
+		//TODO DO WE NEED?
+		if(after_stack_allocation == function_entry->leader_statement){
+			function_entry->leader_statement = after_stack_allocation;
+		}
+
+		//Now we need to go through every exit block and emit the stack deallocation
+		for(u_int32_t i = 0; i < function_exit->predecessors.current_index; i++){
+			//Get the predecessor out
+			basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
+
+			//Keep a pointer to where our stack deallocation has to go
+			instruction_t* before_callee_saving = predecessor->exit_statement;
+
+			//Now let's hunt through to get passed any stack allocation statements
+			while(before_callee_saving->is_callee_saving_instruction == TRUE){
+				before_callee_saving = before_callee_saving->previous_statement;
+			}
+
+			//Emit the stack deallocation statement
+			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
+
+			insert_instruction_after_given(stack_deallocation, before_callee_saving);
 		}
 	}
-
-
-
-
-
-		//If the area has a larger total size than 0, we'll need to add in the deallocation
-		//before every return statement
-		if(total_size > 0){
-			//Emit the stack deallocation statement
-			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-			//We will insert this right before the very last statement in each predecessor
-			insert_instruction_before_given(stack_deallocation, predecessor->exit_statement);
-		}
-
 }
 
 

@@ -338,6 +338,8 @@ struct instruction_t{
 	//Do we need to stop this value from being coalesced. This is only used
 	//very specifically in the logical not handler currently
 	u_int8_t cannot_be_combined;
+	//Does this instruction handle callee saving?
+	u_int8_t is_callee_saving_instruction;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?
