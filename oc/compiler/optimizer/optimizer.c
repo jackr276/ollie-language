@@ -298,13 +298,16 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 	if(variable == stack_pointer_variable
 		|| variable == instruction_pointer_variable
 		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT
-		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS){
+		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS
+		|| variable->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
 		return;
 	}
 
-	//If this variable has a stack region, then we will be marking
-	//said stack region. We know that this discriminating union is a stack
-	//region because of the if-check above that rules out local constants
+	/**
+	 * If this variable has a stack region, then we will be marking
+	 * said stack region. We know that this discriminating union is a stack
+	 * region because of the if-check above that rules out local constants
+	 */
 	if(variable->associated_memory_region.stack_region != NULL){
 		mark_stack_region(variable->associated_memory_region.stack_region);
 	}
