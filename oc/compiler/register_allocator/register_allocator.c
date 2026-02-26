@@ -4241,9 +4241,6 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			//Get the predecessor out
 			basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
 
-			//Emit the stack deallocation statement
-			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
-
 			/**
 			 * We need to get this deallocation to happen right after we're done returning/callee-saving
 			 *
@@ -4275,6 +4272,9 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 				last_callee_saving_instruction = last_callee_saving_instruction->previous_statement;
 			}
 
+			//We will need this pointer for later
+			instruction_t* before_last_callee_saved = last_callee_saving_instruction->previous_statement;
+
 			/**
 			 * Do we have an end of a function like this:
 			 * ....
@@ -4287,11 +4287,18 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			 * addq $48, %rsp
 			 * ret
 			 */
-			if(last_callee_saving_instruction->instruction_type == ADDQ
-				&& last_callee_saving_instruction->destination_register->associated_live_range == stack_pointer_lr){
-				printf("HERE\n");
+			if(before_last_callee_saved != NULL
+				&& before_last_callee_saved->instruction_type == ADDQ
+				&& before_last_callee_saved->destination_register == stack_pointer){
 
+				//Instead of allocating, we are just going to add the local stack size to this given stack size
+				sum_constant_with_raw_int64_value(before_last_callee_saved->source_immediate, u64_type, local_stack_size);
+
+			//Otherwise we have no chance to optimize
 			} else {
+				//Emit the stack deallocation statement
+				instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
+
 				//By the time we get down here, we should have a pointer to either the ret statement *or* the very
 				//last callee saving statement(pop inst). Our stack deallocator goes before this
 				insert_instruction_before_given(stack_deallocation, last_callee_saving_instruction);
@@ -4309,6 +4316,8 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 		//Make use of the total stack frame size to recompute all of these offsets
 		recompute_stack_passed_parameter_region_offsets(&(function->stack_passed_parameters), total_stack_frame_size);
 
+
+		//TODO
 	}
 }
 
