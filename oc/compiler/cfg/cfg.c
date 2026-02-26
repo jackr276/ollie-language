@@ -5628,8 +5628,26 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			result_package.final_block = current_block;
 		}
 
+		//What is the final assignee
+		three_addr_var_t* final_assignee = package.assignee;
+
+		/**
+		 * If we gave back a memory address var, there will be no associated assignment.
+		 * Let's do the assignment now
+		 */
+		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+			//Emit the assignment
+			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+
+			//Add it into the block
+			add_statement(current_block, assignment_instruction);
+
+			//This now is the final assignee
+			final_assignee = assignment_instruction->assignee;
+		}
+
 		//Add this final result into our parameter results list
-		dynamic_array_add(&function_parameter_results, package.assignee);
+		dynamic_array_add(&function_parameter_results, final_assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
@@ -5909,8 +5927,26 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			result_package.final_block = current_block;
 		}
 
+		//What is the final assignee
+		three_addr_var_t* final_assignee = package.assignee;
+
+		/**
+		 * If we gave back a memory address var, there will be no associated assignment.
+		 * Let's do the assignment now
+		 */
+		if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+			//Emit the assignment
+			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
+
+			//Add it into the block
+			add_statement(current_block, assignment_instruction);
+
+			//This now is the final assignee
+			final_assignee = assignment_instruction->assignee;
+		}
+
 		//Add this final result into our parameter results list
-		dynamic_array_add(&function_parameter_results, package.assignee);
+		dynamic_array_add(&function_parameter_results, final_assignee);
 
 		//And move up
 		param_cursor = param_cursor->next_sibling;
