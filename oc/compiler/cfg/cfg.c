@@ -8971,123 +8971,68 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
 		/**
-		 * First option: this parameter is *not* passed via the stack. In this case, we need to either
-		 * emit the store logic(if it's memory address is going to be taken) or just emit the parameter aliasing
+		 * Parameter aliasing:
+		 *
+		 * To avoid any issues with precoloring interference way down the line
+		 * in the register allocator, we will do a temp assignment/aliasing
+		 * of all non-stack function parameters. This works something like this
+		 *
+		 * Parameter x:
+		 *
+		 * <function_start>
+		 * 		x_alias <- x;
+		 *
+		 * 	<use of x>
+		 * 		y <- x(replaced with x_alias) + 3;
+		 *
+		 *
+		 * 	This allows us to avoid the need to spill function parameter variables. If this
+		 * 	turns out to not be needed, then the coalescing subsystem inside of the register
+		 * 	allocator will simply knock out the top assignment as if it was never there
 		 */
-		if(parameter->passed_by_stack == FALSE){
+		if(parameter->stack_variable == FALSE){
+			//Create the aliased variable
+			symtab_variable_record_t* alias = create_parameter_alias_variable(parameter, variable_symtab, increment_and_get_temp_id());
+
+			//Very important that we emit this first for the below reason
+			three_addr_var_t* parameter_var = emit_var(parameter);
+
+			//Emit the alias that we're assigning to
+			three_addr_var_t* alias_var = emit_var(alias);
+
 			/**
-			 * Parameter aliasing:
-			 *
-			 * To avoid any issues with precoloring interference way down the line
-			 * in the register allocator, we will do a temp assignment/aliasing
-			 * of all non-stack function parameters. This works something like this
-			 *
-			 * Parameter x:
-			 *
-			 * <function_start>
-			 * 		x_alias <- x;
-			 *
-			 * 	<use of x>
-			 * 		y <- x(replaced with x_alias) + 3;
-			 *
-			 *
-			 * 	This allows us to avoid the need to spill function parameter variables. If this
-			 * 	turns out to not be needed, then the coalescing subsystem inside of the register
-			 * 	allocator will simply knock out the top assignment as if it was never there
+			 * Flag that the parameter does have this alias. Note that once we do this, any time
+			 * emit_var() is called on the parameter, the alias will be used instead so the order
+			 * here is very important. Once this is done - there is no going back
 			 */
-			if(parameter->stack_variable == FALSE){
-				//Create the aliased variable
-				symtab_variable_record_t* alias = create_parameter_alias_variable(parameter, variable_symtab, increment_and_get_temp_id());
+			parameter->alias = alias;
 
-				//Very important that we emit this first for the below reason
-				three_addr_var_t* parameter_var = emit_var(parameter);
+			//Emit the assignment here
+			instruction_t* alias_assignment = emit_assignment_instruction(alias_var, parameter_var);
 
-				//Emit the alias that we're assigning to
-				three_addr_var_t* alias_var = emit_var(alias);
+			//Counts as a use for the parameter
+			add_used_variable(function_entry_block, parameter_var);
+			add_assigned_variable(function_entry_block, alias_var);
 
-				/**
-				 * Flag that the parameter does have this alias. Note that once we do this, any time
-				 * emit_var() is called on the parameter, the alias will be used instead so the order
-				 * here is very important. Once this is done - there is no going back
-				 */
-				parameter->alias = alias;
-
-				//Emit the assignment here
-				instruction_t* alias_assignment = emit_assignment_instruction(alias_var, parameter_var);
-
-				//Counts as a use for the parameter
-				add_used_variable(function_entry_block, parameter_var);
-				add_assigned_variable(function_entry_block, alias_var);
-
-				//Now add the statement in
-				add_statement(function_entry_block, alias_assignment);
-				
-			} else {
-				//Add this variable onto the stack now, since we know it is not already on it
-				parameter->stack_region = create_stack_region_for_type(&(current_function->local_stack), parameter->type_defined_as);
-
-				//Copy the type over here
-				three_addr_var_t* parameter_var = emit_memory_address_var(parameter);
-
-				//Now we'll need to do our initial load
-				instruction_t* store_code = emit_store_ir_code(parameter_var, emit_var(parameter), parameter->type_defined_as);
-
-				//Bookkeeping here
-				add_used_variable(function_entry_block, store_code->op1);
-				add_used_variable(function_entry_block, store_code->assignee);
-
-				//Add it into the starting block
-				add_statement(function_entry_block, store_code);
-			}
-
-		/**
-		 * Otherwise, this parameter *is* coming to us via the stack. In this case, we will need to load
-		 * a local copy(because remember, we are copying here, these stack params are destroyed once the function
-		 * returns) into a register if possible. The only exception to this is if the given variables are themselves
-		 * stack variables whose memory address will be taken. In that case, we will just leave them be
-		 */
+			//Now add the statement in
+			add_statement(function_entry_block, alias_assignment);
+			
 		} else {
-			//No matter what, all stack-passed-params must have a stack region associated with them
-			stack_region_t* stack_passing_region = parameter->stack_region;
+			//Add this variable onto the stack now, since we know it is not already on it
+			parameter->stack_region = create_stack_region_for_type(&(current_function->local_stack), parameter->type_defined_as);
 
-			//TODO - this creates a TON of interference. Really it's not a plausible solution unfortunately
+			//Copy the type over here
+			three_addr_var_t* parameter_var = emit_memory_address_var(parameter);
 
-			//Simplest case - this is not a stack variable
-			/*
-			if(parameter->stack_variable == FALSE){
-				//Create the aliased variable
-				symtab_variable_record_t* alias = create_parameter_alias_variable(parameter, variable_symtab, increment_and_get_temp_id());
+			//Now we'll need to do our initial load
+			instruction_t* store_code = emit_store_ir_code(parameter_var, emit_var(parameter), parameter->type_defined_as);
 
-				//Very important that we emit this first for the below reason
-				three_addr_var_t* parameter_var = emit_var(parameter);
+			//Bookkeeping here
+			add_used_variable(function_entry_block, store_code->op1);
+			add_used_variable(function_entry_block, store_code->assignee);
 
-				//Emit the alias that we're assigning to
-				three_addr_var_t* alias_var = emit_var(alias);
-
-				 * Flag that the parameter does have this alias. Note that once we do this, any time
-				 * emit_var() is called on the parameter, the alias will be used instead so the order
-				 * here is very important. Once this is done - there is no going back
-				parameter->alias = alias;
-
-				//The offset constant
-				//
-				//UPDATE ME THIS IS TEMP
-				three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(stack_passing_region->base_address, u64);
-
-				//Emit the assignment here
-				instruction_t* alias_assignment = emit_load_with_constant_offset_ir_code(alias_var, stack_pointer_variable, offset_constant, parameter->type_defined_as);
-
-				//Counts as a use
-				add_assigned_variable(function_entry_block, alias_var);
-
-				//Now add the statement in
-				add_statement(function_entry_block, alias_assignment);
-
-			} else {
-				//TODO FLESH OUT
-
-			}
-		*/
+			//Add it into the starting block
+			add_statement(function_entry_block, store_code);
 		}
 	}
 }
