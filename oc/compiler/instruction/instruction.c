@@ -858,16 +858,28 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	//Add into here for memory management
 	dynamic_array_add(&emitted_vars, emitted_var);
 
-	//If we have an aliased variable(almost exclusively function
-	//parameters), we will instead emit the alias of that variable instead
-	//of the variable itself
+	/**
+	 * If we have an aliased variable(almost exclusively function
+	 * parameters), we will instead emit the alias of that variable instead
+	 * of the variable itself
+	 */
 	if(var->alias != NULL){
 		var = var->alias;
 	}
 
-	//This is a memory address variable. We will flag this for special
-	//printing
-	emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
+	/**
+	 * We will need to consider things differently whether or not this variable
+	 * is passed via a parameter stack or not. If it is, then we need to 
+	 * flag this as a special kind of variable
+	 */
+	if(var->passed_by_stack == FALSE){
+		//This is a memory address variable. We will flag this for special printing
+		emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
+
+	} else {
+		//Flag that this is not a regular memory address - it is a stack memory address
+		emitted_var->variable_type = VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS;
+	}
 
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = var->type_defined_as;
@@ -1727,16 +1739,20 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 					//Print out it's temp var number
 					fprintf(fl, "t%d", variable->temp_var_number);
 					break;
+
 				case VARIABLE_TYPE_NON_TEMP:
 					//Print out the SSA generation along with the variable
 					fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
 					break;
+
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
 					fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
 					break;
+
 				case VARIABLE_TYPE_FUNCTION_ADDRESS:
 					fprintf(fl, "%s", variable->associated_memory_region.rip_relative_function->func_name.string);
 					break;
+					
 				case VARIABLE_TYPE_MEMORY_ADDRESS:
 					if(variable->linked_var != NULL){
 						//Print out the normal version, plus the MEM<> wrapper
@@ -1746,6 +1762,14 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 					}
 
 					break;
+
+				case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+					if(variable->linked_var != NULL){
+						//Print out the normal version, plus the MEM<> wrapper
+						fprintf(fl, "PARAMETER_MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
+					} else {
+						fprintf(fl, "PARAMETER_MEM<t%d>", variable->temp_var_number);
+					}
 			}
 
 			break;

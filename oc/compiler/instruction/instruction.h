@@ -58,6 +58,8 @@ typedef enum {
 	VARIABLE_TYPE_TEMP,
 	VARIABLE_TYPE_NON_TEMP,
 	VARIABLE_TYPE_MEMORY_ADDRESS,
+	//Specialized memory address for a stack passed parameter
+	VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS,
 	VARIABLE_TYPE_LOCAL_CONSTANT,
 	VARIABLE_TYPE_FUNCTION_ADDRESS, //For rip-relative function pointer loads
 } variable_type_t;
