@@ -9017,7 +9017,12 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 			//Now add the statement in
 			add_statement(function_entry_block, alias_assignment);
 			
-		} else {
+		/**
+		 * Otherwise, if we have a stack variable *and* it's not been passed
+		 * along by the stack, we need to create a stack region for it. It is critical
+		 * that we only do this if this is *not* passed via the stack
+		 */
+		} else if(parameter->passed_by_stack == FALSE){
 			//Add this variable onto the stack now, since we know it is not already on it
 			parameter->stack_region = create_stack_region_for_type(&(current_function->local_stack), parameter->type_defined_as);
 
