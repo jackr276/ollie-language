@@ -4229,47 +4229,40 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			//Emit the stack deallocation statement
 			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
 
-			//Now remember, there will be a "ret" statement here always, so we need to push past that initially
-			instruction_t* return_statement = predecessor->exit_statement;
-			instruction_t* callee_saving = return_statement->previous_statement;
+			/**
+			 * We need to get this deallocation to happen right after we're done returning/callee-saving
+			 *
+			 *
+			 * ....
+			 * <Needs to go here>
+			 * ret 
+			 *
+			 * ....
+			 * <Needs to go here>
+			 * pop %r9
+			 * pop %r11
+			 * ret
+			 *
+			 * So in reality we just need to get a pointer to the last statement that either is a "ret" or is callee-saving
+			 * logic
+			 */
+			instruction_t* last_callee_saving_instruction = predecessor->exit_statement;
 
-			//Keep going so long as we aren't NULL
-			while(callee_saving != NULL){
-				if(callee_saving->is_callee_saving_instruction == FALSE){
+			/**
+			 * Keep crawling upwards so long as:
+			 * 	1.) we're not going to run into a NULL statement
+			 * 	2.) the previous statement is still some callee saving logic(pop instructions)
+			 */
+			while(last_callee_saving_instruction->previous_statement != NULL
+					&& last_callee_saving_instruction->previous_statement->is_callee_saving_instruction == TRUE){
 
-				}
-
+				//Bump it up
+				last_callee_saving_instruction = last_callee_saving_instruction->previous_statement;
 			}
 
-
-			//If this is not NULL, then our goal is to get a pointer to the very *last* 
-			//callee saving statement
-			if(callee_saving != NULL){
-				//Keep going
-				while(TRUE){
-					//If the previous guy is NULL then we're already at the top
-					if(callee_saving->previous_statement == NULL){
-						break;
-					}
-
-					//If the statement before this is not callee saving, we're also where we need to be
-					if(callee_saving->previous_statement->is_callee_saving_instruction == FALSE){
-						break;
-					}
-
-					//Otherwise keep pushing it up
-					callee_saving = callee_saving->previous_statement;
-				}
-
-				//Once we get down here, we have a pointer to the instruction that needs to come after
-				//the stack deallocation, so we will add it before
-				insert_instruction_before_given(stack_deallocation, callee_saving);
-
-			//This means that we have a return statement at the end only. In this case we'll just
-			//insert before the return and get out
-			} else {
-				insert_instruction_before_given(stack_deallocation, return_statement);
-			}
+			//By the time we get down here, we should have a pointer to either the ret statement *or* the very
+			//last callee saving statement(pop inst). Our stack deallocator goes before this
+			insert_instruction_before_given(stack_deallocation, last_callee_saving_instruction);
 		}
 	}
 }
