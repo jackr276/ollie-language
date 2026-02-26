@@ -4164,6 +4164,22 @@ static void insert_callee_saving_logic(cfg_t* cfg, basic_block_t* function_entry
 
 
 /**
+ * Now that we are done spilling, we need to insert all of the stack logic,
+ * including additions and subtractions, into the functions. We also need
+ * to insert pushing of any/all callee saved and caller saved registers to maintain
+ * our calling convention
+ */
+static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+	//We'll first insert the caller saved logic. This logic has the potential to
+	//generate stack allocations for XMM registers so it needs to come first
+	insert_caller_saved_register_logic(function_entry_block);
+
+	//Then we'll do all callee saving
+	insert_callee_saving_logic(cfg, function_entry_block, function_exit_block);
+}
+
+
+/**
  * Now that we've done any spilling that we need to do, we'll need to finalize the
  * local stack for this function. In addition to that, we're also going to need to 
  * finalize the stack passed parameters(if there are any) because those values
@@ -4216,36 +4232,44 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			//Get the predecessor out
 			basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
 
-			//Keep a pointer to where our stack deallocation has to go
-			instruction_t* before_callee_saving = predecessor->exit_statement;
-
-			//Now let's hunt through to get passed any stack allocation statements
-			while(before_callee_saving->is_callee_saving_instruction == TRUE){
-				before_callee_saving = before_callee_saving->previous_statement;
-			}
-
 			//Emit the stack deallocation statement
 			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
 
-			insert_instruction_after_given(stack_deallocation, before_callee_saving);
+			//Now remember, there will be a "ret" statement here always, so we need to push past that initially
+			instruction_t* return_statement = predecessor->exit_statement;
+			instruction_t* callee_saving = return_statement->previous_statement;
+
+			//If this is not NULL, then our goal is to get a pointer to the very *last* 
+			//callee saving statement
+			if(callee_saving != NULL){
+				//Keep going
+				while(TRUE){
+					//If the previous guy is NULL then we're already at the top
+					if(callee_saving->previous_statement == NULL){
+						break;
+					}
+
+					//If the statement before this is not callee saving, we're also where we need to be
+					if(callee_saving->previous_statement->is_callee_saving_instruction == FALSE){
+						break;
+					}
+
+					//Otherwise keep pushing it up
+					callee_saving = callee_saving->previous_statement;
+				}
+
+				//Once we get down here, we have a pointer to the instruction that needs to come after
+				//the stack deallocation, so we will add it before
+				insert_instruction_before_given(stack_deallocation, callee_saving);
+
+			//This means that we have a return statement at the end only. In this case we'll just
+			//insert before the return and get out
+			} else {
+				insert_instruction_before_given(stack_deallocation, return_statement);
+			}
+
 		}
 	}
-}
-
-
-/**
- * Now that we are done spilling, we need to insert all of the stack logic,
- * including additions and subtractions, into the functions. We also need
- * to insert pushing of any/all callee saved and caller saved registers to maintain
- * our calling convention
- */
-static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
-	//We'll first insert the caller saved logic. This logic has the potential to
-	//generate stack allocations for XMM registers so it needs to come first
-	insert_caller_saved_register_logic(function_entry_block);
-
-	//Then we'll do all callee saving
-	insert_callee_saving_logic(cfg, function_entry_block, function_exit_block);
 }
 
 
@@ -4676,7 +4700,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 * how large the stack frame of this function is. This helper function will handle
 	 * all of that
 	 */
-	finalize_local_and_parameter_stack_logic(cfg, function_entry);
+	finalize_local_and_parameter_stack_logic(cfg, function_entry, function_exit);
 }
 
 
