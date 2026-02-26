@@ -4197,16 +4197,12 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
  * how large the stack frame of this function is. This helper function will handle
  * all of that
  */
-static inline void finalize_local_and_parameter_stacks(cfg_t* cfg){
-	//Run through every function entry point in the CFG
-	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Get the entry block out
-		basic_block_t* current_function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+static inline void finalize_local_and_parameter_stacks(cfg_t* cfg, basic_block_t* function_entry){
+	//Extract what function this is
+	symtab_function_record_t* function = function_entry->function_defined_in;
 
-		//Extract the function out too
-		symtab_function_record_t* function = current_function_entry->function_defined_in;
-
-	}
+	//The first thing that we'll want to do is align the local stack
+	align_stack_data_area(&(function->local_stack));
 
 }
 
@@ -4230,7 +4226,7 @@ static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry
 /**
  * Perform our function level allocation process
  */
-static void allocate_registers_for_function(compiler_options_t* options, basic_block_t* function_entry, basic_block_t* function_exit){
+static void allocate_registers_for_function(compiler_options_t* options, cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
 	u_int8_t debug_printing = options->enable_debug_printing;
@@ -4631,8 +4627,18 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	//Destroy both of these now that we're done
 	dynamic_array_dealloc(&general_purpose_live_ranges);
 	dynamic_array_dealloc(&sse_live_ranges);
-	
 
+	/**
+	 * STEP 8: function local stack alignment and stack passed parameter offset updates
+	 *
+	 * Now that we've done any spilling that we need to do, we'll need to finalize the
+	 * local stack for this function. In addition to that, we're also going to need to 
+	 * finalize the stack passed parameters(if there are any) because those values
+	 * will need to have their stack offsets modified if we did anything to change
+	 * how large the stack frame of this function is. This helper function will handle
+	 * all of that
+	 */
+	finalize_local_and_parameter_stacks(cfg, function_entry);
 
 	/**
 	 * STEP 9: caller/callee saving logic
@@ -4643,10 +4649,8 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	 *
 	 * NOTE: We cannot do this at the individual function step because it does require
 	 * that we have all functions completely allocated before going forward.
-	 *
-	 * TODO MOVE TO PER-FUNCTION
-	*/
-	insert_saving_logic(cfg);
+	 */
+	insert_saving_logic(cfg, function_entry, function_exit);
 }
 
 
@@ -4679,26 +4683,8 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 		basic_block_t* function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
 
 		//Invoke the function-level allocator
-		allocate_registers_for_function(options, function_entry, function_exit);
+		allocate_registers_for_function(options, cfg, function_entry, function_exit);
 	}
-
-	//Align it
-	align_stack_data_area(area);
-
-	/**
-	 * STEP 8: function local stack alignment and stack passed parameter offset updates
-	 *
-	 * Now that we've done any spilling that we need to do, we'll need to finalize the
-	 * local stack for this function. In addition to that, we're also going to need to 
-	 * finalize the stack passed parameters(if there are any) because those values
-	 * will need to have their stack offsets modified if we did anything to change
-	 * how large the stack frame of this function is. This helper function will handle
-	 * all of that
-	 *
-	 * TODO MOVE TO PER-FUNCTION
-	 */
-	finalize_local_and_parameter_stacks(cfg);
-
 
 	/**
 	 * STEP 10: final cleanup pass
