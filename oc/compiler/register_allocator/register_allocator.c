@@ -4073,8 +4073,7 @@ static inline void insert_caller_saved_register_logic(basic_block_t* function_en
 
 
 /**
- * This function handles all callee saving logic for each function that we have on top off emitting
- * the stack allocation and deallocation statements that we need for each function
+ * This function handles all callee saving logic for each function that we have
  *
  * NOTE: since all SSE registers are caller-saved, we actually don't need to worry about any SSE registers here because
  * they will all be handled by the caller anyway
@@ -4087,12 +4086,6 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	
 	//Grab the function record out now too
 	symtab_function_record_t* function = function_entry->function_defined_in;
-
-	//We'll also need it's stack data area
-	stack_data_area_t* area = &(function_entry->function_defined_in->local_stack);
-
-	//Grab the total size out
-	u_int32_t total_size = area->total_size;
 
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
@@ -4125,21 +4118,6 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		}
 	}
 
-	//If we have a total size to emit, we'll add it in here
-	if(total_size != 0){
-		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
-		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
-		insert_instruction_before_given(stack_allocation, entry_instruction);
-
-		//If the entry instruction was the function's leader statement, then this now will be the leader statement
-		if(entry_instruction == function_entry->leader_statement){
-			function_entry->leader_statement = entry_instruction;
-		}
-	}
-
-
 	//Now that we've added all of the callee saving logic at the function entry, we'll need to
 	//go through and add it at the exit(s) as well. Note that we're given the function exit block
 	//as an input value here
@@ -4148,16 +4126,6 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	for(u_int16_t i = 0; i < function_exit->predecessors.current_index; i++){
 		//Grab the given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
-
-		//If the area has a larger total size than 0, we'll need to add in the deallocation
-		//before every return statement
-		if(total_size > 0){
-			//Emit the stack deallocation statement
-			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-			//We will insert this right before the very last statement in each predecessor
-			insert_instruction_before_given(stack_deallocation, predecessor->exit_statement);
-		}
 
 		//Now we'll go through the registers in the reverse order. This time, when we hit one that
 		//is callee-saved and used, we'll emit the push instruction and insert it directly before
@@ -4197,12 +4165,52 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
  * how large the stack frame of this function is. This helper function will handle
  * all of that
  */
-static inline void finalize_local_and_parameter_stacks(cfg_t* cfg, basic_block_t* function_entry){
+static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_block_t* function_entry){
 	//Extract what function this is
 	symtab_function_record_t* function = function_entry->function_defined_in;
 
 	//The first thing that we'll want to do is align the local stack
 	align_stack_data_area(&(function->local_stack));
+
+	//TODO UPDATE PARAM STACK
+	
+
+	//TODO INSERT ALL STACK SAVING
+
+	//We'll also need it's stack data area
+	stack_data_area_t* area = &(function_entry->function_defined_in->local_stack);
+
+	//Grab the total size out
+	u_int32_t total_size = area->total_size;
+
+
+	//If we have a total size to emit, we'll add it in here
+	if(total_size != 0){
+		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
+		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
+		insert_instruction_before_given(stack_allocation, entry_instruction);
+
+		//If the entry instruction was the function's leader statement, then this now will be the leader statement
+		if(entry_instruction == function_entry->leader_statement){
+			function_entry->leader_statement = entry_instruction;
+		}
+	}
+
+
+
+
+
+		//If the area has a larger total size than 0, we'll need to add in the deallocation
+		//before every return statement
+		if(total_size > 0){
+			//Emit the stack deallocation statement
+			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
+
+			//We will insert this right before the very last statement in each predecessor
+			insert_instruction_before_given(stack_deallocation, predecessor->exit_statement);
+		}
 
 }
 
@@ -4219,7 +4227,7 @@ static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry
 	insert_caller_saved_register_logic(function_entry_block);
 
 	//Then we'll do all callee saving
-	insert_stack_and_callee_saving_logic(cfg, function_entry_block, function_exit_block);
+	insert_callee_saving_logic(cfg, function_entry_block, function_exit_block);
 }
 
 
@@ -4629,19 +4637,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	dynamic_array_dealloc(&sse_live_ranges);
 
 	/**
-	 * STEP 8: function local stack alignment and stack passed parameter offset updates
-	 *
-	 * Now that we've done any spilling that we need to do, we'll need to finalize the
-	 * local stack for this function. In addition to that, we're also going to need to 
-	 * finalize the stack passed parameters(if there are any) because those values
-	 * will need to have their stack offsets modified if we did anything to change
-	 * how large the stack frame of this function is. This helper function will handle
-	 * all of that
-	 */
-	finalize_local_and_parameter_stacks(cfg, function_entry);
-
-	/**
-	 * STEP 9: caller/callee saving logic
+	 * STEP 8: caller/callee saving logic
 	 *
 	 * Once we make it down here, we have colored the entire graph successfully. But,
 	 * we still need to insert any caller/callee saving logic that is needed
@@ -4651,6 +4647,18 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 * that we have all functions completely allocated before going forward.
 	 */
 	insert_saving_logic(cfg, function_entry, function_exit);
+
+	/**
+	 * STEP 9: function local stack alignment and stack passed parameter offset updates
+	 *
+	 * Now that we've done any spilling that we need to do, we'll need to finalize the
+	 * local stack for this function. In addition to that, we're also going to need to 
+	 * finalize the stack passed parameters(if there are any) because those values
+	 * will need to have their stack offsets modified if we did anything to change
+	 * how large the stack frame of this function is. This helper function will handle
+	 * all of that
+	 */
+	finalize_local_and_parameter_stack_logic(cfg, function_entry);
 }
 
 
@@ -4675,7 +4683,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 
 	//Run through every function entry block individually and invoke the allocator on
 	//all of them separately
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the given function entry
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
