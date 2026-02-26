@@ -4221,12 +4221,6 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
 		insert_instruction_before_given(stack_allocation, after_stack_allocation);
 
-		//If the entry instruction was the function's leader statement, then this now will be the leader statement
-		//TODO DO WE NEED?
-		if(after_stack_allocation == function_entry->leader_statement){
-			function_entry->leader_statement = after_stack_allocation;
-		}
-
 		//Now we need to go through every exit block and emit the stack deallocation
 		for(u_int32_t i = 0; i < function_exit->predecessors.current_index; i++){
 			//Get the predecessor out
@@ -4238,6 +4232,15 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			//Now remember, there will be a "ret" statement here always, so we need to push past that initially
 			instruction_t* return_statement = predecessor->exit_statement;
 			instruction_t* callee_saving = return_statement->previous_statement;
+
+			//Keep going so long as we aren't NULL
+			while(callee_saving != NULL){
+				if(callee_saving->is_callee_saving_instruction == FALSE){
+
+				}
+
+			}
+
 
 			//If this is not NULL, then our goal is to get a pointer to the very *last* 
 			//callee saving statement
@@ -4267,7 +4270,6 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			} else {
 				insert_instruction_before_given(stack_deallocation, return_statement);
 			}
-
 		}
 	}
 }
