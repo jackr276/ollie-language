@@ -4275,6 +4275,11 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 				last_callee_saving_instruction = last_callee_saving_instruction->previous_statement;
 			}
 
+
+			//TODO IF WE HAVE LOCAL SAVING HERE WE SHOULD COMBINE STACK ALLOCATIONS
+			//
+			//SEE MORE_THAN_6_PARAMS_WITH_STACK.ol
+
 			//By the time we get down here, we should have a pointer to either the ret statement *or* the very
 			//last callee saving statement(pop inst). Our stack deallocator goes before this
 			insert_instruction_before_given(stack_deallocation, last_callee_saving_instruction);
