@@ -4794,6 +4794,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 		case FLOAT_CONST:
 		case STR_CONST:
 		case FUNC_CONST:
+		case STACK_PASSED_PARAM_OFFSET:
 			printf("Fatal internal compiler error: string, function pointer, f32 and f64 constants may not be emitted directly\n");
 			exit(1);
 		//Some very weird error here
@@ -4803,6 +4804,30 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	}
 	
 	//Once all that is done, we can leave
+	return constant;
+}
+
+
+/**
+ * Emit a stack passed parameter offset constant
+ */
+three_addr_const_t* emit_stack_passed_parameter_offset_constant(stack_region_t* region, generic_type_t* type) {
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_consts, constant);
+
+	//This is a special kind of constant
+	constant->const_type = STACK_PASSED_PARAM_OFFSET;
+
+	//Store the type as well
+	constant->type = type;
+
+	//And the region
+	constant->constant_value.parameter_passed_stack_region = region;
+
+	//Give this back
 	return constant;
 }
 

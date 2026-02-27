@@ -522,6 +522,11 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type);
 
 /**
+ * Emit a stack passed parameter offset constant
+ */
+three_addr_const_t* emit_stack_passed_parameter_offset_constant(stack_region_t* region, generic_type_t* type);
+
+/**
  * Emit a push instruction. We only have one kind of pushing - quadwords - we don't
  * deal with getting granular when pushing
  */
