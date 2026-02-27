@@ -1020,14 +1020,14 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 *
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT:
+					//op1_const is our offset
+					instruction->op1_const = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
+
 					//Turn it into a LEA
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
 
 					//Op1 becomes that stack pointer
 					instruction->op1 = stack_pointer_variable;
-
-					//And op1_const is our offset
-					instruction->op1_const = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
 
 					//This is a lea with an offset only
 					instruction->lea_statement_type = OIR_LEA_TYPE_OFFSET_ONLY;
