@@ -4180,6 +4180,23 @@ static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry
 
 
 /**
+ * Individual handling for the stack passed param offset constant. As noted in other places,
+ * we will need to update the constant to reflect the value of the stack region's offset
+ * plus any adjustments that we may have made along the way
+ */
+static inline void handle_stack_passed_param_constant(three_addr_const_t* stack_passed_offset){
+	//Extract the stack region
+	stack_region_t* region = stack_passed_offset->constant_value.parameter_passed_stack_region;
+
+	//These are always U64 types
+	stack_passed_offset->const_type = U64;
+
+	//The actual value is the parameter's base address plus any adjustments that have been made
+	stack_passed_offset->constant_value.unsigned_long_constant = region->stack_passed_parameter_base_address + stack_passed_offset->constant_adjustment;
+}
+
+
+/**
  * Once we are done with all of our stack updates, we need to go through and update all
  * of the stack passed parameter offsets. Luckily, these are conveniently stored for
  * us in special constant types called STACK_PASSED_PARAM_OFFSET constants. These constants
@@ -4197,7 +4214,22 @@ static inline void update_stack_passed_parameter_offsets(symtab_function_record_
 
 		//For every instruction
 		while(cursor != NULL){
+			//Handle the vase where the immediate source needs updating
+			if(cursor->source_immediate != NULL	
+				&& cursor->source_immediate->const_type == STACK_PASSED_PARAM_OFFSET){
 
+				//Let the helper do it
+				handle_stack_passed_param_constant(cursor->source_immediate);
+
+			//Otherwise we could also have this case
+			} else if(cursor->offset != NULL
+						&& cursor->offset->const_type == STACK_PASSED_PARAM_OFFSET){
+
+				//Let the helper do it
+				handle_stack_passed_param_constant(cursor->offset);
+			} 
+
+			//Push along to the next value
 			cursor = cursor->next_statement;
 		}
 	}
