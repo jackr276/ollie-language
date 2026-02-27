@@ -4180,18 +4180,26 @@ static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry
 
 
 /**
- * TODO
+ * Once we are done with all of our stack updates, we need to go through and update all
+ * of the stack passed parameter offsets. Luckily, these are conveniently stored for
+ * us in special constant types called STACK_PASSED_PARAM_OFFSET constants. These constants
+ * also contain an optional slot to hold any modifications to the constant that happened throughout
+ * its lifetime
  */
 static inline void update_stack_passed_parameter_offsets(symtab_function_record_t* function){
+	//Run through every block in the function
 	for(u_int32_t i = 0; i < function->function_blocks.current_index; i++){
+		//Extract it
 		basic_block_t* block = dynamic_array_get_at(&(function->function_blocks), i);
 
+		//Now go through every instruction
+		instruction_t* cursor = block->leader_statement;
 
+		//For every instruction
+		while(cursor != NULL){
 
-
-		//TODO implement
-
-		
+			cursor = cursor->next_statement;
+		}
 	}
 }
 
