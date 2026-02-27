@@ -4180,6 +4180,24 @@ static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry
 
 
 /**
+ * TODO
+ */
+static inline void update_stack_passed_parameter_offsets(symtab_function_record_t* function){
+	for(u_int32_t i = 0; i < function->function_blocks.current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(&(function->function_blocks), i);
+
+
+
+
+		//TODO implement
+
+		
+	}
+}
+
+
+
+/**
  * Now that we've done any spilling that we need to do, we'll need to finalize the
  * local stack for this function. In addition to that, we're also going to need to 
  * finalize the stack passed parameters(if there are any) because those values
@@ -4316,8 +4334,7 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 		//Make use of the total stack frame size to recompute all of these offsets
 		recompute_stack_passed_parameter_region_offsets(&(function->stack_passed_parameters), total_stack_frame_size);
 
-
-		//TODO
+		//TODO - crawl all of the instructions and rememdiate any of the parameter passed stack addresses
 	}
 }
 
