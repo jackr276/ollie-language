@@ -1050,7 +1050,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 					//Emit the constant
-					stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
 
 					//Simplify based on what we have
 					switch(instruction->op){
@@ -1091,7 +1091,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				//need to use our special version of a lea for this in most cases
 				case THREE_ADDR_CODE_BIN_OP_STMT:
 					//Create the offset constant
-					stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+					stack_offset_constant = emit_stack_passed_parameter_offset_constant(instruction->op1->associated_memory_region.stack_region, u64);
 
 					//This is now our op1_const
 					instruction->op1_const = stack_offset_constant;

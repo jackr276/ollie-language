@@ -6213,6 +6213,10 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
  * Emit the sum of two given constants. The result will overwrite the first constant given
  *
  * NOTE: The result is always stored in the first one
+ *
+ * When we are adding constants, we need to account for the special case where we have a 
+ * stack passed memory address as a constant. This is not really a constant, but we
+ * can still use the internal "constant_adjustment" to do arithmetic here
  */
 void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
 	switch(constant1->const_type){
@@ -6541,6 +6545,47 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 
 			break;
 
+		/**
+		 * Special case with our stack passed parameter offset. We can only use the constant adjustment,
+		 * not the actual constant itself because we don't know what it is yet. We guarantee that this
+		 * will always be constant1
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_adjustment += constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_adjustment += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_adjustment += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_adjustment += constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_adjustment += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_adjustment += constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_adjustment += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_adjustment += constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_adjustment += constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
 		default:
 			printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 			exit(1);
@@ -6552,6 +6597,10 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
  * Emit the difference of two given constants. The result will overwrite the first constant given
  *
  * NOTE: The result is always stored in the first one
+ *
+ * When we are subtracting constants, we need to account for the special case where we have a 
+ * stack passed memory address as a constant. This is not really a constant, but we
+ * can still use the internal "constant_adjustment" to do arithmetic here
  */
 void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
 	switch(constant1->const_type){
@@ -6875,6 +6924,47 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 					break;
 				default:
 					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+
+			break;
+
+		/**
+		 * Special case with our stack passed parameter offset. We can only use the constant adjustment,
+		 * not the actual constant itself because we don't know what it is yet. We guarantee that this
+		 * will always be constant1
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_adjustment -= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_adjustment -= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_adjustment -= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_adjustment -= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 					exit(1);
 			}
 
