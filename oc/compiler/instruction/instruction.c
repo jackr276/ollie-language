@@ -1993,7 +1993,7 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 		 * we do register allocation. We will print it out symbolically until then
 		 */
 		case STACK_PASSED_PARAM_OFFSET:
-			fprintf(fl, "<Stack Passed Param Offset Region %d>", constant->constant_value.parameter_passed_stack_region->stack_region_id);
+			fprintf(fl, "<Stack Passed Offset Region %d>", constant->constant_value.parameter_passed_stack_region->stack_region_id);
 			break;
 
 		//To stop compiler warnings

@@ -253,6 +253,18 @@ struct three_addr_const_t{
 
 	} constant_value;
 
+	//
+	//
+	//
+	//
+	//
+	//TODO SPECIAL CASE
+	//
+	//
+	//
+	//
+	int64_t constant_adjustment;
+
 	//What kind of constant is it
 	ollie_token_t const_type;
 };
