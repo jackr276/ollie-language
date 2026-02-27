@@ -1987,6 +1987,15 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 				fprintf(fl, "'%c'", constant->constant_value.char_constant);
 			}
 			break;
+
+		/**
+		 * This special kind of constant value is going to survive until after
+		 * we do register allocation. We will print it out symbolically until then
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			fprintf(fl, "<Stack Passed Param Offset Region %d>", constant->constant_value.parameter_passed_stack_region->stack_region_id);
+			break;
+
 		//To stop compiler warnings
 		default:
 			printf("Fatal Internal Compiler Error: Attempt to print unrecognized function type");
@@ -2654,6 +2663,13 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 		case CHAR_CONST:
 			fprintf(fl, "$%d", constant->constant_value.char_constant);
 			break;
+		/**
+		 * This special kind of constant value is going to survive until after
+		 * we do register allocation. We will print it out symbolically until then
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			fprintf(fl, "<Stack Passed Param Offset Region %d>", constant->constant_value.parameter_passed_stack_region->stack_region_id);
+			break;
 		//To avoid compiler complaints
 		default:
 			printf("Fatal internal compiler error: unreachable immediate value type hit\n");
@@ -2711,6 +2727,13 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 			if(constant->constant_value.char_constant != 0){
 				fprintf(fl, "%d", constant->constant_value.char_constant);
 			}
+			break;
+		/**
+		 * This special kind of constant value is going to survive until after
+		 * we do register allocation. We will print it out symbolically until then
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			fprintf(fl, "<Stack Passed Param Offset Region %d>", constant->constant_value.parameter_passed_stack_region->stack_region_id);
 			break;
 		//To avoid compiler complaints
 		default:
