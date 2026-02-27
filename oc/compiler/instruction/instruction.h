@@ -253,16 +253,13 @@ struct three_addr_const_t{
 
 	} constant_value;
 
-	//
-	//
-	//
-	//
-	//
-	//TODO SPECIAL CASE
-	//
-	//
-	//
-	//
+	/**
+	 * We want the ability to use all of our fancy simplification tricks, but we also need to account for the ambiguity in
+	 * how stack passed parameter constants work. This is our middle ground. We can do any constant manipulation on this
+	 * adjustment integer here, then at the register allocation step, when we translate everything out of stack parameters,
+	 * we will add this adjustment to the offset that we get to maintain accuracy and keep our instruction selector simplification
+	 * viable
+	 */
 	int64_t constant_adjustment;
 
 	//What kind of constant is it
