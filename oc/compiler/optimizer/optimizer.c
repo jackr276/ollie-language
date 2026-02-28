@@ -1069,7 +1069,7 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
  * avoid us having to crawl through the entire block searching since we'll be providing the instruction where this
  * variable was last used
  */
-static void mark_and_add_definition_block_local(basic_block_t* block, instruction_t* starting_point, three_addr_var_t* variable, instruction_t* worklist[], u_int32_t* current_index){
+static void mark_and_add_definition_block_local(instruction_t* starting_point, three_addr_var_t* variable, instruction_t* worklist[], u_int32_t* current_index){
 	//If this is NULL then get out
 	if(variable == NULL){
 		return;
@@ -1156,11 +1156,16 @@ static void mark_and_add_definition_block_local(basic_block_t* block, instructio
  * NOTE: we guarantee that the end statement is a branch
  */
 static inline void mark_all_branch_related_statements(basic_block_t* block){
-	//Reset all of the marks
-	reset_marks_for_block(block);
-
 	//Guarantee that the exit statement is a branch statement
 	instruction_t* branch_statement = block->exit_statement;
+
+	//If this isn't a branch statement then leave
+	if(branch_statement->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+		return;
+	}
+
+	//Reset all of the marks
+	reset_marks_for_block(block);
 
 	/**
 	 * We can use a compile-time VLA as the worklist here. We know
@@ -1173,7 +1178,7 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 	u_int32_t worklist_current_index = 0;
 
 	//We will mark where the op1 for this branch came from
-	mark_and_add_definition_block_local(block, branch_statement, branch_statement->op1, worklist, &worklist_current_index);
+	mark_and_add_definition_block_local(branch_statement, branch_statement->op1, worklist, &worklist_current_index);
 
 	//Let's start by marking the branch statement
 	branch_statement->mark = TRUE;
@@ -1198,7 +1203,7 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Run through them all and mark them
 				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
-					mark_and_add_definition_block_local(block, current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+					mark_and_add_definition_block_local(current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
 				}
 
 				break;
@@ -1210,11 +1215,11 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition_block_local(block, current, current->op1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->op1, worklist, &worklist_current_index);
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; i < current->parameters.current_index; i++){
-					mark_and_add_definition_block_local(block, current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+					mark_and_add_definition_block_local(current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
 				}
 
 				break;
@@ -1227,19 +1232,19 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				//Add the assignee as if it was a variable itself
-				mark_and_add_definition_block_local(block, current, current->assignee, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->assignee, worklist, &worklist_current_index);
 
 				//We need to mark the place where each definition is set
-				mark_and_add_definition_block_local(block, current, current->op1, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(block, current, current->op2, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->op1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->op2, worklist, &worklist_current_index);
 
 				break;
 
 			//In all other cases, we'll just mark and add the two operands 
 			default:
 				//We need to mark the place where each definition is set
-				mark_and_add_definition_block_local(block, current, current->op1, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(block, current, current->op2, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->op1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->op2, worklist, &worklist_current_index);
 
 				break;
 		}
@@ -1393,8 +1398,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 */
 			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
 				&& is_block_only_branch(jumping_to_block) == TRUE){
-				printf("HERE\n\n\n\n\n");
 
+				printf("HERE\n");
+
+				/*
 				//Delete the jump statement in i
 				delete_statement(current->exit_statement);
 
@@ -1413,15 +1420,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 					//Add it to the current block
 					add_statement(current, copy);
 
-					//Add as assigned
-					if(copy->assignee != NULL){
-						add_assigned_variable(current, copy->assignee);
-					}
-
-					//Add these as used
-					add_used_variable(current, copy->op1);
-					add_used_variable(current, copy->op2);
-
 					//Add it over
 					current_stmt = current_stmt->next_statement;
 				}
@@ -1437,6 +1435,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 				//This counts as a change
 				changed = TRUE;
+				*/
 			}
 		}
 	}
@@ -2261,7 +2260,7 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
  */
 static void optimize_short_circuit_logic(symtab_function_record_t* function, dynamic_array_t* function_blocks){
 	//For every single block in the function
-	for(u_int16_t _ = 0; _ < function_blocks->current_index; _++){
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
@@ -2288,23 +2287,17 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
 		//Grab a statement cursor
 		instruction_t* cursor = block->exit_statement->previous_statement;
 
+		//First, we need to mark everything that is related to the branch inside of this block
+		mark_all_branch_related_statements(block);
+
 		//Store all of our eligible statements in this block. This will be done in a FIFO
 		//fashion
 		dynamic_array_t eligible_statements = dynamic_array_alloc();
 
 		//Let's run through and see if we can find a statement that's eligible for short circuiting.
 		while(cursor != NULL){
-			//Not branch ending - move on
-			//
-			//TODO UPDATE ME - we can do this without the is branch ending if we trace
-			//our way up the block starting at the branching statement
-			//
-			//
-			//
-			//TODO look at something like the instruction scheduler where we're building block dependence
-			//for a given variable. All branch statements have their op1 set to be the result of the
-			//comparison that the branch is based on. We can use this for our basis
-			if(cursor->is_branch_ending == FALSE){
+			//If this isn't marked, we don't care. Just move on
+			if(cursor->mark == FALSE){
 				cursor = cursor->previous_statement;
 				continue;
 			}
