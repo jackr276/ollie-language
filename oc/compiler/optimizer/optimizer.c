@@ -26,6 +26,17 @@ static cfg_t* cfg_reference;
 	current_index++;
 
 /**
+ * Remove an item from the stack worklist
+ */
+#define REMOVE_FROM_STACK_WORKLIST(worklist, current_index)\
+	worklist[--current_index];
+
+/**
+ * Is a stack worklist empty or not
+ */
+#define IS_STACK_WORKLIST_EMPTY(current_index) ((current_index == 0) ? TRUE : FALSE)
+
+/**
  * Is a conditional always true, always false, or unknown?
  */
 typedef enum{
@@ -1052,14 +1063,22 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 
 
 /**
+ * Mark and add the definition from within a block
+ */
+static inline void mark_and_add_definition_block_local(basic_block_t* block, three_addr_var_t* variable, instruction_t* worklist[], u_int32_t* current_index){
+
+}
+
+
+/**
  * Is a given block only a branching block?. We will be able to tell
  * by tracing our way back up the block and marking everything in the block
  * that is relied on by the branch
  *
- * NOTE: we guarantee that the end statement is a branch
+ * We are going to do this using a modified mark algorithm similar to mark and sweep. The 
+ * good thing is that we're able to keep this entire algorithm block-local
  *
- * TODO we can do this via a worklist algorithm. Run through the entire block, "mark" everything that
- * is related to the branch, and crawl the block one final time to see if there are any unmarked values
+ * NOTE: we guarantee that the end statement is a branch
  */
 static inline u_int8_t is_block_only_branch(basic_block_t* block){
 	//Guarantee that the exit statement is a branch statement
@@ -1081,8 +1100,71 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
 	//We will use this to seed the worklist
 	ADD_TO_STACK_WORKLIST(branch_statement, worklist, worklist_current_index);
 
+	//So long as the worklist isn't empty
+	while(IS_STACK_WORKLIST_EMPTY(worklist_current_index) == FALSE){
+		//Get an item off of the worklist
+		instruction_t* current = REMOVE_FROM_STACK_WORKLIST(worklist, worklist_current_index);
 
+		//Trace back to find where this value is assigned
+		switch(current->statement_type){
+			/**
+			 * Phi functions mean that stuff is coming from outside of the block, we will skip this as it's not important
+			 * to us at all for this case
+			 */
+			case THREE_ADDR_CODE_PHI_FUNC:
+				break;
 
+			/**
+			 * If we have a function call, then everything is important
+			 */
+			case THREE_ADDR_CODE_FUNC_CALL:
+				//Run through them all and mark them
+				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
+					mark_and_add_definition_block_local(block, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+				}
+
+				break;
+
+			/**
+			 * An indirect function call behaves similarly to a function call, but we'll also
+			 * need to mark it's "op1" value as important. This is the value that stores
+			 * the memory address of the function that we're calling
+			 */
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				//Mark the op1 of this function as being important
+				mark_and_add_definition_block_local(block, current->op1, worklist, &worklist_current_index);
+
+				//Run through them all and mark them
+				for(u_int16_t i = 0; i < current->parameters.current_index; i++){
+					mark_and_add_definition_block_local(block, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+				}
+
+				break;
+
+			/**
+			 * There will be special rules for store statements because we have assignees
+			 * that are not really assignees, they are more like operands
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT:
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+				//Add the assignee as if it was a variable itself
+				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
+
+				//We need to mark the place where each definition is set
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+				break;
+
+			//In all other cases, we'll just mark and add the two operands 
+			default:
+				//We need to mark the place where each definition is set
+				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+
+				break;
+		}
+	}
 }
 
 
