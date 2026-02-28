@@ -86,6 +86,24 @@ static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency,
 
 
 /**
+ * Reset all of the marked instructions for a given block
+ */
+static inline void reset_marks_for_block(basic_block_t* block){
+	//Start at the top
+	instruction_t* cursor = block->leader_statement;
+
+	//Crawl through the block
+	while(cursor != NULL){
+		//Unmark it
+		cursor->mark = FALSE;
+
+		//Go down the block by one
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
  * Run through and reset all of the marks on every instruction in a given
  * function. This is done in anticipation of us using the mark/sweep algorithm
  * again after branch optimizations
@@ -96,17 +114,8 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
 		//Block to work on
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
-		//Grab a cursor
-		instruction_t* cursor = current->leader_statement;
-
-		//Run through every statement
-		while(cursor != NULL){
-			//Reset the mark here
-			cursor->mark = FALSE;
-
-			//Bump it up
-			cursor = cursor->next_statement;
-		}
+		//Let the helper do it
+		reset_marks_for_block(current);
 	}
 }
 
@@ -1036,16 +1045,19 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 
 
 /**
- * Trace up the block to find all statements that a given statement
- * relies on
+ * Is a given block only a branching block?. We will be able to tell
+ * by tracing our way back up the block and marking everything in the block
+ * that is relied on by the branch
  *
- * TODO I bet this is why nothing is working for the last conditional. The starting
- * statement is probably never "branch ending"
+ * NOTE: we guarantee that the end statement is a branch
+ *
+ * TODO we can do this via a worklist algorithm. Run through the entire block, "mark" everything that
+ * is related to the branch, and crawl the block one final time to see if there are any unmarked values
  */
-static inline dynamic_array_t* get_all_statements_relied_on_by_parent(){
+static inline void do_all_statements_relate_to_branch(basic_block_t* block){
+
 
 }
-
 
 
 /**
@@ -1096,8 +1108,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			/**
 			 * If both targets are identical(j) then:
 			 * 	replace branch with a jump to j
-			 *
-			 * 	TODO - we actually never get here
 			 */
 			if(branch->if_block == branch->else_block){
 				//Emit a jump here instead
@@ -1166,6 +1176,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 */
 			if(jumping_to_block->leader_statement->is_branch_ending == TRUE
 				&& jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+				//TODO FIGURE OUT IF ALL STATEMENTS RELATE TO THE BRANCH
+
+
+
 				//Delete the jump statement in i
 				delete_statement(current->exit_statement);
 
