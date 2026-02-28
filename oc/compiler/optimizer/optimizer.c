@@ -1297,6 +1297,12 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
+ *
+ *
+ * 			NOTE: For this last one - we've never really seen a benefit from having it
+ * 			turned on at all. We will leave this turned *off* for now and we may
+ * 			eventually implement this later
+ *
  * 			if j is empty and ends in a conditional branch then
  * 				overwrite i's jump with a copy of j's branch
  */
@@ -1319,7 +1325,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			continue;
 		}
 
-
 		/**
 		 * If block i ends in a conditional branch
 		 */
@@ -1332,17 +1337,16 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * 	replace branch with a jump to j
 			 */
 			if(branch->if_block == branch->else_block){
-				//Emit a jump here instead
-				emit_jump(current, branch->if_block);
-
 				//Delete the branch statement afterwards 
 				delete_statement(branch);
+
+				//Emit a jump here instead
+				emit_jump(current, branch->if_block);
 
 				//This counts as a change
 				changed = TRUE;
 			}
 		}
-
 
 		/**
 		 * If block i ends in a jump to j then..
@@ -1390,52 +1394,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 				//And we're done here
 				continue;
-			}
-
-			/**
-			 * If j is empty(except for the branch) and ends in a conditional branch then
-			 * 	overwrite i's jump with a copy of j's branch
-			 */
-			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
-				&& is_block_only_branch(jumping_to_block) == TRUE){
-
-				printf("HERE\n");
-
-				/*
-				//Delete the jump statement in i
-				delete_statement(current->exit_statement);
-
-				//These are also no longer successors
-				delete_successor(current, jumping_to_block);
-
-				//Run through every statement in the jumping to block and 
-				//copy them into current
-				instruction_t* current_stmt = jumping_to_block->leader_statement;
-
-				//So long as there is more to copy
-				while(current_stmt != NULL){
-					//Copy it
-					instruction_t* copy = copy_instruction(current_stmt);
-
-					//Add it to the current block
-					add_statement(current, copy);
-
-					//Add it over
-					current_stmt = current_stmt->next_statement;
-				}
-
-				//Once we get to the very end here, we'll need to do the bookkeeping
-				//from the branch
-				basic_block_t* if_destination = jumping_to_block->exit_statement->if_block;
-				basic_block_t* else_destination = jumping_to_block->exit_statement->else_block;
-				
-				//These both count as successor
-				add_successor(current, if_destination);
-				add_successor(current, else_destination);
-
-				//This counts as a change
-				changed = TRUE;
-				*/
 			}
 		}
 	}
