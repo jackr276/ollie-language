@@ -19,6 +19,13 @@ static three_addr_var_t* instruction_pointer_variable;
 static cfg_t* cfg_reference;
 
 /**
+ * Add an item to the current stack worklist
+ */
+#define ADD_TO_STACK_WORKLIST(insertee, worklist, current_index)\
+	worklist[current_index] = insertee;\
+	current_index++;
+
+/**
  * Is a conditional always true, always false, or unknown?
  */
 typedef enum{
@@ -1054,7 +1061,26 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
  * TODO we can do this via a worklist algorithm. Run through the entire block, "mark" everything that
  * is related to the branch, and crawl the block one final time to see if there are any unmarked values
  */
-static inline void do_all_statements_relate_to_branch(basic_block_t* block){
+static inline u_int8_t is_block_only_branch(basic_block_t* block){
+	//Guarantee that the exit statement is a branch statement
+	instruction_t* branch_statement = block->exit_statement;
+
+	/**
+	 * We can use a compile-time VLA as the worklist here. We know
+	 * that the maximum number of items on the worklist at any time is 
+	 * the number of instructions inside of the block, and that value is
+	 * known to us
+	 */
+	instruction_t* worklist[block->number_of_instructions];
+	//Keep track of the current index
+	u_int32_t worklist_current_index = 0;
+
+	//Let's start by marking the branch statement
+	branch_statement->mark = TRUE;
+
+	//We will use this to seed the worklist
+	ADD_TO_STACK_WORKLIST(branch_statement, worklist, worklist_current_index);
+
 
 
 }
@@ -1174,12 +1200,8 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * If j is empty(except for the branch) and ends in a conditional branch then
 			 * 	overwrite i's jump with a copy of j's branch
 			 */
-			if(jumping_to_block->leader_statement->is_branch_ending == TRUE
-				&& jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
-				//TODO FIGURE OUT IF ALL STATEMENTS RELATE TO THE BRANCH
-
-
-
+			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
+				&& is_block_only_branch(jumping_to_block) == TRUE){
 				//Delete the jump statement in i
 				delete_statement(current->exit_statement);
 
