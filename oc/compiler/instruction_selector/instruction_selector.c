@@ -7727,56 +7727,86 @@ static void handle_load_instruction(instruction_window_t* window){
 	//Invoke the helper to handle the assignee and any edge cases
 	handle_load_instruction_type_and_destination(window);
 
-	//If we have a memory address variable(super common), we'll need to
-	//handle this now
-	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		//If this is *not* a global variable
-		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
-			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
+	/**
+	 * Handle based on what the variable type is
+	 */
+	switch(load_instruction->op1->variable_type){
+		/**
+		 * We have a regular function-local stack frame address. This is super
+		 * common and our most broad case. We will need to support global variables
+		 * as well as stack offsets in this case
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			//If this is *not* a global variable
+			if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+				//This is our stack offset, it will be needed going forward
+				int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
 
-			//If we actually have a stack offset to deal with
-			if(stack_offset != 0){
-				//Let's get the offset from this memory address
-				three_addr_const_t* offset = emit_direct_integer_or_char_constant(load_instruction->op1->linked_var->stack_region->function_local_base_address, u64);
+				//If we actually have a stack offset to deal with
+				if(stack_offset != 0){
+					//Let's get the offset from this memory address
+					three_addr_const_t* offset = emit_direct_integer_or_char_constant(load_instruction->op1->linked_var->stack_region->function_local_base_address, u64);
 
-				//We now will have something like <offset>(%rsp)
-				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					//We now will have something like <offset>(%rsp)
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-				//This will be the stack pointer
-				load_instruction->address_calc_reg1 = stack_pointer_variable;
+					//This will be the stack pointer
+					load_instruction->address_calc_reg1 = stack_pointer_variable;
 
-				//Store the offset too
-				load_instruction->offset = offset;
+					//Store the offset too
+					load_instruction->offset = offset;
 
-			//Otherwise there's no stack offset, so we're just dereferencing the
-			//stack pointer
+				//Otherwise there's no stack offset, so we're just dereferencing the
+				//stack pointer
+				} else {
+					//Change the mode
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+					
+					//Source is now just the stack pointer
+					load_instruction->source_register = stack_pointer_variable;
+				}
+
+			//Otherwise, we are loading a global variable
 			} else {
-				//Change the mode
-				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
-				
-				//Source is now just the stack pointer
-				load_instruction->source_register = stack_pointer_variable;
+				//This is going to be a global variable movement
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+
+				//The address calc reg1 is the instruction pointer
+				load_instruction->address_calc_reg1 = instruction_pointer_variable;
+
+				//The offset field holds the global var's name
+				load_instruction->rip_offset_variable = load_instruction->op1;
 			}
 
-		//Otherwise, we are loading a global variable
-		} else {
-			//This is going to be a global variable movement
-			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE;
+			break;
 
-			//The address calc reg1 is the instruction pointer
-			load_instruction->address_calc_reg1 = instruction_pointer_variable;
+		/**
+		 * Unlike a function local stack address, a stack passed parameter address
+		 * has a few more restrictions. We know that the stack offset will never be 0 due
+		 * to the way that stack passed parameters work, and we know that this will never
+		 * be a global variable
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//We now will have something like <offset>(%rsp)
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-			//The offset field holds the global var's name
-			load_instruction->rip_offset_variable = load_instruction->op1;
-		}
+			//This will be the stack pointer
+			load_instruction->address_calc_reg1 = stack_pointer_variable;
 
-	} else {
-		//This will always be a SOURCE_ONLY
-		load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+			//The offset will come directly from the stack passed parameter region
+			load_instruction->offset = emit_stack_passed_parameter_offset_constant(load_instruction->op1->associated_memory_region.stack_region, u64);
 
-		//And the op1 is our source
-		load_instruction->source_register = load_instruction->op1;
+			break;
+
+		//Most basic case is we just have a pointer or something
+		default:
+			//This will always be a SOURCE_ONLY
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_DEREF_ONLY_SOURCE;
+
+			//And the op1 is our source
+			load_instruction->source_register = load_instruction->op1;
+
+			break;
 	}
 }
 
