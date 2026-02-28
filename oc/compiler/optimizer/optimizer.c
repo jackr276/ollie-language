@@ -1064,9 +1064,79 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 
 /**
  * Mark and add the definition from within a block
+ *
+ * A small optimization that we can do is provide a "starting point" instruction to begin our search at. This will
+ * avoid us having to crawl through the entire block searching since we'll be providing the instruction where this
+ * variable was last used
  */
-static inline void mark_and_add_definition_block_local(basic_block_t* block, three_addr_var_t* variable, instruction_t* worklist[], u_int32_t* current_index){
+static void mark_and_add_definition_block_local(basic_block_t* block, instruction_t* starting_point, three_addr_var_t* variable, instruction_t* worklist[], u_int32_t* current_index){
+	//Grab a cursor
+	instruction_t* cursor = starting_point;
 
+	/**
+	 * We'll have different things to look at based 
+	 */
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_NON_TEMP:
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			//So long as this isn't NULL
+			while(cursor != NULL){
+				//If it's marked we're out of here
+				if(cursor->mark == TRUE || cursor->assignee == NULL){
+					cursor = cursor->previous_statement;
+					continue;
+				}
+
+				//Is the assignee our variable AND it's unmarked?
+				if(cursor->assignee->linked_var == variable->linked_var
+					&& cursor->assignee->ssa_generation == variable->ssa_generation){
+					//Mark the cursor
+					cursor->mark = TRUE;
+
+					//Add it to the worklist
+					ADD_TO_STACK_WORKLIST(cursor, worklist, (*current_index));
+
+					//We're done
+					return;
+				}
+
+				//Advance the statement
+				cursor = cursor->previous_statement;
+			}
+
+			break;
+
+		case VARIABLE_TYPE_TEMP:
+			//So long as this isn't NULL
+			while(cursor != NULL){
+				//If this is the case, we'll just go onto the next one
+				if(cursor->mark == TRUE || cursor->assignee == NULL){
+					cursor = cursor->previous_statement;
+					continue;
+				}
+
+				//Is the assignee our variable AND it's unmarked?
+				if(cursor->assignee->temp_var_number == variable->temp_var_number){
+					//Mark it
+					cursor->mark = TRUE;
+
+					//Add it to the worklist
+					ADD_TO_STACK_WORKLIST(cursor, worklist, (*current_index));
+
+					//We're done
+					return;
+				}
+
+				//Advance the statement
+				cursor = cursor->previous_statement;
+			}
+
+			break;
+
+		default:
+			printf("Fatal internal compiler error: attempting to mark invalid variable type\n");
+			exit(1);
+	}
 }
 
 
@@ -1094,11 +1164,11 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
 	//Keep track of the current index
 	u_int32_t worklist_current_index = 0;
 
+	//We will mark where the op1 for this branch came from
+	mark_and_add_definition_block_local(block, branch_statement, branch_statement->op1, worklist, &worklist_current_index);
+
 	//Let's start by marking the branch statement
 	branch_statement->mark = TRUE;
-
-	//We will use this to seed the worklist
-	ADD_TO_STACK_WORKLIST(branch_statement, worklist, worklist_current_index);
 
 	//So long as the worklist isn't empty
 	while(IS_STACK_WORKLIST_EMPTY(worklist_current_index) == FALSE){
@@ -1120,7 +1190,7 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Run through them all and mark them
 				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
-					mark_and_add_definition_block_local(block, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+					mark_and_add_definition_block_local(block, current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
 				}
 
 				break;
@@ -1132,11 +1202,11 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
-				mark_and_add_definition_block_local(block, current->op1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(block, current, current->op1, worklist, &worklist_current_index);
 
 				//Run through them all and mark them
 				for(u_int16_t i = 0; i < current->parameters.current_index; i++){
-					mark_and_add_definition_block_local(block, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+					mark_and_add_definition_block_local(block, current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
 				}
 
 				break;
@@ -1149,18 +1219,19 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
 			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
 			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
 				//Add the assignee as if it was a variable itself
-				mark_and_add_definition(function_blocks, stmt->assignee, &worklist);
+				mark_and_add_definition_block_local(block, current, current->assignee, worklist, &worklist_current_index);
 
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+				mark_and_add_definition_block_local(block, current, current->op1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(block, current, current->op2, worklist, &worklist_current_index);
+
 				break;
 
 			//In all other cases, we'll just mark and add the two operands 
 			default:
 				//We need to mark the place where each definition is set
-				mark_and_add_definition(function_blocks, stmt->op1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->op2, &worklist);
+				mark_and_add_definition_block_local(block, current, current->op1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(block, current, current->op2, worklist, &worklist_current_index);
 
 				break;
 		}
