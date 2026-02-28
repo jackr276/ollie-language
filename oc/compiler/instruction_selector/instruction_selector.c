@@ -7636,6 +7636,85 @@ static void handle_load_instruction_type_and_destination(instruction_window_t* w
 
 
 /**
+ * Handle the base address for a load statement in all of its forms. This includes
+ * global variables, stack variables, and plain variables as well. This is meant to
+ * be used by the lea combiner rule. It will *not* modify addressing modes and it should
+ * not be expected to give a full and complete result back. It will only modify
+ * address calc reg1 and the offset if appropriate
+ */
+static inline void handle_load_instruction_base_address(instruction_t* load_statement){
+	/**
+	 * Go based on the kind of variable that we have here
+	 */
+	switch(load_statement->op1->variable_type){
+		/**
+		 * We have a regular memory address variable(super common). We'll handle this
+		 * here
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			//If this is *not* a global variable
+			if(load_statement->op1->linked_var->membership != GLOBAL_VARIABLE){
+				//This is our stack offset, it will be needed going forward
+				int64_t stack_offset = load_statement->op1->linked_var->stack_region->function_local_base_address;
+
+				//If we actually have a stack offset to deal with. We'll store the offset constant
+				//and op1
+				if(stack_offset != 0){
+					//Emit the offset
+					load_statement->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
+
+					//This will be the stack pointer
+					load_statement->address_calc_reg1 = stack_pointer_variable;
+
+				//Otherwise there's no stack offset, so we'll just have the stack
+				//pointer
+				} else {
+					//Copy both over
+					load_statement->address_calc_reg1 = stack_pointer_variable;
+				}
+
+			/**
+			 * Otherwise, we are loading a global variable with a subsequent offset. We will need to first
+			 * load the address of said global variable, and then use that with an address calculation. We 
+			 * are not able to combine the 2 in such a way
+			 */
+			} else {
+				//Let the helper do the work
+				instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_statement->op1, instruction_pointer_variable, u64);
+
+				//Now insert this before the given instruction
+				insert_instruction_before_given(global_variable_address, load_statement);
+
+				//The destination of the global variable address will be our new address calc reg 1. 
+				//We already have the offset loaded in, so that remains unchanged
+				load_statement->address_calc_reg1 = global_variable_address->destination_register;
+			}
+
+			break;
+
+		/**
+		 * Unlike a regular memory address, a stack passed parameter address is going to come
+		 * with a few caveats. First, it will never be 0 due to the way that function calling works,
+		 * and second, it will never be global, so we can have some simpler processing here
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//Emit the offset
+			load_statement->offset = emit_stack_passed_parameter_offset_constant(load_statement->op1->associated_memory_region.stack_region, u64);
+
+			//This will be the stack pointer
+			load_statement->address_calc_reg1 = stack_pointer_variable;
+
+			break;
+
+		default:
+			//Assign over like such
+			load_statement->address_calc_reg1 = load_statement->op1;
+			break;
+	}
+}
+
+
+/**
  * Handle a load instruction. A load instruction is always converted into
  * a garden variety dereferencing move
  *
@@ -7883,85 +7962,6 @@ static void handle_load_with_variable_offset_instruction(instruction_window_t* w
 
 
 /**
- * Handle the base address for a load statement in all of its forms. This includes
- * global variables, stack variables, and plain variables as well. This is meant to
- * be used by the lea combiner rule. It will *not* modify addressing modes and it should
- * not be expected to give a full and complete result back. It will only modify
- * address calc reg1 and the offset if appropriate
- */
-static void handle_load_statement_base_address(instruction_t* load_statement){
-	/**
-	 * Go based on the kind of variable that we have here
-	 */
-	switch(load_statement->op1->variable_type){
-		/**
-		 * We have a regular memory address variable(super common). We'll handle this
-		 * here
-		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//If this is *not* a global variable
-			if(load_statement->op1->linked_var->membership != GLOBAL_VARIABLE){
-				//This is our stack offset, it will be needed going forward
-				int64_t stack_offset = load_statement->op1->linked_var->stack_region->function_local_base_address;
-
-				//If we actually have a stack offset to deal with. We'll store the offset constant
-				//and op1
-				if(stack_offset != 0){
-					//Emit the offset
-					load_statement->offset = emit_direct_integer_or_char_constant(stack_offset, i64);
-
-					//This will be the stack pointer
-					load_statement->address_calc_reg1 = stack_pointer_variable;
-
-				//Otherwise there's no stack offset, so we'll just have the stack
-				//pointer
-				} else {
-					//Copy both over
-					load_statement->address_calc_reg1 = stack_pointer_variable;
-				}
-
-			/**
-			 * Otherwise, we are loading a global variable with a subsequent offset. We will need to first
-			 * load the address of said global variable, and then use that with an address calculation. We 
-			 * are not able to combine the 2 in such a way
-			 */
-			} else {
-				//Let the helper do the work
-				instruction_t* global_variable_address = emit_global_variable_address_calculation_x86(load_statement->op1, instruction_pointer_variable, u64);
-
-				//Now insert this before the given instruction
-				insert_instruction_before_given(global_variable_address, load_statement);
-
-				//The destination of the global variable address will be our new address calc reg 1. 
-				//We already have the offset loaded in, so that remains unchanged
-				load_statement->address_calc_reg1 = global_variable_address->destination_register;
-			}
-
-			break;
-
-		/**
-		 * Unlike a regular memory address, a stack passed parameter address is going to come
-		 * with a few caveats. First, it will never be 0 due to the way that function calling works,
-		 * and second, it will never be global, so we can have some simpler processing here
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//Emit the offset
-			load_statement->offset = emit_stack_passed_parameter_offset_constant(load_statement->op1->associated_memory_region.stack_region, u64);
-
-			//This will be the stack pointer
-			load_statement->address_calc_reg1 = stack_pointer_variable;
-
-			break;
-
-		default:
-			//Assign over like such
-			load_statement->address_calc_reg1 = load_statement->op1;
-			break;
-	}
-}
-
-
-/**
  * Combine and select all cases where we have a variable offset load that can be combined
  * with a lea to form a singular instruction. This handles all cases, and performs the deletion
  * of the given lea statement at the end
@@ -7983,7 +7983,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		 */
 		case OIR_LEA_TYPE_OFFSET_ONLY:
 			//Let the helper deal with the load base address
-			handle_load_statement_base_address(variable_offset_load);
+			handle_load_instruction_base_address(variable_offset_load);
 
 			//If there are any constants to add, we'll do that now
 			if(variable_offset_load->offset != NULL){
@@ -8027,7 +8027,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		 */
 		case OIR_LEA_TYPE_INDEX_AND_SCALE:
 			//Let the helper deal with the load base address
-			handle_load_statement_base_address(variable_offset_load);
+			handle_load_instruction_base_address(variable_offset_load);
 
 			//Copy the scale over
 			variable_offset_load->lea_multiplier = lea_statement->lea_multiplier;
@@ -8069,7 +8069,7 @@ static void combine_lea_with_variable_offset_load_instruction(instruction_window
 		 */
 		case OIR_LEA_TYPE_INDEX_OFFSET_AND_SCALE:
 			//Let the helper deal with the load base address
-			handle_load_statement_base_address(variable_offset_load);
+			handle_load_instruction_base_address(variable_offset_load);
 
 			//If there are any constants to add, we'll do that now
 			if(variable_offset_load->offset != NULL){
@@ -9054,7 +9054,6 @@ static void select_instruction_patterns(instruction_window_t* window){
 			handle_not_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_LOAD_STATEMENT:
-			//Let the helper do it
 			handle_load_instruction(window);
 			break;
 		case THREE_ADDR_CODE_LOAD_WITH_CONSTANT_OFFSET:
