@@ -1070,6 +1070,11 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
  * variable was last used
  */
 static void mark_and_add_definition_block_local(basic_block_t* block, instruction_t* starting_point, three_addr_var_t* variable, instruction_t* worklist[], u_int32_t* current_index){
+	//If this is NULL then get out
+	if(variable == NULL){
+		return;
+	}
+
 	//Grab a cursor
 	instruction_t* cursor = starting_point;
 
@@ -1150,7 +1155,10 @@ static void mark_and_add_definition_block_local(basic_block_t* block, instructio
  *
  * NOTE: we guarantee that the end statement is a branch
  */
-static inline u_int8_t is_block_only_branch(basic_block_t* block){
+static inline void mark_all_branch_related_statements(basic_block_t* block){
+	//Reset all of the marks
+	reset_marks_for_block(block);
+
 	//Guarantee that the exit statement is a branch statement
 	instruction_t* branch_statement = block->exit_statement;
 
@@ -1236,6 +1244,36 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
 				break;
 		}
 	}
+}
+
+
+/**
+ * Helper function to determine if a block is entirely a branch or not. To do this, 
+ * we are going to first use the marker function to mark all statements that are
+ * related to this block's branch statement. After that, we will go through
+ * and see if everything is marked or not. If it is all marked, then we return
+ * TRUE. If it is not, then we return false
+ */
+static inline u_int8_t is_block_only_branch(basic_block_t* block){
+	//Do this first off
+	mark_all_branch_related_statements(block);
+
+	//Now let's crawl the block
+	instruction_t* cursor = block->leader_statement;
+
+	//Crawl every instruction 
+	while(cursor != NULL){
+		//One false destroys the whole thing
+		if(cursor->mark == FALSE){
+			return FALSE;
+		}
+
+		//Onto the next one
+		cursor = cursor->next_statement;
+	}
+
+	//If we get down here then it's true
+	return TRUE;
 }
 
 
@@ -1355,6 +1393,8 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 */
 			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
 				&& is_block_only_branch(jumping_to_block) == TRUE){
+				printf("HERE\n\n\n\n\n");
+
 				//Delete the jump statement in i
 				delete_statement(current->exit_statement);
 
