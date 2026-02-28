@@ -7821,63 +7821,100 @@ static void handle_load_instruction(instruction_window_t* window){
  * NOTE: we assume that the first instruction in the window is the load instruction
  */
 static void handle_load_with_constant_offset_instruction(instruction_window_t* window){
+	//Holder for down the line
+	three_addr_const_t* stack_offset;
+
 	//This is the load that we're after
 	instruction_t* load_instruction = window->instruction1;
 
 	//Handle destination assignment based on op1
 	handle_load_instruction_type_and_destination(window);
 
-	//If we have a memory address variable(super common), we'll need to
-	//handle this now
-	if(load_instruction->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-		//If this is *not* a global variable
-		if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
-			//This is our stack offset, it will be needed going forward
-			int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
+	/**
+	 * Go based on what kind of base address we are given
+	 */
+	switch(load_instruction->op1->variable_type){
+		/**
+		 * Memory address variables are the most common type that we will see here. We need
+		 * to translate these into either stack offsets or rip-relative offsets if we have a
+		 * global variable
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			//If this is *not* a global variable
+			if(load_instruction->op1->linked_var->membership != GLOBAL_VARIABLE){
+				//This is our stack offset, it will be needed going forward
+				int64_t stack_offset = load_instruction->op1->linked_var->stack_region->function_local_base_address;
 
-			//If we actually have a stack offset to deal with
-			if(stack_offset != 0){
-				//We need to sum the existing offset with the stack offset to get an accurate picture
-				sum_constant_with_raw_int64_value(load_instruction->offset, i64, stack_offset);
+				//If we actually have a stack offset to deal with
+				if(stack_offset != 0){
+					//We need to sum the existing offset with the stack offset to get an accurate picture
+					sum_constant_with_raw_int64_value(load_instruction->offset, i64, stack_offset);
 
-				//We now will have something like <offset>(%rsp)
-				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					//We now will have something like <offset>(%rsp)
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
 
-				//This will be the stack pointer
-				load_instruction->address_calc_reg1 = stack_pointer_variable;
+					//This will be the stack pointer
+					load_instruction->address_calc_reg1 = stack_pointer_variable;
 
-			//Otherwise there's no stack offset, so we're just dereferencing the
-			//stack pointer with the pre-existing offset
+				//Otherwise there's no stack offset, so we're just dereferencing the
+				//stack pointer with the pre-existing offset
+				} else {
+					//Change the mode
+					load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+					
+					//Address calc just needs the stack pointer
+					load_instruction->address_calc_reg1 = stack_pointer_variable;
+				}
+
+			//Otherwise, we are loading a global variable with a subsequent offset. We can use a special
+			//rip-relative addressing mode to make this happen in one instruction
 			} else {
-				//Change the mode
-				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
-				
-				//Address calc just needs the stack pointer
-				load_instruction->address_calc_reg1 = stack_pointer_variable;
+				//The first address calc register is the instruction pointer
+				load_instruction->address_calc_reg1 = instruction_pointer_variable;
+
+				//The global var comes from op1
+				load_instruction->rip_offset_variable = load_instruction->op1;
+
+				//The offset is already where it needs to be
+				//Now we just need to change the mode to make this work
+				load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
 			}
 
-		//Otherwise, we are loading a global variable with a subsequent offset. We can use a special
-		//rip-relative addressing mode to make this happen in one instruction
-		} else {
-			//The first address calc register is the instruction pointer
-			load_instruction->address_calc_reg1 = instruction_pointer_variable;
+			break;
 
-			//The global var comes from op1
-			load_instruction->rip_offset_variable = load_instruction->op1;
+		/**
+		 * A stack passed parameter memory address is treated differently than the regular address. We will
+		 * emit a specialized constant to handle this. Due to the way that these work, we don't need to worry
+		 * about global variables or stack offsets of 0 here
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:	
+			//Emit the stack passed parameter offset
+			stack_offset = emit_stack_passed_parameter_offset_constant(load_instruction->op1->associated_memory_region.stack_region, u64);
 
-			//The offset is already where it needs to be
-			//Now we just need to change the mode to make this work
-			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_RIP_RELATIVE_WITH_OFFSET;
-		}
+			//Add these two values together. Make sure that we're storing the result inside of the stack offset - the other way around
+			//will not work
+			add_constants(stack_offset, load_instruction->offset);
 
-	//Otherwise we aren't on the stack, it's just an offset. In that case, we'll keep the
-	//offset here and just
-	} else {
-		//This will always be a SOURCE_ONLY
-		load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+			//Now reassing the offset to be this stack offset
+			load_instruction->offset = stack_offset;
 
-		//Op1 is the only address calc needed
-		load_instruction->address_calc_reg1 = load_instruction->op1;
+			//We now will have something like <offset>(%rsp)
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+			//This will be the stack pointer
+			load_instruction->address_calc_reg1 = stack_pointer_variable;
+
+			break;
+
+		//Just some pointer with an offset - in this case we won't do anything with the stack pointer
+		default:
+			//This will always be a SOURCE_ONLY
+			load_instruction->calculation_mode = ADDRESS_CALCULATION_MODE_OFFSET_ONLY;
+
+			//Op1 is the only address calc needed
+			load_instruction->address_calc_reg1 = load_instruction->op1;
+
+			break;
 	}
 }
 
@@ -7890,6 +7927,13 @@ static void handle_load_with_constant_offset_instruction(instruction_window_t* w
  * This usually generates addressing mode expressions with registers and offsets
  *
  * NOTE: We assume that the load instruction is always the first in the window
+ *
+ *
+ *
+ *
+ *
+ *
+ * TODO IMPLEMENT
  */
 static void handle_load_with_variable_offset_instruction(instruction_window_t* window){
 	//As noted above, this is the assumption
