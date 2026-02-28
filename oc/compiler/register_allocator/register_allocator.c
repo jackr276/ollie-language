@@ -4188,8 +4188,8 @@ static inline void handle_stack_passed_param_constant(three_addr_const_t* stack_
 	//Extract the stack region
 	stack_region_t* region = stack_passed_offset->constant_value.parameter_passed_stack_region;
 
-	//These are always U64 types
-	stack_passed_offset->const_type = U64;
+	//These are always U64(unsigned long) types
+	stack_passed_offset->const_type = LONG_CONST_FORCE_U;
 
 	//The actual value is the parameter's base address plus any adjustments that have been made
 	stack_passed_offset->constant_value.unsigned_long_constant = region->stack_passed_parameter_base_address + stack_passed_offset->constant_adjustment;
@@ -4374,7 +4374,8 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 		//Make use of the total stack frame size to recompute all of these offsets
 		recompute_stack_passed_parameter_region_offsets(&(function->stack_passed_parameters), total_stack_frame_size);
 
-		//TODO - crawl all of the instructions and rememdiate any of the parameter passed stack addresses
+		//Now we'll invoke the helper to update all of our constants inside of the function
+		update_stack_passed_parameter_offsets(function);
 	}
 }
 
