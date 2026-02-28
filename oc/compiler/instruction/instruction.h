@@ -311,9 +311,6 @@ struct instruction_t{
 	ollie_token_t op;
 	//Is this operation critical?
 	u_int8_t mark;
-	//Is this operation a "branch-ending" operation. This would encompass
-	//things like if statement decisions and loop conditions
-	u_int8_t is_branch_ending;
 	//Is this a regular or inverse branch
 	u_int8_t inverse_branch;
 	//Does this branch rely on a floating point comparison? This could affect

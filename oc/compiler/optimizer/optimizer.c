@@ -19,6 +19,24 @@ static three_addr_var_t* instruction_pointer_variable;
 static cfg_t* cfg_reference;
 
 /**
+ * Add an item to the current stack worklist
+ */
+#define ADD_TO_STACK_WORKLIST(insertee, worklist, current_index)\
+	worklist[current_index] = insertee;\
+	current_index++;
+
+/**
+ * Remove an item from the stack worklist
+ */
+#define REMOVE_FROM_STACK_WORKLIST(worklist, current_index)\
+	worklist[--current_index];
+
+/**
+ * Is a stack worklist empty or not
+ */
+#define IS_STACK_WORKLIST_EMPTY(current_index) ((current_index == 0) ? TRUE : FALSE)
+
+/**
  * Is a conditional always true, always false, or unknown?
  */
 typedef enum{
@@ -86,6 +104,24 @@ static basic_block_t* basic_block_alloc(u_int32_t estimated_execution_frequency,
 
 
 /**
+ * Reset all of the marked instructions for a given block
+ */
+static inline void reset_marks_for_block(basic_block_t* block){
+	//Start at the top
+	instruction_t* cursor = block->leader_statement;
+
+	//Crawl through the block
+	while(cursor != NULL){
+		//Unmark it
+		cursor->mark = FALSE;
+
+		//Go down the block by one
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
  * Run through and reset all of the marks on every instruction in a given
  * function. This is done in anticipation of us using the mark/sweep algorithm
  * again after branch optimizations
@@ -96,17 +132,8 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
 		//Block to work on
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
-		//Grab a cursor
-		instruction_t* cursor = current->leader_statement;
-
-		//Run through every statement
-		while(cursor != NULL){
-			//Reset the mark here
-			cursor->mark = FALSE;
-
-			//Bump it up
-			cursor = cursor->next_statement;
-		}
+		//Let the helper do it
+		reset_marks_for_block(current);
 	}
 }
 
@@ -1036,27 +1063,222 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 
 
 /**
- * Delete all branching statements in the current block. We know if a statement is branching if it is 
- * marks as branch ending. 
+ * Mark and add the definition from within a block
  *
- * NOTE: This should only be called after we have identified this block as a candidate for block folding
+ * A small optimization that we can do is provide a "starting point" instruction to begin our search at. This will
+ * avoid us having to crawl through the entire block searching since we'll be providing the instruction where this
+ * variable was last used
  */
-static inline void delete_all_branching_statements(basic_block_t* block){
-	//We'll always start from the end and work our way up
-	instruction_t* current = block->exit_statement;
-	//To hold while we delete
-	instruction_t* temp;
-
-	//So long as this is NULL and it's branch ending
-	while(current != NULL && current->is_branch_ending == TRUE){
-		temp = current;
-		//Advance this
-		current = current->previous_statement;
-		//Then we delete
-		delete_statement(temp);
+static void mark_and_add_definition_block_local(instruction_t* starting_point, three_addr_var_t* variable, instruction_t* worklist[], u_int32_t* current_index){
+	//If this is NULL then get out
+	if(variable == NULL){
+		return;
 	}
 
-	//After we've gotten here we're all done
+	//Grab a cursor
+	instruction_t* cursor = starting_point;
+
+	/**
+	 * We'll have different things to look at based 
+	 */
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_NON_TEMP:
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			//So long as this isn't NULL
+			while(cursor != NULL){
+				//If it's marked we're out of here
+				if(cursor->mark == TRUE || cursor->assignee == NULL){
+					cursor = cursor->previous_statement;
+					continue;
+				}
+
+				//Is the assignee our variable AND it's unmarked?
+				if(cursor->assignee->linked_var == variable->linked_var
+					&& cursor->assignee->ssa_generation == variable->ssa_generation){
+					//Mark the cursor
+					cursor->mark = TRUE;
+
+					//Add it to the worklist
+					ADD_TO_STACK_WORKLIST(cursor, worklist, (*current_index));
+
+					//We're done
+					return;
+				}
+
+				//Advance the statement
+				cursor = cursor->previous_statement;
+			}
+
+			break;
+
+		case VARIABLE_TYPE_TEMP:
+			//So long as this isn't NULL
+			while(cursor != NULL){
+				//If this is the case, we'll just go onto the next one
+				if(cursor->mark == TRUE || cursor->assignee == NULL){
+					cursor = cursor->previous_statement;
+					continue;
+				}
+
+				//Is the assignee our variable AND it's unmarked?
+				if(cursor->assignee->temp_var_number == variable->temp_var_number){
+					//Mark it
+					cursor->mark = TRUE;
+
+					//Add it to the worklist
+					ADD_TO_STACK_WORKLIST(cursor, worklist, (*current_index));
+
+					//We're done
+					return;
+				}
+
+				//Advance the statement
+				cursor = cursor->previous_statement;
+			}
+
+			break;
+
+		default:
+			printf("Fatal internal compiler error: attempting to mark invalid variable type\n");
+			exit(1);
+	}
+}
+
+
+/**
+ * Is a given block only a branching block?. We will be able to tell
+ * by tracing our way back up the block and marking everything in the block
+ * that is relied on by the branch
+ *
+ * We are going to do this using a modified mark algorithm similar to mark and sweep. The 
+ * good thing is that we're able to keep this entire algorithm block-local
+ *
+ * NOTE: we guarantee that the end statement is a branch
+ */
+static inline void mark_all_branch_related_statements(basic_block_t* block){
+	//Guarantee that the exit statement is a branch statement
+	instruction_t* branch_statement = block->exit_statement;
+
+	//If this isn't a branch statement then leave
+	if(branch_statement->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+		return;
+	}
+
+	//Reset all of the marks
+	reset_marks_for_block(block);
+
+	/**
+	 * We can use a compile-time VLA as the worklist here. We know
+	 * that the maximum number of items on the worklist at any time is 
+	 * the number of instructions inside of the block, and that value is
+	 * known to us
+	 */
+	instruction_t* worklist[block->number_of_instructions];
+	//Keep track of the current index
+	u_int32_t worklist_current_index = 0;
+
+	//We will mark where the op1 for this branch came from
+	mark_and_add_definition_block_local(branch_statement, branch_statement->op1, worklist, &worklist_current_index);
+
+	//Let's start by marking the branch statement
+	branch_statement->mark = TRUE;
+
+	//So long as the worklist isn't empty
+	while(IS_STACK_WORKLIST_EMPTY(worklist_current_index) == FALSE){
+		//Get an item off of the worklist
+		instruction_t* current = REMOVE_FROM_STACK_WORKLIST(worklist, worklist_current_index);
+
+		//Trace back to find where this value is assigned
+		switch(current->statement_type){
+			/**
+			 * Phi functions mean that stuff is coming from outside of the block, we will skip this as it's not important
+			 * to us at all for this case
+			 */
+			case THREE_ADDR_CODE_PHI_FUNC:
+				break;
+
+			/**
+			 * If we have a function call, then everything is important
+			 */
+			case THREE_ADDR_CODE_FUNC_CALL:
+				//Run through them all and mark them
+				for(u_int32_t i = 0; i < current->parameters.current_index; i++){
+					mark_and_add_definition_block_local(current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+				}
+
+				break;
+
+			/**
+			 * An indirect function call behaves similarly to a function call, but we'll also
+			 * need to mark it's "op1" value as important. This is the value that stores
+			 * the memory address of the function that we're calling
+			 */
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				//Mark the op1 of this function as being important
+				mark_and_add_definition_block_local(current, current->op1, worklist, &worklist_current_index);
+
+				//Run through them all and mark them
+				for(u_int16_t i = 0; i < current->parameters.current_index; i++){
+					mark_and_add_definition_block_local(current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+				}
+
+				break;
+
+			/**
+			 * There will be special rules for store statements because we have assignees
+			 * that are not really assignees, they are more like operands
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT:
+			case THREE_ADDR_CODE_STORE_WITH_CONSTANT_OFFSET:
+			case THREE_ADDR_CODE_STORE_WITH_VARIABLE_OFFSET:
+				//Add the assignee as if it was a variable itself
+				mark_and_add_definition_block_local(current, current->assignee, worklist, &worklist_current_index);
+
+				//We need to mark the place where each definition is set
+				mark_and_add_definition_block_local(current, current->op1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->op2, worklist, &worklist_current_index);
+
+				break;
+
+			//In all other cases, we'll just mark and add the two operands 
+			default:
+				//We need to mark the place where each definition is set
+				mark_and_add_definition_block_local(current, current->op1, worklist, &worklist_current_index);
+				mark_and_add_definition_block_local(current, current->op2, worklist, &worklist_current_index);
+
+				break;
+		}
+	}
+}
+
+
+/**
+ * Helper function to determine if a block is entirely a branch or not. To do this, 
+ * we are going to first use the marker function to mark all statements that are
+ * related to this block's branch statement. After that, we will go through
+ * and see if everything is marked or not. If it is all marked, then we return
+ * TRUE. If it is not, then we return false
+ */
+static inline u_int8_t is_block_only_branch(basic_block_t* block){
+	//Do this first off
+	mark_all_branch_related_statements(block);
+
+	//Now let's crawl the block
+	instruction_t* cursor = block->leader_statement;
+
+	//Crawl every instruction 
+	while(cursor != NULL){
+		//One false destroys the whole thing
+		if(cursor->mark == FALSE){
+			return FALSE;
+		}
+
+		//Onto the next one
+		cursor = cursor->next_statement;
+	}
+
+	//If we get down here then it's true
+	return TRUE;
 }
 
 
@@ -1075,6 +1297,12 @@ static inline void delete_all_branching_statements(basic_block_t* block){
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
+ *
+ *
+ * 			NOTE: For this last one - we've never really seen a benefit from having it
+ * 			turned on at all. We will leave this turned *off* for now and we may
+ * 			eventually implement this later
+ *
  * 			if j is empty and ends in a conditional branch then
  * 				overwrite i's jump with a copy of j's branch
  */
@@ -1092,11 +1320,15 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 		//Grab the current block out
 		current = dynamic_array_get_at(postorder, _);
 
+		//If the exit statement is NULL then we can get out
+		if(current->exit_statement == NULL){
+			continue;
+		}
+
 		/**
 		 * If block i ends in a conditional branch
 		 */
-		if(current->exit_statement != NULL 
-			&& current->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
+		if(current->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
 			//Extract the branch statement
 			instruction_t* branch = current->exit_statement;
 
@@ -1105,8 +1337,8 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * 	replace branch with a jump to j
 			 */
 			if(branch->if_block == branch->else_block){
-				//Remove these all
-				delete_all_branching_statements(current);
+				//Delete the branch statement afterwards 
+				delete_statement(branch);
 
 				//Emit a jump here instead
 				emit_jump(current, branch->if_block);
@@ -1116,12 +1348,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			}
 		}
 
-
 		/**
 		 * If block i ends in a jump to j then..
 		 */
-		if(current->exit_statement != NULL
-			&& current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
+		if(current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
 			//Extract the block(j) that we're going to
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
@@ -1164,56 +1394,6 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 
 				//And we're done here
 				continue;
-			}
-
-			/**
-			 * If j is empty(except for the branch) and ends in a conditional branch then
-			 * 	overwrite i's jump with a copy of j's branch
-			 */
-			if(jumping_to_block->leader_statement->is_branch_ending == TRUE
-				&& jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
-				//Delete the jump statement in i
-				delete_statement(current->exit_statement);
-
-				//These are also no longer successors
-				delete_successor(current, jumping_to_block);
-
-				//Run through every statement in the jumping to block and 
-				//copy them into current
-				instruction_t* current_stmt = jumping_to_block->leader_statement;
-
-				//So long as there is more to copy
-				while(current_stmt != NULL){
-					//Copy it
-					instruction_t* copy = copy_instruction(current_stmt);
-
-					//Add it to the current block
-					add_statement(current, copy);
-
-					//Add as assigned
-					if(copy->assignee != NULL){
-						add_assigned_variable(current, copy->assignee);
-					}
-
-					//Add these as used
-					add_used_variable(current, copy->op1);
-					add_used_variable(current, copy->op2);
-
-					//Add it over
-					current_stmt = current_stmt->next_statement;
-				}
-
-				//Once we get to the very end here, we'll need to do the bookkeeping
-				//from the branch
-				basic_block_t* if_destination = jumping_to_block->exit_statement->if_block;
-				basic_block_t* else_destination = jumping_to_block->exit_statement->else_block;
-				
-				//These both count as successor
-				add_successor(current, if_destination);
-				add_successor(current, else_destination);
-
-				//This counts as a change
-				changed = TRUE;
 			}
 		}
 	}
@@ -2038,7 +2218,7 @@ static void optimize_logical_and_branch_logic(symtab_function_record_t* function
  */
 static void optimize_short_circuit_logic(symtab_function_record_t* function, dynamic_array_t* function_blocks){
 	//For every single block in the function
-	for(u_int16_t _ = 0; _ < function_blocks->current_index; _++){
+	for(u_int32_t _ = 0; _ < function_blocks->current_index; _++){
 		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
@@ -2065,14 +2245,17 @@ static void optimize_short_circuit_logic(symtab_function_record_t* function, dyn
 		//Grab a statement cursor
 		instruction_t* cursor = block->exit_statement->previous_statement;
 
+		//First, we need to mark everything that is related to the branch inside of this block
+		mark_all_branch_related_statements(block);
+
 		//Store all of our eligible statements in this block. This will be done in a FIFO
 		//fashion
 		dynamic_array_t eligible_statements = dynamic_array_alloc();
 
 		//Let's run through and see if we can find a statement that's eligible for short circuiting.
 		while(cursor != NULL){
-			//Not branch ending - move on
-			if(cursor->is_branch_ending == FALSE){
+			//If this isn't marked, we don't care. Just move on
+			if(cursor->mark == FALSE){
 				cursor = cursor->previous_statement;
 				continue;
 			}
