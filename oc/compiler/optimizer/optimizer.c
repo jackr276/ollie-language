@@ -298,13 +298,16 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 	if(variable == stack_pointer_variable
 		|| variable == instruction_pointer_variable
 		|| variable->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT
-		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS){
+		|| variable->variable_type == VARIABLE_TYPE_FUNCTION_ADDRESS
+		|| variable->variable_type == VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS){
 		return;
 	}
 
-	//If this variable has a stack region, then we will be marking
-	//said stack region. We know that this discriminating union is a stack
-	//region because of the if-check above that rules out local constants
+	/**
+	 * If this variable has a stack region, then we will be marking
+	 * said stack region. We know that this discriminating union is a stack
+	 * region because of the if-check above that rules out local constants
+	 */
 	if(variable->associated_memory_region.stack_region != NULL){
 		mark_stack_region(variable->associated_memory_region.stack_region);
 	}
@@ -512,6 +515,18 @@ static void mark(dynamic_array_t* function_blocks){
 					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
 					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Special cases: these stack allocation and deallocation statements
+				 * do not have any variables in them(%rsp is inferred because it is the stack)
+				 * They must always be marked, and they may never be deleted. However, since there
+				 * are no variables in them to trace around, we will not add them to the worklist
+				 */
+				case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
+				case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
+					current_stmt->mark = TRUE;
 					current->contains_mark = TRUE;
 					break;
 
@@ -1031,7 +1046,7 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 
 	//Invoke the stack sweeper. This function will go through an remove any stack regions
 	//that have been flagged as unimportant
-	sweep_stack_data_area(&(function_entry_block->function_defined_in->data_area));
+	sweep_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
 }
 
 

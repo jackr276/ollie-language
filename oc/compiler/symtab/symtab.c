@@ -624,25 +624,42 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
 
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed
+ *
+ * *Stack Parameters*
+ * Every function internally maintains a stack structure *separate* from the local stack that is used for
+ * passing function parameters via the stack. If we notice that we are adding a function parameter that
+ * is more than the max per class register passing value, we will add that into the specialized stack
+ * data area
  */
-u_int8_t add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
-	//We have too many parameters, fail out
-	if(function_record->number_of_params == 6){
-		return FAILURE;
-	}
-
+void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
-	function_record->func_params[function_record->number_of_params] = variable_record;
+	dynamic_array_add(&(function_record->function_parameters), variable_record);
 	
 	//Store what function this came from
 	variable_record->function_declared_in = function_record;
 
-	//Increment the count
-	(function_record->number_of_params)++;
+	//Do we need to pass via stack? If so add it here
+	if(variable_record->class_relative_function_parameter_order > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+		//Allocate it if need be
+		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
+			//This is specifically a parameter passing stack region. We must be sure to mention that
+			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING);
+		}
 
-	//All went well
-	return SUCCESS;
+		//Add this type into said stack region
+		variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
+
+		//This is a stack variable, we need to note it as such
+		variable_record->stack_variable = TRUE;
+
+		//Flag that this is passed via the stack
+		variable_record->passed_by_stack = TRUE;
+
+		//Flag that this function contains stack params
+		function_record->contains_stack_params = TRUE;
+	}
 }
+
 
 /**
  * Dynamically allocate a function record
@@ -652,10 +669,13 @@ symtab_function_record_t* create_function_record(dynamic_string_t name, u_int8_t
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
 	//Allocate the data area internally
-	stack_data_area_alloc(&(record->data_area));
+	stack_data_area_alloc(&(record->local_stack), STACK_TYPE_FUNCTION_LOCAL);
 
 	//Allocate the array for all function blocks
 	record->function_blocks = dynamic_array_alloc();
+
+	//Allocate space for the function parameter
+	record->function_parameters = dynamic_array_alloc();
 
 	//Copy the name over
 	record->func_name = name;
@@ -1535,15 +1555,17 @@ void print_function_name(symtab_function_record_t* record){
 	}
 
 	//Print out the params
-	for(u_int8_t i = 0; i < record->number_of_params; i++){
+	for(u_int8_t i = 0; i < record->function_parameters.current_index; i++){
+		symtab_variable_record_t* current_parameter = dynamic_array_get_at(&(record->function_parameters), i);
+
 		//Print if it's mutable
-		if(record->func_params[i]->type_defined_as->mutability == MUTABLE){
+		if(current_parameter->type_defined_as->mutability == MUTABLE){
 			printf("mut ");
 		}
 
-		printf("%s : %s", record->func_params[i]->var_name.string, record->func_params[i]->type_defined_as->type_name.string);
+		printf("%s : %s", current_parameter->var_name.string, current_parameter->type_defined_as->type_name.string);
 		//Comma if needed
-		if(i < record->number_of_params-1){
+		if(i < record->function_parameters.current_index - 1){
 			printf(", ");
 		}
 	}
@@ -2015,11 +2037,14 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 			//Destroy the block storage
 			dynamic_array_dealloc(&(temp->function_blocks));
 
+			//Destroy the parameters
+			dynamic_array_dealloc(&(temp->function_parameters));
+
 			//Dealloate the function type
 			type_dealloc(temp->signature);
 
 			//Deallocate the data area itself
-			stack_data_area_dealloc(&(temp->data_area));
+			stack_data_area_dealloc(&(temp->local_stack));
 
 			free(temp);
 		}

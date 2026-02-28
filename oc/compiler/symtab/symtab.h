@@ -31,9 +31,6 @@
 //There's only one function keyspace per program, so it can be a bit larger
 #define FUNCTION_KEYSPACE 1024 
 
-//The maximum number of function paramaters
-#define MAX_FUNCTION_PARAMS 6
-
 //A variable symtab
 typedef struct variable_symtab_t variable_symtab_t;
 //A function symtab
@@ -108,11 +105,15 @@ struct symtab_function_record_t{
 	//All of the basic blocks that make up this function
 	dynamic_array_t function_blocks;
 	//The parameters for the function
-	symtab_variable_record_t* func_params[MAX_FUNCTION_PARAMS];
+	dynamic_array_t function_parameters;
 	//The name of the function
 	dynamic_string_t func_name;
-	//The data area for the whole function
-	stack_data_area_t data_area;
+	//The data area for the whole function. This is the *local stack*. 
+	//There is a separate stack data area for the passed parameters
+	stack_data_area_t local_stack;
+	//An entire stack data area dedicated to parameters that are passed in. This is
+	//only allocated on an as-needed basis so it's normal for it to be blank
+	stack_data_area_t stack_passed_parameters;
 	//The type of the function
 	generic_type_t* signature;
 	//The list of all functions that this function calls out to
@@ -129,14 +130,14 @@ struct symtab_function_record_t{
 	u_int32_t called_by_count;
 	//Unique identifier that is not a name
 	u_int32_t function_id;
-	//Number of parameters
-	u_int8_t number_of_params;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
 	u_int8_t called;
 	//Has this function been inlined?
 	u_int8_t inlined;
+	//Does this function contain stack params?
+	u_int8_t contains_stack_params;
 	//Is this function public or private
 	function_visibility_t function_visibility;
 };
@@ -191,6 +192,8 @@ struct symtab_variable_record_t{
 	//Where does this variable get stored? By default we assume register, so
 	//this flag will only be set if we have a memory address value
 	u_int8_t stack_variable;
+	//Is this a function parameter that is passed via stack?
+	u_int8_t passed_by_stack;
 	//Was it declared or letted
 	u_int8_t declare_or_let; /* 0 = declare, 1 = let */
 };
@@ -396,7 +399,7 @@ symtab_variable_record_t* create_temp_memory_address_variable(generic_type_t* ty
 /**
  * Add a parameter to a function and perform all internal bookkeeping needed
  */
-u_int8_t add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);
+void add_function_parameter(symtab_function_record_t* function_record, symtab_variable_record_t* variable_record);
 
 /**
  * Make a function record

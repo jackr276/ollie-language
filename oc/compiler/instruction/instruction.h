@@ -58,6 +58,8 @@ typedef enum {
 	VARIABLE_TYPE_TEMP,
 	VARIABLE_TYPE_NON_TEMP,
 	VARIABLE_TYPE_MEMORY_ADDRESS,
+	//Specialized memory address for a stack passed parameter
+	VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS,
 	VARIABLE_TYPE_LOCAL_CONSTANT,
 	VARIABLE_TYPE_FUNCTION_ADDRESS, //For rip-relative function pointer loads
 } variable_type_t;
@@ -189,7 +191,7 @@ struct three_addr_var_t{
 	u_int32_t use_count;
 	//What is the parameter number of this var? Used for parameter passing. If
 	//it is 0, it's ignored
-	u_int16_t class_relative_parameter_order;
+	u_int32_t class_relative_parameter_order;
 	//What is the indirection level
 	//Is this variable dereferenced in some way
 	//(either loaded from or stored to)
@@ -242,7 +244,23 @@ struct three_addr_const_t{
 		 * These pointers are always 8 bytes
 		 */
 		three_addr_var_t* local_constant_address;
+		/**
+		 * This is a stack-param passed offset constant. We will only act upon it inside of the regsiter allocator/postprocessor
+		 * once we are done with all spilling/stack maanagement logic. There should be a "const type" to do this. In fact, we should
+		 * probably make the "const_type" an actual type and not just some tacked on token extension
+		 */
+		stack_region_t* parameter_passed_stack_region;
+
 	} constant_value;
+
+	/**
+	 * We want the ability to use all of our fancy simplification tricks, but we also need to account for the ambiguity in
+	 * how stack passed parameter constants work. This is our middle ground. We can do any constant manipulation on this
+	 * adjustment integer here, then at the register allocation step, when we translate everything out of stack parameters,
+	 * we will add this adjustment to the offset that we get to maintain accuracy and keep our instruction selector simplification
+	 * viable
+	 */
+	int64_t constant_adjustment;
 
 	//What kind of constant is it
 	ollie_token_t const_type;
@@ -322,6 +340,8 @@ struct instruction_t{
 	//Do we need to stop this value from being coalesced. This is only used
 	//very specifically in the logical not handler currently
 	u_int8_t cannot_be_combined;
+	//Does this instruction handle callee saving?
+	u_int8_t is_callee_saving_instruction;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//What kind of address calculation mode do we have?
@@ -509,6 +529,11 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
  * Emit a constant directly based on whatever the type given is
  */
 three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type);
+
+/**
+ * Emit a stack passed parameter offset constant
+ */
+three_addr_const_t* emit_stack_passed_parameter_offset_constant(stack_region_t* region, generic_type_t* type);
 
 /**
  * Emit a push instruction. We only have one kind of pushing - quadwords - we don't
@@ -706,6 +731,16 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block);
 instruction_t* emit_jump_instruction_directly(void* jumping_to_block, instruction_type_t jump_instruction_type);
 
 /**
+ * Emit a stack allocation statement
+ */
+instruction_t* emit_stack_allocation_ir_statement(three_addr_const_t* bytes_to_allocate);
+
+/**
+ * Emit a stack deallocation statement
+ */
+instruction_t* emit_stack_deallocation_ir_statement(three_addr_const_t* bytes_to_deallocate);
+
+/**
  * Emit a branch statement
  */
 instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type);
@@ -764,16 +799,6 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
  * Emit a fully formed global variable x86 address calculation lea
  */
 instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, generic_type_t* u64);
-
-/**
- * Emit a stack allocation statement
- */
-instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset);
-
-/**
- * Emit a stack deallocation statement
- */
-instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset);
 
 /**
  * Are two variables equal? A helper method for searching

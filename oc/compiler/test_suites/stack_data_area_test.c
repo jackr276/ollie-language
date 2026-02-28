@@ -119,7 +119,7 @@ int main(int argc, char** argv){
 	symtab_function_record_t* main_function = lookup_function(results->function_symtab, "main");
 
 	//Sample blank print. Should say blank
-	print_stack_data_area(&(main_function->data_area));
+	print_local_stack_data_area(&(main_function->local_stack));
 
 	//Now let's go through and start adding things into the stack. This is quick and dirty, we're
 	//just trying to test what's going on here
@@ -142,7 +142,7 @@ int main(int argc, char** argv){
 			//We could have chaining here, so run through just in case
 			while(record != NULL){
 				//Add it into the stack
-				record->stack_region = create_stack_region_for_type(&(main_function->data_area), record->type_defined_as);
+				record->stack_region = create_stack_region_for_type(&(main_function->local_stack), record->type_defined_as);
 			
 				//Emit the variable
 				three_addr_var_t* var = emit_var(record);
@@ -151,7 +151,7 @@ int main(int argc, char** argv){
 				dynamic_array_add(&array_of_vars, var);
 
 				//Let's print it out to see what we have
-				print_stack_data_area(&(main_function->data_area));
+				print_local_stack_data_area(&(main_function->local_stack));
 
 				record = record->next;
 			}
@@ -159,8 +159,8 @@ int main(int argc, char** argv){
 	}
 
 	//Perform the alignment
-	align_stack_data_area(&(main_function->data_area));
-	printf("Total size: %d\n", main_function->data_area.total_size);
+	align_stack_data_area(&(main_function->local_stack));
+	printf("Total size: %d\n", main_function->local_stack.total_size);
 
 	printf("###################### Now testing removal ####################\n");
 
@@ -169,16 +169,16 @@ int main(int argc, char** argv){
 		//Extract the variable
 		three_addr_var_t* variable = dynamic_array_get_at(&array_of_vars, i);
 		//Delete it
-		remove_region_from_stack(&(main_function->data_area), variable->associated_memory_region.stack_region);
+		remove_region_from_stack(&(main_function->local_stack), variable->associated_memory_region.stack_region);
 		//Reprint the whole thing
-		print_stack_data_area(&(main_function->data_area));
+		print_local_stack_data_area(&(main_function->local_stack));
 	}
 
 	//We can scrap the dynamic array once here
 	dynamic_array_dealloc(&array_of_vars);
 
 	//Ensure that we can fully deallocate
-	stack_data_area_dealloc(&(main_function->data_area));
+	stack_data_area_dealloc(&(main_function->local_stack));
 
 	//Cleanup at the end
 	deallocate_all_consts();

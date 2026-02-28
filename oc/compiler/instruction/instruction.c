@@ -157,9 +157,10 @@ void insert_instruction_after_given(instruction_t* insertee, instruction_t* give
 	if(after_given != NULL){
 		//Tie this in as the previous
 		after_given->previous_statement = insertee;
+
 	//Otherwise this is the exit statement
 	} else {
-		block->exit_statement = given;
+		block->exit_statement = insertee;
 	}
 
 	//Save the function as well
@@ -857,16 +858,28 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	//Add into here for memory management
 	dynamic_array_add(&emitted_vars, emitted_var);
 
-	//If we have an aliased variable(almost exclusively function
-	//parameters), we will instead emit the alias of that variable instead
-	//of the variable itself
+	/**
+	 * If we have an aliased variable(almost exclusively function
+	 * parameters), we will instead emit the alias of that variable instead
+	 * of the variable itself
+	 */
 	if(var->alias != NULL){
 		var = var->alias;
 	}
 
-	//This is a memory address variable. We will flag this for special
-	//printing
-	emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
+	/**
+	 * We will need to consider things differently whether or not this variable
+	 * is passed via a parameter stack or not. If it is, then we need to 
+	 * flag this as a special kind of variable
+	 */
+	if(var->passed_by_stack == FALSE){
+		//This is a memory address variable. We will flag this for special printing
+		emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
+
+	} else {
+		//Flag that this is not a regular memory address - it is a stack memory address
+		emitted_var->variable_type = VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS;
+	}
 
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = var->type_defined_as;
@@ -1726,16 +1739,20 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 					//Print out it's temp var number
 					fprintf(fl, "t%d", variable->temp_var_number);
 					break;
+
 				case VARIABLE_TYPE_NON_TEMP:
 					//Print out the SSA generation along with the variable
 					fprintf(fl, "%s_%d", variable->linked_var->var_name.string, variable->ssa_generation);
 					break;
+
 				case VARIABLE_TYPE_LOCAL_CONSTANT:
 					fprintf(fl, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
 					break;
+
 				case VARIABLE_TYPE_FUNCTION_ADDRESS:
 					fprintf(fl, "%s", variable->associated_memory_region.rip_relative_function->func_name.string);
 					break;
+					
 				case VARIABLE_TYPE_MEMORY_ADDRESS:
 					if(variable->linked_var != NULL){
 						//Print out the normal version, plus the MEM<> wrapper
@@ -1745,6 +1762,14 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 					}
 
 					break;
+
+				case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+					if(variable->linked_var != NULL){
+						//Print out the normal version, plus the MEM<> wrapper
+						fprintf(fl, "PARAMETER_MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
+					} else {
+						fprintf(fl, "PARAMETER_MEM<t%d>", variable->temp_var_number);
+					}
 			}
 
 			break;
@@ -1962,6 +1987,24 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 				fprintf(fl, "'%c'", constant->constant_value.char_constant);
 			}
 			break;
+
+		/**
+		 * This special kind of constant value is going to survive until after
+		 * we do register allocation. We will print it out symbolically until then
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			fprintf(fl, "<Stack Passed Offset Region %d", constant->constant_value.parameter_passed_stack_region->stack_region_id);
+
+			//We're able to have adjustments in here. If we do, print that out too
+			if(constant->constant_adjustment != 0){
+				fprintf(fl, " adjusted by %ld", constant->constant_adjustment);
+			}
+
+			//Now the ending
+			fprintf(fl, ">");
+
+			break;
+
 		//To stop compiler warnings
 		default:
 			printf("Fatal Internal Compiler Error: Attempt to print unrecognized function type");
@@ -2576,6 +2619,20 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 			break;
 
+		case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
+			fprintf(fl, "Stack Allocate <- ");
+			print_three_addr_constant(fl, stmt->op1_const);
+			fprintf(fl, " bytes\n");
+
+			break;
+
+		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
+			fprintf(fl, "Stack Deallocate <- ");
+			print_three_addr_constant(fl, stmt->op1_const);
+			fprintf(fl, " bytes\n");
+
+			break;
+
 		default:
 			printf("UNKNOWN TYPE");
 			break;
@@ -2615,6 +2672,24 @@ static void print_immediate_value(FILE* fl, three_addr_const_t* constant){
 		case CHAR_CONST:
 			fprintf(fl, "$%d", constant->constant_value.char_constant);
 			break;
+
+		/**
+		 * This special kind of constant value is going to survive until after
+		 * we do register allocation. We will print it out symbolically until then
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			fprintf(fl, "<Stack Passed Offset Region %d", constant->constant_value.parameter_passed_stack_region->stack_region_id);
+
+			//We're able to have adjustments in here. If we do, print that out too
+			if(constant->constant_adjustment != 0){
+				fprintf(fl, " adjusted by %ld", constant->constant_adjustment);
+			}
+
+			//Now the ending
+			fprintf(fl, ">");
+
+			break;
+
 		//To avoid compiler complaints
 		default:
 			printf("Fatal internal compiler error: unreachable immediate value type hit\n");
@@ -2673,6 +2748,23 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
 				fprintf(fl, "%d", constant->constant_value.char_constant);
 			}
 			break;
+
+		/**
+		 * This special kind of constant value is going to survive until after
+		 * we do register allocation. We will print it out symbolically until then
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			fprintf(fl, "<Stack Passed Offset Region %d", constant->constant_value.parameter_passed_stack_region->stack_region_id);
+
+			//We're able to have adjustments in here. If we do, print that out too
+			if(constant->constant_adjustment != 0){
+				fprintf(fl, " adjusted by %ld", constant->constant_adjustment);
+			}
+
+			//Now the ending
+			fprintf(fl, ">");
+			break;
+
 		//To avoid compiler complaints
 		default:
 			printf("Fatal internal compiler error: unreachable immediate value type hit\n");
@@ -4151,7 +4243,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case INDIRECT_CALL:
 			//Indirect function calls store the location of the call in op1
 			fprintf(fl, "call *");
-			print_variable(fl, instruction->op1, mode);
+			print_variable(fl, instruction->source_register, mode);
 
 			if(instruction->destination_register != NULL){
 				fprintf(fl, " /* --> ");
@@ -4755,6 +4847,7 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 		case FLOAT_CONST:
 		case STR_CONST:
 		case FUNC_CONST:
+		case STACK_PASSED_PARAM_OFFSET:
 			printf("Fatal internal compiler error: string, function pointer, f32 and f64 constants may not be emitted directly\n");
 			exit(1);
 		//Some very weird error here
@@ -4764,6 +4857,30 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	}
 	
 	//Once all that is done, we can leave
+	return constant;
+}
+
+
+/**
+ * Emit a stack passed parameter offset constant
+ */
+three_addr_const_t* emit_stack_passed_parameter_offset_constant(stack_region_t* region, generic_type_t* type) {
+	//First we'll dynamically allocate the constant
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_consts, constant);
+
+	//This is a special kind of constant
+	constant->const_type = STACK_PASSED_PARAM_OFFSET;
+
+	//Store the type as well
+	constant->type = type;
+
+	//And the region
+	constant->constant_value.parameter_passed_stack_region = region;
+
+	//Give this back
 	return constant;
 }
 
@@ -5167,6 +5284,42 @@ instruction_t* emit_jump_instruction_directly(void* jumping_to_block, instructio
 
 
 /**
+ * Emit a stack allocation statement
+ */
+instruction_t* emit_stack_allocation_ir_statement(three_addr_const_t* bytes_to_allocate){
+	//Allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Directly assign the type here
+	instruction->statement_type = THREE_ADDR_CODE_STACK_ALLOCATION_STMT;
+	
+	//Store the constant
+	instruction->op1_const = bytes_to_allocate;
+
+	//And give it back
+	return instruction;
+}
+
+
+/**
+ * Emit a stack deallocation statement
+ */
+instruction_t* emit_stack_deallocation_ir_statement(three_addr_const_t* bytes_to_deallocate){
+	//Allocate it
+	instruction_t* instruction = calloc(1, sizeof(instruction_t));
+
+	//Directly assign the type here
+	instruction->statement_type = THREE_ADDR_CODE_STACK_DEALLOCATION_STMT;
+	
+	//Store the constant
+	instruction->op1_const = bytes_to_deallocate;
+
+	//And give it back
+	return instruction;
+}
+
+
+/**
  * Emit a branch statement
  */
 instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type){
@@ -5535,48 +5688,6 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 
 	//And give it back
 	return lea;
-}
-
-
-/**
- * Emit a stack allocation statement
- */
-instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
-	//Allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//This is always a subq statement
-	stmt->instruction_type = SUBQ;
-
-	//Store the destination as the stack pointer
-	stmt->destination_register = stack_pointer;
-
-	//Emit this directly
-	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
-
-	//Just give this back
-	return stmt;
-}
-
-
-/**
- * Emit a stack deallocation statement
- */
-instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
-	//Allocate it
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	//This is always an addq statement
-	stmt->instruction_type = ADDQ;
-
-	//Destination is always the stack pointer
-	stmt->destination_register = stack_pointer;
-
-	//Emit this directly
-	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
-
-	//Just give this back
-	return stmt;
 }
 
 
@@ -6102,6 +6213,10 @@ void multiply_constants(three_addr_const_t* constant1, three_addr_const_t* const
  * Emit the sum of two given constants. The result will overwrite the first constant given
  *
  * NOTE: The result is always stored in the first one
+ *
+ * When we are adding constants, we need to account for the special case where we have a 
+ * stack passed memory address as a constant. This is not really a constant, but we
+ * can still use the internal "constant_adjustment" to do arithmetic here
  */
 void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
 	switch(constant1->const_type){
@@ -6430,6 +6545,47 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
 
 			break;
 
+		/**
+		 * Special case with our stack passed parameter offset. We can only use the constant adjustment,
+		 * not the actual constant itself because we don't know what it is yet. We guarantee that this
+		 * will always be constant1
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_adjustment += constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_adjustment += constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_adjustment += constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_adjustment += constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_adjustment += constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_adjustment += constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_adjustment += constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_adjustment += constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_adjustment += constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
+					exit(1);
+			}
+
+			break;
+
 		default:
 			printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 			exit(1);
@@ -6441,6 +6597,10 @@ void add_constants(three_addr_const_t* constant1, three_addr_const_t* constant2)
  * Emit the difference of two given constants. The result will overwrite the first constant given
  *
  * NOTE: The result is always stored in the first one
+ *
+ * When we are subtracting constants, we need to account for the special case where we have a 
+ * stack passed memory address as a constant. This is not really a constant, but we
+ * can still use the internal "constant_adjustment" to do arithmetic here
  */
 void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* constant2){
 	switch(constant1->const_type){
@@ -6764,6 +6924,47 @@ void subtract_constants(three_addr_const_t* constant1, three_addr_const_t* const
 					break;
 				default:
 					printf("Fatal internal compiler error: Unsupported constant subtraction operation\n");
+					exit(1);
+			}
+
+			break;
+
+		/**
+		 * Special case with our stack passed parameter offset. We can only use the constant adjustment,
+		 * not the actual constant itself because we don't know what it is yet. We guarantee that this
+		 * will always be constant1
+		 */
+		case STACK_PASSED_PARAM_OFFSET:
+			switch(constant2->const_type){
+				case LONG_CONST_FORCE_U:
+					constant1->constant_adjustment -= constant2->constant_value.unsigned_long_constant;
+					break;
+				case LONG_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.signed_long_constant;
+					break;
+				case INT_CONST_FORCE_U:
+					constant1->constant_adjustment -= constant2->constant_value.unsigned_integer_constant;
+					break;
+				case INT_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.signed_integer_constant;
+					break;
+				case BYTE_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.signed_byte_constant;
+					break;
+				case BYTE_CONST_FORCE_U:
+					constant1->constant_adjustment -= constant2->constant_value.unsigned_byte_constant;
+					break;
+				case SHORT_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.signed_short_constant;
+					break;
+				case SHORT_CONST_FORCE_U:
+					constant1->constant_adjustment -= constant2->constant_value.unsigned_short_constant;
+					break;
+				case CHAR_CONST:
+					constant1->constant_adjustment -= constant2->constant_value.char_constant;
+					break;
+				default:
+					printf("Fatal internal compiler error: Unsupported constant addition operation\n");
 					exit(1);
 			}
 

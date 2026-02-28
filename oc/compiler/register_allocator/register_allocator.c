@@ -15,6 +15,7 @@
 #include "../postprocessor/postprocessor.h"
 #include "../utils/queue/max_priority_queue.h"
 #include "../cfg/cfg.h"
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -171,6 +172,48 @@ static inline u_int8_t is_general_purpose_register_callee_saved(general_purpose_
 
 
 /**
+ * Emit a stack allocation statement
+ */
+static inline instruction_t* emit_stack_allocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
+	//Allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//This is always a subq statement
+	stmt->instruction_type = SUBQ;
+
+	//Store the destination as the stack pointer
+	stmt->destination_register = stack_pointer;
+
+	//Emit this directly
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
+
+	//Just give this back
+	return stmt;
+}
+
+
+/**
+ * Emit a stack deallocation statement
+ */
+static inline instruction_t* emit_stack_deallocation_statement(three_addr_var_t* stack_pointer, type_symtab_t* type_symtab, u_int64_t offset){
+	//Allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//This is always an addq statement
+	stmt->instruction_type = ADDQ;
+
+	//Destination is always the stack pointer
+	stmt->destination_register = stack_pointer;
+
+	//Emit this directly
+	stmt->source_immediate = emit_direct_integer_or_char_constant(offset, lookup_type_name_only(type_symtab, "u64", NOT_MUTABLE)->type);
+
+	//Just give this back
+	return stmt;
+}
+
+
+/**
  * Developer utility function to validate the priority queue implementation
  */
 static void print_live_range_array(dynamic_array_t* live_ranges){
@@ -283,7 +326,8 @@ static void print_block_with_live_ranges(basic_block_t* block){
 		case BLOCK_TYPE_FUNC_ENTRY:
 			//Then the name
 			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_stack_data_area(&(block->function_defined_in->data_area));
+			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
+			print_local_stack_data_area(&(block->function_defined_in->local_stack));
 			break;
 
 		//By default just print the name
@@ -438,7 +482,8 @@ static void print_block_with_registers(basic_block_t* block){
 		case BLOCK_TYPE_FUNC_ENTRY:
 			//Then the name
 			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_stack_data_area(&(block->function_defined_in->data_area));
+			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
+			print_local_stack_data_area(&(block->function_defined_in->local_stack));
 			break;
 
 		//By default just print the name
@@ -2977,7 +3022,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 		//Case we want here
 		if(instruction->source_register->associated_live_range == spill_range){
 			//Let the helper deal with it
-			handle_pure_copy_source_spill(instruction, spill_region->base_address);
+			handle_pure_copy_source_spill(instruction, spill_region->function_local_base_address);
 
 			//We're done here
 			return instruction;
@@ -2993,7 +3038,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 		//What we're after here
 		if(instruction->destination_register->associated_live_range == spill_range){
 			//Let the helper deal with it
-			handle_constant_assignment_destination_spill(instruction, spill_region->base_address);
+			handle_constant_assignment_destination_spill(instruction, spill_region->function_local_base_address);
 
 			//We're done
 			return instruction;
@@ -3005,10 +3050,10 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 	instruction_t* latest = instruction;
 
 	//Handle all source spills first
-	handle_source_spill(live_ranges, instruction->source_register, spill_range, currently_spilled, instruction, spill_region->base_address);
-	handle_source_spill(live_ranges, instruction->source_register2, spill_range, currently_spilled, instruction, spill_region->base_address);
-	handle_source_spill(live_ranges, instruction->address_calc_reg1, spill_range, currently_spilled, instruction, spill_region->base_address);
-	handle_source_spill(live_ranges, instruction->address_calc_reg2, spill_range, currently_spilled, instruction, spill_region->base_address);
+	handle_source_spill(live_ranges, instruction->source_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(live_ranges, instruction->source_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(live_ranges, instruction->address_calc_reg1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(live_ranges, instruction->address_calc_reg2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 	//Run through all function parameters
 	if(instruction->instruction_type != PHI_FUNCTION){
@@ -3021,7 +3066,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			three_addr_var_t* parameter = dynamic_array_get_at(&parameters, i);
 
 			//Invoke the helper
-			handle_source_spill(live_ranges, parameter, spill_range, currently_spilled, instruction, spill_region->base_address);
+			handle_source_spill(live_ranges, parameter, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 		}
 	}
 
@@ -3039,10 +3084,10 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			//In this case, we need to handle a source spill and a destination store
 			if(is_destination_also_operand(instruction) == TRUE){
 				//Handle the source first
-				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->base_address);
+				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 				//Emit the store instruction for this now
-				handle_destination_spill(instruction->destination_register, instruction, spill_region->base_address);
+				handle_destination_spill(instruction->destination_register, instruction, spill_region->function_local_base_address);
 
 				//Update latest
 				latest = instruction->next_statement;
@@ -3050,12 +3095,12 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			//In the case like this, we just need to emit the load
 			} else if(is_move_instruction_destination_assigned(instruction) == FALSE){
 				//Handle the source spill only
-				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->base_address);
+				handle_source_spill(live_ranges, instruction->destination_register, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 			//In all other cases, we just have the store
 			} else {
 				//Emit the store instruction for this now
-				handle_destination_spill(instruction->destination_register, instruction, spill_region->base_address);
+				handle_destination_spill(instruction->destination_register, instruction, spill_region->function_local_base_address);
 
 				//Update latest
 				latest = instruction->next_statement;
@@ -3070,7 +3115,7 @@ static instruction_t* handle_instruction_level_spilling(instruction_t* instructi
 			|| instruction->destination_register2->associated_live_range == *currently_spilled){
 
 			//Emit the store instruction for this now
-			handle_destination_spill(instruction->destination_register2, instruction, spill_region->base_address);
+			handle_destination_spill(instruction->destination_register2, instruction, spill_region->function_local_base_address);
 
 			//Update latest
 			latest = instruction->next_statement;
@@ -3119,7 +3164,7 @@ static void spill_in_function(basic_block_t* function_entry_block, dynamic_array
 	symtab_function_record_t* function = function_entry_block->function_defined_in;
 
 	//Let's first create the stack region for our spill range
-	stack_region_t* spill_region = create_stack_region_for_type(&(function->data_area), get_largest_type_in_live_range(spill_range));
+	stack_region_t* spill_region = create_stack_region_for_type(&(function->local_stack), get_largest_type_in_live_range(spill_range));
 
 	//Grab a cursor
 	basic_block_t* block_cursor = function_entry_block;
@@ -3524,11 +3569,11 @@ static u_int8_t graph_color_and_allocate_sse(basic_block_t* function_entry, dyna
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
  */
-static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* instruction){
+static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_record_t* caller, instruction_t* function_call){
 	//If we get here we know that we have a call instruction. Let's
 	//grab whatever it's calling out. We're able to do this for a direct call,
 	//whereas in an indirect call we are not
-	symtab_function_record_t* callee = instruction->called_function;
+	symtab_function_record_t* callee = function_call->called_function;
 
 	//Grab out this LR for reference later on. Remember that this is nullable, so we 
 	//need to account for that
@@ -3538,20 +3583,58 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	live_range_class_t destination_lr_class;
 	
 	//Assign if it's not null
-	if(instruction->destination_register != NULL){
+	if(function_call->destination_register != NULL){
 		//Extract the destination LR for our uses later
-		destination_lr = instruction->destination_register->associated_live_range;
+		destination_lr = function_call->destination_register->associated_live_range;
 
 		//Cache the class as well
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
-	//Keep pointers to the first/last instruction in our chain
-	instruction_t* first_instruction = instruction;
-	instruction_t* last_instruction = instruction;
+	/**
+	 * Keep track of what is immediately before and after
+	 * our stack param setup. In the event that there
+	 * is no stack param setup, these will just be the
+	 * function call
+	 */
+	instruction_t* before_stack_param_setup = function_call;
+	instruction_t* after_stack_param_setup = function_call;
+
+	/**
+	 * If our function contains stack parameters, then we need to look for the
+	 * actual stack allocation/deallocation statements and ensure that we are
+	 * putting all of our saving logic *before and after* said statements
+	 */
+	if(callee->contains_stack_params == TRUE){
+		//Let's first find the stack allocation statement. Note that it *has to be here*
+		while(before_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_ALLOCATION_STMT){
+			//Go back
+			before_stack_param_setup = before_stack_param_setup->previous_statement;
+		}
+
+		//Now by a similar token let's find the deallocation statement
+		while(after_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_DEALLOCATION_STMT){
+			//Push it up
+			after_stack_param_setup = after_stack_param_setup->next_statement;
+		}
+	}
+
+	/**
+	 * Maintain dynamic arrays that are(as of yet) unallocated. We will build
+	 * these arrays out with all of the live ranges that need to be saved in 
+	 * each class of variable(GP or SSE). When we are done, we will need
+	 * to traverse them. GP always comes first to avoid any issues with the stack, which is then
+	 * followed by SSE afterwards
+	 */
+	dynamic_array_t general_purpose_lrs_to_save;
+	dynamic_array_t SSE_lrs_to_save;
+	
+	//Wipe them all out first
+	INITIALIZE_NULL_DYNAMIC_ARRAY(general_purpose_lrs_to_save);
+	INITIALIZE_NULL_DYNAMIC_ARRAY(SSE_lrs_to_save);
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
-	dynamic_array_t live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
 	//We can remove the destination LR from here, there's no point in keeping it in
 	dynamic_array_delete(&live_after, destination_lr);
 
@@ -3559,7 +3642,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * Run through everything that is alive after this function runs(live_after)
 	 * and check if we need to save any registers from that set
 	 */
-	for(u_int16_t i = 0; i < live_after.current_index; i++){
+	for(u_int32_t i = 0; i < live_after.current_index; i++){
 		//Extract it
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
 
@@ -3593,33 +3676,13 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				 * value it has that we're relying on would not survive the call
 				 */
 				if(get_bitmap_at_index(callee->assigned_general_purpose_registers, general_purpose_reg - 1) == TRUE){
-					//Emit a direct push with this live range's register
-					instruction_t* push_inst = emit_direct_gp_register_push_instruction(general_purpose_reg);
-
-					//Emit the pop instruction for this
-					instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(general_purpose_reg);
-
-					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(push_inst, instruction);
-
-					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(pop_inst, instruction);
-
-					//If the first instruction still is the original instruction. That
-					//means that this is the first push instruction that we're inserting.
-					//As such, we'll set the first instruction to be this pushinstruction
-					//to save ourselves time down the line
-					if(first_instruction == instruction){
-						first_instruction = push_inst;
+					//Allocate here if need be
+					if(general_purpose_lrs_to_save.internal_array == NULL){
+						general_purpose_lrs_to_save = dynamic_array_alloc();
 					}
 
-					//If the last instruction still is the original instruction. That
-					//means that this is the first pop instruction that we're inserting.
-					//As such, we'll set the last instruction to be this pop instruction
-					//to save ourselves time down the line
-					if(last_instruction == instruction){
-						last_instruction = pop_inst;
-					}
+					//Add this into our list of GP LRs to save
+					dynamic_array_add(&general_purpose_lrs_to_save, lr);
 				}
 
 				break;
@@ -3645,41 +3708,108 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 				 * value it has that we're relying on would not survive the call
 				 */
 				if(get_bitmap_at_index(callee->assigned_sse_registers, sse_reg - 1) == TRUE){
-					//Do we already have a stack region for this exact LR? We will check and if
-					//so, we don't need to make any more room on the stack for it
-					stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->data_area), lr);
-
-					//If we didn't have a spill region, then we'll make one
-					if(stack_region == NULL){
-						stack_region = create_stack_region_for_type(&(caller->data_area), get_largest_type_in_live_range(lr));
-
-						//Cache this for later
-						stack_region->variable_referenced = lr;
+					//Allocate here if need be
+					if(SSE_lrs_to_save.internal_array == NULL){
+						SSE_lrs_to_save = dynamic_array_alloc();
 					}
 
-					//Emit the store instruction and load instruction
-					instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
-					instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
-
-					//Insert the push instruction directly before the call instruction
-					insert_instruction_before_given(store_instruction, first_instruction);
-
-					//The first instruction now is the store
-					first_instruction = store_instruction;
-
-					//Insert the pop instruction directly after the last instruction
-					insert_instruction_after_given(load_instruction, last_instruction);
-
-					//And the last one now is the load
-					last_instruction = load_instruction;
+					//Add this into our list of GP LRs to save
+					dynamic_array_add(&SSE_lrs_to_save, lr);
 				}
 
 				break;
 		}
 	}
 
+	//We'll need to keep track of the last instruction to return it in the end
+	instruction_t* first_instruction = before_stack_param_setup;
+	instruction_t* last_instruction = after_stack_param_setup;
+
+	/**
+	 * Due to the way that we use push/pop for general purpose caller saving, we need
+	 * to guarantee that this are inserted first and that any SSE saving happens
+	 * afterwards. If we didn't do this, we'd run the risk of clobbering any SSE
+	 * values that had been saved on the stack
+	 */
+	for(u_int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
+		//Grab out the LR
+		live_range_t* lr_to_save = dynamic_array_get_at(&general_purpose_lrs_to_save, i);
+
+		//Emit a direct push with this live range's register
+		instruction_t* push_inst = emit_direct_gp_register_push_instruction(lr_to_save->reg.gen_purpose);
+
+		//Emit the pop instruction for this
+		instruction_t* pop_inst = emit_direct_gp_register_pop_instruction(lr_to_save->reg.gen_purpose);
+
+		//Insert the push instruction directly before any stack parameter setup
+		insert_instruction_before_given(push_inst, first_instruction);
+
+		//Insert the pop instruction directly after any stack parameter setup
+		insert_instruction_after_given(pop_inst, last_instruction);
+
+		/**
+		 * This instruction now is the very first instruction in our big block
+		 * of instructions
+		 */
+		first_instruction = push_inst;
+
+		/**
+		 * And the pop instruction is now the very last instruction(currently) in
+		 * our big block of instructions
+		 */
+		last_instruction = pop_inst;
+	}
+
+	/**
+	 * Now let's do the exact same procedure for SSE registers. We're doing this last because again, we
+	 * need to guarantee that all of this movement happens *after* any pushing or popping
+	 */
+	for(u_int32_t i = 0; i < SSE_lrs_to_save.current_index; i++){
+		//What is the LR that we want to save
+		live_range_t* lr_to_save = dynamic_array_get_at(&SSE_lrs_to_save, i);
+
+		/**
+		 * Do we already have a stack region for this exact LR? We will check and if
+		 * so, we don't need to make any more room on the stack for it
+		 */
+		stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->local_stack), lr_to_save);
+
+		//If we didn't have a spill region, then we'll make one
+		if(stack_region == NULL){
+			stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr_to_save));
+
+			//Cache this for later
+			stack_region->variable_referenced = lr_to_save;
+		}
+
+		//Emit the store instruction and load instruction
+		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
+		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
+
+		//Insert the push instruction directly before the call instruction
+		insert_instruction_before_given(store_instruction, first_instruction);
+
+		//This now is the first instruction
+		first_instruction = store_instruction;
+
+		//Insert the pop instruction directly after the last instruction
+		insert_instruction_after_given(load_instruction, last_instruction);
+
+		//And this now is the last instruction
+		last_instruction = load_instruction;
+	}
+
 	//Free it up once done
 	dynamic_array_dealloc(&live_after);
+
+	//Let's also free the temporary storage if need be
+	if(general_purpose_lrs_to_save.internal_array != NULL){
+		dynamic_array_dealloc(&general_purpose_lrs_to_save);
+	}
+	
+	if(SSE_lrs_to_save.internal_array != NULL){
+		dynamic_array_dealloc(&SSE_lrs_to_save);
+	}
 
 	//Return whatever this ended up being
 	return last_instruction;
@@ -3687,6 +3817,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 
 
 /**
+ *
  * For an indirect call, we can not know for certain what registers are and are not used
  * inside of the function. As such, we'll need to save any/all caller saved registers that are in use
  * at the time that the function is called
@@ -3694,28 +3825,63 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
  * NOTE: All SSE(xmm) registers are caller saved. The callee is free to clobber these however it
  * sees fit. As such, the burden for saving all of these falls onto the caller here
  */
-static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* caller, instruction_t* instruction){
+static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_function_record_t* caller, instruction_t* function_call){
 	//Get the destination LR. Remember that this is nullable
 	live_range_t* destination_lr = NULL;
 
 	//Also cache what the class of the destination LR is
 	live_range_class_t destination_lr_class;
 
+	//Extract the actual function type
+	generic_type_t* function_type = function_call->source_register->type;
+
 	//Extract if not null
-	if(instruction->destination_register != NULL){
-		destination_lr = instruction->destination_register->associated_live_range;
+	if(function_call->destination_register != NULL){
+		destination_lr = function_call->destination_register->associated_live_range;
 
 		//What is the class
 		destination_lr_class = destination_lr->live_range_class;
 	}
 
-	//We'll maintain a pointer to the last instruction. This initially is the instruction that we
-	//have, but will change to be the first pop instruction that we make 
-	instruction_t* first_instruction = instruction;
-	instruction_t* last_instruction = instruction;
+	/**
+	 * Maintain dynamic arrays that are(as of yet) unallocated. We will build
+	 * these arrays out with all of the live ranges that need to be saved in 
+	 * each class of variable(GP or SSE). When we are done, we will need
+	 * to traverse them. GP always comes first to avoid any issues with the stack, which is then
+	 * followed by SSE afterwards
+	 */
+	dynamic_array_t general_purpose_lrs_to_save;
+	dynamic_array_t SSE_lrs_to_save;
+	
+	//Wipe them all out first
+	INITIALIZE_NULL_DYNAMIC_ARRAY(general_purpose_lrs_to_save);
+	INITIALIZE_NULL_DYNAMIC_ARRAY(SSE_lrs_to_save);
+
+	//Maintain pointers to instructions that are our landmarks, especially if we have stack param passing
+	instruction_t* before_stack_param_setup = function_call;
+	instruction_t* after_stack_param_setup = function_call;
+
+	/**
+	 * NOTE: if we have any stack passed parameter logic, we need to detect that now and ensure that we 
+	 * are inserting our caller saving logic both before and after any of that takes place to ensure we
+	 * don't clobber our values inadvertently
+	 */
+	if(function_type->internal_types.function_type->contains_stack_params == TRUE){
+		//Let's first find the stack allocation statement. Note that it *has to be here*
+		while(before_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_ALLOCATION_STMT){
+			//Go back
+			before_stack_param_setup = before_stack_param_setup->previous_statement;
+		}
+
+		//Now by a similar token let's find the deallocation statement
+		while(after_stack_param_setup->statement_type != THREE_ADDR_CODE_STACK_DEALLOCATION_STMT){
+			//Push it up
+			after_stack_param_setup = after_stack_param_setup->next_statement;
+		}
+	}
 
 	//Grab the live_after array for up to but not including the actual call
-	dynamic_array_t live_after = calculate_live_after_for_block(instruction->block_contained_in, instruction);
+	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
 	//Delete the destination LR from here as it will be assigned by the instruction anyway
 	dynamic_array_delete(&live_after, destination_lr);
 
@@ -3723,108 +3889,136 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	 * Now we will run through every live range in live_after and check if it is caller-saved or not
 	 * We are not able to fine-tune things here like we are in the the direct call unfortunately
 	 */
-	for(u_int16_t i = 0; i < live_after.current_index; i++){
+	for(u_int32_t i = 0; i < live_after.current_index; i++){
 		//Grab it out
 		live_range_t* lr = dynamic_array_get_at(&live_after, i);
-
-		general_purpose_register_t general_purpose_reg;
-		sse_register_t sse_reg;
 
 		//Go based on the given LR class
 		switch(lr->live_range_class){
 			case LIVE_RANGE_CLASS_GEN_PURPOSE:
-				general_purpose_reg = lr->reg.gen_purpose;
-
 				//This register must be caller saved to be relevant
-				if(is_general_purpose_register_caller_saved(general_purpose_reg) == FALSE){
+				if(is_general_purpose_register_caller_saved(lr->reg.gen_purpose) == FALSE){
 					continue;
 				}
 
 				//Let's now check to see if it matches the function destination's register. If it
 				//does, we'll bail
 				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
-					if(destination_lr->reg.gen_purpose == general_purpose_reg){
+					if(destination_lr->reg.gen_purpose == lr->reg.gen_purpose){
 						continue;
 					}
 				}
 
-				//Emit a direct push with this live range's register
-				instruction_t* push_inst_gp = emit_direct_gp_register_push_instruction(general_purpose_reg);
-
-				//Emit the pop instruction for this
-				instruction_t* pop_inst_gp = emit_direct_gp_register_pop_instruction(general_purpose_reg);
-
-				//Insert the push instruction directly before the call instruction
-				insert_instruction_before_given(push_inst_gp, instruction);
-
-				//Insert the pop instruction directly after the last instruction
-				insert_instruction_after_given(pop_inst_gp, instruction);
-
-				//If the first instruction still is the original instruction. That
-				//means that this is the first push instruction that we're inserting.
-				//As such, we'll set the first instruction to be this pushinstruction
-				//to save ourselves time down the line
-				if(first_instruction == instruction){
-					first_instruction = push_inst_gp;
+				//If we make it down here, then we need to save this LR
+				if(general_purpose_lrs_to_save.internal_array == NULL){
+					general_purpose_lrs_to_save = dynamic_array_alloc();
 				}
 
-				//If the last instruction still is the original instruction. That
-				//means that this is the first pop instruction that we're inserting.
-				//As such, we'll set the last instruction to be this pop instruction
-				//to save ourselves time down the line
-				if(last_instruction == instruction){
-					last_instruction = pop_inst_gp;
-				}
+				//Add it into the array
+				dynamic_array_add(&general_purpose_lrs_to_save, lr);
 
 				break;
 
+			//Remember that by default these are all caller saved
 			case LIVE_RANGE_CLASS_SSE:
-				//Extract the register. We know that all SSE registers are caller saved, so we
-				//do not need to check for that
-				sse_reg = lr->reg.sse_reg;
-
 				//Let's now check to see if it matches the function destination's register. If it
 				//does, we'll bail
 				if(destination_lr != NULL && destination_lr_class == LIVE_RANGE_CLASS_SSE){
-					if(destination_lr->reg.sse_reg == sse_reg){
+					if(destination_lr->reg.sse_reg == lr->reg.sse_reg){
 						continue;
 					}
 				}
 
-				//By the time we get here, we know that we need to save this
-				//First check if this has already been saved before
-				stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->data_area), lr);
-
-				//If it's NULL, we need to make one ourselves
-				if(stack_region == NULL){
-					stack_region = create_stack_region_for_type(&(caller->data_area), get_largest_type_in_live_range(lr));
-
-					//Cache this for later
-					stack_region->variable_referenced = lr;
+				//If we make it down here then this is an LR that we need to save
+				if(SSE_lrs_to_save.internal_array == NULL){
+					SSE_lrs_to_save = dynamic_array_alloc();
 				}
 
-				//Emit the store instruction and load instruction
-				instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
-				instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr->variables), 0), stack_pointer, type_symtab, stack_region->base_address);
-
-				//Insert the push instruction directly before the call instruction
-				insert_instruction_before_given(store_instruction, first_instruction);
-
-				//The first instruction now is the store
-				first_instruction = store_instruction;
-
-				//Insert the pop instruction directly after the last instruction
-				insert_instruction_after_given(load_instruction, last_instruction);
-
-				//And the last one now is the load
-				last_instruction = load_instruction;
+				//Add it into the array
+				dynamic_array_add(&SSE_lrs_to_save, lr);
 
 				break;
 		}
 	}
 
+	//We'll need to keep track of the last instruction to return it in the end
+	instruction_t* first_instruction = before_stack_param_setup;
+	instruction_t* last_instruction = after_stack_param_setup;
+
+	//Now let's run through all of the general purpose registers first
+	for(u_int32_t i = 0; i < general_purpose_lrs_to_save.current_index; i++){
+		//Extract what we want to save
+		live_range_t* lr_to_save = dynamic_array_get_at(&general_purpose_lrs_to_save, i);
+
+		//Emit a direct push with this live range's register
+		instruction_t* push_inst_gp = emit_direct_gp_register_push_instruction(lr_to_save->reg.gen_purpose);
+
+		//Emit the pop instruction for this
+		instruction_t* pop_inst_gp = emit_direct_gp_register_pop_instruction(lr_to_save->reg.gen_purpose);
+
+		//The push goes directly before the push instruction
+		insert_instruction_before_given(push_inst_gp, first_instruction);
+		
+		//This now is the first instruction
+		first_instruction = push_inst_gp;
+
+		//Insert the pop instruction directly after the last instruction
+		insert_instruction_after_given(pop_inst_gp, last_instruction);
+
+		//This now is the last instruction
+		last_instruction = pop_inst_gp;
+	}
+
+	/**
+	 * Once we are entirely done with all of that, we will now handle saving the SSE registers.
+	 * These must come before and after the general purpose ones because pushing and popping silently
+	 * modifies the stack pointer, meaning that our offsets for this would be inaccurate if we did them
+	 * after pushing
+	 */
+	for(u_int32_t i = 0; i < SSE_lrs_to_save.current_index; i++){
+		//Extract the LR
+		live_range_t* lr_to_save = dynamic_array_get_at(&SSE_lrs_to_save, i);
+
+		//By the time we get here, we know that we need to save this
+		//First check if this has already been saved before
+		stack_region_t* stack_region = get_stack_region_for_live_range(&(caller->local_stack), lr_to_save);
+
+		//If it's NULL, we need to make one ourselves
+		if(stack_region == NULL){
+			stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr_to_save));
+
+			//Cache this for later
+			stack_region->variable_referenced = lr_to_save;
+		}
+
+		//Emit the store instruction and load instruction
+		instruction_t* store_instruction = emit_store_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
+		instruction_t* load_instruction = emit_load_instruction(dynamic_array_get_at(&(lr_to_save->variables), 0), stack_pointer, type_symtab, stack_region->function_local_base_address);
+
+		//Insert the push instruction directly before the first instruction
+		insert_instruction_before_given(store_instruction, first_instruction);
+
+		//The first instruction now is the store
+		first_instruction = store_instruction;
+
+		//Insert the pop instruction directly after the last instruction
+		insert_instruction_after_given(load_instruction, last_instruction);
+
+		//And the last one now is the load
+		last_instruction = load_instruction;
+	}
+
 	//Free it up once done
 	dynamic_array_dealloc(&live_after);
+	
+	//If we had arrays to save, now is the time to deallocate them
+	if(general_purpose_lrs_to_save.internal_array != NULL){
+		dynamic_array_dealloc(&general_purpose_lrs_to_save);
+	}
+
+	if(SSE_lrs_to_save.internal_array != NULL){
+		dynamic_array_dealloc(&SSE_lrs_to_save);
+	}
 
 	//Return the last instruction to save time when drilling
 	return last_instruction;
@@ -3835,7 +4029,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
  * Run through the current function and insert all needed save/restore logic
  * for caller-saved registers
  */
-static void insert_caller_saved_register_logic(basic_block_t* function_entry_block){
+static inline void insert_caller_saved_register_logic(basic_block_t* function_entry_block){
 	//We'll grab out everything we need from this function
 	//Extract this for convenience
 	symtab_function_record_t* function = function_entry_block->function_defined_in;
@@ -3879,13 +4073,12 @@ static void insert_caller_saved_register_logic(basic_block_t* function_entry_blo
 
 
 /**
- * This function handles all callee saving logic for each function that we have on top off emitting
- * the stack allocation and deallocation statements that we need for each function
+ * This function handles all callee saving logic for each function that we have
  *
  * NOTE: since all SSE registers are caller-saved, we actually don't need to worry about any SSE registers here because
  * they will all be handled by the caller anyway
  */
-static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
+static void insert_callee_saving_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
 	//Keep a reference to the original entry instruction that we had before
 	//we insert any pushes. This will be important for when we need to
 	//reassign the function's leader statement
@@ -3893,15 +4086,6 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	
 	//Grab the function record out now too
 	symtab_function_record_t* function = function_entry->function_defined_in;
-
-	//We'll also need it's stack data area
-	stack_data_area_t area = function_entry->function_defined_in->data_area;
-
-	//Align it
-	align_stack_data_area(&area);
-
-	//Grab the total size out
-	u_int32_t total_size = area.total_size;
 
 	//We need to see which registers that we use
 	for(u_int16_t i = 0; i < K_COLORS_GEN_USE; i++){
@@ -3922,6 +4106,9 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		//Now we'll need to add an instruction to push this at the entry point of our function
 		instruction_t* push_instruction = emit_direct_gp_register_push_instruction(used_reg);
 
+		//Flag that this is a callee saving instruction
+		push_instruction->is_callee_saving_instruction = TRUE;
+
 		//Insert this push before the leader instruction
 		insert_instruction_before_given(push_instruction, entry_instruction);
 
@@ -3934,21 +4121,6 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 		}
 	}
 
-	//If we have a total size to emit, we'll add it in here
-	if(total_size != 0){
-		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
-		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
-		insert_instruction_before_given(stack_allocation, entry_instruction);
-
-		//If the entry instruction was the function's leader statement, then this now will be the leader statement
-		if(entry_instruction == function_entry->leader_statement){
-			function_entry->leader_statement = entry_instruction;
-		}
-	}
-
-
 	//Now that we've added all of the callee saving logic at the function entry, we'll need to
 	//go through and add it at the exit(s) as well. Note that we're given the function exit block
 	//as an input value here
@@ -3957,16 +4129,6 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 	for(u_int16_t i = 0; i < function_exit->predecessors.current_index; i++){
 		//Grab the given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
-
-		//If the area has a larger total size than 0, we'll need to add in the deallocation
-		//before every return statement
-		if(total_size > 0){
-			//Emit the stack deallocation statement
-			instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, total_size);
-
-			//We will insert this right before the very last statement in each predecessor
-			insert_instruction_before_given(stack_deallocation, predecessor->exit_statement);
-		}
 
 		//Now we'll go through the registers in the reverse order. This time, when we hit one that
 		//is callee-saved and used, we'll emit the push instruction and insert it directly before
@@ -3991,6 +4153,9 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
 			//If we make it here, we know that we'll need to save this register
 			instruction_t* pop_instruction = emit_direct_gp_register_pop_instruction(used_reg);
 
+			//Flag that this is a callee-saving instruction
+			pop_instruction->is_callee_saving_instruction = TRUE;
+
 			//Insert it before the ret
 			insert_instruction_before_given(pop_instruction, predecessor->exit_statement);
 		}
@@ -4004,19 +4169,213 @@ static void insert_stack_and_callee_saving_logic(cfg_t* cfg, basic_block_t* func
  * to insert pushing of any/all callee saved and caller saved registers to maintain
  * our calling convention
  */
-static void insert_saving_logic(cfg_t* cfg){
-	//Run through every function entry point in the CFG
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Grab out the function exit and entry blocks
-		basic_block_t* current_function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
-		basic_block_t* current_function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
-		
-		//We'll first insert the caller saved logic. This logic has the potential to
-		//generate stack allocations for XMM registers so it needs to come first
-		insert_caller_saved_register_logic(current_function_entry);
+static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+	//We'll first insert the caller saved logic. This logic has the potential to
+	//generate stack allocations for XMM registers so it needs to come first
+	insert_caller_saved_register_logic(function_entry_block);
 
-		//Then we'll do all callee saving
-		insert_stack_and_callee_saving_logic(cfg, current_function_entry, current_function_exit);
+	//Then we'll do all callee saving
+	insert_callee_saving_logic(cfg, function_entry_block, function_exit_block);
+}
+
+
+/**
+ * Individual handling for the stack passed param offset constant. As noted in other places,
+ * we will need to update the constant to reflect the value of the stack region's offset
+ * plus any adjustments that we may have made along the way
+ */
+static inline void handle_stack_passed_param_constant(three_addr_const_t* stack_passed_offset){
+	//Extract the stack region
+	stack_region_t* region = stack_passed_offset->constant_value.parameter_passed_stack_region;
+
+	//These are always U64(unsigned long) types
+	stack_passed_offset->const_type = LONG_CONST_FORCE_U;
+
+	//The actual value is the parameter's base address plus any adjustments that have been made
+	stack_passed_offset->constant_value.unsigned_long_constant = region->stack_passed_parameter_base_address + stack_passed_offset->constant_adjustment;
+}
+
+
+/**
+ * Once we are done with all of our stack updates, we need to go through and update all
+ * of the stack passed parameter offsets. Luckily, these are conveniently stored for
+ * us in special constant types called STACK_PASSED_PARAM_OFFSET constants. These constants
+ * also contain an optional slot to hold any modifications to the constant that happened throughout
+ * its lifetime
+ */
+static inline void update_stack_passed_parameter_offsets(symtab_function_record_t* function){
+	//Run through every block in the function
+	for(u_int32_t i = 0; i < function->function_blocks.current_index; i++){
+		//Extract it
+		basic_block_t* block = dynamic_array_get_at(&(function->function_blocks), i);
+
+		//Now go through every instruction
+		instruction_t* cursor = block->leader_statement;
+
+		//For every instruction
+		while(cursor != NULL){
+			//Handle the vase where the immediate source needs updating
+			if(cursor->source_immediate != NULL	
+				&& cursor->source_immediate->const_type == STACK_PASSED_PARAM_OFFSET){
+
+				//Let the helper do it
+				handle_stack_passed_param_constant(cursor->source_immediate);
+
+			//Otherwise we could also have this case
+			} else if(cursor->offset != NULL
+						&& cursor->offset->const_type == STACK_PASSED_PARAM_OFFSET){
+
+				//Let the helper do it
+				handle_stack_passed_param_constant(cursor->offset);
+			} 
+
+			//Push along to the next value
+			cursor = cursor->next_statement;
+		}
+	}
+}
+
+
+
+/**
+ * Now that we've done any spilling that we need to do, we'll need to finalize the
+ * local stack for this function. In addition to that, we're also going to need to 
+ * finalize the stack passed parameters(if there are any) because those values
+ * will need to have their stack offsets modified if we did anything to change
+ * how large the stack frame of this function is. This helper function will handle
+ * all of that
+ */
+static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
+	//Extract what function this is
+	symtab_function_record_t* function = function_entry->function_defined_in;
+
+	//The first thing that we'll want to do is align the local stack
+	align_stack_data_area(&(function->local_stack));
+
+	//We'll also need it's stack data area
+	stack_data_area_t* area = &(function_entry->function_defined_in->local_stack);
+
+	//Grab the total size out
+	u_int32_t local_stack_size = area->total_size;
+
+	/**
+	 * The total stack frame size is the total footprint that this function will take
+	 * up on the stack. Note that this is not always *just* the local stack size. If 
+	 * we have callee-saving instructions(pushq instructions) at the top, that also
+	 * adds to the total size. We need to keep track of this in case we have stack-passed
+	 * parameters who will need their offsets updated
+	 */
+	u_int32_t total_stack_frame_size = local_stack_size;
+
+	/**
+	 * If we have a local stack size that is more than 0, we'll emit it now. Note that
+	 * we need to specifically emit this *after* any push instructions at the beginning of the function
+	 */
+	if(local_stack_size != 0){
+		//We need to find where to put this
+		instruction_t* after_stack_allocation = function_entry->leader_statement;
+
+		/**
+		 * So long as we keep seeing the leading "push" instructions, we need
+		 * to keep searching through. Once this loop exits, we know that
+		 * we'll have a pointer to the instruction after the last push instruction
+		 */
+		while(after_stack_allocation->is_callee_saving_instruction == TRUE){
+			//This increases the total stack frame size by 8 bytes
+			total_stack_frame_size += CALLEE_SAVED_REGISTER_STACK_SIZE_BYTES;
+
+			//Push it down
+			after_stack_allocation = after_stack_allocation->next_statement;
+		}
+
+		//For each function entry block, we need to emit a stack subtraction that is the size of that given variable
+		instruction_t* stack_allocation = emit_stack_allocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
+
+		//Now that we have the stack allocation statement, we can add it in to be right before the current leader statement
+		insert_instruction_before_given(stack_allocation, after_stack_allocation);
+
+		//Now we need to go through every exit block and emit the stack deallocation
+		for(u_int32_t i = 0; i < function_exit->predecessors.current_index; i++){
+			//Get the predecessor out
+			basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
+
+			/**
+			 * We need to get this deallocation to happen right after we're done returning/callee-saving
+			 *
+			 *
+			 * ....
+			 * <Needs to go here>
+			 * ret 
+			 *
+			 * ....
+			 * <Needs to go here>
+			 * pop %r9
+			 * pop %r11
+			 * ret
+			 *
+			 * So in reality we just need to get a pointer to the last statement that either is a "ret" or is callee-saving
+			 * logic
+			 */
+			instruction_t* last_callee_saving_instruction = predecessor->exit_statement;
+
+			/**
+			 * Keep crawling upwards so long as:
+			 * 	1.) we're not going to run into a NULL statement
+			 * 	2.) the previous statement is still some callee saving logic(pop instructions)
+			 */
+			while(last_callee_saving_instruction->previous_statement != NULL
+					&& last_callee_saving_instruction->previous_statement->is_callee_saving_instruction == TRUE){
+
+				//Bump it up
+				last_callee_saving_instruction = last_callee_saving_instruction->previous_statement;
+			}
+
+			//We will need this pointer for later
+			instruction_t* before_last_callee_saved = last_callee_saving_instruction->previous_statement;
+
+			/**
+			 * Do we have an end of a function like this:
+			 * ....
+			 * addq $16, %rsp
+			 * addq $32, %rsp
+			 * ret
+			 *
+			 * In that case, we can save an instruction be combining the two into something like:
+			 * ...
+			 * addq $48, %rsp
+			 * ret
+			 */
+			if(before_last_callee_saved != NULL
+				&& before_last_callee_saved->instruction_type == ADDQ
+				&& before_last_callee_saved->destination_register == stack_pointer){
+
+				//Instead of allocating, we are just going to add the local stack size to this given stack size
+				sum_constant_with_raw_int64_value(before_last_callee_saved->source_immediate, u64_type, local_stack_size);
+
+			//Otherwise we have no chance to optimize
+			} else {
+				//Emit the stack deallocation statement
+				instruction_t* stack_deallocation = emit_stack_deallocation_statement(cfg->stack_pointer, cfg->type_symtab, local_stack_size);
+
+				//By the time we get down here, we should have a pointer to either the ret statement *or* the very
+				//last callee saving statement(pop inst). Our stack deallocator goes before this
+				insert_instruction_before_given(stack_deallocation, last_callee_saving_instruction);
+			}
+		}
+	}
+
+	/**
+	 * Does this function contain stack params? If so, now is the time
+	 * were we need to modify all of their offsets to ensure that we are
+	 * grabbing these from the correct stack region when we're inside of 
+	 * the function
+	 */
+	if(function->contains_stack_params == TRUE){
+		//Make use of the total stack frame size to recompute all of these offsets
+		recompute_stack_passed_parameter_region_offsets(&(function->stack_passed_parameters), total_stack_frame_size);
+
+		//Now we'll invoke the helper to update all of our constants inside of the function
+		update_stack_passed_parameter_offsets(function);
 	}
 }
 
@@ -4024,7 +4383,7 @@ static void insert_saving_logic(cfg_t* cfg){
 /**
  * Perform our function level allocation process
  */
-static void allocate_registers_for_function(compiler_options_t* options, basic_block_t* function_entry){
+static void allocate_registers_for_function(compiler_options_t* options, cfg_t* cfg, basic_block_t* function_entry, basic_block_t* function_exit){
 	//Save whether or not we want to actually print IRs
 	u_int8_t print_irs = options->print_irs;
 	u_int8_t debug_printing = options->enable_debug_printing;
@@ -4425,6 +4784,30 @@ static void allocate_registers_for_function(compiler_options_t* options, basic_b
 	//Destroy both of these now that we're done
 	dynamic_array_dealloc(&general_purpose_live_ranges);
 	dynamic_array_dealloc(&sse_live_ranges);
+
+	/**
+	 * STEP 8: caller/callee saving logic
+	 *
+	 * Once we make it down here, we have colored the entire graph successfully. But,
+	 * we still need to insert any caller/callee saving logic that is needed
+	 * when appropriate
+	 *
+	 * NOTE: We cannot do this at the individual function step because it does require
+	 * that we have all functions completely allocated before going forward.
+	 */
+	insert_saving_logic(cfg, function_entry, function_exit);
+
+	/**
+	 * STEP 9: function local stack alignment and stack passed parameter offset updates
+	 *
+	 * Now that we've done any spilling that we need to do, we'll need to finalize the
+	 * local stack for this function. In addition to that, we're also going to need to 
+	 * finalize the stack passed parameters(if there are any) because those values
+	 * will need to have their stack offsets modified if we did anything to change
+	 * how large the stack frame of this function is. This helper function will handle
+	 * all of that
+	 */
+	finalize_local_and_parameter_stack_logic(cfg, function_entry, function_exit);
 }
 
 
@@ -4449,28 +4832,19 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 
 	//Run through every function entry block individually and invoke the allocator on
 	//all of them separately
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(u_int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the given function entry
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
+		//Also extract the function exit block
+		basic_block_t* function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
+
 		//Invoke the function-level allocator
-		allocate_registers_for_function(options, function_entry);
+		allocate_registers_for_function(options, cfg, function_entry, function_exit);
 	}
 
 	/**
-	 * STEP 8: caller/callee saving logic
-	 *
-	 * Once we make it down here, we have colored the entire graph successfully. But,
-	 * we still need to insert any caller/callee saving logic that is needed
-	 * when appropriate
-	 *
-	 * NOTE: We cannot do this at the individual function step because it does require
-	 * that we have all functions completely allocated before going forward.
-	*/
-	insert_saving_logic(cfg);
-
-	/**
-	 * STEP 9: final cleanup pass
+	 * STEP 10: final cleanup pass
 	 *
 	 * This is detailed more in the postprocessor.c file that we're invoking
 	 * here

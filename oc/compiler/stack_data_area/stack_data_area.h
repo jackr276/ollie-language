@@ -20,7 +20,7 @@
 /**
  * Allocate the internal dynamic array in the data area
  */
-void stack_data_area_alloc(stack_data_area_t* area);
+void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type);
 
 /**
  * Create a stack region for the type provided. This will handle alignment and addition
@@ -45,9 +45,22 @@ void remove_region_from_stack(stack_data_area_t* area, stack_region_t* region);
 void sweep_stack_data_area(stack_data_area_t* area);
 
 /**
+ * Realign a parameter/argument build stack data area after the function that it's calling
+ * out to is fully known. This is done because we need to account for local stack allocations
+ * in the callee and more importantly the way that the return address has been pushed onto the
+ * stack
+ */
+void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_passed_parameter_region, u_int32_t function_stack_frame_size_bytes);
+
+/**
+ * Print out the passed parameter stack data
+ */
+void print_passed_parameter_stack_data_area(stack_data_area_t* area);
+
+/**
  * Print the stack data area out in its entirety
  */
-void print_stack_data_area(stack_data_area_t* area);
+void print_local_stack_data_area(stack_data_area_t* area);
 
 /**
  * Does the stack contain a given pointer value? This is used for avoiding redundant addresses

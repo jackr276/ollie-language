@@ -1018,7 +1018,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 	//Let's check for this easy case first. If we have no parameters, then 
 	//we'll expect to immediately see an R_PAREN
-	if(function_signature->num_params == 0){
+	if(function_signature->function_parameters.current_index == 0){
 		//Refresh the lookahead
 		lookahead = get_next_token(token_stream, &parser_line_num);
 		
@@ -1068,12 +1068,12 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 		//We'll let the error below handle this, we just don't
 		//want to segfault
-		if(num_params > function_signature->num_params){
+		if(num_params > function_signature->function_parameters.current_index){
 			break;
 		}
 
 		//Grab the current function param
-		generic_type_t* param_type = function_signature->parameters[num_params - 1];
+		generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), num_params - 1);
 
 		//Parameters are in the form of a ternary expression
 		current_param = ternary_expression(token_stream, side);
@@ -1138,9 +1138,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 	//If we have a mismatch between what the function takes and what we want, throw an
 	//error
-	if(num_params != function_signature->num_params){
+	if(num_params != function_signature->function_parameters.current_index){
 		sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
-		  function_name.string, function_signature->num_params, num_params, function_type->type_name.string);
+		  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
 		//Error out
@@ -5033,22 +5033,10 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		}
 
 		//Add it to the mutable version
-		u_int8_t status = add_parameter_to_function_type(mutable_function_type, type);
-
-		//This means that we have been given too many parameters
-		if(status == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
-			return FALSE;
-		}
+		add_parameter_to_function_type(mutable_function_type, type);
 
 		//Let's also add it to the immutable version
-		status = add_parameter_to_function_type(immutable_function_type, type);
-
-		//This means that we have been given too many parameters
-		if(status == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
-			return FALSE;
-		}
+		add_parameter_to_function_type(immutable_function_type, type);
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -6296,14 +6284,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 		}
 
 		//Add it to the mutable version
-		u_int8_t status = add_parameter_to_function_type(function_type, type);
-
-		//This means that we have been given too many parameters
-		if(status == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Maximum function parameter count of 6 exceeded", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
+		add_parameter_to_function_type(function_type, type);
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(stream, &parser_line_num);
@@ -6903,8 +6884,6 @@ static generic_type_t* type_specifier(ollie_token_stream_t* token_stream){
 	 * 	This is really a pointer to an i32[5]
 	 *
 	 * 	i32[5][5]
-	 *
-	 * 	TODO DOC
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
 	while(TRUE){
@@ -9897,15 +9876,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Check that it isn't some duplicated variable name. We will only check in the
 	//local scope for this one
-	//
-	//
-	//
-	//TODO WRONG - parameters must be in a different scope - this is leading to duplicate parameter
-	//names which is a big issue
-	//
-	//
-	//
-	//
 	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
@@ -10212,7 +10182,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 	//Let's first validate the parameter count. The main function can
 	//either have 0 or 2 parameters
 	
-	switch(signature->num_params){
+	switch(signature->function_parameters.current_index){
 		//This is allowed
 		case 0:
 			break;
@@ -10220,7 +10190,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 		//If we have two, we need to validate the type of each parameter
 		case 2:
 			//Extract the first parameter
-			parameter_type = signature->parameters[0];
+			parameter_type = dynamic_array_get_at(&(signature->function_parameters), 0);
 			
 			//If it isn't a basic type and it isn't an i32, we fail
 			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
@@ -10230,7 +10200,7 @@ static u_int8_t validate_main_function(generic_type_t* type){
 			}
 
 			//Now let's grab the second parameter
-			parameter_type = signature->parameters[1];
+			parameter_type = dynamic_array_get_at(&(signature->function_parameters), 1);
 
 			//This must be a char** type. If it's not, we fail out
 			if(is_type_string_array(parameter_type) == FALSE){
@@ -10425,8 +10395,8 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			//has no params
 			if(defining_predeclared_function == TRUE){
 				//If we have a mismatch, we fail out
-				if(internal_function_type->num_params != 0){
-					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->num_params);
+				if(internal_function_type->function_parameters.current_index != 0){
+					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->function_parameters.current_index);
 					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 					num_errors++;
 					return FAILURE;
@@ -10459,8 +10429,8 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			//has no params
 			if(defining_predeclared_function == TRUE){
 				//If we have a mismatch, we fail out
-				if(internal_function_type->num_params != 0){
-					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->num_params);
+				if(internal_function_type->function_parameters.current_index != 0){
+					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->function_parameters.current_index);
 					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 					num_errors++;
 					return FAILURE;
@@ -10497,42 +10467,34 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		//We will also store the "absolute" parameter number as well
 		parameter->absolute_function_parameter_order = absolute_parameter_number;
 
-		//Status tracker
-		u_int8_t status;
-
 		//If we're not defining a predeclared function, we need to add this parameter in
 		if(defining_predeclared_function == FALSE){
-			//Let the helper do it
-			status = add_parameter_to_function_type(function_type, parameter->type_defined_as);
-
-			//This means that we exceeded the number of parameters
-			if(status == FAILURE){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-			//Otherwise we're fine
+			//Let the helper add it in
+			add_parameter_to_function_type(function_type, parameter->type_defined_as);
 
 		//If we get here, we need to validate that the type that was declared is
 		//the same as the one originally given
 		} else {
 			//Check if we've got too many parameters
-			if(absolute_parameter_number > internal_function_type->num_params){
-				sprintf(info, "Function %s was defined with only %d parameters", function_record->func_name.string, internal_function_type->num_params);
+			if(absolute_parameter_number > internal_function_type->function_parameters.current_index){
+				sprintf(info, "Function %s was defined with only %d parameters", function_record->func_name.string, internal_function_type->function_parameters.current_index);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 			}
 
+			//Extract for validations
+			generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), absolute_parameter_number - 1);
+
 			//We need to ensure that the mutability levels match here
-			if(internal_function_type->parameters[absolute_parameter_number - 1]->mutability == MUTABLE && parameter->type_defined_as->mutability == NOT_MUTABLE){
+			if(parameter_type->mutability == MUTABLE && parameter->type_defined_as->mutability == NOT_MUTABLE){
 				sprintf(info, "Parameter %s was defined as immutable, but predeclared as mutable", parameter->var_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
 
 			//The other option for a mismatch
-			} else if(internal_function_type->parameters[absolute_parameter_number - 1]->mutability == NOT_MUTABLE && parameter->type_defined_as->mutability == MUTABLE){
+			} else if(parameter_type->mutability == NOT_MUTABLE && parameter->type_defined_as->mutability == MUTABLE){
 				sprintf(info, "Parameter %s was defined as mutable, but predeclared as immutable", parameter->var_name.string);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
@@ -10540,7 +10502,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			}
 
 			//If the mutability levels are off, we fail out
-			if(internal_function_type->parameters[absolute_parameter_number - 1]->mutability != parameter->type_defined_as->mutability){
+			if(parameter_type->mutability != parameter->type_defined_as->mutability){
 				sprintf(info, "Mutability mismatch for parameter %d", absolute_parameter_number);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
@@ -10548,7 +10510,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 			}
 
 			//Grab the defined type out
-			generic_type_t* declared_type = dealias_type(internal_function_type->parameters[absolute_parameter_number - 1]);
+			generic_type_t* declared_type = dealias_type(parameter_type);
 			//And this type
 			generic_type_t* defined_type = dealias_type(parameter->type_defined_as);
 
@@ -10564,16 +10526,7 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		}
 
 		//Once we're here, we can add the function parameter in
-		status = add_function_parameter(function_record, parameter);
-
-		//If this fails that means we exceeded the maximum number of parameters
-		//This means that we exceeded the number of parameters
-		if(status == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Functions may have a maximum of 6 parameters", parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
+		add_function_parameter(function_record, parameter);
 
 		//We made it here, so we've seen one more absolute number
 		absolute_parameter_number++;
@@ -10585,8 +10538,8 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 	} while(lookahead.tok == COMMA);
 
 	//If we're predeclaring, we need to check that the parameter count matches
-	if(defining_predeclared_function == TRUE && function_record->number_of_params != internal_function_type->num_params){
-		sprintf(info, "Function %s was declared with %d parameters, but was only defined with %d", function_record->func_name.string, internal_function_type->num_params, function_record->number_of_params);
+	if(defining_predeclared_function == TRUE && function_record->function_parameters.current_index != internal_function_type->function_parameters.current_index){
+		sprintf(info, "Function %s was declared with %d parameters, but was only defined with %d", function_record->func_name.string, internal_function_type->function_parameters.current_index, function_record->function_parameters.current_index);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
 		return FAILURE;
@@ -10604,6 +10557,15 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
 		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
 		num_errors++;
 		return FAILURE;
+	}
+
+	/**
+	 * Once we are fully done with all of our parameters, we will need to finalize the alignment
+	 * on the given stack data area. This ensures that the overall size is going to be 8-byte
+	 * aligned, and that all of the padding if needed is present
+	 */
+	if(sse_parameter_number > 6 || general_purpose_parameter_number > 6){
+		align_stack_data_area(&(function_record->stack_passed_parameters));
 	}
 
 	//If we make it down here then this all worked, so
@@ -10774,12 +10736,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		}
 
 		//Let the helper add the type in
-		u_int8_t status = add_parameter_to_function_type(function_record->signature, type);
-
-		//This means that we have been given too many parameters
-		if(status == FAILURE){
-			return print_and_return_error("Maximum function parameter count of 6 exceeded", parser_line_num);
-		}
+		add_parameter_to_function_type(function_record->signature, type);
 
 		//Refresh the lookahead token
 		lookahead = get_next_token(token_stream, &parser_line_num);

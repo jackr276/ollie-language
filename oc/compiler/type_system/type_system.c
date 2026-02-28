@@ -2290,6 +2290,9 @@ generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inl
 	//Now we need to create the internal function pointer type
 	type->internal_types.function_type = calloc(1, sizeof(function_type_t));
 
+	//Allocate space for the parameters
+	type->internal_types.function_type->function_parameters = dynamic_array_alloc();
+
 	//Store whether or not this is public
 	type->internal_types.function_type->is_public = is_public;
 
@@ -2310,23 +2313,30 @@ generic_type_t* create_function_pointer_type(u_int8_t is_public, u_int8_t is_inl
 /**
  * Add a function's parameter in
  */
-u_int8_t add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter){
+void add_parameter_to_function_type(generic_type_t* function_type, generic_type_t* parameter){
 	//Extract this for convenience
 	function_type_t* internal_type = function_type->internal_types.function_type;
 
-	//This means that we've hit the maximum number of parameters
-	if(internal_type->num_params == 6){
-		return FAILURE;
+	//Let's up our counts for parameter types before we add this in
+	if(IS_FLOATING_POINT(parameter) == FALSE){
+		internal_type->general_purpose_param_count++;
+
+		//If we have more than 6 that's stack params
+		if(internal_type->general_purpose_param_count > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+			internal_type->contains_stack_params = TRUE;
+		}
+
+	} else {
+		internal_type->SSE_param_count++;
+
+		//If we have more than 6 that's stack params
+		if(internal_type->SSE_param_count > MAX_PER_CLASS_REGISTER_PASSED_PARAMS){
+			internal_type->contains_stack_params = TRUE;
+		}
 	}
 
-	//Store the mutability level and parameter type
-	internal_type->parameters[internal_type->num_params] = parameter;
-
-	//Increment this
-	(internal_type->num_params)++;
-
-	//Give back success
-	return SUCCESS;
+	//Add this into the dynamic array
+	dynamic_array_add(&(internal_type->function_parameters), parameter);
 }
 
 
@@ -2492,10 +2502,13 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 	//Set the type name initially
 	dynamic_string_set(&(function_pointer_type->type_name), "fn(");
 
+	//Store this for our uses
+	u_int32_t num_params = function_type->function_parameters.current_index;
+
 	//Run through all of our parameters
-	for(u_int16_t i = 0; i < function_type->num_params; i++){
+	for(u_int32_t i = 0; i < num_params; i++){
 		//Extract the parameter type
-		generic_type_t* paramter_type = function_type->parameters[i];
+		generic_type_t* paramter_type = dynamic_array_get_at(&(function_type->function_parameters), i);
 
 		//We'll need to generate the mut value if we do or don't have it
 		if(paramter_type->mutability == MUTABLE){
@@ -2509,7 +2522,7 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
 		dynamic_string_concatenate(&(function_pointer_type->type_name), var_string);
 
 		//Add the comma in if need be
-		if(i != function_type->num_params - 1){
+		if(i != num_params - 1){
 			//Then concatenate
 			dynamic_string_concatenate(&(function_pointer_type->type_name), ", ");
 		}
@@ -2637,6 +2650,9 @@ void type_dealloc(generic_type_t* type){
 			dynamic_array_dealloc(&(type->internal_types.enumeration_table));
 			break;
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			//Deallocate the parameters
+			dynamic_array_dealloc(&(type->internal_types.function_type->function_parameters));
+			//Free the overall type
 			free(type->internal_types.function_type);
 			break;
 		//For this one we can deallocate the struct table
