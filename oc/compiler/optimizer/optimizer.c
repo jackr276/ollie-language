@@ -1448,6 +1448,13 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				add_successor(current, branch_statement->if_block);
 				add_successor(current, branch_statement->else_block);
 
+
+				cursor = current->leader_statement;
+				while(cursor != NULL){
+					print_three_addr_code_stmt(stdout, cursor);
+					cursor = cursor->next_statement;
+				}
+
 				//This is a change
 				changed = TRUE;
 			}

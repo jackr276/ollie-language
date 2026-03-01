@@ -430,6 +430,8 @@ char* operator_token_to_string(ollie_token_t token){
 			return "~";
 		case L_NOT:
 			return "!";
+		case BLANK:
+			return "BLANK OPERATOR";
 		default:
 			return "UNKNOWN OPERATOR";
 	}

@@ -5692,6 +5692,21 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 
 
 /**
+ * Duplicate a variable. This is used for copy instructions where we
+ * need to maintain separation of variables
+ */
+static inline three_addr_var_t* duplicate_variable(three_addr_var_t* variable){
+	//If this is NULL then return NULL
+	if(variable == NULL){
+		return NULL;
+	}
+
+	//Give back a copy of it
+	return emit_var_copy(variable);
+}
+
+
+/**
  * Emit a complete copy of whatever was in here previously
  */
 instruction_t* copy_instruction(instruction_t* copied){
@@ -5701,9 +5716,19 @@ instruction_t* copy_instruction(instruction_t* copied){
 	//Perform a complete memory copy
 	memcpy(copy, copied, sizeof(instruction_t));
 	
+	//Duplicate the variables
+	copy->assignee = duplicate_variable(copied->assignee);
+	copy->op1 = duplicate_variable(copied->op1);
+	copy->op2 = duplicate_variable(copied->op2);
+
 	//If we have function call parameters, emit a copy of them
 	if(copied->parameters.internal_array != NULL){
-		copy->parameters = clone_dynamic_array(&(copied->parameters));
+		copy->parameters = dynamic_array_alloc();
+	}
+
+	//Run through and copy individually
+	for(u_int32_t i = 0; i < copied->parameters.current_index; i++){
+		dynamic_array_add(&(copy->parameters), duplicate_variable(dynamic_array_get_at(&(copied->parameters), i)));
 	}
 
 	//IMPORTANT: null out the next/previous for the instruction
