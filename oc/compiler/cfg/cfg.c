@@ -3153,7 +3153,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	switch(variable->membership){
 		//For an enum just turn it into a constant
 		case ENUM_MEMBER:
-			return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(ident_node->variable->enum_member_value, ident_node->variable->type_defined_as), ident_node->variable->type_defined_as);
+			return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(variable->enum_member_value, variable->type_defined_as), variable->type_defined_as);
 
 		/**
 		 * For a global variable, if we are on the RHS of an equation and we're trying to
@@ -3166,7 +3166,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 * not anything else with it
 			 */
 			if(is_memory_region(variable->type_defined_as) == TRUE){
-				return emit_memory_address_var(ident_node->variable);
+				return emit_memory_address_var(variable);
 			}
 
 			/**
@@ -3176,10 +3176,10 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 */
 			if(side == SIDE_TYPE_RIGHT){
 				//Extract the "true type" here in case we are dealing with a reference type
-				generic_type_t* type = ident_node->variable->type_defined_as;
+				generic_type_t* type = variable->type_defined_as;
 
 				//Emit the memory address var for later on
-				three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
+				three_addr_var_t* memory_address = emit_memory_address_var(variable);
 
 				//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
 				//a reference
@@ -3196,7 +3196,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 
 			//Otherwise emit a normal variable
 			} else {
-				return emit_var(ident_node->variable);
+				return emit_var(variable);
 			}
 
 		/**
@@ -3206,11 +3206,95 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		case FUNCTION_PARAMETER:
 			//Most common case - not passed by stack
 			if(variable->passed_by_stack == FALSE){
+				//RHS can have special rules
+				if(side == SIDE_TYPE_RIGHT){
+					/**
+					 * If we're on the RHS and we have a special "stack variable", we need to automatically
+					 * load that variable out of memory for use in whatever is happening in the caller
+					 */
+					if(variable->stack_variable == TRUE){
+						//Extract the "true type" here in case we are dealing with a reference type
+						generic_type_t* type = ident_node->variable->type_defined_as;
 
+						//Emit the memory address var for later on
+						three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
+
+						//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
+						//a reference
+						instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
+
+						//This counts as a use
+						add_used_variable(basic_block, load_instruction->op1);
+
+						//Add it to the block
+						add_statement(basic_block, load_instruction);
+
+						//Just give back the temp var here
+						return load_instruction->assignee;
+
+					//Otherwise again just emit the variable
+					} else {
+						return emit_var(variable);
+					}
+
+				//Otherwise we're just emitting the variable
+				} else {
+					return emit_var(variable);
+				}
 
 			//Otherwise we are passed via stack so we'll need some special rules
 			} else {
+				/**
+				 * If we have an array or pointer type, we need to note that by loading this
+				 * pointer itself out of memory before we use it. We will account for that here
+				 */
+				if(is_type_stack_passed_by_reference(variable->type_defined_as) == TRUE){
+					//Extract the "true type" here in case we are dealing with a reference type
+					generic_type_t* type = variable->type_defined_as;
 
+					//Emit the memory address var for later on
+					three_addr_var_t* memory_address = emit_memory_address_var(variable);
+
+					//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
+					//a reference
+					instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
+
+					//This counts as a use
+					add_used_variable(basic_block, load_instruction->op1);
+
+					//Add it to the block
+					add_statement(basic_block, load_instruction);
+
+					//Just give back the temp var here
+					return load_instruction->assignee;
+				}
+
+				//If we're on the RHS we need to handle an automatic derference for the caller
+				if(side == SIDE_TYPE_RIGHT){
+					//Extract the "true type" here in case we are dealing with a reference type
+					generic_type_t* type = variable->type_defined_as;
+
+					//Emit the memory address var for later on
+					three_addr_var_t* memory_address = emit_memory_address_var(variable);
+
+					//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
+					//a reference
+					instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
+
+					//This counts as a use
+					add_used_variable(basic_block, load_instruction->op1);
+
+					//Add it to the block
+					add_statement(basic_block, load_instruction);
+
+					//Just give back the temp var here
+					return load_instruction->assignee;
+
+				//Otherwise just emit a variable
+				} else {
+					return emit_var(variable);
+
+				}
 			}
 
 		/**
@@ -3222,7 +3306,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 * not anything else with it
 			 */
 			if(is_memory_region(variable->type_defined_as) == TRUE){
-				return emit_memory_address_var(ident_node->variable);
+				return emit_memory_address_var(variable);
 			}
 
 			//RHS can have special rules
@@ -3233,10 +3317,10 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 */
 				if(variable->stack_variable == TRUE){
 					//Extract the "true type" here in case we are dealing with a reference type
-					generic_type_t* type = ident_node->variable->type_defined_as;
+					generic_type_t* type = variable->type_defined_as;
 
 					//Emit the memory address var for later on
-					three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
+					three_addr_var_t* memory_address = emit_memory_address_var(variable);
 
 					//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
 					//a reference
@@ -3261,69 +3345,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				return emit_var(variable);
 			}
 	}
-
-	/**
-	 * If we're emitting a variable that represents a memory region(array, struct, union), then we're really
-	 * asking for the stack address of said variable. As such, the emit_identifier rule will intelligently
-	 * realize this and instead of just emitting the var itself, will emit a "memory address of" statement.
-	 */
-	if(is_memory_region(ident_node->variable->type_defined_as) == TRUE && ident_node->variable->membership != FUNCTION_PARAMETER){
-		return emit_memory_address_var(ident_node->variable);
-	}
-
-	if(ident_node->variable->passed_by_stack == TRUE && is_type_stack_passed_by_reference(ident_node->variable->type_defined_as) == TRUE){
-		//Extract the "true type" here in case we are dealing with a reference type
-		generic_type_t* type = ident_node->variable->type_defined_as;
-
-		//Emit the memory address var for later on
-		three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
-
-		//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
-		//a reference
-		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
-
-		//This counts as a use
-		add_used_variable(basic_block, load_instruction->op1);
-
-		//Add it to the block
-		add_statement(basic_block, load_instruction);
-
-		//Just give back the temp var here
-		return load_instruction->assignee;
-	}
-
-
-	/**
-	 * If we're on the right side of the equation and this is a stack variable, when we want to use 
-	 * the address we have to load
-	 */
-	if(ident_node->side == SIDE_TYPE_RIGHT && 
-		(ident_node->variable->stack_variable == TRUE || ident_node->variable->membership == GLOBAL_VARIABLE)){
-		//Extract the "true type" here in case we are dealing with a reference type
-		generic_type_t* type = ident_node->variable->type_defined_as;
-
-		//Emit the memory address var for later on
-		three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
-
-		//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
-		//a reference
-		instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
-
-		//This counts as a use
-		add_used_variable(basic_block, load_instruction->op1);
-
-		//Add it to the block
-		add_statement(basic_block, load_instruction);
-
-		//Just give back the temp var here
-		return load_instruction->assignee;
-	}
-
-	//Create our variable - the most basic case
-	three_addr_var_t* returned_variable = emit_var(ident_node->variable);
-
-	//Give our variable back
-	return returned_variable;
 }
 
 
