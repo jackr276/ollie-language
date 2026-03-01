@@ -142,6 +142,10 @@ typedef enum {
 	THREE_ADDR_CODE_MEM_ACCESS_STMT,
 	//A specialized CLEAR instruction
 	THREE_ADDR_CODE_CLEAR_STMT,
+	//A specialized instruction used when we need temporary stack allocations
+	THREE_ADDR_CODE_STACK_ALLOCATION_STMT,
+	//A specialized instruction used when we need temporary stack allocations
+	THREE_ADDR_CODE_STACK_DEALLOCATION_STMT,
 } instruction_stmt_type_t;
 
 #endif /* OLLIE_INTERMEDIARY_REPRESENTATION_H */

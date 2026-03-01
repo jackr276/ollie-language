@@ -11,6 +11,9 @@
 #include <stdlib.h>
 #include "../utils/constants.h"
 
+//The number of bytes added for a return address on the stack during a function call
+#define RETURN_ADDRESS_SIZE_BYTES 8
+
 //Atomically increasing stack region ID
 static u_int32_t current_stack_region_id = 0;
 
@@ -28,9 +31,15 @@ static u_int32_t increment_and_get_stack_region_id(){
 /**
  * Allocate the internal dynamic array in the data area
  */
-void stack_data_area_alloc(stack_data_area_t* area){
+void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type){
 	//Allocate the regions array
 	area->stack_regions = dynamic_array_alloc();
+
+	//Wipe this out too
+	area->total_size = 0;
+
+	//Save what kind of type this is - this will become important
+	area->stack_type = type;
 }
 
 
@@ -72,7 +81,7 @@ static stack_region_t* create_stack_region(u_int32_t base_address, u_int32_t siz
 
 	//Populate
 	region->size = size;
-	region->base_address = base_address;
+	region->function_local_base_address = base_address;
 
 	//Assign it a unique ID
 	region->stack_region_id = increment_and_get_stack_region_id();
@@ -171,7 +180,7 @@ static void realign_data_area(stack_data_area_t* area){
 		}
 
 		//This one's stack offset is the original total size plus whatever padding we need
-		region->base_address = area->total_size + needed_padding;
+		region->function_local_base_address = area->total_size + needed_padding;
 		
 		//Update the total size of the stack too. The new size is the original size
 		//with the needed padding and the new type's size added onto it
@@ -225,9 +234,70 @@ void sweep_stack_data_area(stack_data_area_t* area){
 
 
 /**
+ * Realign a parameter/argument build stack data area after the function that it's calling
+ * out to is fully known. This is done because we need to account for local stack allocations
+ * in the callee and more importantly the way that the return address has been pushed onto the
+ * stack
+ */
+void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_passed_parameter_region, u_int32_t function_stack_frame_size_bytes){
+	/**
+	 * Due to the way that a function call works, we are guaranteed to have *at least* 8 bytes of additional
+	 * distance on the stack to hold the return address for the caller. As such, we need to account
+	 * for at least this here
+	 */
+	u_int32_t additional_offset = RETURN_ADDRESS_SIZE_BYTES;
+
+	/**
+	 * In addition to this return address, we need add whatever the local stack
+	 * allocation's size is onto it as well. Sometimes this will be 0, and that is
+	 * fine, but we will not overcomplicate the logic by having separate paths for that
+	 */
+	additional_offset += function_stack_frame_size_bytes;
+
+	//Now run through every stack region
+	for(u_int32_t i = 0; i < stack_passed_parameter_region->stack_regions.current_index; i++){
+		//Extract the region to work on
+		stack_region_t* region = dynamic_array_get_at(&(stack_passed_parameter_region->stack_regions), i);
+
+		/**
+		 * Now we very specifically have a distinction between the function local stack base address 
+		 * and the base address that we have to use if we're referencing this region in the context of it
+		 * being a stack passed parameter. We will now update the parameter passed version specifically
+		 * here
+		 */
+		region->stack_passed_parameter_base_address = region->function_local_base_address + additional_offset;
+	}
+}
+
+
+/**
+ * Print out the passed parameter stack data
+ */
+void print_passed_parameter_stack_data_area(stack_data_area_t* area){
+	//No point in printing out if we have this
+	if(area->total_size == 0){
+		return;
+	}
+
+	printf("================== Stack Passed Parameters ===================\n");
+	//Run through all of the regions backwards and print
+	for(int16_t i = area->stack_regions.current_index - 1; i >= 0; i--){
+		//Extract it
+		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
+
+		//Print it
+		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->function_local_base_address, region->mark == TRUE ? "marked" : "unmarked");
+	}
+
+	printf("================== Stack Passed Parameters ===================\n");
+	printf("====================== Return Address(8 Bytes) ========================\n");
+}
+
+
+/**
  * Print the stack data area out in its entirety
  */
-void print_stack_data_area(stack_data_area_t* area){
+void print_local_stack_data_area(stack_data_area_t* area){
 	printf("================== Stack Layout ===================\n");
 
 	//If it's empty we'll leave
@@ -243,7 +313,7 @@ void print_stack_data_area(stack_data_area_t* area){
 		stack_region_t* region = dynamic_array_get_at(&(area->stack_regions), i);
 
 		//Print it
-		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->base_address, region->mark == TRUE ? "marked" : "unmarked");
+		printf("Region #%d\t%8d\t%8d\t%s\n", region->stack_region_id, region->size, region->function_local_base_address, region->mark == TRUE ? "marked" : "unmarked");
 	}
 
 	printf("================== Stack Layout ===================\n");

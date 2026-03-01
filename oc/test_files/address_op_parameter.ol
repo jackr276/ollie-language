@@ -11,6 +11,9 @@ fn address_op_parameter(param:mut i32) -> i32{
 	*x = 32;
 	*x = 17;
 
+	param = 5;
+	param = 2;
+
 	//Give it back
 	ret *x;
 }

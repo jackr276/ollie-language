@@ -27,6 +27,14 @@ struct dynamic_array_t{
 };
 
 /**
+ * Macro to initialize a NULL stack allocated dynamic array
+ */
+#define INITIALIZE_NULL_DYNAMIC_ARRAY(dynamic_array)\
+	dynamic_array.internal_array = NULL;\
+	dynamic_array.current_max_size = 0;\
+	dynamic_array.current_index = 0;\
+
+/**
  * Initialize a dynamic array on the heap 
  * specifically
  */

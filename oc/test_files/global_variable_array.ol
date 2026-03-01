@@ -20,5 +20,5 @@ pub fn main() -> i32 {
 		array[i] = i * 3 - 2;
 	}
 
-	ret 0;
+	ret array[5];
 }

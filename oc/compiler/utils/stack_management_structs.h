@@ -21,6 +21,26 @@ typedef struct stack_data_area_t stack_data_area_t;
 //A stack region has a size itself. Variables/live ranges can point into the stack region
 typedef struct stack_region_t stack_region_t;
 
+
+/**
+ * What kind of stack data area do we have? We can
+ * have ones that are for temporary use(indirect function
+ * calls with more than one param), ones for the local
+ * stack of a function, and ones that are used for a function's
+ * parameter passing convention
+ */
+typedef enum {
+	//Default is none
+	STACK_TYPE_NONE,
+	//For temp use
+	STACK_TYPE_TEMP_USE,
+	//For a function's local stack
+	STACK_TYPE_FUNCTION_LOCAL,
+	//For parameter passing
+	STACK_TYPE_PARAMETER_PASSING
+} stack_data_area_type_t;
+
+
 /**
  * A stack region has a size and a base address on
  * the stack. Anything whose stack offset is *within*
@@ -41,8 +61,20 @@ struct stack_region_t {
 	//used for array addresses
 	//The unique ID for this region
 	u_int32_t stack_region_id;
-	//The base address
-	u_int32_t base_address;
+	/**
+	 * The function local base address is the address
+	 * that is used for all function-local stack allocations
+	 */
+	u_int32_t function_local_base_address;
+	/**
+	 * The stack passed parameter base address is specifically
+	 * used by stack regions for stack-passed parameters. This is
+	 * needed because when we add the return address(8 bytes) and
+	 * the additional local stack allocations from the function itself,
+	 * we actually need to increase this base address to maintain a correct
+	 * reference
+	 */
+	u_int32_t stack_passed_parameter_base_address;
 	//The size
 	u_int32_t size;
 	//Is this marked or not
@@ -59,6 +91,8 @@ struct stack_data_area_t{
 	dynamic_array_t stack_regions;
 	//The total size of the data area
 	u_int32_t total_size;
+	//What kind of stack do we have?
+	stack_data_area_type_t stack_type;
 };
 
 
