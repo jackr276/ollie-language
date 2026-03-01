@@ -21,7 +21,10 @@ pub fn pointer_param_reassign(x:mut i32, y:i32, z:i32, a:char, b:char, c:char, p
 	//Modify it
 	*ptr = 5;
 
-	ret x + y + z + *ptr;
+	//Try a reassign
+	let new_ptr:mut i32* = ptr;
+
+	ret x + y + z + *new_ptr;
 }
 
 
