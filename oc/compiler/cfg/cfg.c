@@ -3144,10 +3144,64 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * to move an identifier to some temporary location
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node){
-	//Handle an enumerated type right here
-	if(ident_node->variable->membership == ENUM_MEMBER) {
-		//Just create a constant here with the enum
-		return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(ident_node->variable->enum_member_value, ident_node->variable->type_defined_as), ident_node->variable->type_defined_as);
+	//Extract the variable
+	symtab_variable_record_t* variable = ident_node->variable;
+	//Are we on the left or right of an equation?
+	side_type_t side = ident_node->side;
+
+	//Go based on it's membership
+	switch(variable->membership){
+		//For an enum just turn it into a constant
+		case ENUM_MEMBER:
+			return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(ident_node->variable->enum_member_value, ident_node->variable->type_defined_as), ident_node->variable->type_defined_as);
+
+		/**
+		 * For a global variable, if we are on the RHS of an equation and we're trying to
+		 * use this, we really are looking to load it out of memory. So, we will
+		 * help out here by emitting a load to get this out
+		 */
+		case GLOBAL_VARIABLE:
+			/**
+			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
+			 * not anything else with it
+			 */
+			if(is_memory_region(variable->type_defined_as) == TRUE){
+				return emit_memory_address_var(ident_node->variable);
+			}
+
+			/**
+			 * Otherwise it's not a memory address. Depending on what side of the equation that we're
+			 * on, we're going to either emit a normal variable or load the variable out of memory. If
+			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
+			 */
+			if(side == SIDE_TYPE_RIGHT){
+				//Extract the "true type" here in case we are dealing with a reference type
+				generic_type_t* type = ident_node->variable->type_defined_as;
+
+				//Emit the memory address var for later on
+				three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
+
+				//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
+				//a reference
+				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
+
+				//This counts as a use
+				add_used_variable(basic_block, load_instruction->op1);
+
+				//Add it to the block
+				add_statement(basic_block, load_instruction);
+
+				//Just give back the temp var here
+				return load_instruction->assignee;
+
+			//Otherwise emit a normal variable
+			} else {
+				return emit_var(ident_node->variable);
+			}
+
+		default:
+			break;
+			
 	}
 
 	/**
@@ -3156,8 +3210,6 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 * realize this and instead of just emitting the var itself, will emit a "memory address of" statement.
 	 */
 	if(is_memory_region(ident_node->variable->type_defined_as) == TRUE && ident_node->variable->membership != FUNCTION_PARAMETER){
-		//Emit a special variable that denotes that we are seeking the memory address of this variable,
-		//not anything else with it
 		return emit_memory_address_var(ident_node->variable);
 	}
 
