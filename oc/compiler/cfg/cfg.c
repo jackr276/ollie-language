@@ -5692,21 +5692,27 @@ static cfg_result_package_t emit_indirect_function_call(basic_block_t* basic_blo
 			//Emit the assignment
 			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
 
-			/**
-			 * NOTE: if we do contain stack parameters, it is very important that this final assignment
-			 * is *never* coalesced. Doing so would bring the stack parameter that we originally set before
-			 * any function call related stack allocations to be after the allocation, which would cause
-			 * invalid memory
-			 */
-			if(has_stack_params == TRUE){
-				assignment_instruction->cannot_be_combined = TRUE;
-			}
-
 			//Add it into the block
 			add_statement(current_block, assignment_instruction);
 
 			//This now is the final assignee
 			final_assignee = assignment_instruction->assignee;
+		}
+
+		/**
+		 * NOTE: if we do contain stack parameters, it is very important that this final assignment
+		 * is *never* coalesced. Doing so would bring the stack parameter that we originally set before
+		 * any function call related stack allocations to be after the allocation, which would cause
+		 * invalid memory
+		 */
+		if(has_stack_params == TRUE){
+			//If the last thing we added is an assignment with a memory address variable
+			if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
+				&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+
+				//Flag that it cannot be combined
+				current_block->exit_statement->cannot_be_combined = TRUE;
+			}
 		}
 
 		//Add this final result into our parameter results list
@@ -5998,21 +6004,27 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			//Emit the assignment
 			instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(package.assignee->type), package.assignee);
 
-			/**
-			 * NOTE: if we do contain stack parameters, it is very important that this final assignment
-			 * is *never* coalesced. Doing so would bring the stack parameter that we originally set before
-			 * any function call related stack allocations to be after the allocation, which would cause
-			 * invalid memory
-			 */
-			if(func_record->contains_stack_params == TRUE){
-				assignment_instruction->cannot_be_combined = TRUE;
-			}
-
 			//Add it into the block
 			add_statement(current_block, assignment_instruction);
 
 			//This now is the final assignee
 			final_assignee = assignment_instruction->assignee;
+		}
+
+		/**
+		 * NOTE: if we do contain stack parameters, it is very important that this final assignment
+		 * is *never* coalesced. Doing so would bring the stack parameter that we originally set before
+		 * any function call related stack allocations to be after the allocation, which would cause
+		 * invalid memory
+		 */
+		if(func_record->contains_stack_params == TRUE){
+			//If the last thing we added is an assignment with a memory address variable
+			if(current_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_STMT
+				&& current_block->exit_statement->op1->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
+
+				//Flag that it cannot be combined
+				current_block->exit_statement->cannot_be_combined = TRUE;
+			}
 		}
 
 		//Add this final result into our parameter results list
