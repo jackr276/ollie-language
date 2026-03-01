@@ -1410,6 +1410,15 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				//And we're done here
 				continue;
 			}
+
+			/**
+			 * if j is empty and ends in a conditional branch then
+			 * 	 overwrite i's jump with a copy of j's branch
+			 */
+			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
+				&& is_block_only_branch(jumping_to_block) == TRUE){
+				printf("HERE\n\n\n");
+			}
 		}
 	}
 
