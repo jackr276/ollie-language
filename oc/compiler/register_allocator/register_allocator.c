@@ -4169,7 +4169,7 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
  * to insert pushing of any/all callee saved and caller saved registers to maintain
  * our calling convention
  */
-static inline void insert_saving_logic(cfg_t* cfg, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+static inline void insert_saving_logic(basic_block_t* function_entry_block, basic_block_t* function_exit_block){
 	//We'll first insert the caller saved logic. This logic has the potential to
 	//generate stack allocations for XMM registers so it needs to come first
 	insert_caller_saved_register_logic(function_entry_block);
@@ -4795,7 +4795,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	 * NOTE: We cannot do this at the individual function step because it does require
 	 * that we have all functions completely allocated before going forward.
 	 */
-	insert_saving_logic(cfg, function_entry, function_exit);
+	insert_saving_logic(function_entry, function_exit);
 
 	/**
 	 * STEP 9: function local stack alignment and stack passed parameter offset updates

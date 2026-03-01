@@ -631,7 +631,7 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_variable_record
  * is more than the max per class register passing value, we will add that into the specialized stack
  * data area
  */
-void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
+void add_function_parameter(type_symtab_t* type_symtab, symtab_function_record_t* function_record, symtab_variable_record_t* variable_record){
 	//Store it in the function's parameters
 	dynamic_array_add(&(function_record->function_parameters), variable_record);
 	
@@ -652,8 +652,8 @@ void add_function_parameter(type_symtab_t* symtab, symtab_function_record_t* fun
 			//we represent this accurately inside of the stack region. We can use a generic pointer to do so
 			case TYPE_CLASS_ARRAY:
 				//Add this type into said stack region
-				//TODO
-				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
+				variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), lookup_type_name_only(type_symtab, "void*", NOT_MUTABLE)->type);
+				break;
 			
 			default:
 				//Add this type into said stack region
