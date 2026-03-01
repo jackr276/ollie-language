@@ -3199,9 +3199,67 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				return emit_var(ident_node->variable);
 			}
 
+		/**
+		 * Most function parameters are simple variable emittals. We do need to account for the case where
+		 * we have function parameters that are passed in via the stack however
+		 */
+		case FUNCTION_PARAMETER:
+			//Most common case - not passed by stack
+			if(variable->passed_by_stack == FALSE){
+
+
+			//Otherwise we are passed via stack so we'll need some special rules
+			} else {
+
+			}
+
+		/**
+		 * Handle all of our other cases. These follow mostly the same rules as the other variables
+		 */
 		default:
-			break;
-			
+			/**
+			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
+			 * not anything else with it
+			 */
+			if(is_memory_region(variable->type_defined_as) == TRUE){
+				return emit_memory_address_var(ident_node->variable);
+			}
+
+			//RHS can have special rules
+			if(side == SIDE_TYPE_RIGHT){
+				/**
+				 * If we're on the RHS and we have a special "stack variable", we need to automatically
+				 * load that variable out of memory for use in whatever is happening in the caller
+				 */
+				if(variable->stack_variable == TRUE){
+					//Extract the "true type" here in case we are dealing with a reference type
+					generic_type_t* type = ident_node->variable->type_defined_as;
+
+					//Emit the memory address var for later on
+					three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
+
+					//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
+					//a reference
+					instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
+
+					//This counts as a use
+					add_used_variable(basic_block, load_instruction->op1);
+
+					//Add it to the block
+					add_statement(basic_block, load_instruction);
+
+					//Just give back the temp var here
+					return load_instruction->assignee;
+
+				//Otherwise again just emit the variable
+				} else {
+					return emit_var(variable);
+				}
+
+			//Otherwise we're just emitting the variable
+			} else {
+				return emit_var(variable);
+			}
 	}
 
 	/**
