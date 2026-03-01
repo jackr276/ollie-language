@@ -2739,7 +2739,8 @@ static void perform_block_level_coalescence_for_target(basic_block_t* block, int
 	//Now run through all of these
 	while(instruction != NULL){
 		//If it's not a pure copy *or* it's marked as non-combinable, just move along
-		if(is_instruction_pure_copy(instruction) == FALSE){
+		if(is_instruction_pure_copy(instruction) == FALSE
+			|| instruction->cannot_be_combined == TRUE){
 			instruction = instruction->next_statement;
 			continue;
 		}
