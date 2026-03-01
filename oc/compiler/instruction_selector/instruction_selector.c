@@ -8589,6 +8589,32 @@ static void handle_store_with_variable_offset_instruction(instruction_t* instruc
 
 			break;
 
+		/**
+		 * A stack passed parameter address is different in that the offset can never be 0 and it will never be a global variable.
+		 * We will handle this by emitting a specialized constant that will be filled in later by the regiseter allocator
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+			//Once that's done, we just need to change the address calc mode
+			instruction->calculation_mode = ADDRESS_CALCULATION_MODE_REGISTERS_AND_OFFSET;
+
+			//This is still the stack pointer
+			instruction->address_calc_reg1 = stack_pointer_variable;
+
+			//This is the variable offset
+			instruction->address_calc_reg2 = instruction->op1;
+
+			//We will need to have a stack offset here since the memory base address has one
+			instruction->offset = emit_stack_passed_parameter_offset_constant(instruction->assignee->associated_memory_region.stack_region, u64); 
+
+			//The base(address calc reg1) and index(address calc reg 2) registers must be the same type.
+			//We determine that the base address is the dominating force, and takes precedence, so the address calc reg2
+			//must adhere to this one's type
+			if(is_converting_move_required(instruction->address_calc_reg1->type, instruction->address_calc_reg2->type) == TRUE){
+				instruction->address_calc_reg2 = create_and_insert_converting_move_instruction(instruction, instruction->address_calc_reg2, instruction->address_calc_reg1->type);
+			}
+
+			break;
+
 		//This means that we just have some kind of pointer dereference
 		default:
 			//The offset is already stored where we need it to be
