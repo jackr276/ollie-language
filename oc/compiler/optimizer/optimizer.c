@@ -1298,6 +1298,54 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
 
 
 /**
+ * Are blocks eligible for branch hoisting checks to make sure we aren't trying to 
+ * hoist a loop header inside of a loop
+ *
+ * Remember: hoisting blocks have *more than one* predecessor. This is not like a simple
+ * jump thread where we know there's only one thing before it. Doing this kind of hoist breaks
+ * the loop invariant and causes issues down the road
+ *
+ * Example:
+ *
+ * target(.L3):
+ *   .....
+ *   Stuff inside of here
+ *   .....
+ * 	jmp .L5(hoisting block)
+ *
+ * hoisting block(.L5):
+ * 	t35 <- t3 > 52
+ * 	cbranch_ne .L3 else .L4
+ *
+ * If we were going to hoist this into the target, odds are we'd have a phi function mess. So, we only 
+ * hoist *if* the target itself is *not* one of the branch targets
+ */
+static inline u_int8_t are_blocks_eligible_for_branch_hoisting(basic_block_t* target, basic_block_t* hoisting_block){
+	//Extract the branch
+	instruction_t* branch = hoisting_block->exit_statement;
+
+	//Get the if and else blocks out
+	basic_block_t* if_block = branch->if_block;
+	basic_block_t* else_block = branch->else_block;
+
+	//We have a match - we can't do this
+	if(if_block->block_id == target->block_id){
+		printf("BAD\n");
+		return FALSE;
+	}
+
+	//We have a match - we can't do this
+	if(else_block->block_id == target->block_id){
+		printf("BAD\n");
+		return FALSE;
+	}
+
+	//If we survive to here then it's fine
+	return TRUE;
+}
+
+
+/**
  * Hoist a branch from the branch_block into the target block. Note that this operation
  * will *not* remove the old branch. It will simply copy it verbatim into the new branch
  *
@@ -1464,7 +1512,10 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			 * This is referred to as branch hoisting
 			 */
 			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
+				&& are_blocks_eligible_for_branch_hoisting(current, jumping_to_block) == TRUE
 				&& is_block_only_branch(jumping_to_block) == TRUE){
+
+				printf("HERE\n");
 
 				//Let the helper perform the actual hoist
 				//hoist_branch(current, jumping_to_block);
