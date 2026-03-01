@@ -3140,6 +3140,33 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
 
 
 /**
+ * There are several cases when we are emitting an identifier that we want to automatically emit a load
+ * from memory. In these cases, we will call out to this function. This function creates a load instruction
+ * that automatically grabs the value at the variable memory address
+ */
+static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable){
+	//Extract for use
+	generic_type_t* type = variable->type_defined_as;
+
+	//Emit the memory address var for later on
+	three_addr_var_t* memory_address = emit_memory_address_var(variable);
+
+	//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
+	//a reference
+	instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
+
+	//This counts as a use
+	add_used_variable(block, load_instruction->op1);
+
+	//Add it to the block
+	add_statement(block, load_instruction);
+
+	//Just give back the temp var here
+	return load_instruction->assignee;
+}
+
+
+/**
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
  */
@@ -3175,24 +3202,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
 			 */
 			if(side == SIDE_TYPE_RIGHT){
-				//Extract the "true type" here in case we are dealing with a reference type
-				generic_type_t* type = variable->type_defined_as;
-
-				//Emit the memory address var for later on
-				three_addr_var_t* memory_address = emit_memory_address_var(variable);
-
-				//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
-				//a reference
-				instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
-
-				//This counts as a use
-				add_used_variable(basic_block, load_instruction->op1);
-
-				//Add it to the block
-				add_statement(basic_block, load_instruction);
-
-				//Just give back the temp var here
-				return load_instruction->assignee;
+				//Let the helper emit our load from memory
+				return emit_automatic_load_from_memory(basic_block, variable);
 
 			//Otherwise emit a normal variable
 			} else {
@@ -3213,24 +3224,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 					 * load that variable out of memory for use in whatever is happening in the caller
 					 */
 					if(variable->stack_variable == TRUE){
-						//Extract the "true type" here in case we are dealing with a reference type
-						generic_type_t* type = ident_node->variable->type_defined_as;
-
-						//Emit the memory address var for later on
-						three_addr_var_t* memory_address = emit_memory_address_var(ident_node->variable);
-
-						//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
-						//a reference
-						instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
-
-						//This counts as a use
-						add_used_variable(basic_block, load_instruction->op1);
-
-						//Add it to the block
-						add_statement(basic_block, load_instruction);
-
-						//Just give back the temp var here
-						return load_instruction->assignee;
+						//Let the helper emit our load from memory
+						return emit_automatic_load_from_memory(basic_block, variable);
 
 					//Otherwise again just emit the variable
 					} else {
@@ -3249,46 +3244,14 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * pointer itself out of memory before we use it. We will account for that here
 				 */
 				if(is_type_stack_passed_by_reference(variable->type_defined_as) == TRUE){
-					//Extract the "true type" here in case we are dealing with a reference type
-					generic_type_t* type = variable->type_defined_as;
-
-					//Emit the memory address var for later on
-					three_addr_var_t* memory_address = emit_memory_address_var(variable);
-
-					//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
-					//a reference
-					instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
-
-					//This counts as a use
-					add_used_variable(basic_block, load_instruction->op1);
-
-					//Add it to the block
-					add_statement(basic_block, load_instruction);
-
-					//Just give back the temp var here
-					return load_instruction->assignee;
+					//Let the helper emit our load from memory
+					return emit_automatic_load_from_memory(basic_block, variable);
 				}
 
 				//If we're on the RHS we need to handle an automatic derference for the caller
 				if(side == SIDE_TYPE_RIGHT){
-					//Extract the "true type" here in case we are dealing with a reference type
-					generic_type_t* type = variable->type_defined_as;
-
-					//Emit the memory address var for later on
-					three_addr_var_t* memory_address = emit_memory_address_var(variable);
-
-					//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
-					//a reference
-					instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
-
-					//This counts as a use
-					add_used_variable(basic_block, load_instruction->op1);
-
-					//Add it to the block
-					add_statement(basic_block, load_instruction);
-
-					//Just give back the temp var here
-					return load_instruction->assignee;
+					//Let the helper emit our load from memory
+					return emit_automatic_load_from_memory(basic_block, variable);
 
 				//Otherwise just emit a variable
 				} else {
@@ -3316,24 +3279,8 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * load that variable out of memory for use in whatever is happening in the caller
 				 */
 				if(variable->stack_variable == TRUE){
-					//Extract the "true type" here in case we are dealing with a reference type
-					generic_type_t* type = variable->type_defined_as;
-
-					//Emit the memory address var for later on
-					three_addr_var_t* memory_address = emit_memory_address_var(variable);
-
-					//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
-					//a reference
-					instruction_t* load_instruction = emit_load_ir_code(emit_temp_var(type), memory_address, type);
-
-					//This counts as a use
-					add_used_variable(basic_block, load_instruction->op1);
-
-					//Add it to the block
-					add_statement(basic_block, load_instruction);
-
-					//Just give back the temp var here
-					return load_instruction->assignee;
+					//Let the helper emit our load from memory
+					return emit_automatic_load_from_memory(basic_block, variable);
 
 				//Otherwise again just emit the variable
 				} else {
