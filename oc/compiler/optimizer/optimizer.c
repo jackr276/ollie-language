@@ -1298,6 +1298,54 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
 
 
 /**
+ * Hoist a branch from the branch_block into the target block. Note that this operation
+ * will *not* remove the old branch. It will simply copy it verbatim into the new branch
+ *
+ * Once we do this, we are going to need to redo the SSA/temp variable assignments within the block
+ * itself
+ */
+static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_block){
+	//Let's delete the jump in the current block
+	delete_statement(target->exit_statement);
+
+	//We can also remove the jumping to block as a successor
+	delete_successor(target, branch_block);
+
+	//Grab pointers to these two blocks. We will need them for relation management
+	basic_block_t* if_block = branch_block->exit_statement->if_block;
+	basic_block_t* else_block = branch_block->exit_statement->else_block;
+
+	//Grab an instruction cursor
+	instruction_t* cursor = branch_block->leader_statement;
+
+	//Run through every single instruction
+	while(cursor != NULL){
+		//Do not copy phi-functions - they will be incorrect no matter what
+		//we do
+		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+			cursor = cursor->next_statement;
+			continue;
+		}
+
+		//Create a complete copy
+		instruction_t* copy = copy_instruction(cursor);
+
+		//Add the cloned statement into the current block
+		add_statement(target, copy);
+
+		//Bump this up
+		cursor = cursor->next_statement;
+	}
+
+	//Update the successors for the current block to include the new branch
+	add_successor(target, if_block);
+	add_successor(target, else_block);
+
+	//TODO - we now need to remediate any SSA flowing through the branch block
+}
+
+
+/**
  * The branch reduce function is what we use on each pass of the function
  * postorder
  *
@@ -1312,14 +1360,9 @@ static inline u_int8_t is_block_only_branch(basic_block_t* block){
  * 				replace transfers to i with transfers to j
  * 			if j has only one predecessor then
  * 				merge i and j
- *
- *
- * 			NOTE: For this last one - we've never really seen a benefit from having it
- * 			turned on at all. We will leave this turned *off* for now and we may
- * 			eventually implement this later
- *
  * 			if j is empty and ends in a conditional branch then
  * 				overwrite i's jump with a copy of j's branch
+ * 				remediate SSA statements inside of i and j
  */
 static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
@@ -1414,42 +1457,20 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			/**
 			 * if j is empty and ends in a conditional branch then
 			 * 	 overwrite i's jump with a copy of j's branch
+			 *
+			 * CAVEAT: if i jumps to j and j's branch goes back to i, we will not
+			 * be doing any of this because that is a loop header
+			 *
+			 * This is referred to as branch hoisting
 			 */
 			if(jumping_to_block->exit_statement->statement_type == THREE_ADDR_CODE_BRANCH_STMT
 				&& is_block_only_branch(jumping_to_block) == TRUE){
 
-				printf("HERE\n");
-
-				//Stash this branch for reference
-				instruction_t* branch_statement = jumping_to_block->exit_statement;
-
-				//Let's delete the jump in the current block
-				delete_statement(current->exit_statement);
-
-				//We can also remove the jumping to block as a successor
-				delete_successor(current, jumping_to_block);
-
-				//Grab an instruction cursor
-				instruction_t* cursor = jumping_to_block->leader_statement;
-
-				//Run through every single instruction
-				while(cursor != NULL){
-					//Create a complete copy
-					instruction_t* copy = copy_instruction(cursor);
-
-					//Add the cloned statement into the current block
-					add_statement(current, copy);
-
-					//Bump this up
-					cursor = cursor->next_statement;
-				}
-
-				//Update the successors for the current block to include the new branch
-				add_successor(current, branch_statement->if_block);
-				add_successor(current, branch_statement->else_block);
+				//Let the helper perform the actual hoist
+				//hoist_branch(current, jumping_to_block);
 
 				//This is a change
-				changed = TRUE;
+				//changed = TRUE;
 			}
 		}
 	}
