@@ -3243,10 +3243,10 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * If we have an array or pointer type, we need to note that by loading this
 				 * pointer itself out of memory before we use it. We will account for that here
 				 */
-				if(is_type_stack_passed_by_reference(variable->type_defined_as) == TRUE){
+				//if(is_type_stack_passed_by_reference(variable->type_defined_as) == TRUE){
 					//Let the helper emit our load from memory
-					return emit_automatic_load_from_memory(basic_block, variable);
-				}
+					//return emit_automatic_load_from_memory(basic_block, variable);
+				//}
 
 				//If we're on the RHS we need to handle an automatic derference for the caller
 				if(side == SIDE_TYPE_RIGHT){
@@ -5370,6 +5370,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	} else if(left_hand_var->linked_var == NULL 
 		|| (left_hand_var->linked_var->stack_variable == FALSE
 		&& left_hand_var->linked_var->membership != GLOBAL_VARIABLE)){
+
 		//Finally we'll struct the whole thing
 		instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, final_op1);
 
