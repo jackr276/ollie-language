@@ -4042,8 +4042,31 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		//Run the primary results function
 		cfg_result_package_t primary_results = emit_primary_expr_code(basic_block, root);
 
-		//The base address is whatever this assignee is
-		*base_address = primary_results.assignee;
+		//Extract for some analysis
+		three_addr_var_t* assignee = primary_results.assignee;
+
+		//Get this if there is one
+		symtab_variable_record_t* base_address_variable = assignee->linked_var;
+
+		/**
+		 * If we have a linked variable that is coming to us from the stack, we'll
+		 * need to automatically get this out of the stack for our uses here. Remember
+		 * that these types(arrays and pointers) live on the stack as references to other
+		 * areas in memory. The array itself is not on the stack
+		 */
+		if(base_address_variable != NULL 
+			&& base_address_variable->passed_by_stack == TRUE
+			&& is_type_stack_passed_by_reference(base_address_variable->type_defined_as)){
+			
+			//Let the helper do it
+			*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable);
+
+		//Else just update the base address
+		} else {
+			//The base address is whatever this assignee is
+			*base_address = assignee;
+		}
+
 
 		//And give these back
 		return primary_results;
